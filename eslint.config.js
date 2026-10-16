@@ -1746,6 +1746,20 @@ export default defineConfig(
 				//
 				// It is possible to use /~ in the restrictions property even without using it in
 				// the target property by adding a layer property.
+				// TEMCO: fork edit — the shell is Temco's own layer, outside VS Code's layering.
+				// Application behaviour lives there, so it may use the workbench and the platform
+				// freely and import its own folders.
+				{
+					'target': 'src/temco/**',
+					'restrictions': [
+						'vs/base/**',
+						'vs/platform/**',
+						'vs/editor/**',
+						'vs/workbench/**',
+						'vs/nls.js',
+						'src/temco/**'
+					]
+				},
 				{
 					'target': 'src/vs/base/~',
 					'restrictions': [
@@ -2138,7 +2152,9 @@ export default defineConfig(
 						'vs/workbench/api/~',
 						'vs/workbench/services/*/~',
 						'vs/workbench/contrib/*/~',
-						'vs/workbench/workbench.common.main.js'
+						'vs/workbench/workbench.common.main.js',
+						// TEMCO: fork edit — the shell's single entry point, imported in the fork region
+						'src/temco/**'
 					]
 				},
 				{
@@ -3086,7 +3102,7 @@ export default defineConfig(
 	// conventions, so the rules that encode VS Code's policies for its own code are off for them.
 	// Every general rule still applies.
 	{
-		files: ['extensions/temco-*/**'],
+		files: ['extensions/temco-*/**', 'src/temco/**'],
 		rules: {
 			'header/header': 'off',
 			'local/code-no-sync-fs': 'off',

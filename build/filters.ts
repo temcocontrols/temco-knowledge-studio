@@ -73,6 +73,7 @@ export const unicodeFilter = Object.freeze<string[]>([
 	// TEMCO: fork edit — Temco modules are not Microsoft-owned: they keep their own writing style
 	// and carry no Microsoft copyright header.
 	'!extensions/temco-*/**',
+	'!src/temco/**',
 
 	'!src/vs/base/browser/dompurify/**',
 	'!src/vs/workbench/services/keybinding/browser/keyboardLayouts/**',
@@ -149,6 +150,7 @@ export const indentationFilter = Object.freeze<string[]>([
 	// TEMCO: fork edit — Temco modules are not Microsoft-owned: they keep their own writing style
 	// and carry no Microsoft copyright header.
 	'!extensions/temco-*/**',
+	'!src/temco/**',
 
 	// except specific file types
 	'!src/vs/*/**/*.d.ts',
@@ -240,6 +242,7 @@ export const copyrightFilter = Object.freeze<string[]>([
 	// TEMCO: fork edit — Temco modules are not Microsoft-owned: they keep their own writing style
 	// and carry no Microsoft copyright header.
 	'!extensions/temco-*/**',
+	'!src/temco/**',
 ]);
 
 export const tsFormattingFilter = Object.freeze<string[]>([
@@ -267,6 +270,7 @@ export const tsFormattingFilter = Object.freeze<string[]>([
 	// TEMCO: fork edit — Temco modules are not Microsoft-owned: they keep their own writing style
 	// and carry no Microsoft copyright header.
 	'!extensions/temco-*/**',
+	'!src/temco/**',
 ]);
 
 export const eslintFilter = Object.freeze<string[]>([

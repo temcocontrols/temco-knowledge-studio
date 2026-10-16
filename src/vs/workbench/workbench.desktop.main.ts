@@ -224,4 +224,11 @@ import './contrib/keybindings/electron-browser/systemWideKeybindings.contributio
 //#endregion
 
 
+//#region --- temco (fork)
+
+// TEMCO: fork edit — the shell's single entry point. See docs/temco-platform/entry-points.md.
+import '../../temco/temco.contribution.js';
+
+//#endregion
+
 export { main } from './electron-browser/desktop.main.js';
