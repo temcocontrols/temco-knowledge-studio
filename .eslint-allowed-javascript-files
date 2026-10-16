@@ -82,6 +82,9 @@ extensions/razor/build/update-grammar.mjs
 extensions/rust/build/update-grammar.mjs
 extensions/search-result/syntaxes/generateTMLanguage.js
 extensions/sql/build/update-grammar.mjs
+# TEMCO: fork edit — Temco Docs ships one hand-written webview script. It is a browser asset loaded by
+# the webview (`media/ai-panel.js`), not extension code, and has no TypeScript build step of its own.
+extensions/temco-docs/media/ai-panel.js
 extensions/terminal-suggest/scripts/update-specs.js
 extensions/theme-seti/build/update-icon-theme.js
 extensions/typescript-basics/build/update-grammars.mjs

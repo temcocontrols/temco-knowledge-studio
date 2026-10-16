@@ -3081,6 +3081,20 @@ export default defineConfig(
 			],
 		}
 	},
+	// TEMCO: fork edit — Temco modules are not Microsoft-owned. They carry no Microsoft copyright
+	// header, they are not localized through `nls` yet, and they keep their own I/O and style
+	// conventions, so the rules that encode VS Code's policies for its own code are off for them.
+	// Every general rule still applies.
+	{
+		files: ['extensions/temco-*/**'],
+		rules: {
+			'header/header': 'off',
+			'local/code-no-sync-fs': 'off',
+			'local/code-no-unexternalized-strings': 'off',
+			'local/code-no-in-operator': 'off',
+			'local/code-no-bracket-notation-for-identifiers': 'off',
+		},
+	},
 	// Forbid new JavaScript files - use TypeScript instead.
 	// The allowlist of pre-existing JS/CJS/MJS files lives in
 	// `.eslint-allowed-javascript-files`, which is gated by CODEOWNERS.
