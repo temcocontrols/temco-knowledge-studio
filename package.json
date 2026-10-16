@@ -26,7 +26,7 @@
     "compile": "npm-run-all2 -lp compile-client compile-copilot check-temco-commands",
     "compile-client": "npm run gulp compile",
     "compile-copilot": "npm --prefix extensions/copilot run compile",
-    "check-temco-commands": "npm --prefix extensions/temco-docs run check-commands",
+		"check-temco-commands": "npm --prefix extensions/temco-docs run check-commands && npm --prefix extensions/temco-ai run check-commands",
     "build-fast": "node build/next/build-fast.ts",
     "build-fast-extensions": "npm run gulp copy-codicons compile-extensions compile-extension-media",
     "typecheck-client": "tsc --project ./src/tsconfig.json --noEmit --skipLibCheck",

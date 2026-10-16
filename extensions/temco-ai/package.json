@@ -1,0 +1,156 @@
+{
+  "name": "temco-ai",
+  "displayName": "Temco AI",
+  "description": "Temco AI — the local-AI module of Temco Platform: runs a model on this machine and answers from the documentation it is given.",
+  "version": "0.0.1",
+  "publisher": "temcocontrols",
+  "private": true,
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/temcocontrols/temco-platform.git"
+  },
+  "bugs": {
+    "url": "https://github.com/temcocontrols/temco-platform/issues"
+  },
+  "engines": {
+    "vscode": "^1.143.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "extensionDependencies": [
+    "temcocontrols.temco-docs"
+  ],
+  "activationEvents": [
+    "onView:temcoAi.panel"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "secondarySidebar": [
+        {
+          "id": "temcoAi",
+          "title": "Temco AI",
+          "icon": "media/ai.svg"
+        }
+      ]
+    },
+    "views": {
+      "temcoAi": [
+        {
+          "type": "webview",
+          "id": "temcoAi.panel",
+          "name": "Temco AI"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "temcoAi.page",
+        "title": "The AI Page",
+        "icon": "$(settings-gear)",
+        "category": "Temco AI"
+      },
+      {
+        "command": "temcoAi.openPanel",
+        "title": "Open the AI Panel",
+        "icon": "$(comment-discussion)",
+        "category": "Temco AI"
+      },
+      {
+        "command": "temcoAi.models",
+        "title": "Models and Runtime",
+        "icon": "$(server-process)",
+        "category": "Temco AI"
+      },
+      {
+        "command": "temcoAi.removeModel",
+        "title": "Remove Model or Runtime",
+        "icon": "$(trash)",
+        "category": "Temco AI"
+      },
+      {
+        "command": "temcoAi.openModelFolder",
+        "title": "Open Model Folder",
+        "icon": "$(file-directory)",
+        "category": "Temco AI"
+      },
+      {
+        "command": "temcoAi.dockRight",
+        "title": "Show the AI in the Right Side Bar",
+        "icon": "$(layout-sidebar-right)",
+        "category": "Temco AI"
+      },
+      {
+        "command": "temcoAi.status",
+        "title": "AI Status",
+        "icon": "$(pulse)",
+        "category": "Temco AI"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "temcoAi.dockRight",
+          "when": "view == temcoAi.panel",
+          "group": "navigation@1"
+        },
+        {
+          "command": "temcoAi.models",
+          "when": "view == temcoAi.panel",
+          "group": "navigation@2"
+        },
+        {
+          "command": "temcoAi.status",
+          "when": "view == temcoAi.panel",
+          "group": "navigation@3"
+        },
+        {
+          "command": "temcoAi.openModelFolder",
+          "when": "view == temcoAi.panel",
+          "group": "1_open@1"
+        },
+        {
+          "command": "temcoAi.page",
+          "when": "view == temcoAi.panel",
+          "group": "2_settings@1"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Temco AI",
+      "properties": {
+        "temcoAi.modelFolder": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Where the local runtime and its models are downloaded. Empty keeps them in the extension's own storage — never in a repository."
+        },
+        "temcoAi.allowUnpinned": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Allow downloading a catalog entry whose checksum is not pinned yet. Each such download asks for confirmation first, and the checksum it turns out to have is recorded, so a later change is still noticed."
+        },
+        "temcoAi.runtime": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Id of the local runtime in use. Chosen from **Temco AI: Models and Runtime**."
+        },
+        "temcoAi.model": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Id of the model in use. Chosen from **Temco AI: Models and Runtime**."
+        },
+        "temcoAi.idleMinutes": {
+          "type": "number",
+          "default": 10,
+          "minimum": 0,
+          "markdownDescription": "How long the local server may sit unused before it is stopped and its memory released. `0` keeps it running until the window closes."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "check-commands": "node --experimental-strip-types scripts/check-commands.mts"
+  }
+}

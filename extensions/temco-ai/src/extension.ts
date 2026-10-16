@@ -1,0 +1,126 @@
+// The AI module's entry point.
+//
+// It is the sixth module of Temco Platform and it is *not* part of the documentation module: a local model is a
+// thing the application runs, and the documentation is one of the things it can be pointed at. That is why this
+// is an extension of its own — it has its own container, its own page, its own settings and its own command
+// namespace, and it can be left out of an install without the documentation module noticing.
+//
+// Two directions, and only one of them is a dependency:
+//
+//   * this module requires `temcocontrols.temco-docs`, whose exports are the documentation model — the sets, the
+//     pages, the selection. The panel reads them through `docs.ts` rather than owning a copy.
+//   * the documentation module requires nothing of this one. It calls the commands below when the module is
+//     installed — a new page's body is drafted, a source is analysed for what it is missing, the AI page opens —
+//     and every one of those is a plain command, so an install without this module is a smaller install, not a
+//     broken one.
+
+import * as vscode from 'vscode';
+import { MODELS, RUNTIMES, entryById } from './ai/catalog';
+import { registerAiCommands } from './ai/commands';
+import { AiPanel, AI_VIEW_ID } from './ai/panel';
+import { PROMPT_VERSION, analysePrompt, newPagePrompt, systemPrompt } from './ai/prompts';
+import { AiStatus, aiStatus, complete, disposeAi } from './ai/runtime';
+import { docs } from './docs';
+
+/** What one analysis needs: a source, its files, the pages it already has, and the note the person added. */
+export interface AnalyseRequest {
+  name: string;
+  files: readonly string[];
+  pages: readonly string[];
+  note: string;
+}
+
+/** What one draft needs: the form's answers, and where the text is to be written. */
+export interface DraftRequest {
+  title: string;
+  kind: string;
+  headings: readonly string[];
+  path: string;
+  area: string;
+  material: string;
+  /** Called as the answer arrives, so a draft appears while it is still being written. */
+  onToken?(text: string): void;
+}
+
+/**
+ * What this module offers the rest of the platform.
+ *
+ * The documentation module is the one caller today: the new-page page drafts a body and analyses a source
+ * through here, and the project hub shows what the module has to work with. Every fact about the AI itself is
+ * answered here rather than guessed from a setting, so there is one owner of "which model, which runtime, is it
+ * running".
+ */
+export interface TemcoAiApi {
+  /** The runtime, the model, and the server they are behind, right now. */
+  status(): AiStatus;
+  /** What the module knows, for a surface that only wants to say how much is available. */
+  facts(): { promptVersion: string; known: number };
+  /** The model in use as a person would name it, or `undefined` when none is chosen. */
+  modelLabel(): string | undefined;
+  /** What a source's documentation is missing, as the model proposes it. */
+  analyse(request: AnalyseRequest): Promise<string>;
+  /** A draft of a new page's body, streamed to `onToken` as it is written. */
+  draft(request: DraftRequest): Promise<void>;
+}
+
+export function activate(context: vscode.ExtensionContext): TemcoAiApi {
+  const documentation = docs();
+
+  // The panel reads the page and the registry through the documentation module's model, and decides nothing.
+  const panel = new AiPanel(context, () => documentation.roots(), documentation.selection);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(AI_VIEW_ID, panel, {
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
+    vscode.window.onDidChangeActiveTextEditor(() => panel.refresh()),
+    documentation.onDidChange(() => panel.refresh())
+  );
+
+  registerAiCommands(context);
+
+  return {
+    status: () => aiStatus(context),
+
+    facts: () => ({
+      promptVersion: PROMPT_VERSION,
+      known: [...RUNTIMES, ...MODELS].length,
+    }),
+
+    modelLabel: () => {
+      const status = aiStatus(context);
+      return status.model ? entryById(status.model.id)?.label ?? status.model.id : undefined;
+    },
+
+    analyse: async (request) => {
+      const prompt = analysePrompt(context, request);
+      return complete(
+        context,
+        [
+          { role: 'system', content: systemPrompt(context, undefined) },
+          { role: 'user', content: prompt },
+        ],
+        { maxTokens: 700 }
+      );
+    },
+
+    draft: async (request) => {
+      const prompt = newPagePrompt(context, request);
+      await complete(
+        context,
+        [
+          { role: 'system', content: systemPrompt(context, undefined) },
+          { role: 'user', content: prompt },
+        ],
+        {
+          maxTokens: 1200,
+          onToken: (text) => request.onToken?.(text),
+        }
+      );
+    },
+  };
+}
+
+export function deactivate(): void {
+  // The local AI may have left a server process running; nothing else is holding anything open.
+  disposeAi();
+}

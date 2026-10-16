@@ -319,7 +319,7 @@ names, and the difference is recorded here rather than left to be discovered:
   (`src/projectPage.ts`) is what it is *made of*. Opening the editor for every look at a project would make
   reading its pages and editing its fields the same act, so they are separate commands (`openProject` and
   `editProject`). The **dashboard** (`src/home.ts`) is the application itself, and the **AI page**
-  (`src/aiPage.ts`) is the AI. All five are tabs in one group.
+  (`extensions/temco-ai/src/aiPage.ts`) is the AI. All five are tabs in one group.
 - **The project's pages are tabs in one group**, and so are the documentation pages they open — never a split. The rule
   lives in `src/surface.ts` and is stated there once, together with the two wrong answers that led to it: a page
   opened `Beside` produced a second column a few hundred pixels wide, and "is the tab in front one of ours?" —
@@ -331,7 +331,7 @@ names, and the difference is recorded here rather than left to be discovered:
   holds text is `min-width: 0`, and a table wider than the pane scrolls inside its own box. A bare `minmax(Nem,
   1fr)` sets a hard floor that pushed the right-hand column out of the pane — the page scrolled sideways
   instead of reflowing, and it looked like a rendering fault rather than a CSS one.
-- The **AI page** (`src/aiPage.ts`) is the AI as something owned and configured — the four facts a person needs
+- The **AI page** (`extensions/temco-ai/src/aiPage.ts`) is the AI as something owned and configured — the four facts a person needs
   before trusting an answer, what can be downloaded, and which is chosen. It stands beside the AI *panel*: the
   panel is the conversation, the page is the setup. A project's AI tab carries the same facts plus the
   suggestions read from that project's pages.
@@ -375,7 +375,7 @@ and it is where a reader of a page wants a question answered.
 under **`contributes.viewsContainers.secondarySidebar`** — a location VS Code's own schema has, and which this
 design document wrongly claimed did not exist. The secondary side bar is therefore its default home: nothing to
 drag, nothing to pick, no setup step. If someone moves it (the panel, the primary side bar), *Show the AI in the
-right side bar* (`temcoDocs.aiDockRight`) focuses the view and invokes the per-container
+right side bar* (`temcoAi.dockRight`, in the `temco-ai` module) focuses the view and invokes the per-container
 `<containerId>.resetViewContainerLocation` command VS Code registers, which returns it to its declared location.
 That is also why the extension never asks *where* a view currently is: the view-location API is not exposed to
 extensions, and the reset command makes the question unnecessary.

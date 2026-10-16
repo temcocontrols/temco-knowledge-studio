@@ -50,7 +50,7 @@ VS Code's gates encode policies for Microsoft's own code: a Microsoft copyright 
 |---|---|
 | `build/filters.ts` | `'!extensions/temco-*/**'` and `'!src/temco/**'` in the unicode, indentation, copyright and formatting filters |
 | `eslint.config.js` | one override for both paths, turning off the Microsoft header, sync-fs, unexternalized-strings, in-operator and bracket-notation rules |
-| `.eslint-allowed-javascript-files` | `extensions/temco-docs/media/ai-panel.js` — a webview asset, not extension code |
+| `.eslint-allowed-javascript-files` | `extensions/temco-ai/media/ai-panel.js` — a webview asset, not extension code |
 | `build/gulpfile.extensions.ts` | the module's `tsconfig.json` in the compiled list |
 | `package.json` | `check-temco-commands`, run by `compile` |
 

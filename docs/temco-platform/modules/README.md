@@ -7,7 +7,7 @@ A module is a real VS Code extension inside the application. Namespaces follow t
 | Module | Purpose | Namespace | State |
 |---|---|---|---|
 | `temco-docs` | the registry, pages, checks, editor surfaces, the catalog and the writes | `temcoDocs` | **active** |
-| `temco-ai` | the local runtime and models, the prompts, the panel, drafts and answers | `temcoAi` | reserved |
+| `temco-ai` | the local runtime and models, the prompts, the panel, drafts and answers | `temcoAi` | **active** |
 | `temco-repositories` | the organisation, clones, pulls, history, the working area | `temcoRepositories` | reserved |
 | `temco-projects` | projects, sources, outputs, builds | `temcoProjects` | reserved |
 | `temco-sql` | registers, queries, export | `temcoSql` | reserved |
@@ -28,7 +28,16 @@ A module becomes active on the day it has a first real feature. Reserving a modu
 
 **`temco-docs`** — the content side: the registry of areas, chapters and pages, the structural checks, the Workspace and Library views, the pages, the Markdown surfaces, the **catalog** and the five writes. It owns the only write a page ever gets.
 
-**`temco-ai`** — the local model: the runtime and models downloaded on request into the user's own folder, the prompts, the AI panel, drafts and their diffs, and the citations that open the page they name. It reads the catalog through `temco-docs` and never writes a page.
+**`temco-ai`** — the local model: the runtime and models downloaded on request into the user's own folder, the prompts, the AI panel, drafts and their diffs, and the citations that open the page they name. It reads the documentation through `temco-docs` and never writes a page.
+
+### How two modules may talk
+
+Only one shape is allowed, and it runs in one direction:
+
+* **A provider publishes, a consumer declares.** `temco-ai` requires `temcocontrols.temco-docs` (`extensionDependencies`), so that module activates first and its exports — the sets, the pages, the selection, the editor column, one change signal — are there when the consumer's `activate()` runs. The shapes are spelled twice, once in each module (`src/api.ts` in the provider, `src/docs.ts` in the consumer), because an extension cannot import another extension's sources.
+* **A consumer never requires a provider that requires it.** That is a cycle, and a cycle is a load-order bug waiting to happen. The second direction is always a *command* the first module calls and may find missing, and the caller gates what it shows on a context key it sets itself (`temcoDocs.aiInstalled`).
+
+`temco-docs` and `temco-ai` are the worked example: one declared dependency, one optional command surface.
 
 **`temco-repositories`** — the organisation and the local copies: the repository list, a source's files, cloning one branch with full history, `pull --ff-only`, removing the local copy, reading a file's text and history. It owns the working area (`temcoRepositories.workspaceFolder`, default `~/Temco`).
 

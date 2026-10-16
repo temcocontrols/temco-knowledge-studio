@@ -7,15 +7,8 @@
 | `src/registry.ts` | reading `docs/help/registry.json` and the generated `index.json`/`page-meta.json`, the page id → file rule, the structural checks, the counts. No VS Code UI beyond `Uri`, `WorkspaceFolder` and the filesystem |
 | `src/tree.ts` | the Content view: which nodes exist, what they show, what a click does |
 | `src/diagnostics.ts` | which issues become Problems, and on which file |
-| `src/extension.ts` | activation, the view and status bar, the commands, the file watcher |
-| `src/ai/catalog.ts` | what can be downloaded: the pinned llama.cpp build with the checksums GitHub publishes, the models on offer, their licences. No network, no filesystem |
-| `src/ai/install.ts` | the model folder, the resumable download and its checksum check, the unpack, and the manifest of what is installed |
-| `src/ai/runtime.ts` | the local server process: started on demand on a loopback port, health-checked, stopped when idle — and the single `complete()` call everything else uses |
-| `src/ai/history.ts` | the commits a draft is about: `git log` over the page's `code` globs since its last review, metadata and paths only. Never throws |
-| `src/ai/prompts.ts` | loads `prompts/*.md` and fills them in: the house rules, the question, the draft, the area. The only text that may reach the model |
-| `src/ai/citations.ts` | what an answer pointed at: the ids that resolve, the ids that do not, and the plain term search behind a low-confidence fallback |
-| `src/ai/panel.ts` | the `Temco Docs` panel: chat about the open page, `Draft update` as a diff, `Ask the area`, and the model line. Decides nothing itself |
-| `src/ai/commands.ts` | the list a person picks from: install, use, remove, open the folder, and the AI's status |
+| `src/extension.ts` | activation, the view and status bar, the commands, the file watcher, and the model it publishes to other modules (`src/api.ts`) |
+| `src/aiModule.ts` | what this module knows of `temco-ai`: whether it is installed, its commands, and the two calls it makes when it is (a draft, an analysis) |
 | `src/builds.ts` | the product repo's own builds, invoked as VS Code tasks and judged by the artifact they leave — never by an exit code, and never the form that deploys |
 | `src/report.ts` | the staleness report: what needs attention, grouped by owner, as Markdown. Counts rather than lists for the pages that have merely never been reviewed |
 | `src/scaffold.ts` | starting a registry in an open folder that has none: the smallest valid file, on a confirmation, with the seeding left to the repository's own generator |
@@ -25,7 +18,8 @@
 | `src/feedback.ts` | feedback rows routed to their page's owner, against a proposed file shape, with the aging called out |
 
 `registry.ts` is deliberately free of presentation: it is the part that would survive replacing the view, and
-the part an AI feature will reuse to know what pages exist.
+the part any other module reuses to know what pages exist — `temco-ai` reads it through the exported model rather
+than through this folder.
 
 ## The tree
 
@@ -105,10 +99,6 @@ already owns.**
 | `temcoDocs.renamePage` | the title as a registry value, and the page's first `#` with it — never the file name |
 | `temcoDocs.movePageUp` · `movePageDown` | a two-number swap of `order` in `registry.json` |
 | `temcoDocs.retirePage` | `deprecated` and `superseded_by`; the file stays, so old links keep redirecting |
-| `temcoDocs.models` | the list of runtimes and models: what is installed, what can be downloaded, which one is in use |
-| `temcoDocs.removeModel` | deletes an installed runtime or model, and clears it from the settings when it was the one in use |
-| `temcoDocs.openModelFolder` | opens the folder the downloads live in |
-| `temcoDocs.aiStatus` | which runtime and model are in use, whether the server is running, and how to stop it or read its log |
 | `temcoDocs.buildSite` | invokes the repository's own `docs:site` as a task and reports the files it produced |
 | `temcoDocs.buildHelp` | invokes the non-deploying help build (`build:help:dry`) and reports the CHM it produced |
 | `temcoDocs.stalenessReport` | opens the report of what is owed as an untitled Markdown document — nothing is written |
@@ -179,7 +169,7 @@ trusted.
 |---|---|
 | No shipped page is edited by a model | A draft opens in a diff; the page changes only when **Apply draft** is pressed, and then as one undoable `WorkspaceEdit` |
 | No secrets, no customer data | The only thing a prompt can take is a `PageContext` — page text, path, registry metadata — plus ids, titles and headings for an area question. No parameter exists that could carry another file, a token or a sweep of the repository |
-| Traceable | `PROMPT_VERSION` is printed on every draft and in the panel's model line, and a draft also names its commit range (`src/ai/history.ts`) |
+| Traceable | `PROMPT_VERSION` is printed on every draft and in the panel's model line, and a draft also names its commit range (`temco-ai/src/ai/history.ts`) |
 | Degradable | The panel opens with nothing installed and says what to download; the server never starts without a runtime and a model; a missing prompt file is a named error, not a stack trace; a page too large for one draft is refused rather than half-drafted |
 | Deterministic first | Staleness is read from `index.json`, never recomputed; the low-confidence fallback is plain term overlap; citations are resolved against the registry |
 | Cost bounded | 6 turns of history, 40 area candidates, 40 commits, 100k characters of page text, 1024 tokens per answer and 2048 per draft, `--ctx-size 8192` |
