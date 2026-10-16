@@ -54,10 +54,11 @@ extensions/temco-<module>/
 │   └── <feature>/
 ├── media/                 icons, webview css and js
 ├── prompts/               model instructions as text, where a module needs them
-├── scripts/               module-local gates
-├── docs/                  module-level documentation
-└── .vscodeignore          what the .vsix carries
+└── scripts/               module-local gates
 ```
+
+Its documentation is `docs/modules/temco-<module>/` **in this repository**, not a `docs` folder inside the module.
+There is no `.vscodeignore`: the platform build packages a built-in module, `vsce` does not.
 
 ## Contract
 
@@ -65,7 +66,7 @@ extensions/temco-<module>/
 2. The catalog belongs to `temco-docs`. Other modules read it through commands.
 3. Each module owns its own storage under its own extension id — never inside a repository, never committed.
 4. One module, one namespace. A command id is registered exactly once.
-5. Every module builds as a `.vsix` and activates in ordinary VS Code. A module that only works inside the application is in the wrong place.
+5. A module is a built-in extension. It uses the published `vscode` API only and never the shell's internals, so it still runs in an ordinary VS Code window.
 6. A module never assumes the shell.
 
 ## Adding a module
@@ -75,7 +76,7 @@ extensions/temco-<module>/
 3. `tsconfig.json` extends `../tsconfig.base.json`.
 4. Store everything under its own id's storage.
 5. Add its gate to the release list: `tsc`, plus its own behaviour check where it has one.
-6. Write its page in this folder: commands, settings, storage, and what it must not own.
-7. Build the `.vsix` and activate it in ordinary VS Code.
+6. Write its page in `docs/modules/temco-<module>/`: commands, settings, storage, and what it must not own.
+7. Compile it with the platform build (`npm run gulp compile-extension:temco-<module>`) and check it loads.
 
 Nothing else is required: the build picks up any folder with a `package.json`, the root install brings in its dependencies, and web builds skip it automatically.

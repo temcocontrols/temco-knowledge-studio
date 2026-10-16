@@ -76,10 +76,10 @@ extensions/temco-<module>/
 │   └── extension.ts       the only activation entry: register, wire, dispose
 ├── media/                 icons, webview css and js
 ├── prompts/               model instructions, where a module needs them
-├── scripts/               module-local gates
-├── docs/                  module-level documentation
-└── .vscodeignore          what the .vsix carries
+└── scripts/               module-local gates
 ```
+
+A module's documentation lives in `docs/modules/temco-<module>/` ([../modules/README.md](../modules/README.md)), never in a `docs` folder inside the module.
 
 | State | Contents | Build effect |
 |---|---|---|
@@ -133,7 +133,7 @@ A container with no views is not shown, so a container may be declared before it
 
 1. VS Code's own source is never edited; the two entry points are the complete list.
 2. Every change is a new file in a new folder.
-3. A module must also work as a plain `.vsix` in ordinary VS Code.
+3. A module must also work in an ordinary VS Code window — it uses the published `vscode` API only, nothing shell-specific.
 4. Modules talk through commands, settings, files and events; never by importing one another's source.
 5. `temco-docs` owns the catalog and every page write.
 6. Read-only by default. The application writes only in the five documented cases, each behind its own command and a confirmation naming the path or the value.
