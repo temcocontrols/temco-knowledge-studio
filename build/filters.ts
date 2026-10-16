@@ -70,6 +70,10 @@ export const unicodeFilter = Object.freeze<string[]>([
 	// extensions/copilot has its own code style
 	'!extensions/copilot/**',
 
+	// TEMCO: fork edit — Temco modules are not Microsoft-owned: they keep their own writing style
+	// and carry no Microsoft copyright header.
+	'!extensions/temco-*/**',
+
 	'!src/vs/base/browser/dompurify/**',
 	'!src/vs/workbench/services/keybinding/browser/keyboardLayouts/**',
 	'!src/vs/workbench/contrib/terminal/common/scripts/psreadline/**',
@@ -141,6 +145,10 @@ export const indentationFilter = Object.freeze<string[]>([
 
 	// extensions/copilot has its own code style
 	'!extensions/copilot/**',
+
+	// TEMCO: fork edit — Temco modules are not Microsoft-owned: they keep their own writing style
+	// and carry no Microsoft copyright header.
+	'!extensions/temco-*/**',
 
 	// except specific file types
 	'!src/vs/*/**/*.d.ts',
@@ -228,6 +236,10 @@ export const copyrightFilter = Object.freeze<string[]>([
 
 	// extensions/copilot has its own code style
 	'!extensions/copilot/**',
+
+	// TEMCO: fork edit — Temco modules are not Microsoft-owned: they keep their own writing style
+	// and carry no Microsoft copyright header.
+	'!extensions/temco-*/**',
 ]);
 
 export const tsFormattingFilter = Object.freeze<string[]>([
@@ -251,6 +263,10 @@ export const tsFormattingFilter = Object.freeze<string[]>([
 
 	// extensions/copilot has its own code style
 	'!extensions/copilot/**',
+
+	// TEMCO: fork edit — Temco modules are not Microsoft-owned: they keep their own writing style
+	// and carry no Microsoft copyright header.
+	'!extensions/temco-*/**',
 ]);
 
 export const eslintFilter = Object.freeze<string[]>([

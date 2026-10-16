@@ -84,6 +84,8 @@ const compilations = [
 	'extensions/references-view/tsconfig.json',
 	'extensions/search-result/tsconfig.json',
 	'extensions/simple-browser/tsconfig.json',
+	// TEMCO: fork edit — this list is a cached glob, so every built-in extension must be named here to be compiled.
+	'extensions/temco-docs/tsconfig.json',
 	'extensions/tunnel-forwarding/tsconfig.json',
 	'extensions/typescript-language-features/web/tsconfig.json',
 	'extensions/typescript-language-features/tsconfig.json',
