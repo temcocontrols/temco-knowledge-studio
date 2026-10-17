@@ -705,6 +705,8 @@
 			{ label: 'View: Toggle AI Bar', keys: 'Ctrl+Alt+B', run: function () { toggleAux(); } },
 			{ label: 'View: Toggle Breadcrumbs', run: function () { toggleBreadcrumbs(); } },
 			{ label: 'Preferences: Color Theme', run: function () { toggleTheme(); } },
+			{ label: 'Help: Keyboard Shortcuts', run: function () { openView('help/keys'); } },
+			{ label: 'Help: About', run: function () { openView('help/about'); } },
 			{ label: 'Temco: New Documentation Project', run: function () { toast('A project needs a name, a version and an owner. The form is not part of this mock.'); } },
 			{ label: 'Temco: Read All Sources', run: function () { showPanel('output'); toast('Reading ' + M.data.sources.length + ' sources…'); } },
 			{ label: 'Temco: Build Everything', run: function () { showPanel('output'); toast('Build queued: website, PDF, help file, indexes.'); } },
@@ -870,13 +872,14 @@
 			{ label: 'Developer: Open Settings JSON', action: 'open-settings-json' }
 		],
 		Help: [
-			{ label: 'Documentation', action: 'help-docs' },
-			{ label: 'Keyboard Shortcuts', action: 'help-keys' },
+			{ label: 'Help', run: function () { openView('help/home'); } },
+			{ label: 'Documentation', run: function () { openView('learn/home'); } },
+			{ label: 'Keyboard Shortcuts', run: function () { openView('help/keys'); } },
 			{ separator: true },
-			{ label: 'Show Logs', action: 'show-logs' },
-			{ label: 'Report an Issue', action: 'report-issue' },
+			{ label: 'Show Logs', run: function () { openView('help/logs'); } },
+			{ label: 'Report an Issue', run: function () { openView('help/issue'); } },
 			{ separator: true },
-			{ label: 'About Temco Platform', action: 'about' }
+			{ label: 'About Temco Platform', run: function () { openView('help/about'); } }
 		]
 	};
 
@@ -1047,8 +1050,7 @@
 				openView('docs/page');
 				return;
 			}
-			/* "Open the tree": the same surfaces, in the container that shows their shape. */
-			case 'open-tree':
+			/* "Open the tree": the same surfaces, in the container that shows their shape. */			case 'open-tree':
 				moduleId = 'documents';
 				renderActivityBar();
 				renderSidebar();

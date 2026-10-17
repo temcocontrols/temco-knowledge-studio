@@ -305,6 +305,30 @@
 					]
 				}
 			]
+		},
+		{
+			id: 'help',
+			label: 'Help',
+			icon: 'info',
+			defaultView: 'help/home',
+			bottom: true,
+			sections: [
+				{
+					label: 'Learn',
+					views: [
+						{ id: 'help/home', label: 'Help', icon: 'info' },
+						{ id: 'help/keys', label: 'Keyboard Shortcuts', icon: 'key' }
+					]
+				},
+				{
+					label: 'Support',
+					views: [
+						{ id: 'help/logs', label: 'Logs', icon: 'output' },
+						{ id: 'help/issue', label: 'Report an Issue', icon: 'alert' },
+						{ id: 'help/about', label: 'About', icon: 'info' }
+					]
+				}
+			]
 		}
 	];
 
@@ -797,6 +821,33 @@
 			{ id: 2402, name: 'T3-LB · Lighting', product: 'T3-LB', firmware: '2.14.3', online: '1', updated: '2026-10-17 12:41:03' }
 		],
 
+
+		/* What the Help pages read: the keys the window binds, and the files a report would attach. */
+		shortcuts: [
+			{ group: 'Window', items: [
+				{ label: 'Command palette', keys: ['Ctrl', 'Shift', 'P'], note: 'every command, including the ones without a key' },
+				{ label: 'Go to a surface', keys: ['Ctrl', 'P'], note: 'the same list the side bar walks' },
+				{ label: 'Toggle side bar', keys: ['Ctrl', 'B'] },
+				{ label: 'Toggle panel', keys: ['Ctrl', 'J'] },
+				{ label: 'Toggle AI bar', keys: ['Ctrl', 'Alt', 'B'] }
+			] },
+			{ group: 'Documents', items: [
+				{ label: 'New page', keys: ['Ctrl', 'Alt', 'N'], note: 'opens the New Page flow' },
+				{ label: 'Read all sources', keys: ['Ctrl', 'Alt', 'R'] },
+				{ label: 'Build everything', keys: ['Ctrl', 'Shift', 'B'] }
+			] },
+			{ group: 'Editor', items: [
+				{ label: 'Save draft', keys: ['Ctrl', 'S'], note: 'writes the registry, not a source file' },
+				{ label: 'Submit for review', keys: ['Ctrl', 'Enter'] }
+			] }
+		],
+
+		logFiles: [
+			{ name: 'main.log', size: '412 KB', updated: 'just now', tone: 'ok', note: 'the window process: startup, windows, updates' },
+			{ name: 'renderer.log', size: '1.2 MB', updated: 'just now', tone: 'ok', note: 'this window: surfaces, panels, what was opened' },
+			{ name: 'extension-host.log', size: '188 KB', updated: '2 minutes ago', tone: 'warn', note: 'the modules: activation, reads, builds' },
+			{ name: 'agent-host.log', size: '0 KB', updated: 'never', tone: 'neutral', note: 'the local AI runtime, once it is started' }
+		],
 
 		aiModels: [
 			{ name: 'qwen2.5-3b-instruct', kind: 'Chat', size: '1.9 GB', state: 'Loaded', tone: 'ok', ctx: '32k' },
