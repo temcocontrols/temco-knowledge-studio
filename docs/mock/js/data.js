@@ -56,14 +56,33 @@
 			label: 'Documentation',
 			icon: 'document',
 			defaultView: 'docs/projects',
+			/* Grouped by what the surface is about: what you are building, where its text comes from,
+			   the text itself, and the road to a reader. A single-surface group still earns its
+			   heading, because the four names are the map of the module. */
 			sections: [
 				{
 					label: 'Projects',
+					/* Expanded into the projects themselves, so the one being worked on is visible without opening
+					   the list first. */
+					tree: 'projects',
 					views: [
-						{ id: 'docs/projects', label: 'Projects', icon: 'folder', badge: 12 },
+						{ id: 'docs/projects', label: 'Projects', icon: 'folder', badge: 12 }
+					]
+				},
+				{
+					label: 'Sources',
+					views: [
 						{ id: 'docs/repositories', label: 'Repositories', icon: 'repo', badge: 4 },
-						{ id: 'docs/sources', label: 'Sources', icon: 'link', badge: 7 },
-						{ id: 'docs/knowledge', label: 'Knowledge', icon: 'book' }
+						{ id: 'docs/sources', label: 'Sources', icon: 'link', badge: 7 }
+					]
+				},
+				{
+					label: 'Documents',
+					/* Expanded into the areas, so the registry is reachable by name rather than only through
+					   the master list. */
+					tree: 'areas',
+					views: [
+						{ id: 'docs/knowledge', label: 'Documents', icon: 'book' }
 					]
 				},
 				{
@@ -219,13 +238,24 @@
 			label: 'SQL Studio',
 			icon: 'database',
 			defaultView: 'sql/query',
+			/* The database this window actually edits is the documentation registry, so the studio is
+			   laid out around it: one place to connect, one to ask, one to look at the shape, one to
+			   keep the questions worth asking again. */
 			sections: [
 				{
 					label: 'Workbench',
 					views: [
 						{ id: 'sql/query', label: 'Query Editor', icon: 'code' },
 						{ id: 'sql/connections', label: 'Connections', icon: 'database' },
-						{ id: 'sql/reports', label: 'Reports', icon: 'chart' }
+						{ id: 'sql/history', label: 'History', icon: 'clock' }
+					]
+				},
+				{
+					label: 'Docs Database',
+					views: [
+						{ id: 'sql/schema', label: 'Schema', icon: 'list' },
+						{ id: 'sql/saved', label: 'Saved Queries', icon: 'book' },
+						{ id: 'sql/reports', label: 'Reports', icon: 'chart', badge: 3 }
 					]
 				}
 			]
@@ -236,14 +266,21 @@
 			icon: 'gear',
 			defaultView: 'settings/general',
 			bottom: true,
+			/* Two groups, named the way the other modules name theirs: what follows this person
+			   between machines, and what the platform itself is and where it publishes. */
 			sections: [
 				{
-					label: 'Temco Platform',
+					label: 'Profile',
 					views: [
 						{ id: 'settings/general', label: 'General', icon: 'gear' },
+						{ id: 'settings/ai', label: 'AI Models', icon: 'sparkle' }
+					]
+				},
+				{
+					label: 'Platform',
+					views: [
 						{ id: 'settings/modules', label: 'Modules', icon: 'package', badge: 7 },
 						{ id: 'settings/branding', label: 'Branding', icon: 'palette' },
-						{ id: 'settings/ai', label: 'AI Models', icon: 'sparkle' },
 						{ id: 'settings/publishing', label: 'Publishing', icon: 'upload' }
 					]
 				}
@@ -278,8 +315,35 @@
 		moduleId: 'docs',
 		moduleLabel: 'Documentation',
 		moduleDefaultView: 'docs/projects',
-		sectionLabel: 'Projects',
-		sectionFirstView: 'docs/projects',
+		sectionLabel: 'Sources',
+		sectionFirstView: 'docs/repositories',
+		singleSection: false
+	};
+
+	/* The code a read turns into pages. It is evidence, not editable content: a page is changed by
+	   an edit and a release, never by changing a source here. */
+	M.viewIndex['docs/source'] = {
+		id: 'docs/source',
+		label: 'Source',
+		icon: 'code',
+		moduleId: 'docs',
+		moduleLabel: 'Documentation',
+		moduleDefaultView: 'docs/projects',
+		sectionLabel: 'Sources',
+		sectionFirstView: 'docs/repositories',
+		singleSection: false
+	};
+
+	/* One page of the registry, opened from the Knowledge list or from the working set. */
+	M.viewIndex['docs/page'] = {
+		id: 'docs/page',
+		label: 'Page',
+		icon: 'document',
+		moduleId: 'docs',
+		moduleLabel: 'Documentation',
+		moduleDefaultView: 'docs/projects',
+		sectionLabel: 'Documents',
+		sectionFirstView: 'docs/knowledge',
 		singleSection: false
 	};
 
@@ -289,22 +353,32 @@
 		user: { name: 'Derek', initials: 'DK', role: 'Controls engineer' },
 
 		workspaces: [
-			{ id: 't3000', name: 'T3000', desc: 'Building automation controller platform', projects: 5, sources: 14, devices: 34, updated: '12 minutes ago', active: true, tone: 'accent' },
-			{ id: 't3-bacnet', name: 'T3-BACnet', desc: 'BACnet stack and object model', projects: 3, sources: 9, devices: 12, updated: '2 hours ago' },
-			{ id: 'temco-learn', name: 'Temco Learn', desc: 'Published documentation site', projects: 2, sources: 6, devices: 0, updated: 'yesterday' },
-			{ id: 'legacy', name: 'Legacy Products', desc: 'T3-8R, T3-22I, T3-LB archives', projects: 4, sources: 11, devices: 8, updated: '4 days ago' }
+			{ id: 't3000', name: 'T3000', path: '~/Temco/t3000', desc: 'Building automation controller platform', projects: 5, sources: 14, devices: 6, updated: '12 minutes ago', active: true, tone: 'accent' },
+			{ id: 't3-bacnet', name: 'T3-BACnet', path: '~/Temco/t3-bacnet', desc: 'BACnet stack and object model', projects: 3, sources: 9, devices: 12, updated: '2 hours ago' },
+			{ id: 'temco-learn', name: 'Temco Learn', path: '~/Temco/temco-learn', desc: 'Published documentation site', projects: 2, sources: 6, devices: 0, updated: 'yesterday' },
+			{ id: 'legacy', name: 'Legacy Products', path: '~/Temco/legacy', desc: 'T3-8R, T3-22I, T3-LB archives', projects: 4, sources: 11, devices: 8, updated: '4 days ago' }
+		],
+
+		/* A template is the shape a project starts with: which areas it opens, how many pages it
+		   stubs out, and which artifacts the build produces. It writes nothing until a project uses
+		   it, and it never carries content, an owner or a version. */
+		templates: [
+			{ name: 'Controller Manual', desc: 'Product overview, wiring, points, specifications and troubleshooting.', pages: 48, areas: ['Overview', 'Getting Started', 'Hardware', 'Protocols', 'Troubleshooting'], targets: ['Website', 'PDF'], from: 'written by hand' },
+			{ name: 'Protocol Reference', desc: 'Objects, services, conformance and the notes an integrator needs.', pages: 26, areas: ['Overview', 'Architecture', 'Protocols'], targets: ['Website', 'PDF', 'CHM'], from: 'a written outline' },
+			{ name: 'API Reference', desc: 'Endpoints, schemas and samples generated from a repository.', pages: 34, areas: ['Overview', 'Getting Started', 'API Reference'], targets: ['Website', 'PDF'], from: 'a repository' },
+			{ name: 'Release Notes', desc: 'One page per release, from the commits since the previous tag.', pages: 8, areas: ['Release Notes'], targets: ['Website'], from: 'git tags' }
 		],
 
 		kpis: [
 			{ label: 'Documentation Projects', value: '12', delta: '+2 this month', meta: '4 need attention' },
 			{ label: 'Sources Read', value: '38', delta: '+6', meta: 'repositories · PDF · DOCX' },
 			{ label: 'Pages', value: '1,254', delta: '+48', meta: '341 never reviewed' },
-			{ label: 'Devices Online', value: '31 / 34', delta: '−1', down: true, meta: 'T3-22I offline 2 h' }
+			{ label: 'Devices Online', value: '4 / 6', delta: '−1', down: true, meta: 'T3-22I offline 2 h' }
 		],
 
 		pipeline: [
 			{ n: '01', name: 'Sources', meta: '7 read', view: 'docs/sources', current: false },
-			{ n: '02', name: 'Knowledge', meta: '1,254 pages', view: 'docs/knowledge', current: false },
+			{ n: '02', name: 'Documents', meta: '1,254 pages', view: 'docs/knowledge', current: false },
 			{ n: '03', name: 'Review', meta: '17 waiting', view: 'docs/review', current: true },
 			{ n: '04', name: 'Build', meta: '4 targets', view: 'docs/builds', current: false },
 			{ n: '05', name: 'Publish', meta: '13.0 ready', view: 'docs/releases', current: false },
@@ -364,10 +438,43 @@
 		/* `temco` marks the repositories Temco itself publishes under github.com/temcocontrols —
 		   the ones the platform ships documentation for. Everything else is read as a third party. */
 		repositories: [
-			{ name: 't3000webview', remote: 'github.com/temcocontrols/t3000webview', temco: true, branch: 'main', branches: 4, state: 'Cloned', tone: 'ok', files: 412, pages: 138, size: '48 MB', read: '1 hour ago', owner: 'Derek' },
-			{ name: 't3000-esp', remote: 'github.com/temcocontrols/t3000-esp', temco: true, branch: 'main', branches: 2, state: 'Cloned', tone: 'ok', files: 268, pages: 64, size: '22 MB', read: '3 hours ago', owner: 'Mei' },
-			{ name: 'temco-learn', remote: 'github.com/temcocontrols/temco-learn', temco: true, branch: 'main', branches: 3, state: 'Not cloned', tone: 'neutral', files: 0, pages: 0, size: '—', read: 'never', owner: '—' },
-			{ name: 'bacnet-stack', remote: 'github.com/bacnet-stack/bacnet-stack', temco: false, branch: 'v1.4', branches: 9, state: 'Cloned', tone: 'ok', files: 1204, pages: 52, size: '96 MB', read: 'yesterday', owner: 'Ana' }
+			{ name: 't3000webview', remote: 'github.com/temcocontrols/t3000webview', temco: true, branch: 'main', branches: 4, branchNames: ['main', 't3000', 'release/13.0', 'feature/web-ui'], head: '4de5eda', docs: 'docs/help', state: 'Cloned', tone: 'ok', files: 412, pages: 138, size: '48 MB', read: '1 hour ago', owner: 'Derek', scripts: [{ name: 'docs:registry', note: 'writes docs/help/registry.json' }, { name: 'docs:build', note: 'builds the site into .temco/build' }, { name: 'docs:check', note: 'structural checks, no writes' }] },
+			{ name: 't3000-esp', remote: 'github.com/temcocontrols/t3000-esp', temco: true, branch: 'main', branches: 2, branchNames: ['main', 'feature/ota'], head: 'c41f002', docs: 'docs', state: 'Cloned', tone: 'ok', files: 268, pages: 64, size: '22 MB', read: '3 hours ago', owner: 'Mei', scripts: [{ name: 'docs:read', note: 'writes docs/index.json' }] },
+			{ name: 'temco-learn', remote: 'github.com/temcocontrols/temco-learn', temco: true, branch: 'main', branches: 3, branchNames: [], head: '—', docs: 'content', state: 'Not cloned', tone: 'neutral', files: 0, pages: 0, size: '—', read: 'never', owner: '—', scripts: [] },
+			{ name: 'bacnet-stack', remote: 'github.com/bacnet-stack/bacnet-stack', temco: false, branch: 'v1.4', branches: 4, branchNames: ['v1.4', 'master', 'release/1.3', 'feature/sc'], head: '9b21c04', docs: 'doc', state: 'Cloned', tone: 'ok', files: 1204, pages: 52, size: '96 MB', read: 'yesterday', owner: 'Ana', scripts: [] },
+		],
+
+		/* The files a read turned into pages, and the code an AI draft is asked to work from. */
+		sourceFiles: [
+			{ path: 'src/api/points.ts', role: 'the endpoints the API Reference documents', lines: 412, lang: 'TypeScript' },
+			{ path: 'src/api/point-types.ts', role: 'the point type table and its scale factors', lines: 168, lang: 'TypeScript' },
+			{ path: 'src/web/point-table/point-table.component.ts', role: 'what the screenshots on the page show', lines: 640, lang: 'TypeScript' },
+			{ path: 'src/models/point.model.ts', role: 'the schema the page quotes', lines: 96, lang: 'TypeScript' },
+			{ path: 'docs/scale-factor.md', role: 'a page written by hand, not generated', lines: 54, lang: 'Markdown' },
+			{ path: 'README.md', role: 'the overview page', lines: 88, lang: 'Markdown' }
+		],
+
+		sourceCode: [
+			'/* t3000webview · src/api/points.ts · read 1 hour ago at 4de5eda */',
+			'',
+			'export interface Point {',
+			'  id: string;          // AI1, AO2, DI1 ...',
+			'  label: string;',
+			'  type: "AI" | "AO" | "DI" | "DO" | "AV" | "BV";',
+			'  raw: number;         // what the controller stores',
+			'  scale: number;       // engineering value = raw * scale + offset',
+			'  offset: number;',
+			'  unit: string;',
+			'}',
+			'',
+			'/** Every point on a device. */',
+			'export async function listPoints(deviceId: string): Promise<Point[]> {',
+			'  const response = await fetch("/api/devices/" + deviceId + "/points");',
+			'  if (!response.ok) {',
+			'    throw new Error("GET /api/devices/" + deviceId + "/points -> " + response.status);',
+			'  }',
+			'  return response.json();',
+			'}'
 		],
 
 		reads: [
@@ -545,10 +652,60 @@
 			{ ip: '192.168.10.77', mac: 'A4:BB:6D:01:9F:12', name: 'Workstation', vendor: 'Dell', protocol: '—', state: 'Online', tone: 'ok' }
 		],
 
+		/* SQL Studio is about the documentation registry: this window edits one database, and every
+		   page of the module is a view of it. */
 		connections: [
-			{ name: 'MSSQL · Production', kind: 'SQL Server', host: 't3-sql01\\prod', database: 'T3000', state: 'Connected', tone: 'ok' },
-			{ name: 'SQLite · Cache', kind: 'SQLite', host: '~/Temco/cache.db', database: 'main', state: 'Connected', tone: 'ok' },
-			{ name: 'PostgreSQL · Reports', kind: 'PostgreSQL', host: 'reports.temco.local', database: 'analytics', state: 'Idle', tone: 'warn' }
+			{ name: 'Temco Docs', kind: 'SQLite', host: '~/Temco/t3000/.temco/docs.db', database: 'temco_docs', state: 'Connected', tone: 'ok', role: 'The registry this window edits', access: 'Read and write' },
+			{ name: 'Temco Docs · snapshot', kind: 'SQLite', host: '~/Temco/t3000/.temco/docs.2026-10-17.db', database: 'temco_docs', state: 'Idle', tone: 'warn', role: 'What the last build read', access: 'Read-only' },
+			{ name: 'Build history', kind: 'PostgreSQL', host: 'reports.temco.local', database: 'builds', state: 'Idle', tone: 'warn', role: 'Timings of every build, kept off the registry', access: 'Read-only' }
+		],
+
+		/* The tables of `temco_docs`, in the order a reader learns them. */
+		sqlTables: [
+			{ name: 'pages', rows: 1254, key: 'id', note: 'One row per page. `order_key` is unique inside an area.' },
+			{ name: 'areas', rows: 8, key: 'id', note: 'The eight knowledge areas and their coverage counters.' },
+			{ name: 'sources', rows: 7, key: 'id', note: 'Repositories, documents and folders a read pulls pages from.' },
+			{ name: 'links', rows: 3412, key: 'id', note: 'Every internal link, resolved against `pages.slug`.' },
+			{ name: 'reviews', rows: 6, key: 'id', note: 'Something waiting for a person: an edit, a draft, a new page.' },
+			{ name: 'builds', rows: 5, key: 'id', note: 'One row per artifact of the last build.' },
+			{ name: 'releases', rows: 4, key: 'id', note: 'Published versions, newest first.' },
+			{ name: 'citations', rows: 4, key: 'id', note: 'What an AI answer cited, and where it is used.' },
+			{ name: 'checks', rows: 7, key: 'id', note: 'The health checks the build runs, with the count each found.' }
+		],
+
+		/* The columns of `pages`, which is the table everything else joins to. */
+		sqlColumns: [
+			{ name: 'id', type: 'TEXT', nullable: 'no', note: 'Slug-shaped, stable across renames' },
+			{ name: 'area_id', type: 'INTEGER', nullable: 'no', note: '→ areas.id' },
+			{ name: 'order_key', type: 'INTEGER', nullable: 'no', note: 'Unique per area — duplicate 20 is the error the build reports' },
+			{ name: 'title', type: 'TEXT', nullable: 'no', note: '' },
+			{ name: 'owner', type: 'TEXT', nullable: 'yes', note: 'Null means nobody is told when it goes stale' },
+			{ name: 'state', type: 'TEXT', nullable: 'no', note: 'draft · in-review · published · stale' },
+			{ name: 'source_id', type: 'INTEGER', nullable: 'yes', note: '→ sources.id, null for a page written by hand' },
+			{ name: 'reviewed_at', type: 'TEXT', nullable: 'yes', note: 'Null until a person signs it off' },
+			{ name: 'updated_at', type: 'TEXT', nullable: 'no', note: '' }
+		],
+
+		sqlQueries: [
+			{ name: 'Stale pages by area', rows: 89, ms: 18, run: '4 minutes ago', sql: "SELECT a.name AS area, count(*) AS stale\nFROM pages p JOIN areas a ON a.id = p.area_id\nWHERE p.state = 'stale'\nGROUP BY a.name\nORDER BY stale DESC;" },
+			{ name: 'Pages with no owner', rows: 4, ms: 6, run: 'yesterday', sql: "SELECT id, title, area_id\nFROM pages\nWHERE owner IS NULL\nORDER BY area_id, order_key;" },
+			{ name: 'Duplicate order keys', rows: 2, ms: 11, run: 'yesterday', sql: "SELECT area_id, order_key, count(*) AS n\nFROM pages\nGROUP BY area_id, order_key\nHAVING n > 1;" },
+			{ name: 'Broken internal links', rows: 12, ms: 34, run: '2 days ago', sql: "SELECT l.page_id, l.target\nFROM links l LEFT JOIN pages p ON p.slug = l.target\nWHERE p.id IS NULL;" },
+			{ name: 'Never reviewed', rows: 341, ms: 52, run: 'never', sql: "SELECT id, title, updated_at\nFROM pages\nWHERE reviewed_at IS NULL\nORDER BY updated_at\nLIMIT 100;" }
+		],
+
+		sqlHistory: [
+			{ time: '12:41', statement: 'SELECT area, stale FROM v_stale_by_area ORDER BY stale DESC', rows: 8, ms: 18, state: 'ok' },
+			{ time: '11:58', statement: 'SELECT count(*) FROM pages WHERE reviewed_at IS NULL', rows: 1, ms: 6, state: 'ok' },
+			{ time: '11:20', statement: "UPDATE pages SET owner = 'Derek' WHERE id = 'api-reference/data-points'", rows: 0, ms: 0, state: 'err' },
+			{ time: '09:04', statement: 'SELECT * FROM reviews ORDER BY created_at DESC', rows: 6, ms: 9, state: 'ok' },
+			{ time: '08:31', statement: 'EXPLAIN SELECT a.name, count(*) FROM pages p JOIN areas a ON a.id = p.area_id GROUP BY a.name', rows: 4, ms: 2, state: 'ok' }
+		],
+
+		reports: [
+			{ name: 'Coverage by area', desc: 'Pages, reviewed and stale per area — the numbers the Coverage page shows', updated: '4 minutes ago', view: 'dashboard/health' },
+			{ name: 'Release readiness', desc: 'What still blocks 13.0: errors, unowned pages, unreviewed pages', updated: '12 minutes ago', view: 'docs/releases' },
+			{ name: 'What each source contributed', desc: 'Files and pages per repository, document and folder', updated: 'yesterday', view: 'docs/sources' }
 		],
 
 		queryRows: [
@@ -559,11 +716,6 @@
 			{ id: 2402, name: 'T3-LB · Lighting', product: 'T3-LB', firmware: '2.14.3', online: '1', updated: '2026-10-17 12:41:03' }
 		],
 
-		reports: [
-			{ name: 'Device inventory', desc: 'Every device, its firmware and last contact', updated: '5 minutes ago' },
-			{ name: 'Alarm history · 7 days', desc: 'Counts by device, priority and hour', updated: '1 hour ago' },
-			{ name: 'Firmware drift', desc: 'Devices not on the current stable release', updated: 'yesterday' }
-		],
 
 		aiModels: [
 			{ name: 'qwen2.5-3b-instruct', kind: 'Chat', size: '1.9 GB', state: 'Loaded', tone: 'ok', ctx: '32k' },

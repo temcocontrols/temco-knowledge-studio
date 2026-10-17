@@ -117,6 +117,11 @@
 		if (options.title) {
 			attrs += ' title="' + ui.esc(options.title) + '"';
 		}
+		/* Anything the caller needs to say about the button itself — which row it belongs to, for
+		   instance — as long as it is already-escaped markup. */
+		if (options.attrs) {
+			attrs += ' ' + options.attrs;
+		}
 		var cls = 'btn' + (options.kind ? ' btn--' + options.kind : '') + (options.small ? ' btn--sm' : '');
 		return (
 			'<button type="button" class="' + cls + '"' + attrs + '>' +
@@ -201,7 +206,9 @@
 					var value = column.render ? column.render(row, index) : ui.esc(row[column.key]);
 					return '<td' + (column.cls ? ' class="' + column.cls + '"' : '') + (column.align ? ' style="text-align:' + column.align + '"' : '') + '>' + value + '</td>';
 				}).join('');
-				return '<tr' + (row.selected ? ' class="is-selected"' : '') + '>' + cells + '</tr>';
+				/* A row can be a link: `rowAction` returns the attributes that make it one. */
+				var attrs = options.rowAction ? options.rowAction(row, index) : '';
+				return '<tr' + (row.selected ? ' class="is-selected"' : '') + attrs + '>' + cells + '</tr>';
 			}).join('');
 		}
 

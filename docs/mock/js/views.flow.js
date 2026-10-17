@@ -93,6 +93,104 @@
 			(hint ? '<p class="wizard__hint">' + ui.esc(hint) + '</p>' : '');
 	}
 
+	function slugify(value) {
+		return String(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+	}
+
+	function nextFreeOrder(area) {
+		var pages = data.areaPages[area] || [];
+		return pages.reduce(function (top, page) { return Math.max(top, page.order); }, 0) + 1;
+	}
+
+	/* Where a new page would sit: the page above it, the page itself, and the page below, read from
+	   the area's own registry so the step answers the question it asks. */
+	function locationPreview(s) {
+		var area = String(s.values.area);
+		var order = Number(s.values.order);
+		var pages = (data.areaPages[area] || []).slice().sort(function (a, b) { return a.order - b.order; });
+		var above = null;
+		var below = null;
+		pages.forEach(function (page) {
+			if (page.order < order) {
+				above = page;
+			}
+			if (page.order > order && !below) {
+				below = page;
+			}
+		});
+
+		var neighbour = function (page, where) {
+			return (
+				'<div class="record-row record-row--static">' +
+				ui.toneMark(page ? 'document' : 'info') +
+				'<div class="record-row__main">' +
+				'<div class="record-row__title"><span class="record-row__name">' +
+				(page ? 'Order ' + page.order + ' \u00b7 ' + ui.esc(page.page) : 'nothing ' + where) +
+				'</span></div>' +
+				'<div class="record-row__meta"><span>' + (page ? ui.esc(page.state) + ' \u00b7 ' + ui.esc(page.owner === '\u2014' ? 'no owner' : page.owner) : 'it is the edge of this area') + '</span></div>' +
+				'</div>' +
+				'<div class="record-row__state"></div>' +
+				'<div class="record-row__state"></div>' +
+				'</div>'
+			);
+		};
+
+		var created =
+			'<div class="record-row record-row--current">' +
+			ui.toneMark('plus', 'accent') +
+			'<div class="record-row__main">' +
+			'<div class="record-row__title"><span class="record-row__name">Order ' + (isNaN(order) ? '?' : order) + ' \u00b7 ' + ui.esc(s.values.title || 'untitled page') + '</span></div>' +
+			'<div class="record-row__meta"><span>the page this flow creates</span></div>' +
+			'</div>' +
+			'<div class="record-row__state">' + ui.badge('Draft', 'info') + '</div>' +
+			'<div class="record-row__state"></div>' +
+			'</div>';
+
+		var reviewers = pages.map(function (page) { return page.owner; }).filter(function (owner, index, all) {
+			return owner && owner !== '\u2014' && all.indexOf(owner) === index;
+		});
+
+		return '<div class="mt-16">' + ui.group({
+			label: 'Where It Lands',
+			count: pages.length + ' pages in ' + area,
+			note: reviewers.length ? 'Pages here are owned by ' + reviewers.join(', ') + ', who will be asked to review this one.' : '',
+			body: neighbour(above, 'above') + created + neighbour(below, 'below')
+		}) + '</div>';
+	}
+
+	/* What the chosen page template produces. */
+	function templatePreview(s) {
+		var chosen = String(s.values.template);
+		var sections = chosen === 'source' ? ['Overview', 'Details'] : chosen === 'ai' ? ['Overview', 'Examples', 'Errors'] : [];
+		var note = chosen === 'source'
+			? 'A source read fills the heading structure it found; a heading with no text stays a stub.'
+			: chosen === 'ai'
+				? 'The draft lands in Review Center. Nothing is written to the page until a person accepts it.'
+				: 'A blank page has a title and an empty body; nothing is stubbed out for you.';
+		var rows = sections.length
+			? sections.map(function (section, index) {
+				return '<div class="record-row record-row--static">' +
+					ui.toneMark('list') +
+					'<div class="record-row__main">' +
+					'<div class="record-row__title"><span class="record-row__name">' + ui.esc(section) + '</span></div>' +
+					'<div class="record-row__meta"><span>section ' + (index + 1) + ' \u00b7 a heading with an empty body</span></div>' +
+					'</div><div class="record-row__state"></div><div class="record-row__state"></div>' +
+					'</div>';
+			}).join('')
+			: '<div class="record-row record-row--static">' + ui.toneMark('document') +
+				'<div class="record-row__main">' +
+				'<div class="record-row__title"><span class="record-row__name">Title only</span></div>' +
+				'<div class="record-row__meta"><span>the body is yours to write</span></div>' +
+				'</div><div class="record-row__state"></div><div class="record-row__state"></div></div>';
+
+		return '<div class="mt-16">' + ui.group({
+			label: 'This Template',
+			count: sections.length ? sections.length + ' sections' : 'no sections',
+			note: note,
+			body: rows
+		}) + '</div>';
+	}
+
 	/* ------------------------------------------------------------------ the flows */
 
 	var defs = [
@@ -102,6 +200,9 @@
 			title: 'New Project',
 			icon: 'plus',
 			eyebrow: 'Documentation',
+			/* This flow shows a table of sources, so it takes the width every other working surface
+			   takes instead of the 860 px wizard column. */
+			wide: true,
 			desc: 'A project is a version of a product’s documentation: the sources it reads, the pages it holds and the artifacts it builds.',
 			finishLabel: 'Create Project',
 			defaults: {
@@ -243,6 +344,8 @@
 			title: 'Add Source',
 			icon: 'repo',
 			eyebrow: 'Documentation',
+			/* The 860 px wizard column fit this form; now it matches the page it writes to. */
+			wide: true,
 			desc: 'A source is somewhere documentation is read from: a repository, a document, a folder, or a connected library.',
 			finishLabel: 'Add Source',
 			defaults: {
@@ -258,14 +361,18 @@
 					render: function (s) {
 						return stepHead('What kind of source?', 'The kind decides how the platform reads it, and what it records.') +
 							choiceGroups([
-								{ label: 'Repositories', name: 'kind', items: [
-									{ value: 'repo', label: 'Git repository', desc: 'Cloned locally with full history, so a draft can be about a commit.' }
-								] },
-								{ label: 'Files and folders', name: 'kind', items: [
-									{ value: 'document', label: 'Document', desc: 'A PDF or a Word file on this machine.' },
-									{ value: 'folder', label: 'Folder', desc: 'A directory of Markdown or HTML files.' },
-									{ value: 'sharepoint', label: 'SharePoint', desc: 'A connected library, read through the API.' }
-								] }
+								{
+									label: 'Repositories', name: 'kind', items: [
+										{ value: 'repo', label: 'Git repository', desc: 'Cloned locally with full history, so a draft can be about a commit.' }
+									]
+								},
+								{
+									label: 'Files and folders', name: 'kind', items: [
+										{ value: 'document', label: 'Document', desc: 'A PDF or a Word file on this machine.' },
+										{ value: 'folder', label: 'Folder', desc: 'A directory of Markdown or HTML files.' },
+										{ value: 'sharepoint', label: 'SharePoint', desc: 'A connected library, read through the API.' }
+									]
+								}
 							], s.values.kind);
 					}
 				},
@@ -331,74 +438,169 @@
 			title: 'Publish Release',
 			icon: 'upload',
 			eyebrow: 'Documentation · 13.0',
-			desc: 'Publishing copies the built artifacts to Temco Learn and freezes this version of the pages.',
+			/* The preflight lists every target and every open problem, which needs the width. */
+			wide: true,
+			desc: 'Publishing copies the built artifacts to Temco Learn and freezes this version of the pages. It is the last thing that happens to a version, not the first thing you can undo.',
 			finishLabel: 'Publish 13.0',
 			defaults: {
 				version: '13.0',
 				channel: 'Stable',
-				pin: true
+				pin: true,
+				notes: 'Generated from commits since 12.9'
 			},
 			steps: [
 				{
 					label: 'Preflight',
 					render: function () {
-						var checks = [
-							{ label: 'Website', sub: '1,254 pages · built', ok: true },
-							{ label: 'PDF', sub: '1,254 pages · 6.2 MB · built', ok: true },
-							{ label: 'Offline help', sub: '612 of 1,254 topics — still compiling', ok: false },
-							{ label: 'Search index', sub: '12,884 terms · built', ok: true },
-							{ label: 'Structure checks', sub: '2 errors in API Reference', ok: false }
-						];
-						return stepHead('Before publishing', 'Every target has to be finished and every check has to pass.') +
-							'<div class="checklist">' +
-							checks.map(function (check) {
-								return '<div class="checklist__row">' + ui.dot(check.ok ? 'ok' : 'err') +
-									'<span class="checklist__text"><span class="checklist__title">' + ui.esc(check.label) + '</span>' +
-									'<span class="checklist__sub">' + ui.esc(check.sub) + '</span></span>' +
-									(check.ok ? ui.badge('Ready', 'ok') : ui.badge('Blocking', 'err')) +
-									'</div>';
-							}).join('') +
-							'</div>' +
+						/* Read from Build Center and from the checks, so this step cannot claim a
+						   target is ready when the build says otherwise. The AI index is built here
+						   and never published, so it is listed but never blocks. */
+						var localOnly = ['AI Index'];
+						var targets = data.builds.map(function (build) {
+							var local = localOnly.indexOf(build.target) >= 0;
+							return {
+								name: build.target,
+								sub: build.detail + ' · ' + build.time,
+								state: build.state,
+								tone: build.tone,
+								local: local,
+								blocking: !local && build.state !== 'Succeeded'
+							};
+						});
+						var blocking = targets.filter(function (target) { return target.blocking; });
+						var errors = data.problems.filter(function (problem) { return problem.severity === 'err'; });
+						var warnings = data.problems.filter(function (problem) { return problem.severity !== 'err'; });
+
+						var targetRow = function (target) {
+							return (
+								'<div class="record-row record-row--static">' +
+								ui.toneMark('package', target.local ? '' : target.blocking ? 'err' : 'ok') +
+								'<div class="record-row__main">' +
+								'<div class="record-row__title"><span class="record-row__name">' + ui.esc(target.name) + '</span>' +
+								(target.local ? '<span class="cell-muted">stays on this machine</span>' : '') +
+								'</div>' +
+								'<div class="record-row__meta"><span>' + ui.esc(target.sub) + '</span></div>' +
+								'</div>' +
+								'<div class="record-row__state">' + ui.badge(target.local ? 'Not published' : target.state, target.local ? 'neutral' : target.tone) + '</div>' +
+								'<div class="record-row__state"></div>' +
+								'</div>'
+							);
+						};
+
+						var problemRow = function (problem) {
+							var blockingProblem = problem.severity === 'err';
+							return (
+								'<div class="record-row record-row--static">' +
+								ui.toneMark('alert', blockingProblem ? 'err' : 'warn') +
+								'<div class="record-row__main">' +
+								'<div class="record-row__title"><span class="record-row__name">' + ui.esc(problem.message) + '</span></div>' +
+								'<div class="record-row__meta">' +
+								'<span class="cell-mono">' + ui.esc(problem.where) + '</span>' +
+								'<span>' + (blockingProblem ? 'blocks this release' : 'ships with this release') + '</span>' +
+								'</div>' +
+								'</div>' +
+								'<div class="record-row__state">' + ui.badge(blockingProblem ? 'Error' : 'Warning', blockingProblem ? 'err' : 'warn') + '</div>' +
+								'<div class="record-row__state"></div>' +
+								'</div>'
+							);
+						};
+
+						return stepHead('Before publishing', 'Every artifact this release publishes has to be finished, and every structural error has to be closed.') +
+							ui.group({
+								label: 'Build Targets',
+								count: targets.length + ' targets · ' + (targets.length - blocking.length) + ' ready',
+								note: 'These are Build Center\'s own rows. A target that is queued has not started; one that is running has a percentage.',
+								body: targets.map(targetRow).join('')
+							}) +
+							ui.group({
+								label: 'Structure Checks',
+								count: errors.length + ' errors · ' + warnings.length + ' warnings',
+								body: data.problems.map(problemRow).join('')
+							}) +
 							'<div class="mt-16">' +
-							ui.callout('Publishing is refused while a target is incomplete. <b>Offline help</b> is at 62 % and two structural errors are open.', { kind: 'warn' }) +
+							ui.callout(
+								blocking.length
+									? 'Publishing is refused while a target is incomplete: ' + blocking.map(function (target) { return '<b>' + ui.esc(target.name) + '</b>'; }).join(' and ') + ' ' + (blocking.length === 1 ? 'is' : 'are') + ' not finished, and ' + errors.length + ' structural errors are open.'
+									: 'Every published artifact is built and every structural check passes. Publishing freezes this version.',
+								{ kind: blocking.length ? 'warn' : 'ok' }
+							) +
 							'</div>';
 					}
 				},
 				{
 					label: 'Version',
 					render: function (s) {
-						return stepHead('Version and channel', 'A published version cannot be edited afterwards — only superseded.') +
-							'<div class="form">' +
-							field('Version', '<input class="input" data-field="version" value="' + ui.esc(s.values.version) + '" aria-label="Version">') +
-							field('Channel', '<select class="select" data-field="channel" aria-label="Channel">' + options(['Stable', 'Preview (noindex)'], s.values.channel) + '</select>', 'Preview is served with noindex and is not linked from the product index.') +
-							'<label class="check"><input type="checkbox" data-field="pin"' + (s.values.pin ? ' checked' : '') + '><span>Keep the previous version reachable at its own path</span></label>' +
+						return stepHead('Version and channel', 'A published version cannot be edited afterwards — only superseded by the next one.') +
+							'<div class="settings-rows">' +
+							ui.formRow('Version', 'Major and minor, like 13.0. It becomes the path segment a reader sees.', '<input class="input" data-field="version" value="' + ui.esc(s.values.version) + '" aria-label="Version">') +
+							ui.formRow('Channel', 'Preview is served with noindex and is not linked from the product index.', '<select class="select" data-field="channel" aria-label="Channel">' + options(['Stable', 'Preview (noindex)'], s.values.channel) + '</select>') +
+							ui.formRow('Release notes', 'Where the changelog for this version comes from.', '<select class="select" data-field="notes" aria-label="Release notes">' + options(['Generated from commits since 12.9', 'Written by hand', 'None'], s.values.notes) + '</select>') +
+							ui.formRow('Previous version', 'A superseded version stays reachable at its own path instead of being replaced.', '<label class="check"><input type="checkbox" data-field="pin"' + (s.values.pin ? ' checked' : '') + '><span>Keep at its own path</span></label>') +
+							'</div>' +
+							'<div class="mt-16">' +
+							ui.callout('The version number is the one thing that cannot change later: the artifact filenames, the URL and the help id all embed it.') +
 							'</div>';
 					}
 				},
 				{
 					label: 'Publish',
 					render: function (s) {
-						return stepHead('Confirm and publish', 'This is the last step.') +
-							summary([
-								['Version', '<span class="cell-mono">' + ui.esc(s.values.version) + '</span>'],
-								['Channel', ui.esc(s.values.channel)],
-								['Target', '<span class="cell-mono">https://learn.temcocontrols.com/t3000/' + ui.esc(s.values.version) + '/</span>'],
-								['Artifacts', 'Website · PDF · Offline help · Search index'],
-								['Previous', s.values.pin ? 'kept at its own path' : 'replaced']
-							]) +
+						var artifactCount = data.builds.filter(function (build) { return build.target !== 'AI Index'; }).length;
+						return stepHead('Confirm and publish', 'This is the last step; nothing here can be undone, only superseded.') +
+							'<div class="grid grid--2">' +
+							ui.card({
+								title: 'This Release',
+								cls: 'card--plain',
+								body: summary([
+									['Version', '<span class="cell-mono">' + ui.esc(s.values.version) + '</span>'],
+									['Channel', ui.esc(s.values.channel)],
+									['Target', '<span class="cell-mono">https://learn.temcocontrols.com/t3000/' + ui.esc(s.values.version) + '/</span>'],
+									['Artifacts', artifactCount + ' of ' + data.builds.length + ' · website, PDF, offline help, search index'],
+									['Not published', 'the AI index stays local'],
+									['Notes', ui.esc(s.values.notes)],
+									['Previous', s.values.pin ? 'kept at its own path' : 'replaced']
+								])
+							}) +
+							ui.card({
+								title: 'After Publishing',
+								cls: 'card--plain',
+								desc: 'What exists once this finishes, and where it is.',
+								body: ui.list([
+									{ icon: 'globe', title: 'The site answers at the target', sub: '<span class="cell-muted">/t3000/' + ui.esc(s.values.version) + '/</span>', meta: ui.badge('Public', 'ok') },
+									{ icon: 'document', title: 't3000-' + ui.esc(s.values.version) + '.pdf', sub: '<span class="cell-muted">the download page links it</span>', meta: ui.badge('Download', 'neutral') },
+									{ icon: 'package', title: 'Offline help', sub: '<span class="cell-muted">the CHM ships with the installer, not the site</span>', meta: ui.badge('Artifact', 'neutral') },
+									{ icon: 'search', title: 'Search index rebuilt', sub: '<span class="cell-muted">the site loads this one, not the previous version\'s</span>', meta: ui.badge('Live', 'ok') },
+									{ icon: 'clock', title: 'This version is frozen', sub: '<span class="cell-muted">an edit now needs a new release</span>', meta: ui.badge('Frozen', 'accent') }
+								])
+							}) +
+							'</div>' +
 							'<div class="mt-16">' +
-							ui.callout('Published pages are frozen: a later edit reaches readers only through a new release.', { kind: 'warn' }) +
+							ui.callout('Published pages are frozen: a later edit reaches readers only through a new release. The version you replace stays on disk, so a rollback is a publish of the older version.', { kind: 'warn' }) +
 							'</div>';
 					}
 				}
 			],
-			validate: function () {
+			/* A version is a number a person types, so it is checked: the shape, and whether this
+			   version already shipped. */
+			validate: function (s, step) {
+				if (step !== 1) {
+					return '';
+				}
+				var version = String(s.values.version || '').trim();
+				if (!/^\d+\.\d+$/.test(version)) {
+					return 'A version is a major and a minor number, like 13.0.';
+				}
+				var taken = data.releases.filter(function (release) { return release.version === version; })[0];
+				if (taken && taken.state === 'Published') {
+					return 'Version ' + version + ' is already published. A published version is superseded, never overwritten.';
+				}
 				return '';
 			},
 			apply: function (s) {
 				if (data.releases.length) {
 					data.releases[0].state = 'Published';
 					data.releases[0].tone = 'ok';
+					data.releases[0].version = s.values.version;
 					data.releases[0].artifacts = 'Website · PDF · CHM · ZIP';
 				}
 				return {
@@ -487,12 +689,14 @@
 			title: 'New Page',
 			icon: 'document',
 			eyebrow: 'Documentation',
+			wide: true,
 			desc: 'A page belongs to a chapter in an area. Its order is what the site and the PDF use.',
 			finishLabel: 'Create Page',
 			defaults: {
 				area: 'API Reference',
 				order: '23',
 				template: 'blank',
+				owner: 'Derek',
 				title: 'Point Scaling'
 			},
 			steps: [
@@ -500,10 +704,11 @@
 					label: 'Location',
 					render: function (s) {
 						return stepHead('Where does it go?', 'The area decides who is asked to review it.') +
-							'<div class="form">' +
-							field('Area', '<select class="select" data-field="area" aria-label="Area">' + options(['Overview', 'Getting Started', 'Architecture', 'API Reference', 'Hardware', 'Protocols', 'Troubleshooting', 'Release Notes'], s.values.area) + '</select>') +
-							field('Order', '<input class="input" data-field="order" value="' + ui.esc(s.values.order) + '" aria-label="Order">', 'Order 20 is already used twice in API Reference.') +
-							'</div>';
+						'<div class="settings-rows">' +
+						ui.formRow('Area', 'Each area has its own order, so 20 here is not 20 there.', '<select class="select" data-field="area" aria-label="Area">' + options(['Overview', 'Getting Started', 'Architecture', 'API Reference', 'Hardware', 'Protocols', 'Troubleshooting', 'Release Notes'], s.values.area) + '</select>') +
+						ui.formRow('Order', 'Position inside the area. The next free one is ' + nextFreeOrder(s.values.area) + '.', '<input class="input" data-field="order" value="' + ui.esc(s.values.order) + '" aria-label="Order">') +
+						'</div>' +
+						locationPreview(s);
 					}
 				},
 				{
@@ -514,26 +719,59 @@
 								{ value: 'blank', label: 'Blank page', desc: 'A title and an empty body.' },
 								{ value: 'source', label: 'From a source read', desc: 'Pulls the headings the source already has.' },
 								{ value: 'ai', label: 'AI draft', desc: 'A draft lands in Review Center, not in the page.' }
-							], s.values.template);
+							], s.values.template) + templatePreview(s);
 					}
 				},
 				{
 					label: 'Draft',
 					render: function (s) {
-						return stepHead('Name it', 'The slug is derived from the title and never changes afterwards.') +
-							'<div class="form">' +
-							field('Title', '<input class="input" data-field="title" value="' + ui.esc(s.values.title) + '" aria-label="Page title">') +
-							field('Slug', '<input class="input" value="' + ui.esc(String(s.values.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')) + '" aria-label="Slug" readonly>') +
-							'</div>' +
-							'<div class="mt-16">' +
-							ui.callout('The page is created as a draft. It reaches the site only through a build and a release.') +
-							'</div>';
+						var slug = slugify(s.values.title);
+						return stepHead('Name it', 'The slug comes from the title and never changes afterwards — links and help ids point at it.') +
+						'<div class="settings-rows">' +
+						ui.formRow('Title', 'What a reader sees in the list and in the PDF.', '<input class="input" data-field="title" value="' + ui.esc(s.values.title) + '" aria-label="Page title">') +
+						ui.formRow('Slug', 'Derived from the title; two pages cannot share one inside an area.', '<input class="input" value="' + ui.esc(slug) + '" aria-label="Slug" readonly>') +
+						ui.formRow('Owner', 'Who is told when this page goes stale.', '<select class="select" data-field="owner" aria-label="Owner">' + options(['Derek', 'Mei', 'Ana', 'nobody yet'], s.values.owner) + '</select>') +
+						'</div>' +
+						'<div class="mt-16">' +
+						ui.group({
+							label: 'Address',
+							count: s.values.template === 'ai' ? 'draft first' : 'draft',
+							body: '<div class="record-row record-row--static">' +
+								ui.toneMark('link') +
+								'<div class="record-row__main">' +
+								'<div class="record-row__title"><span class="record-row__name cell-mono">t3000 › ' + ui.esc(slugify(s.values.area)) + ' › ' + ui.esc(slug || '…') + '</span></div>' +
+								'<div class="record-row__meta"><span>where the site and the search index will list it</span></div>' +
+								'</div><div class="record-row__state"></div><div class="record-row__state"></div></div>'
+						}) +
+						'</div>' +
+						'<div class="mt-16">' +
+						ui.callout('The page is created as a draft. It reaches the site only through a build and a release.') +
+						'</div>';
 					}
 				}
 			],
 			validate: function (s, step) {
-				if (step === 2 && !String(s.values.title).trim()) {
-					return 'A page needs a title.';
+				var area = String(s.values.area);
+				var pages = data.areaPages[area] || [];
+				var order = String(s.values.order).trim();
+				if (step === 0) {
+					if (!/^\d+$/.test(order)) {
+						return 'Order is a whole number; it is what the site and the PDF sort by.';
+					}
+					var taken = pages.filter(function (page) { return page.order === Number(order); })[0];
+					if (taken) {
+						return 'Order ' + order + ' is already taken by “' + taken.page + '” in ' + area + '. Two pages cannot share a position.';
+					}
+				}
+				if (step === 2) {
+					var title = String(s.values.title).trim();
+					if (!title) {
+						return 'A page needs a title.';
+					}
+					var clash = pages.filter(function (page) { return page.page.toLowerCase() === title.toLowerCase(); })[0];
+					if (clash) {
+						return 'A page called “' + clash.page + '” already exists in ' + area + '.';
+					}
 				}
 				return '';
 			},
@@ -551,6 +789,7 @@
 			title: 'New Workspace',
 			icon: 'layers',
 			eyebrow: 'Workspaces',
+			wide: true,
 			desc: 'A workspace is the folder the window stands in: its projects, the sources they read and the devices it can reach.',
 			finishLabel: 'Create Workspace',
 			defaults: {
@@ -712,7 +951,7 @@
 				: ui.button(def.finishLabel, { kind: 'primary', icon: 'check', action: 'flow-finish' })) +
 			'</div>' +
 			'</div>',
-			{ narrow: true }
+			(def.wide ? {} : { narrow: true })
 		);
 	}
 

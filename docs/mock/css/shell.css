@@ -356,6 +356,150 @@
 	margin-top: 8px;
 }
 
+/* The area a working-set page belongs to, beside its name: two pages can share a title. */
+.tree__area {
+	margin-left: 6px;
+	color: var(--fg-subtle);
+	font-size: 10px;
+}
+
+/* A branch of the side-bar tree: the area a working-set page belongs to. Folding it is how a tree
+   stays readable once a handful of pages are open. */
+.tree__branch {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	width: calc(100% - 12px);
+	height: 22px;
+	margin: 2px 6px 0;
+	padding: 0 8px;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: none;
+	color: var(--fg-muted);
+	font: inherit;
+	font-size: var(--fs-sm);
+	cursor: pointer;
+	text-align: left;
+}
+
+/* A group row in the module tree: the same padding and type as a plain section heading, with the
+   count at the end. Nothing about it should look like a second kind of heading. */
+.tree__row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 10px 16px 4px;
+}
+
+.tree__twisty {
+	display: none;
+}
+
+.tree__row .tree__count {
+	margin-left: auto;
+	font-size: var(--fs-xs);
+	color: var(--fg-subtle);
+}
+
+.tree__section--button {
+	padding: 0;
+	border: 0;
+	background: none;
+	font: inherit;
+	font-size: var(--fs-xs);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--fg-subtle);
+	cursor: pointer;
+}
+
+.tree__section--button:hover,
+.tree__section--button.is-active {
+	color: var(--fg);
+}
+
+/* A leaf of the module tree: a project or an area, marked when it is the one being worked on. */
+.tree__leaf {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: calc(100% - 8px);
+	height: 22px;
+	margin: 0 4px;
+	padding: 0 8px;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: none;
+	color: var(--fg-muted);
+	font: inherit;
+	font-size: var(--fs-sm);
+	cursor: pointer;
+	text-align: left;
+}
+
+.tree__leaf:hover {
+	background: var(--bg-hover);
+	color: var(--fg);
+}
+
+.tree__leaf.is-active {
+	background: var(--bg-selected);
+	color: var(--fg-strong);
+}
+
+.tree__leaf .tree__label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* "… N more": the one row that keeps the panel short without hiding the list. */
+.tree__leaf--more {
+	color: var(--fg-subtle);
+	font-size: var(--fs-xs);
+}
+
+.tree__leaf--more:hover {
+	color: var(--fg);
+}
+
+.tree__branch:hover {
+	background: var(--bg-hover);
+	color: var(--fg);
+}
+
+.tree__branch.is-active {
+	color: var(--fg-strong);
+	font-weight: 500;
+}
+
+.tree__branch .tree__label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* The guide line that makes the children read as children. */
+.tree__children {
+	margin-left: 18px;
+	border-left: 1px solid var(--border);
+	padding-left: 2px;
+}
+
+.tree__children .tree__item {
+	margin-left: 0;
+	margin-right: 6px;
+}
+
+.tree__item--child {
+	padding-left: 10px;
+}
+
 .tree__item {
 	display: flex;
 	align-items: center;

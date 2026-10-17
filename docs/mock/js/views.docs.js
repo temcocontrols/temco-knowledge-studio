@@ -15,7 +15,9 @@
 		title: 'Projects',
 		render: function () {
 			var projects = data.docsProjects;
-			var current = projects[0];
+			var current = projects.filter(function (project) {
+				return project.name === ((M.state && M.state.project) || projects[0].name);
+			})[0] || projects[0];
 
 			/* A project is one row, and its name never shares a line with its numbers — that is what
 			   lets the row survive a narrow editor, which a seven-column table of the same facts did
@@ -119,7 +121,7 @@
 				}
 				var isOpen = repo.state === 'Cloned';
 				return (
-					'<div class="record-row' + (isOpen ? '' : ' record-row--static') + '"' + (isOpen ? ' data-open="docs/repository"' : '') + '>' +
+					'<div class="record-row' + (isOpen ? '' : ' record-row--static') + '"' + (isOpen ? ' data-action="open-repository" data-repository="' + ui.esc(repo.name) + '"' : '') + '>' +
 					(repo.temco ? ui.toneMark('repo', 'accent') : ui.toneMark('repo')) +
 					'<div class="record-row__main">' +
 					'<div class="record-row__title">' +
@@ -195,78 +197,129 @@
 	M.views['docs/repository'] = {
 		title: 'Repository',
 		render: function () {
-			var repo = data.repositories[0];
+			/* One surface for every repository: the row that was clicked names the one to show. */
+			var repos = data.repositories;
+			var requested = M.state && M.state.repository;
+			var repo = repos.filter(function (candidate) { return candidate.name === requested; })[0] || repos[0];
 			var reads = data.reads.filter(function (read) { return read.repo === repo.name; });
+			var cloned = repo.state === 'Cloned';
+			var branchNames = repo.branchNames || [];
+			var scripts = repo.scripts || [];
+
+			var readOfBranch = function (name) {
+				var read = reads.filter(function (candidate) { return candidate.branch === name; })[0];
+				return read ? 'read ' + read.when : 'never read';
+			};
+
+			var commitOfBranch = function (name) {
+				var read = reads.filter(function (candidate) { return candidate.branch === name; })[0];
+				return read ? read.commit : '—';
+			};
 
 			var body =
 				ui.pageHead({
-					eyebrow: 'Documentation · Repositories',
+					eyebrow: 'Repositories',
 					title: repo.name,
 					icon: 'repo',
-					desc: repo.remote + ' · on branch ' + repo.branch + ' of ' + repo.branches,
-					actions:
-						ui.button('Read Source', { kind: 'primary', icon: 'refresh', action: 'read-source' }) +
-						ui.button('Open Working Copy', { icon: 'folder', action: 'open-folder' })
+					desc: ui.esc(repo.remote) + ' · ' + (cloned ? ui.esc(repo.branch) + ' at ' + ui.esc(repo.head) : 'no local copy yet') + ' · ' + repo.branches + ' branches · ' + (repo.temco ? 'published by Temco' : 'third party'),
+					actions: cloned
+						? ui.button('Read Source', { kind: 'primary', icon: 'refresh', action: 'read-source' }) + ui.button('Browse Source', { icon: 'code', action: 'browse-source', attrs: 'data-repository="' + ui.esc(repo.name) + '"' }) + ui.button('Open Working Copy', { icon: 'folder', action: 'open-folder' })
+						: ui.button('Clone', { kind: 'primary', icon: 'download', action: 'clone-repository' })
 				}) +
-				ui.tiles([
-					{ value: repo.files.toLocaleString(), label: 'Files' },
-					{ value: String(repo.pages), label: 'Pages found' },
-					{ value: repo.size, label: 'Local copy' },
-					{ value: String(reads.length), label: 'Reads recorded' }
-				]) +
-				'<div class="mt-24 split">' +
-				'<div class="stack">' +
-				ui.card({
-					title: 'Branches',
-					desc: 'The local copy has every branch; a read uses one of them.',
-					body: ui.list([
-						{ icon: 'branch', title: 'main', sub: '<span class="cell-muted">default · read 1 hour ago</span>', meta: ui.badge('Checked out', 'accent') },
-						{ icon: 'branch', title: 't3000', sub: '<span class="cell-muted">read 3 days ago</span>', meta: ui.button('Read', { small: true, kind: 'ghost', action: 'read-source' }) },
-						{ icon: 'branch', title: 'release/13.0', sub: '<span class="cell-muted">never read</span>', meta: ui.button('Read', { small: true, kind: 'ghost', action: 'read-source' }) },
-						{ icon: 'branch', title: 'feature/web-ui', sub: '<span class="cell-muted">never read</span>', meta: ui.button('Read', { small: true, kind: 'ghost', action: 'read-source' }) }
+				(cloned
+					? ui.tiles([
+						{ value: repo.files.toLocaleString('en-US'), label: 'Files' },
+						{ value: String(repo.pages), label: 'Pages found' },
+						{ value: repo.size, label: 'Local copy' },
+						{ value: String(reads.length), label: 'Reads recorded' }
 					])
-				}) +
-				ui.card({
-					title: 'Recent Reads',
-					desc: 'What each read found, keyed by the commit it read.',
-					flush: true,
-					body: ui.table({
-						compact: true,
-						columns: [
-							{ label: 'Commit', render: function (row) { return '<span class="cell-mono">' + ui.esc(row.commit) + '</span>'; } },
-							{ label: 'Branch', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.branch) + '</span>'; } },
-							{ label: 'Pages', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.pages + '</span>'; } },
-							{ label: 'Change', render: function (row) {
-								return '<span class="cell-mono cell-muted">+' + row.added + ' ~' + row.changed + ' −' + row.removed + '</span>';
-							} },
-							{ label: 'When', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.when) + '</span>'; } }
-						],
-						rows: reads
+					: ui.callout('<b>Nothing is local yet.</b> Cloning copies the repository into <code>~/Temco</code> with its history; until then this page can only describe the remote.', { kind: 'warn' })) +
+				(cloned && branchNames.length
+					? ui.group({
+						label: 'Branches',
+						count: branchNames.length === repo.branches ? branchNames.length + ' branches' : branchNames.length + ' of ' + repo.branches + ' branches listed',
+						note: 'The copy has every branch; a read uses one of them, and a read is keyed by the commit it read.',
+						body: branchNames.map(function (name) {
+							var isCheckedOut = name === repo.branch;
+							return (
+								'<div class="record-row">' +
+								ui.toneMark('branch', isCheckedOut ? 'accent' : '') +
+								'<div class="record-row__main">' +
+								'<div class="record-row__title">' +
+								'<span class="record-row__name cell-mono">' + ui.esc(name) + '</span>' +
+								(isCheckedOut ? '<span class="cell-muted">the one reads use by default</span>' : '') +
+								'</div>' +
+								'<div class="record-row__meta">' +
+								'<span>' + ui.esc(readOfBranch(name)) + '</span>' +
+								'<span class="cell-mono">' + ui.esc(isCheckedOut ? repo.head : commitOfBranch(name)) + '</span>' +
+								'</div>' +
+								'</div>' +
+								'<div class="record-row__state">' + (isCheckedOut ? ui.badge('Checked out', 'accent') : '') + '</div>' +
+								ui.button('Read', { small: true, kind: 'ghost', action: 'read-source' }) +
+								'</div>'
+							);
+						}).join('')
 					})
-				}) +
-				'</div>' +
-				'<div class="stack">' +
-				ui.card({
-					title: 'Repository',
-					body:
-						'<dl class="kv">' +
-						'<dt>Remote</dt><dd class="cell-mono">' + ui.esc(repo.remote) + '</dd>' +
-						'<dt>Working copy</dt><dd class="cell-mono">~/Temco/' + ui.esc(repo.name) + '</dd>' +
-						'<dt>Owner</dt><dd>' + ui.esc(repo.owner) + '</dd>' +
-						'<dt>Last read</dt><dd>' + ui.esc(repo.read) + '</dd>' +
-						'</dl>'
-				}) +
-				ui.card({
-					title: 'Documentation Scripts',
-					desc: 'The repository’s own vocabulary. The platform calls these and nothing else.',
-					body: ui.list([
-						{ icon: 'code', title: 'docs:registry', sub: '<span class="cell-muted">writes docs/help/registry.json</span>' },
-						{ icon: 'code', title: 'docs:build', sub: '<span class="cell-muted">builds the site into .temco/build</span>' },
-						{ icon: 'code', title: 'docs:check', sub: '<span class="cell-muted">structural checks, no writes</span>' }
-					])
-				}) +
-				'</div>' +
+					: '') +
+				(reads.length
+					? ui.group({
+						label: 'Reads',
+						count: reads.length + (reads.length === 1 ? ' read' : ' reads'),
+						note: 'What each read found, keyed by the commit it read, so a change on the wire can be explained later.',
+						body: reads.map(function (read) {
+							return (
+								'<div class="record-row record-row--static">' +
+								ui.toneMark('check', 'ok') +
+								'<div class="record-row__main">' +
+								'<div class="record-row__title">' +
+								'<span class="record-row__name cell-mono">' + ui.esc(read.commit) + '</span>' +
+								'<span class="tag">' + ui.esc(read.branch) + '</span>' +
+								'</div>' +
+								'<div class="record-row__meta">' +
+								'<span>' + read.pages + ' pages</span>' +
+								'<span class="cell-mono">+' + read.added + ' ~' + read.changed + ' −' + read.removed + '</span>' +
+								'<span>' + ui.esc(read.when) + '</span>' +
+								'</div>' +
+								'</div>' +
+								'<div class="record-row__state"></div>' +
+								'<div class="record-row__state"></div>' +
+								'</div>'
+							);
+						}).join('')
+					})
+					: cloned
+						? ui.callout('Nothing has been read from this copy yet. A read records the pages the repository declares and the commit it read them at; it never writes to the repository.')
+						: '') +
+				(cloned
+					? scripts.length
+						? ui.group({
+							label: 'Scripts',
+							count: scripts.length + (scripts.length === 1 ? ' script' : ' scripts'),
+							note: 'The repository\'s own vocabulary. The platform calls these and nothing else.',
+							body: scripts.map(function (script) {
+								return (
+									'<div class="record-row record-row--static">' +
+									ui.toneMark('code') +
+									'<div class="record-row__main">' +
+									'<div class="record-row__title"><span class="record-row__name cell-mono">' + ui.esc(script.name) + '</span></div>' +
+									'<div class="record-row__meta"><span>' + ui.esc(script.note) + '</span></div>' +
+									'</div>' +
+									'<div class="record-row__state"></div>' +
+									'<div class="record-row__state"></div>' +
+									'</div>'
+								);
+							}).join('')
+						})
+						: ui.callout('<b>No documentation scripts.</b> The platform reads <code>' + ui.esc(repo.docs) + '/</code> as files instead: a page is a file, and nothing in the repository runs.')
+					: '') +
+				ui.rule({ label: 'Where It Lives' }) +
+				'<div class="settings-strip">' +
+				'<div><div class="settings-strip__label">Remote</div><div class="settings-strip__value cell-mono">' + ui.esc(repo.remote) + '</div></div>' +
+				'<div><div class="settings-strip__label">Working copy</div><div class="settings-strip__value cell-mono">' + (cloned ? '~/Temco/' + ui.esc(repo.name) : '—') + '</div></div>' +
+				'<div><div class="settings-strip__label">Pages folder</div><div class="settings-strip__value cell-mono">' + ui.esc(repo.docs) + '/</div></div>' +
+				'<div><div class="settings-strip__label">Owner</div><div class="settings-strip__value">' + ui.esc(repo.owner) + ' · last read ' + ui.esc(repo.read) + '</div></div>' +
 				'</div>';
+
 			return ui.view(body);
 		}
 	};
@@ -383,7 +436,7 @@
 	};
 
 	M.views['docs/knowledge'] = {
-		title: 'Knowledge',
+		title: 'Documents',
 		render: function () {
 			var areas = data.knowledge;
 			/* The area whose pages are shown. Picking another one re-renders the page (open-area in
@@ -417,12 +470,12 @@
 			var body =
 				ui.pageHead({
 					eyebrow: 'T3000 Documentation · 13.0',
-					title: 'Knowledge',
+					title: 'Documents',
 					icon: 'book',
 					desc: totalPages.toLocaleString('en-US') + ' pages in ' + areas.length + ' areas, ' + totalReviewed.toLocaleString('en-US') + ' of them read by a person. The registry order is the order the documentation ships in, not the order the files sit on disk.',
 					actions:
 						ui.button('New Page', { kind: 'primary', icon: 'plus', action: 'new-page' }) +
-						ui.button('Generate from Sources', { icon: 'sparkle', prompt: 'Find knowledge gaps in the API Reference area' })
+						ui.button('Generate from Sources', { icon: 'sparkle', action: 'generate-from-sources' })
 				}) +
 				/* Master–detail: the areas on the left, the pages of the one you picked on the right,
 				   so a click changes something you can see without scrolling. */
@@ -441,7 +494,7 @@
 					icon: 'document',
 					cls: 'card--plain',
 					actions: ui.button('Add Page', { small: true, kind: 'ghost', icon: 'plus', action: 'new-page' }),
-					desc: openArea.pages + ' pages · ' + openArea.reviewed + ' read (' + openPct + '%) · ' + (openArea.stale ? openArea.stale + ' stale' : 'nothing stale') + '. Order is the page order inside the area, not a file line.',
+					desc: openArea.pages + ' pages · ' + openArea.reviewed + ' read (' + openPct + '%) · ' + (openArea.stale ? openArea.stale + ' stale' : 'nothing stale') + '. Order is the page order inside the area, not a file line. Pick a page to open it.',
 					body: ui.table({
 						plain: true,
 						compact: true,
@@ -455,7 +508,21 @@
 							},
 							{ label: 'State', align: 'right', render: function (row) { return ui.badge(row.state, row.tone); } }
 						],
-						rows: pages
+						/* Every row is a page; opening one puts it in the working set on the left. */
+						rowAction: function (row) {
+							return ' data-action="open-page" data-page="' + ui.esc(row.page) + '" data-area="' + ui.esc(openArea.area) + '"';
+						},
+						rows: pages.map(function (row) {
+							return {
+								order: row.order,
+								page: row.page,
+								state: row.state,
+								tone: row.tone,
+								owner: row.owner,
+								changed: row.changed,
+								selected: !!(M.state && M.state.page === row.page)
+							};
+						})
 					})
 				}) +
 				'</div>' +
@@ -488,6 +555,264 @@
 				}) +
 				'</div>';
 			return ui.view(body);
+		}
+	};
+
+	/* One page, in the state the registry holds it: the text, the facts that decide where it ships,
+	   and what a save actually writes. */
+	M.views['docs/page'] = {
+		title: 'Page',
+		render: function () {
+			var requested = (M.state && M.state.page) || 'Data Points API';
+			var areaName = (M.state && M.state.area) || 'API Reference';
+			var rows = data.areaPages[areaName] || [];
+			var record = rows.filter(function (row) { return row.page === requested; })[0];
+
+			/* Open from a working-set row whose area is not the one on screen: find it where it lives. */
+			if (!record) {
+				Object.keys(data.areaPages).forEach(function (name) {
+					data.areaPages[name].forEach(function (row) {
+						if (!record && row.page === requested) {
+							record = row;
+							areaName = name;
+						}
+					});
+				});
+			}
+			record = record || { order: 1, page: requested, state: 'Draft', tone: 'info', owner: '—', changed: 'just now' };
+
+			var issues = {
+				Conflict: 'Two pages claim order ' + record.order + ' in ' + ui.esc(areaName) + '. The build refuses to guess which one ships, so neither does.',
+				Duplicate: 'This page exists twice in the registry — one copy is ' + ui.esc(record.changed) + ' old and has no owner. One of the two has to go.',
+				Stale: 'A source changed after this page was written, so the text may describe a version none of the controllers run.',
+				Draft: 'This page has not been reviewed by a person. A draft is readable in the window and never in a release.'
+			}[record.state];
+
+			/* The page as markdown in a code-editor surface: a gutter, the text, a toolbar and a
+			   status line. The shape of an editor, because the page is edited as text — the mock
+			   shows the surface, not a working buffer. */
+			var markdown = [
+				{ kind: 'h1', text: '# ' + record.page },
+				{ kind: 'p', text: '' },
+				{ kind: 'p', text: record.page + ' is page ' + record.order + ' of the ' + areaName + ' area.' },
+				{ kind: 'p', text: 'The registry decides where it sits, so the site and the PDF agree.' },
+				{ kind: 'p', text: '' },
+				{ kind: 'h2', text: '## What it covers' },
+				{ kind: 'p', text: '' },
+				{ kind: 'list', text: '- what the thing is' },
+				{ kind: 'list', text: '- what it does' },
+				{ kind: 'list', text: '- what it refuses to do' },
+				{ kind: 'p', text: '' },
+				{ kind: 'h2', text: '## Reading a point' },
+				{ kind: 'p', text: '' },
+				{ kind: 'p', text: 'GET /api/devices/{id}/points returns every point on a device,' },
+				{ kind: 'p', text: 'with its raw value and the scale factor the page documents.' },
+				{ kind: 'p', text: '' },
+				{ kind: 'quote', text: '> A heading with nothing under it is a gap: the build counts it.' }
+			];
+
+			var tool = function (label, command, title) {
+				return ui.button(label, { small: true, kind: 'ghost', action: 'md-insert', attrs: 'data-md="' + command + '"', title: title });
+			};
+
+			var editor =
+				'<div class="md-editor">' +
+				'<div class="md-editor__bar">' +
+				tool('B', 'bold', 'Bold') +
+				tool('I', 'italic', 'Italic') +
+				tool('H2', 'heading', 'Section heading') +
+				tool('• List', 'list', 'Bulleted list') +
+				tool('❝', 'quote', 'Note') +
+				tool('</>', 'code', 'Code sample') +
+				tool('Link', 'link', 'Link to another page') +
+				tool('Image', 'image', 'Screenshot from the last read') +
+				tool('Table', 'table', 'Table with a header row') +
+				'<span class="toolbar__spacer"></span>' +
+				'<span class="cell-muted" style="font-size:11px">Markdown · the build reads headings, code and links</span>' +
+				'</div>' +
+				'<div class="md-editor__body">' +
+				'<div class="md-editor__gutter">' +
+				markdown.map(function (line, index) { return '<div>' + (index + 1) + '</div>'; }).join('') +
+				'</div>' +
+				'<div class="md-editor__code">' +
+				markdown.map(function (line) {
+					return '<div class="md-line md-line--' + line.kind + '">' + (line.text ? ui.esc(line.text) : '&nbsp;') + '</div>';
+				}).join('') +
+				'</div>' +
+				'</div>' +
+				'<div class="md-editor__status">' +
+				'<span>Ln 1, Col 1</span><span>' + markdown.length + ' lines</span><span>Markdown</span><span>UTF-8</span><span>' + ui.esc(areaName) + ' · order ' + record.order + '</span>' +
+				'</div>' +
+				'</div>';
+
+			var body =
+				ui.pageHead({
+					eyebrow: ui.esc(areaName) + ' · order ' + record.order + ' · T3000 13.0',
+					title: record.page,
+					icon: 'document',
+					desc: 'The page as the registry holds it. Saving writes a draft; nothing here reaches a reader until a build and a release carry it.',
+					actions:
+						ui.button('Submit for Review', { kind: 'primary', icon: 'check', action: 'submit-page' }) +
+						ui.button('Read Source', { icon: 'code', action: 'browse-source' })
+				}) +
+				(issues ? '<div class="mt-16">' + ui.callout(issues, { kind: record.tone === 'err' ? 'warn' : '' }) + '</div>' : '') +
+				'<div class="split mt-24" style="grid-template-columns: minmax(0, 1fr) 300px">' +
+				editor +
+				'<div class="stack">' +
+				ui.rule({ label: 'Registry', count: '6 facts' }) +
+				'<div class="mt-16">' +
+				'<dl class="kv">' +
+				'<dt>Area</dt><dd>' + ui.esc(areaName) + '</dd>' +
+				'<dt>Order</dt><dd class="cell-mono">' + record.order + '</dd>' +
+				'<dt>State</dt><dd>' + ui.badge(record.state, record.tone) + '</dd>' +
+				'<dt>Owner</dt><dd>' + ui.esc(record.owner === '—' ? 'nobody yet' : record.owner) + '</dd>' +
+				'<dt>Source</dt><dd class="cell-mono">t3000webview</dd>' +
+				'<dt>Changed</dt><dd>' + ui.esc(record.changed) + '</dd>' +
+				'</dl>' +
+				'</div>' +
+				ui.group({
+					label: 'Links',
+					count: '3',
+					body:
+						'<div class="record-row record-row--static">' + ui.toneMark('arrow-right') +
+						'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">→ Reading a Point</span></div>' +
+						'<div class="record-row__meta"><span>outgoing</span></div></div><div class="record-row__state"></div><div class="record-row__state"></div></div>' +
+						'<div class="record-row record-row--static">' + ui.toneMark('arrow-right') +
+						'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">→ Point Types</span></div>' +
+						'<div class="record-row__meta"><span>outgoing</span></div></div><div class="record-row__state"></div><div class="record-row__state"></div></div>' +
+						'<div class="record-row record-row--static">' + ui.toneMark('link') +
+						'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">← Writing a Point</span></div>' +
+						'<div class="record-row__meta"><span>incoming · the link the build resolves</span></div></div><div class="record-row__state"></div><div class="record-row__state"></div></div>'
+				}) +
+				ui.group({
+					label: 'History',
+					count: '3 revisions',
+					body:
+						'<div class="record-row record-row--static">' + ui.toneMark('sparkle', 'accent') +
+						'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">AI draft · +42 −8</span></div>' +
+						'<div class="record-row__meta"><span>26 minutes ago</span><span>in Review Center</span></div></div><div class="record-row__state"></div><div class="record-row__state"></div></div>' +
+						'<div class="record-row record-row--static">' + ui.toneMark('check', 'ok') +
+						'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">Reviewed by Mei</span></div>' +
+						'<div class="record-row__meta"><span>2 weeks ago</span><span>12.9</span></div></div><div class="record-row__state"></div><div class="record-row__state"></div></div>' +
+						'<div class="record-row record-row--static">' + ui.toneMark('code') +
+						'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">Written from t3000webview</span></div>' +
+						'<div class="record-row__meta"><span>3 months ago</span><span>4de5eda</span></div></div><div class="record-row__state"></div><div class="record-row__state"></div></div>'
+				}) +
+				'</div>' +
+				'</div>' +
+				ui.group({
+					label: 'What Saving Does',
+					count: '3 facts',
+					body:
+						'<div class="record-row record-row--static">' + ui.toneMark('document') +
+						'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">It writes a draft</span></div>' +
+						'<div class="record-row__meta"><span>to the registry, not to a source file</span></div></div><div class="record-row__state"></div><div class="record-row__state"></div></div>' +
+						'<div class="record-row record-row--static">' + ui.toneMark('check') +
+						'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">The diff goes to Review Center</span></div>' +
+						'<div class="record-row__meta"><span>accepting it is a review, not a save</span></div></div><div class="record-row__state"></div><div class="record-row__state"></div></div>' +
+						'<div class="record-row record-row--static">' + ui.toneMark('upload') +
+						'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">Only a release reaches a reader</span></div>' +
+						'<div class="record-row__meta"><span>a build and a publish, in that order</span></div></div><div class="record-row__state"></div><div class="record-row__state"></div></div>'
+				});
+
+			return ui.view(body, { wide: true });
+		}
+	};
+
+	/* The code behind the pages: what a read turned into text, and what an AI draft is reading when
+	   it says it drafted from a source. Read-only, because a page is changed by an edit and a
+	   release — never by editing the repository. */
+	M.views['docs/source'] = {
+		title: 'Source',
+		render: function () {
+			var requested = M.state && M.state.repository;
+			var repo = data.repositories.filter(function (candidate) { return candidate.name === requested; })[0] || data.repositories[0];
+			var files = data.sourceFiles;
+			var open = files[0];
+
+			var fileRow = function (file, isOpen) {
+				return (
+					'<div class="record-row' + (isOpen ? ' record-row--current' : ' record-row--static') + '">' +
+					ui.toneMark(file.lang === 'Markdown' ? 'document' : 'code', isOpen ? 'accent' : '') +
+					'<div class="record-row__main">' +
+					'<div class="record-row__title"><span class="record-row__name cell-mono">' + ui.esc(file.path) + '</span></div>' +
+					'<div class="record-row__meta"><span>' + ui.esc(file.role) + '</span><span>' + file.lines + ' lines</span></div>' +
+					'</div>' +
+					'<div class="record-row__state">' + (isOpen ? ui.badge('Open', 'accent') : '') + '</div>' +
+					'<div class="record-row__state"></div>' +
+					'</div>'
+				);
+			};
+
+			var fact = function (icon, title, note) {
+				return (
+					'<div class="record-row record-row--static">' +
+					ui.toneMark(icon) +
+					'<div class="record-row__main">' +
+					'<div class="record-row__title"><span class="record-row__name">' + ui.esc(title) + '</span></div>' +
+					'<div class="record-row__meta"><span>' + ui.esc(note) + '</span></div>' +
+					'</div>' +
+					'<div class="record-row__state"></div>' +
+					'<div class="record-row__state"></div>' +
+					'</div>'
+				);
+			};
+
+			var body =
+				ui.pageHead({
+					eyebrow: 'Source · ' + repo.name,
+					title: 'Source Explorer',
+					icon: 'code',
+					desc: 'The files behind the pages, as the last read left them. Read-only: a page is changed by an edit and a release, never by editing a source.',
+					actions:
+						ui.button('Read Again', { icon: 'refresh', action: 'read-source' }) +
+						ui.button('Repository', { icon: 'repo', open: 'docs/repository' })
+				}) +
+				ui.tiles([
+					{ value: repo.files.toLocaleString('en-US'), label: 'Files in the repository' },
+					{ value: String(repo.pages), label: 'Pages found' },
+					{ value: repo.head || '—', label: 'Commit read' },
+					{ value: repo.read || 'never', label: 'Last read' }
+				]) +
+				'<div class="split mt-24" style="grid-template-columns: 320px minmax(0, 1fr)">' +
+				ui.group({
+					label: 'Files',
+					count: files.length + ' files',
+					note: 'The six files that produced the API Reference pages. A read keeps the heading structure, not a copy of the file.',
+					body: files.map(function (file) { return fileRow(file, file === open); }).join('')
+				}) +
+				'<div>' +
+				ui.group({
+					label: open.path,
+					plain: true,
+					count: open.lang + ' · ' + open.lines + ' lines',
+					actions: ui.button('Open on GitHub', { small: true, kind: 'ghost', action: 'open-source-file' }),
+					body:
+						'<div style="padding-top:10px">' +
+						'<pre class="code" style="max-height:420px">' + data.sourceCode.map(ui.esc).join('\n') + '</pre>' +
+						'</div>' +
+						'<div class="facts">' +
+						'<span>read at 4de5eda</span>' +
+						'<span>declares 12 headings</span>' +
+						'<span>feeds 9 pages</span>' +
+						'<span>cited 4 times</span>' +
+						'</div>'
+				}) +
+				'</div>' +
+				'</div>' +
+				ui.group({
+					label: 'What a Read Does With These Files',
+					count: '3 steps',
+					body:
+						fact('search', 'Finds the headings', 'a heading with text under it becomes a page; a heading with nothing under it becomes a gap') +
+						fact('document', 'Keeps the code samples', 'a fenced block in the source is quoted verbatim, so the page cannot drift from the code') +
+						fact('link', 'Records the links', 'a link to another heading becomes an internal link, which is what the broken-link check reads')
+				}) +
+				'<div class="mt-16">' +
+				ui.callout('An AI draft reads this file as evidence and cites it. Editing the file does not change a page: the next read finds the change, and the page then shows as stale until somebody reviews it.') +
+				'</div>';
+
+			return ui.view(body, { wide: true });
 		}
 	};
 

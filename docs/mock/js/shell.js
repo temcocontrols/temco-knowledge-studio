@@ -119,6 +119,77 @@
 
 	/* ------------------------------------------------------------------ side bar */
 
+	/* A group of the module tree: its name, which opens the surface it is named after, and how many
+	   things it holds. The leaves under it are truncated to the one being worked on. */
+	function treeHeader(section) {
+		var first = section.views[0];
+		var count = section.tree === 'projects' ? data.docsProjects.length : data.knowledge.length;
+		return (
+			'<div class="tree__row">' +
+			'<button type="button" class="tree__section tree__section--button' + (first.id === activeView ? ' is-active' : '') + '" data-open="' + first.id + '">' + ui.esc(section.label) + '</button>' +
+			'<span class="tree__count">' + count + '</span>' +
+			'</div>'
+		);
+	}
+
+	/* The leaves: the one being worked on, then "… N more" — the side bar says where you are, and
+	   the full list is one click away instead of eight rows down. */
+	function treeBody(kind) {
+		var expanded = ((M.state && M.state.expandedGroups) || []).indexOf(kind) >= 0;
+		var leaves = [];
+		var hidden = 0;
+
+		if (kind === 'projects') {
+			var currentName = (M.state && M.state.project) || data.docsProjects[0].name;
+			var current = data.docsProjects.filter(function (project) { return project.name === currentName; })[0] || data.docsProjects[0];
+			var others = data.docsProjects.filter(function (project) { return project !== current; });
+			hidden = others.length;
+			leaves.push(projectLeaf(current, true));
+			if (expanded) {
+				leaves = leaves.concat(others.map(function (project) { return projectLeaf(project, false); }));
+			}
+		} else {
+			var openArea = (M.state && M.state.area) || 'API Reference';
+			var area = data.knowledge.filter(function (candidate) { return candidate.area === openArea; })[0] || data.knowledge[3];
+			var rest = data.knowledge.filter(function (candidate) { return candidate !== area; });
+			hidden = rest.length;
+			leaves.push(areaLeaf(area, true));
+			if (expanded) {
+				leaves = leaves.concat(rest.map(function (candidate) { return areaLeaf(candidate, false); }));
+			}
+		}
+
+		if (hidden) {
+			leaves.push(
+				'<button type="button" class="tree__leaf tree__leaf--more" data-action="toggle-group" data-group="' + kind + '">' +
+				ui.icon(expanded ? 'chevron-down' : 'chevron-right', 'icon--sm') +
+				'<span class="tree__label">' + (expanded ? 'Show less' : '\u2026 ' + hidden + ' more') + '</span>' +
+				'</button>'
+			);
+		}
+
+		return '<div class="tree__children">' + leaves.join('') + '</div>';
+	}
+
+	function projectLeaf(project, isCurrent) {
+		return (
+			'<button type="button" class="tree__leaf' + (isCurrent ? ' is-active' : '') + '" data-action="tree-project" data-project="' + ui.esc(project.name) + '">' +
+			ui.icon(isCurrent ? 'layers' : 'folder') +
+			'<span class="tree__label">' + ui.esc(project.name) + '</span>' +
+			'</button>'
+		);
+	}
+
+	function areaLeaf(area, isCurrent) {
+		return (
+			'<button type="button" class="tree__leaf' + (isCurrent ? ' is-active' : '') + '" data-action="tree-area" data-area="' + ui.esc(area.area) + '">' +
+			ui.icon('book') +
+			'<span class="tree__label">' + ui.esc(area.area) + '</span>' +
+			'<span class="tree__count">' + area.pages + '</span>' +
+			'</button>'
+		);
+	}
+
 	function renderSidebar() {
 		var module = moduleOf(moduleId);
 		if (!module) {
@@ -128,6 +199,11 @@
 		var html = '';
 		module.sections.forEach(function (section) {
 			/* A heading above the only group of items names nothing the title did not. */
+			if (section.tree) {
+				html += treeHeader(section);
+				html += treeBody(section.tree);
+				return;
+			}
 			if (module.sections.length > 1) {
 				html += '<div class="tree__section">' + ui.esc(section.label) + '</div>';
 			}
@@ -140,6 +216,48 @@
 					'</button>';
 			});
 		});
+
+		/* The pages being worked on, as a tree: the area is a branch you can fold, the pages are its
+		   leaves, and the branch holding the open page is marked — so the list says where you are as
+		   well as what is open. */
+		var working = (M.state && M.state.working) || [];
+		if (working.length) {
+			var folded = (M.state && M.state.collapsed) || [];
+			var branches = [];
+			working.forEach(function (entry) {
+				var branch = null;
+				branches.forEach(function (candidate) { if (candidate.area === entry.area) { branch = candidate; } });
+				if (!branch) {
+					branch = { area: entry.area, entries: [] };
+					branches.push(branch);
+				}
+				branch.entries.push(entry);
+			});
+			html += '<div class="tree__section">Working Set</div>';
+			branches.forEach(function (branch) {
+				var isFolded = folded.indexOf(branch.area) >= 0;
+				var holdsOpen = activeView === 'docs/page' && M.state.page && branch.entries.some(function (entry) { return entry.page === M.state.page; });
+				html +=
+					'<button type="button" class="tree__branch' + (holdsOpen ? ' is-active' : '') + '" data-action="toggle-branch" data-branch="' + ui.esc(branch.area) + '">' +
+					ui.icon(isFolded ? 'chevron-right' : 'chevron-down', 'icon--sm') +
+					'<span class="tree__label">' + ui.esc(branch.area) + '</span>' +
+					'<span class="tree__count">' + branch.entries.length + '</span>' +
+					'</button>';
+				if (isFolded) {
+					return;
+				}
+				html += '<div class="tree__children">';
+				branch.entries.forEach(function (entry) {
+					var isOpen = activeView === 'docs/page' && M.state.page === entry.page;
+					html +=
+						'<button type="button" class="tree__item tree__item--child' + (isOpen ? ' is-active' : '') + '" data-action="open-page" data-page="' + ui.esc(entry.page) + '" data-area="' + ui.esc(entry.area) + '">' +
+						ui.icon('document') +
+						'<span class="tree__label">' + ui.esc(entry.page) + '</span>' +
+						'</button>';
+				});
+				html += '</div>';
+			});
+		}
 		el.sidebarBody.innerHTML = html;
 	}
 
@@ -762,6 +880,109 @@
 			case 'toggle-breadcrumbs':
 				toggleBreadcrumbs();
 				return;
+			/* A source detail surface keeps the repository that was picked, the way the repository
+			   page and the knowledge registry do. */
+			case 'browse-source': {
+				M.state = M.state || {};
+				if (target && target.getAttribute('data-repository')) {
+					M.state.repository = target.getAttribute('data-repository');
+				}
+				openView('docs/source');
+				return;
+			}
+			/* Opening a page remembers it: the side bar lists what is being worked on, the way an
+			   editor keeps its open files, so coming back is one click and not a hunt. */
+			case 'open-page': {
+				var pageName = target ? target.getAttribute('data-page') : '';
+				var pageArea = target ? target.getAttribute('data-area') : '';
+				if (!pageName) {
+					return;
+				}
+				M.state = M.state || {};
+				M.state.page = pageName;
+				if (pageArea) {
+					M.state.area = pageArea;
+				}
+				M.state.working = (M.state.working || []).filter(function (entry) { return entry.page !== pageName; });
+				M.state.working.unshift({ page: pageName, area: M.state.area || 'API Reference' });
+				M.state.working = M.state.working.slice(0, 6);
+				openView('docs/page');
+				return;
+			}
+			/* Folding a branch of the working set: the tree remembers which areas are closed. */
+			case 'toggle-branch': {
+				var branchName = target ? target.getAttribute('data-branch') : '';
+				M.state = M.state || {};
+				var foldedBranches = M.state.collapsed || [];
+				M.state.collapsed = foldedBranches.indexOf(branchName) >= 0
+					? foldedBranches.filter(function (name) { return name !== branchName; })
+					: foldedBranches.concat([branchName]);
+				renderSidebar();
+				return;
+			}
+			/* Folding a group of the module tree (Projects, Documents): "… N more" and "Show less". */
+			case 'toggle-group': {
+				var groupKey = target ? target.getAttribute('data-group') : '';
+				M.state = M.state || {};
+				var expandedGroups = M.state.expandedGroups || [];
+				M.state.expandedGroups = expandedGroups.indexOf(groupKey) >= 0
+					? expandedGroups.filter(function (name) { return name !== groupKey; })
+					: expandedGroups.concat([groupKey]);
+				renderSidebar();
+				return;
+			}
+			/* Picking a leaf of the tree: the project becomes the one being worked on, the area
+			   becomes the one the registry shows, and the surface that lists it opens. */
+			case 'tree-project':
+				M.state = M.state || {};
+				M.state.project = target ? target.getAttribute('data-project') : '';
+				openView('docs/projects');
+				return;
+			case 'tree-area':
+				M.state = M.state || {};
+				M.state.area = target ? target.getAttribute('data-area') : '';
+				openView('docs/knowledge');
+				return;
+			/* The editor toolbar says what the command writes, because the surface is a picture of an
+			   editor: the mock does not take typing. */
+			case 'md-insert': {
+				var command = target ? target.getAttribute('data-md') : '';
+				var commands = {
+					bold: 'wraps the selection in ** **',
+					italic: 'wraps the selection in * *',
+					heading: 'turns the line into a section heading',
+					list: 'starts a bulleted list',
+					quote: 'marks the line as a note the build keeps but does not promote to a page',
+					code: 'wraps the selection in a code block, quoted verbatim on the page',
+					link: 'links the selection to another page, and the broken-link check reads it',
+					image: 'inserts a screenshot the last read captured',
+					table: 'inserts a table with a header row'
+				};
+				toast('“' + (commands[command] || command) + '” — the mock shows the editor surface, not the edit.');
+				return;
+			}
+			/* Generating from sources is two surfaces at once: the evidence in an editor tab and the
+			   conversation in the AI bar. Both are needed — an answer is checkable only against the
+			   file it cites, and the file is worth opening only because a question was asked. */
+			case 'generate-from-sources':
+				M.state = M.state || {};
+				M.state.repository = 't3000webview';
+				setAux(true);
+				openView('docs/source');
+				sendChat('Draft the API Reference pages from t3000webview at 4de5eda. Name every heading you could not fill.');
+				return;
+			/* A template is the shape a project starts with, so using one opens the New Project
+			   flow with that shape rather than doing nothing. */
+			case 'use-template': {
+				var template = target ? target.getAttribute('data-template') : '';
+				M.state = M.state || {};
+				M.state.template = template;
+				openView('flow/new-project');
+				toast(template
+					? 'New Project started from “' + template + '” — its areas, page order and build targets are already chosen.'
+					: 'New Project started.');
+				return;
+			}
 			case 'theme':
 				toggleTheme();
 				return;
@@ -814,6 +1035,14 @@
 				var readingAt = el.editor.scrollTop;
 				renderAll();
 				el.editor.scrollTop = readingAt;
+				return;
+			}
+			/* The repository detail is one surface for whichever repository was clicked, so the row
+			   says which one before the view is opened. */
+			case 'open-repository': {
+				M.state = M.state || {};
+				M.state.repository = target.getAttribute('data-repository');
+				openView('docs/repository');
 				return;
 			}
 			case 'flow-next':
@@ -1044,6 +1273,16 @@
 			var box = event.target.closest('input[data-setting]');
 			if (box) {
 				toast(box.getAttribute('data-setting') + (box.checked ? ' turned on.' : ' turned off.'));
+				return;
+			}
+			/* A wizard step that shows what the choice means has to redraw when the choice changes,
+			   otherwise "where it lands" describes the area you just left. */
+			var field = event.target.closest('.wizard [data-field]');
+			if (field && (field.type === 'radio' || field.tagName === 'SELECT')) {
+				M.flow.refresh(activeView, el.editor);
+				var readingAt = el.editor.scrollTop;
+				renderEditor();
+				el.editor.scrollTop = readingAt;
 			}
 		});
 

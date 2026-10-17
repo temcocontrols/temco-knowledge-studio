@@ -1048,6 +1048,98 @@
 	color: var(--fg-muted);
 }
 
+/* A row that is a link says so. The registry list opens the page a row names. */
+.table tbody tr[data-action] {
+	cursor: pointer;
+}
+
+.table tbody tr[data-action]:hover {
+	background: var(--bg-hover);
+}
+
+/* The page text is markdown in an editor surface: toolbar, gutter, text, status line. It carries
+   the look of the editor the page is written in — the mock draws it, it does not take typing. */
+.md-editor {
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	overflow: hidden;
+	background: var(--bg-inset);
+	min-width: 0;
+}
+
+.md-editor__bar {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex-wrap: wrap;
+	padding: 6px 8px;
+	border-bottom: 1px solid var(--border);
+	background: var(--bg-card);
+}
+
+.md-editor__body {
+	display: grid;
+	grid-template-columns: 46px minmax(0, 1fr);
+	max-height: 470px;
+	overflow: auto;
+	font-family: var(--font-mono);
+	font-size: var(--fs-sm);
+	line-height: 1.7;
+}
+
+.md-editor__gutter {
+	padding: 12px 0;
+	text-align: right;
+	color: var(--fg-subtle);
+	border-right: 1px solid var(--border);
+	user-select: none;
+	font-variant-numeric: tabular-nums;
+}
+
+.md-editor__gutter div {
+	padding-right: 10px;
+}
+
+.md-editor__code {
+	padding: 12px 14px;
+	min-width: 0;
+}
+
+.md-line {
+	white-space: pre-wrap;
+	color: var(--fg);
+}
+
+.md-line--h1 {
+	color: var(--fg-strong);
+	font-weight: 600;
+}
+
+.md-line--h2 {
+	color: var(--accent);
+	font-weight: 600;
+}
+
+.md-line--list {
+	color: var(--fg);
+}
+
+.md-line--quote {
+	color: var(--fg-muted);
+	font-style: italic;
+}
+
+.md-editor__status {
+	display: flex;
+	gap: 14px;
+	flex-wrap: wrap;
+	padding: 4px 10px;
+	border-top: 1px solid var(--border);
+	background: var(--bg-card);
+	color: var(--fg-subtle);
+	font-size: 11px;
+}
+
 /* A label that is a name and not a category: keep the capitalisation it was written with. */
 .group-head__label--plain {
 	text-transform: none;
@@ -1318,13 +1410,14 @@
 	}
 }
 
+/* The one box on a page that is a sentence rather than a section. Square corners: it is a note
+   pinned to the surface, not a card, and a radius made it read as one more thing to open. */
 .callout {
 	display: flex;
 	gap: 10px;
 	padding: 11px 13px;
 	border: 1px solid var(--border);
 	border-left: 3px solid var(--info);
-	border-radius: var(--radius);
 	background: color-mix(in srgb, var(--info) 7%, var(--bg-card));
 	font-size: var(--fs-sm);
 	line-height: 1.55;
@@ -1596,16 +1689,20 @@
 /* ---------------------------------------------------------------- Learn reader */
 
 .learn-hero {
-	padding: 34px 34px 30px;
-	border-bottom: 1px solid var(--border);
+	/* A banner on the page, not a band across the window: it keeps the same column as the content
+	   under it, so the top of the page has edges like everything below it. */
+	width: min(1332px, 100% - 68px);
+	margin: 24px auto 0;
+	padding: 28px 30px 26px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-lg);
 	background:
 		radial-gradient(900px 220px at 12% -40%, color-mix(in srgb, var(--accent) 22%, transparent), transparent),
 		var(--bg-inset);
 }
 
 .learn-hero__inner {
-	max-width: 1332px;
-	margin: 0 auto;
+	min-width: 0;
 }
 
 .learn-hero__title {

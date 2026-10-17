@@ -326,36 +326,89 @@
 	M.views['workspaces/all'] = {
 		title: 'All Workspaces',
 		render: function () {
-			var cards = data.workspaces.map(function (workspace) {
-				return ui.card({
-					interactive: true,
-					open: workspace.active ? 'workspaces/t3000' : 'workspaces/all',
-					cls: workspace.active ? 'card--current' : '',
-					title: workspace.name,
-					icon: workspace.active ? 'layers' : 'folder',
-					actions: workspace.active ? ui.badge('Current', 'accent') : '',
-					desc: ui.esc(workspace.desc),
-					body:
-						'<div class="facts">' +
-						'<span>' + workspace.projects + ' projects</span>' +
-						'<span>' + workspace.sources + ' sources</span>' +
-						'<span>' + workspace.devices + ' devices</span>' +
-						'</div>',
-					foot: '<span>' + ui.icon('clock') + ' ' + ui.esc(workspace.updated) + '</span>'
-				});
-			}).join('');
+			var current = data.workspaces.filter(function (workspace) { return workspace.active; })[0];
+			var others = data.workspaces.filter(function (workspace) { return !workspace.active; });
+			var projects = data.workspaces.reduce(function (total, workspace) { return total + workspace.projects; }, 0);
+			var sources = data.workspaces.reduce(function (total, workspace) { return total + workspace.sources; }, 0);
+
+			/* A workspace row is a folder, not a card: what you need before switching is where it
+			   stands and how much is in it. Only the current one has a detail surface, so only it
+			   pretends to be a link — the others offer the switch they can actually perform. */
+			var workspaceRow = function (workspace, isCurrent) {
+				return (
+					'<div class="record-row' + (isCurrent ? ' record-row--current' : ' record-row--static') + '"' +
+					(isCurrent ? ' data-open="workspaces/t3000"' : '') + '>' +
+					ui.toneMark('layers', isCurrent ? 'accent' : '') +
+					'<div class="record-row__main">' +
+					'<div class="record-row__title"><span class="record-row__name">' + ui.esc(workspace.name) + '</span></div>' +
+					'<div class="record-row__meta">' +
+					'<span class="cell-mono">' + ui.esc(workspace.path) + '</span>' +
+					'<span>' + workspace.projects + ' projects</span>' +
+					'<span>' + workspace.sources + ' sources</span>' +
+					(workspace.devices ? '<span>' + workspace.devices + ' devices</span>' : '<span>no devices</span>') +
+					'<span>opened ' + ui.esc(workspace.updated) + '</span>' +
+					'</div>' +
+					'</div>' +
+					'<div class="record-row__state">' + (isCurrent ? ui.badge('Current', 'accent') : '') + '</div>' +
+					(isCurrent
+						? ui.button('Open', { small: true, kind: 'ghost', open: 'workspaces/t3000' })
+						: ui.button('Switch', { small: true, kind: 'ghost', action: 'switch-workspace' })) +
+					'</div>'
+				);
+			};
 
 			var body =
 				ui.pageHead({
 					title: 'All Workspaces',
 					icon: 'layers',
-					desc: 'A workspace is the folder the window is standing in — its projects, the sources they read, and the devices it can reach.',
+					desc: 'A workspace is the folder the window stands in: its projects, the sources they read, and the devices it can reach. One window is on one workspace at a time.',
 					actions: ui.button('New Workspace', { kind: 'primary', icon: 'plus', action: 'new-workspace' })
 				}) +
-				'<div class="grid grid--2">' + cards + '</div>' +
-				'<div class="mt-24">' +
-				ui.callout('One window is on <b>one</b> workspace at a time. Switching one closes nothing: the tabs of the previous workspace come back when you return.') +
-				'</div>';
+				ui.tiles([
+					{ value: String(data.workspaces.length), label: 'On this machine' },
+					{ value: String(projects), label: 'Projects' },
+					{ value: String(sources), label: 'Sources' },
+					{ value: current ? current.name : '—', label: 'Open now' }
+				]) +
+				ui.group({
+					label: 'Open Now',
+					count: 'this window',
+					note: 'Every tab, the AI bar and the panel in front of you belong to this workspace. Opening another one does not close them.',
+					body: current ? workspaceRow(current, true) : ''
+				}) +
+				ui.group({
+					label: 'Elsewhere On This Machine',
+					count: others.length + ' workspaces',
+					note: 'Each keeps its own tabs, its own working folder and its own selection, so switching back is where you left off.',
+					body: others.map(function (workspace) { return workspaceRow(workspace, false); }).join('')
+				}) +
+				ui.group({
+					label: 'What Switching Does',
+					count: '3 facts',
+					body:
+						'<div class="record-row record-row--static">' +
+						ui.toneMark('layers') +
+						'<div class="record-row__main">' +
+						'<div class="record-row__title"><span class="record-row__name">Tabs come back</span></div>' +
+						'<div class="record-row__meta"><span>each workspace remembers the surfaces it had open</span></div>' +
+						'</div><div class="record-row__state"></div><div class="record-row__state"></div>' +
+						'</div>' +
+						'<div class="record-row record-row--static">' +
+						ui.toneMark('folder') +
+						'<div class="record-row__main">' +
+						'<div class="record-row__title"><span class="record-row__name">The working folder follows</span></div>' +
+						'<div class="record-row__meta"><span>repositories are cloned beside the workspace, not in one global folder</span></div>' +
+						'</div><div class="record-row__state"></div><div class="record-row__state"></div>' +
+						'</div>' +
+						'<div class="record-row record-row--static">' +
+						ui.toneMark('chip') +
+						'<div class="record-row__main">' +
+						'<div class="record-row__title"><span class="record-row__name">The device list narrows</span></div>' +
+						'<div class="record-row__meta"><span>a workspace only reaches the controllers it lists</span></div>' +
+						'</div><div class="record-row__state"></div><div class="record-row__state"></div>' +
+						'</div>'
+				});
+
 			return ui.view(body);
 		}
 	};
@@ -363,12 +416,13 @@
 	M.views['workspaces/t3000'] = {
 		title: 'T3000',
 		render: function () {
+			var workspace = data.workspaces.filter(function (candidate) { return candidate.id === 't3000'; })[0];
 			var body =
 				ui.pageHead({
 					eyebrow: 'Workspace',
 					title: 'T3000',
 					icon: 'building',
-					desc: 'Building automation controller platform. 5 projects · 14 sources · 34 devices.',
+					desc: ui.esc(workspace.desc) + '. ' + workspace.projects + ' projects · ' + workspace.sources + ' sources · ' + workspace.devices + ' devices.',
 					actions:
 						ui.button('Documentation', { icon: 'document', open: 'docs/projects' }) +
 						ui.button('Devices', { icon: 'chip', open: 'devices/all' })
@@ -376,7 +430,7 @@
 				ui.hero({
 					eyebrow: 'Current workspace',
 					title: 'Everything in this window is T3000',
-					desc: '5 projects, 14 sources and 34 devices, with one release in flight. Switching workspace closes nothing — the tabs come back when you return.',
+					desc: workspace.projects + ' projects, ' + workspace.sources + ' sources and ' + workspace.devices + ' devices, with one release in flight. Switching workspace closes nothing — the tabs come back when you return.',
 					actions:
 						ui.button('Open Review Center', { kind: 'primary', icon: 'check', open: 'docs/review' }) +
 						ui.button('Switch Workspace…', { icon: 'layers', action: 'switch-workspace' })
@@ -384,8 +438,8 @@
 				'<div class="mt-24">' +
 				ui.tiles([
 					{ value: '1,254', label: 'Pages' },
-					{ value: '14', label: 'Sources' },
-					{ value: '34', label: 'Devices' },
+					{ value: String(workspace.sources), label: 'Sources' },
+					{ value: String(workspace.devices), label: 'Devices' },
 					{ value: '1', label: 'Open release' },
 					{ value: '17', label: 'Needs review' }
 				]) +
@@ -436,30 +490,72 @@
 	M.views['workspaces/templates'] = {
 		title: 'Templates',
 		render: function () {
-			var templates = [
-				{ name: 'Controller Manual', desc: 'Product overview, wiring, points, specifications and troubleshooting.', pages: 48 },
-				{ name: 'Protocol Reference', desc: 'Objects, services, conformance and integration notes.', pages: 26 },
-				{ name: 'API Reference', desc: 'Endpoints, schemas and samples generated from a repository.', pages: 34 },
-				{ name: 'Release Notes', desc: 'One page per release, from commits since the previous tag.', pages: 8 }
-			];
+			var templates = data.templates;
+			var starter = templates.reduce(function (total, template) { return total + template.pages; }, 0);
+
+			var fact = function (icon, title, note) {
+				return (
+					'<div class="record-row record-row--static">' +
+					ui.toneMark(icon) +
+					'<div class="record-row__main">' +
+					'<div class="record-row__title"><span class="record-row__name">' + ui.esc(title) + '</span></div>' +
+					'<div class="record-row__meta"><span>' + ui.esc(note) + '</span></div>' +
+					'</div>' +
+					'<div class="record-row__state"></div>' +
+					'<div class="record-row__state"></div>' +
+					'</div>'
+				);
+			};
+
 			var body =
 				ui.pageHead({
 					title: 'Templates',
 					icon: 'package',
-					desc: 'A template creates a project with its areas, its checks and its build targets already in place.',
+					desc: 'A template is the shape a project starts with: the areas it opens, the pages it stubs out and the artifacts the build will produce. It writes nothing until a project uses it.',
 					actions: ui.button('New Template', { icon: 'plus', action: 'new-template' })
 				}) +
-				'<div class="grid grid--2">' +
-				templates.map(function (template) {
-					return ui.card({
-						title: template.name,
-						icon: 'document',
-						desc: ui.esc(template.desc),
-						body: '<div class="cell-muted" style="font-size:12px;margin-top:8px">' + template.pages + ' pages · 8 areas · website + PDF</div>',
-						foot: ui.button('Use Template', { small: true, action: 'use-template' }) + '<span>' + ui.esc('Included with the platform') + '</span>'
-					});
-				}).join('') +
+				ui.tiles([
+					{ value: String(templates.length), label: 'Templates' },
+					{ value: String(starter), label: 'Starter pages' },
+					{ value: String(data.knowledge.length), label: 'Areas it can draw from' },
+					{ value: String(data.healthChecks.length), label: 'Checks every build runs' }
+				]) +
+				ui.group({
+					label: 'Templates',
+					count: templates.length + ' templates',
+					note: 'Using one opens New Project with this shape already chosen — the template adds areas and page order, never a page body.',
+					body: templates.map(function (template) {
+						return (
+							'<div class="record-row">' +
+							ui.toneMark('document') +
+							'<div class="record-row__main">' +
+							'<div class="record-row__title"><span class="record-row__name">' + ui.esc(template.name) + '</span></div>' +
+							'<div class="record-row__meta">' +
+							'<span>' + template.pages + ' starter pages</span>' +
+							'<span>' + template.areas.length + ' areas</span>' +
+							'<span>' + ui.esc(template.targets.join(' · ')) + '</span>' +
+							'<span>filled from ' + ui.esc(template.from) + '</span>' +
+							'</div>' +
+							'</div>' +
+							'<div class="record-row__state cell-mono cell-muted">' + template.pages + ' pp</div>' +
+							ui.button('Use Template', { small: true, kind: 'ghost', action: 'use-template', attrs: 'data-template="' + ui.esc(template.name) + '"' }) +
+							'</div>'
+						);
+					}).join('')
+				}) +
+				ui.group({
+					label: 'What a Template Decides',
+					count: '4 facts',
+					body:
+						fact('list', 'Areas and page order', 'the registry areas this kind of book needs, and where its pages sit inside them') +
+						fact('check', 'Checks', 'the same ' + data.healthChecks.length + ' health checks run on every build, whatever the template') +
+						fact('package', 'Build targets', 'website is always one; PDF, CHM and the indexes are chosen per template') +
+						fact('users', 'What it does not decide', 'content, owner or version — those come from the project and from the first read')
+				}) +
+				'<div class="mt-16">' +
+				ui.callout('A template creates empty pages with titles and an order. The first read of a source is what fills them, which is why a template on its own produces nothing a reader can reach.') +
 				'</div>';
+
 			return ui.view(body);
 		}
 	};

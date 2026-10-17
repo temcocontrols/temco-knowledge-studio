@@ -43,7 +43,7 @@ Every number in it — 1,254 pages, 34 devices, 17 drafts — is invented. The *
 
 The mock keeps the sides at fixed widths and the editor flexible, which is what the workbench does. Nothing here is a webview: a surface is a normal editor tab, so it keeps tabs, breadcrumbs, the panel and the status bar for free.
 
-**There is no breadcrumb row by default.** In VS Code breadcrumbs are a setting (`breadcrumbs.enabled`, View › Appearance › Breadcrumbs), and this window has no file system for them to name: the bar could only repeat the side bar's module and the tab's page, which is what `Settings › Temco Platform › Modules` did. So the row is off, the editor keeps its 22 pixels, and `View › Toggle Breadcrumbs` / `View: Toggle Breadcrumbs` in the palette / the `Breadcrumbs` switch on Settings › General brings it back — a real toggle rather than a fixture, remembered with the other chrome flags. When it is on, the bar reads `Module › Page` and adds the section in between only when the module has more than one: `Documentation › Pipeline › Releases`, not `Settings › Temco Platform › Modules`. A module with a single section also drops that group's heading in the side bar, because a heading above the only group of items names nothing the title did not (`Workspaces › Workspaces › T3000` had the same problem). Every segment above the page is a button that opens that level, since a level you cannot go back to is only a label.
+**There is no breadcrumb row by default.** In VS Code breadcrumbs are a setting (`breadcrumbs.enabled`, View › Appearance › Breadcrumbs), and this window has no file system for them to name: the bar could only repeat the side bar's module and the tab's page. So the row is off, the editor keeps its 22 pixels, and `View › Toggle Breadcrumbs` / `View: Toggle Breadcrumbs` in the palette / the `Breadcrumbs` switch on Settings › General brings it back — a real toggle rather than a fixture, remembered with the other chrome flags. When it is on, the bar reads `Module › Page` and adds the section in between only when the module has more than one: `Settings › Platform › Publishing`, `Documentation › Pipeline › Releases`, but `Workspaces › T3000`. A module with a single section also drops that group's heading in the side bar, because a heading above the only group of items names nothing the title did not. Every segment above the page is a button that opens that level, since a level you cannot go back to is only a label.
 
 ## The menu bar
 
@@ -180,6 +180,27 @@ Settings is where a value is set, not where a state is reported, so the five pag
 - **Branding** draws the mark at the three sizes the shell actually draws it (64, 32, 16), and names the five colour roles under their swatches — a row of unlabelled squares is not a preview of anything.
 - **AI Models** is grouped by what the setting decides — `Answering`, `Retrieval`, `Drafts and Network` — and says in its head that the AI Hub shows what is loaded now while this page decides what loads next, so the two pages stop looking like copies.
 - **Publishing** puts `Test Connection` in the `Target` rule rather than the page head, and computes `4 of 5 published` from the artifact list. Each artifact is a labelled checkbox row, so what a version publishes is readable without counting ticks.
+
+## The device-side pages
+
+Four modules read the building rather than the documentation: **Devices**, **I/O Studio**, **BACnet Studio**, **Network**. Each answers one question and says what it cannot do, and every count on them is derived — the fleet register is `data.devices` (six controllers), the alarm counts come from `data.alarms`, and the host lists from `data.hosts`, so a page cannot claim a fleet the register does not hold.
+
+- **Devices** — the controller that stopped answering gets the panel, the tiles count the register, and the list is two groups: `Needs Attention` and `Answering`. A row is a controller (`T3-BB · AHU-1`), its serial, address, firmware, point count and last contact, with the alarm count read from that device's own alarm rows.
+- **Firmware** — releases, then `Behind`: the controllers on something other than the current version, with the distance (`2.12.1 → 2.14.3`) written on the row. Staging is a write; the callout says a preview image is refused on a production controller.
+- **Health & Alarms** — grouped by state (`Active`, `Acknowledged`, `Cleared Today`), because acknowledging is not clearing and the three are different things to do next.
+- **Schedules / Trend Logs / Backups** — a register each; the trend row carries its buffer as a bar (a buffer over 85 % is a log nobody has read), and a backup that has no younger copy says so instead of offering a restore.
+- **I/O Studio** — `Point Browser` groups points by type; a write is a `settings-rows` form at a priority, not a local override. `Mapping` counts mapped / needs-review / unmapped from the mapping rows. `Logic` is source, programs, diagnostics, in that order. `Live Values` is a subscription and says so.
+- **BACnet Studio** — `Discovery` is the wire (instance, IP, MAC, vendor, protocol), `Object Browser` is one device's objects with the faulting one called out, `Alarms` is the event log *as received*, `Trend Logs` and `Schedules` are the device's own objects.
+- **Network** — `Discovery` (ARP-level hosts, third-party vendors marked), `Modbus Scanner` (registers with the unit that times out), `Diagnostics` (ping output plus a per-host table, because a host that answers ping but not BACnet is a different problem), `Captures` (a capture keeps the filter that produced it).
+
+## SQL Studio
+
+SQL Studio is pointed at the documentation registry — that is the database this window is about — so it is laid out around it rather than as a general SQL client:
+
+- **Workbench** — `Query Editor`, `Connections`, `History`.
+- **Docs Database** — `Schema`, `Saved Queries`, `Reports`.
+
+The Query Editor opens with *Stale pages by area*, and its result is computed from `data.knowledge`, so the studio and the Coverage page cannot disagree: 8 rows, 89 stale pages, the same total the dashboard quotes. `History` keeps the refused statement too — a `UPDATE` the read-only connection would not run is part of the record. `Schema` lists the nine tables of `temco_docs` and the columns of `pages`, which is the table everything else joins to. `Saved Queries` are the checks the build runs, written out; `Reports` point at the page that owns each number instead of restating it.
 
 ## The modules and their surfaces
 
