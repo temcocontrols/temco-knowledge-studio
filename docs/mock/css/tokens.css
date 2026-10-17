@@ -1,0 +1,275 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Temco Controls. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*
+ * Colour roles, not colours. Every surface in the mock draws from these names so a theme change
+ * is one block, and so a value can be traced back to the role it plays in the window.
+ */
+
+:root {
+	--font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+	--font-mono: "Cascadia Code", "Cascadia Mono", Consolas, "Courier New", monospace;
+
+	--fs-ui: 13px;
+	--fs-sm: 12px;
+	--fs-xs: 11px;
+
+	--titlebar-h: 35px;
+	--tabbar-h: 35px;
+	--breadcrumb-h: 22px;
+	--statusbar-h: 22px;
+	--sidebar-w: 300px;
+	--auxbar-w: 340px;
+	--panel-h: clamp(132px, 26vh, 240px);
+
+	--radius-sm: 4px;
+	--radius: 6px;
+	--radius-lg: 10px;
+}
+
+:root,
+[data-theme="dark"] {
+	color-scheme: dark;
+
+	--titlebar-bg: #181818;
+	--activitybar-bg: #181818;
+	--activitybar-fg: #d7d7d7;
+	--activitybar-inactive-fg: #868686;
+	--sidebar-bg: #181818;
+	--sidebar-fg: #cccccc;
+	--editor-bg: #1f1f1f;
+	--panel-bg: #181818;
+	--statusbar-bg: #181818;
+	--statusbar-fg: #cccccc;
+	--tabbar-bg: #181818;
+
+	--fg: #cccccc;
+	--fg-strong: #ffffff;
+	--fg-muted: #9d9d9d;
+	--fg-subtle: #868686;
+
+	--border: #2b2b2b;
+	--border-strong: #3c3c3c;
+
+	--bg-hover: rgba(255, 255, 255, 0.07);
+	--bg-active: rgba(255, 255, 255, 0.1);
+	--bg-selected: #04395e;
+	--bg-inset: #141414;
+	--bg-card: #242424;
+	--bg-card-hover: #2a2a2a;
+
+	--tab-active-bg: #1f1f1f;
+	--tab-active-fg: #ffffff;
+	--tab-inactive-bg: #181818;
+	--tab-inactive-fg: #9d9d9d;
+
+	--accent: #4daafc;
+	--accent-bg: #0078d4;
+	--accent-fg: #ffffff;
+	--link: #4daafc;
+
+	--ok: #3fb950;
+	--warn: #d29922;
+	--err: #f85149;
+	--info: #4daafc;
+	--purple: #b180d7;
+
+	--badge-bg: #37373d;
+	--badge-fg: #d7d7d7;
+
+	--shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+	--scrollbar: rgba(255, 255, 255, 0.16);
+}
+
+[data-theme="light"] {
+	color-scheme: light;
+
+	--titlebar-bg: #f8f8f8;
+	--activitybar-bg: #f8f8f8;
+	--activitybar-fg: #3b3b3b;
+	--activitybar-inactive-fg: #6f6f6f;
+	--sidebar-bg: #f8f8f8;
+	--sidebar-fg: #3b3b3b;
+	--editor-bg: #ffffff;
+	--panel-bg: #f8f8f8;
+	--statusbar-bg: #f8f8f8;
+	--statusbar-fg: #3b3b3b;
+	--tabbar-bg: #f8f8f8;
+
+	--fg: #3b3b3b;
+	--fg-strong: #1f1f1f;
+	--fg-muted: #6f6f6f;
+	--fg-subtle: #8b8b8b;
+
+	--border: #e5e5e5;
+	--border-strong: #d4d4d4;
+
+	--bg-hover: rgba(0, 0, 0, 0.05);
+	--bg-active: rgba(0, 0, 0, 0.09);
+	--bg-selected: #e8f0fe;
+	--bg-inset: #f3f3f3;
+	--bg-card: #ffffff;
+	--bg-card-hover: #fafafa;
+
+	--tab-active-bg: #ffffff;
+	--tab-active-fg: #1f1f1f;
+	--tab-inactive-bg: #f8f8f8;
+	--tab-inactive-fg: #6f6f6f;
+
+	--accent: #005fb8;
+	--accent-bg: #005fb8;
+	--accent-fg: #ffffff;
+	--link: #005fb8;
+
+	--ok: #1a7f37;
+	--warn: #bf8803;
+	--err: #e51400;
+	--info: #005fb8;
+	--purple: #8250df;
+
+	--badge-bg: #e7e7e7;
+	--badge-fg: #3b3b3b;
+
+	--shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+	--scrollbar: rgba(0, 0, 0, 0.22);
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	height: 100%;
+}
+
+body {
+	margin: 0;
+	font-family: var(--font-ui);
+	font-size: var(--fs-ui);
+	line-height: 1.45;
+	color: var(--fg);
+	background: var(--editor-bg);
+	overflow: hidden;
+	-webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea,
+select {
+	font: inherit;
+	color: inherit;
+}
+
+a {
+	color: var(--link);
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+h1,
+h2,
+h3,
+h4 {
+	margin: 0;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+}
+
+p {
+	margin: 0;
+}
+
+ul,
+ol {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+table {
+	border-collapse: collapse;
+	width: 100%;
+}
+
+code,
+kbd,
+pre {
+	font-family: var(--font-mono);
+	font-size: var(--fs-sm);
+}
+
+kbd {
+	padding: 1px 5px;
+	border: 1px solid var(--border-strong);
+	border-bottom-width: 2px;
+	border-radius: var(--radius-sm);
+	background: var(--bg-inset);
+	font-size: var(--fs-xs);
+	color: var(--fg-muted);
+}
+
+::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--scrollbar);
+	border: 2px solid transparent;
+	background-clip: padding-box;
+	border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background-color: var(--fg-subtle);
+	background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::selection {
+	background: rgba(77, 170, 252, 0.35);
+}
+
+.icon {
+	width: 16px;
+	height: 16px;
+	flex: none;
+	display: inline-block;
+	vertical-align: middle;
+}
+
+.icon--lg {
+	width: 24px;
+	height: 24px;
+}
+
+.icon--sm {
+	width: 14px;
+	height: 14px;
+}
+
+.sprite {
+	display: none;
+}
+
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+	border: 0;
+}
