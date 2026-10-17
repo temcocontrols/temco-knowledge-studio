@@ -27,6 +27,21 @@
 		return '<span class="badge' + (kind && kind !== 'neutral' ? ' badge--' + kind : '') + '">' + ui.esc(text) + '</span>';
 	};
 
+	/**
+	 * The word a tone becomes when it has to be *read* rather than seen. A tinted mark alone is a
+	 * colour, and colour is not a status for anyone who cannot see it.
+	 */
+	ui.status = function (tone) {
+		var words = {
+			ok: ['Done', 'ok'],
+			warn: ['Attention', 'warn'],
+			accent: ['In Progress', 'info'],
+			info: ['Info', 'info']
+		};
+		var pair = words[tone] || ['Note', 'neutral'];
+		return ui.badge(pair[0], pair[1]);
+	};
+
 	ui.dot = function (kind) {
 		return '<span class="dot' + (kind ? ' dot--' + kind : '') + '"></span>';
 	};

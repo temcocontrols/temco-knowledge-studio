@@ -170,12 +170,15 @@
 			el.breadcrumbs.innerHTML = '';
 			return;
 		}
-		el.breadcrumbs.innerHTML =
-			'<span class="breadcrumbs__item">' + ui.esc(view.moduleLabel) + '</span>' +
-			ui.icon('chevron-right', 'icon--sm') +
-			'<span class="breadcrumbs__item">' + ui.esc(view.sectionLabel) + '</span>' +
-			ui.icon('chevron-right', 'icon--sm') +
-			'<span class="breadcrumbs__item is-current">' + ui.esc(view.label) + '</span>';
+		var parts = ['<span class="breadcrumbs__item">' + ui.esc(view.moduleLabel) + '</span>'];
+		/* A section named after its own module would read "Workspaces › Workspaces › Templates". */
+		if (view.sectionLabel && view.sectionLabel !== view.moduleLabel) {
+			parts.push(ui.icon('chevron-right', 'icon--sm'));
+			parts.push('<span class="breadcrumbs__item">' + ui.esc(view.sectionLabel) + '</span>');
+		}
+		parts.push(ui.icon('chevron-right', 'icon--sm'));
+		parts.push('<span class="breadcrumbs__item is-current">' + ui.esc(view.label) + '</span>');
+		el.breadcrumbs.innerHTML = parts.join('');
 	}
 
 	/* ------------------------------------------------------------------ editor */
@@ -290,6 +293,14 @@
 			return;
 		}
 		renderAll();
+	}
+
+	/* Remove a tab without changing what is in front — a finished flow hands over to its result. */
+	function dropTab(viewId) {
+		var index = tabs.indexOf(viewId);
+		if (index >= 0) {
+			tabs.splice(index, 1);
+		}
 	}
 
 	/* ------------------------------------------------------------------ panel */
@@ -530,13 +541,14 @@
 			{ label: 'Dashboard', run: function () { openModule('dashboard'); } },
 			{ label: 'Workspaces', run: function () { openModule('workspaces'); } },
 			{ label: 'Documentation', run: function () { openModule('docs'); } },
+			{ label: 'AI Hub', run: function () { openModule('ai'); } },
+			{ label: 'Temco Learn', run: function () { openModule('learn'); } },
+			{ separator: true },
 			{ label: 'Devices', run: function () { openModule('devices'); } },
 			{ label: 'I/O Studio', run: function () { openModule('io'); } },
 			{ label: 'BACnet Studio', run: function () { openModule('bacnet'); } },
 			{ label: 'Network', run: function () { openModule('network'); } },
 			{ label: 'SQL Studio', run: function () { openModule('sql'); } },
-			{ label: 'AI Hub', run: function () { openModule('ai'); } },
-			{ label: 'Temco Learn', run: function () { openModule('learn'); } },
 			{ separator: true },
 			{ label: 'Go to Surface…', keys: 'Ctrl+P', run: function () { openPalette('views'); } },
 			{ label: 'Settings', run: function () { openModule('settings'); } }
@@ -553,25 +565,31 @@
 			{ label: 'Stop Running Task', action: 'build-cancel', disabled: true, hint: 'Nothing running' }
 		],
 		Tools: [
-			{ label: 'Documentation', children: [
-				{ label: 'Read All Sources', action: 'read-all' },
-				{ label: 'Validate Structure', action: 'validate-docs' },
-				{ label: 'Build Website', action: 'build-site' },
-				{ label: 'Build Offline Help', action: 'build-help' },
-				{ label: 'Publish Release…', action: 'publish-release' }
-			] },
-			{ label: 'Devices', children: [
-				{ label: 'Discover Devices', action: 'discover-devices' },
-				{ label: 'Stage Firmware…', action: 'stage-firmware' },
-				{ label: 'Back Up All', action: 'backup-all' }
-			] },
+			{
+				label: 'Documentation', children: [
+					{ label: 'Read All Sources', action: 'read-all' },
+					{ label: 'Validate Structure', action: 'validate-docs' },
+					{ label: 'Build Website', action: 'build-site' },
+					{ label: 'Build Offline Help', action: 'build-help' },
+					{ label: 'Publish Release…', action: 'publish-release' }
+				]
+			},
+			{
+				label: 'Devices', children: [
+					{ label: 'Discover Devices', action: 'discover-devices' },
+					{ label: 'Stage Firmware…', action: 'stage-firmware' },
+					{ label: 'Back Up All', action: 'backup-all' }
+				]
+			},
 			{ label: 'I/O Studio: Auto-Map Points', action: 'auto-map' },
 			{ label: 'Network: Scan Segment', action: 'net-scan' },
-			{ label: 'AI', children: [
-				{ label: 'Load Model…', action: 'load-model' },
-				{ label: 'Rebuild Index', action: 'rebuild-index' },
-				{ label: 'Open Actions', run: function () { openView('ai/actions'); } }
-			] },
+			{
+				label: 'AI', children: [
+					{ label: 'Load Model…', action: 'load-model' },
+					{ label: 'Rebuild Index', action: 'rebuild-index' },
+					{ label: 'Open Actions', run: function () { openView('ai/actions'); } }
+				]
+			},
 			{ separator: true },
 			{ label: 'Developer: Open Settings JSON', action: 'open-settings-json' }
 		],
@@ -734,19 +752,79 @@
 			case 'panel-ports':
 				showPanel('ports');
 				return;
+			case 'new-project':
+				openView('flow/new-project');
+				return;
+			case 'add-source':
+				openView('flow/add-source');
+				return;
+			case 'publish-release':
+				openView('flow/publish');
+				return;
+			case 'stage-firmware':
+				openView('flow/stage-firmware');
+				return;
+			case 'new-page':
+				openView('flow/new-page');
+				return;
+			case 'new-workspace':
+				openView('flow/new-workspace');
+				return;
+			case 'open-workspace':
+				openView('flow/open-workspace');
+				return;
+			case 'flow-next':
+				M.flow.next(activeView, el.editor);
+				renderAll();
+				return;
+			case 'flow-back':
+				M.flow.back(activeView, el.editor);
+				renderAll();
+				return;
+			case 'flow-step':
+				M.flow.step(activeView, Number(target.getAttribute('data-step')), el.editor);
+				renderAll();
+				return;
+			case 'check-all': {
+				var group = target.closest('.checklist-group');
+				if (group) {
+					Array.prototype.forEach.call(group.querySelectorAll('input[type="checkbox"]'), function (box) {
+						box.checked = true;
+					});
+					M.flow.refresh(activeView, el.editor);
+					renderAll();
+				}
+				return;
+			}
+			case 'flow-finish': {
+				var finished = M.flow.finish(activeView, el.editor);
+				if (finished) {
+					dropTab(activeView);
+					openView(finished.open);
+					toast(finished.toast);
+				} else {
+					renderAll();
+				}
+				return;
+			}
+			case 'flow-cancel':
+				M.flow.cancel(activeView);
+				dropTab(activeView);
+				if (tabs.length) {
+					openView(tabs[tabs.length - 1]);
+				} else {
+					activeView = null;
+					renderAll();
+				}
+				return;
 			case 'build-site':
 			case 'build-all':
 			case 'build-missing':
 			case 'build-target':
 			case 'compile-program':
-			case 'stage-firmware':
 			case 'backup-all':
 				showPanel('output');
 				toast('Queued. The mock shows the panel, not the work.');
-				return;
-			case 'publish-release':
-				showPanel('problems');
-				toast('Publish blocked: 2 structural errors in API Reference.');
 				return;
 			case 'learn-nav':
 			case 'toc':
@@ -943,6 +1021,22 @@
 		el.paletteInput.addEventListener('input', function () {
 			paletteIndex = 0;
 			filterPalette(el.paletteInput.value);
+		});
+
+		/* The repository search filters rows in place: it is a view concern, not flow state. */
+		document.addEventListener('input', function (event) {
+			var input = event.target.closest('[data-filter]');
+			if (!input) {
+				return;
+			}
+			var list = document.querySelector('[data-filter-list="' + input.getAttribute('data-filter') + '"]');
+			if (!list) {
+				return;
+			}
+			var needle = input.value.trim().toLowerCase();
+			Array.prototype.forEach.call(list.querySelectorAll('.checklist__row'), function (row) {
+				row.hidden = !!needle && row.textContent.toLowerCase().indexOf(needle) < 0;
+			});
 		});
 
 		/* A submenu opens when the pointer reaches its parent item and closes when it leaves the

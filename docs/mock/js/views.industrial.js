@@ -75,9 +75,11 @@
 						{ label: 'Status', render: function (row) { return statusDot(row.status); } },
 						{ label: 'Firmware', render: function (row) { return '<span class="cell-mono">' + ui.esc(row.firmware) + '</span>'; } },
 						{ label: 'Points', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.points + '</span>'; } },
-						{ label: 'Alarms', align: 'right', render: function (row) {
-							return row.alarms ? ui.badge(String(row.alarms), 'warn') : '<span class="cell-muted">—</span>';
-						} },
+						{
+							label: 'Alarms', align: 'right', render: function (row) {
+								return row.alarms ? ui.badge(String(row.alarms), 'warn') : '<span class="cell-muted">—</span>';
+							}
+						},
 						{ label: 'Last Contact', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.last) + '</span>'; } }
 					],
 					rows: data.devices
@@ -146,9 +148,11 @@
 						{ label: 'Message', render: function (row) { return ui.esc(row.message); } },
 						{ label: 'Priority', render: function (row) { return ui.badge(row.priority, row.priority === 'High' ? 'err' : row.priority === 'Medium' ? 'warn' : 'neutral'); } },
 						{ label: 'State', render: function (row) { return ui.badge(row.state, row.tone); } },
-						{ label: '', align: 'right', render: function (row) {
-							return row.state === 'Active' ? ui.button('Acknowledge', { small: true, action: 'ack' }) : ui.button('Details', { small: true, kind: 'ghost', action: 'alarm-details' });
-						} }
+						{
+							label: '', align: 'right', render: function (row) {
+								return row.state === 'Active' ? ui.button('Acknowledge', { small: true, action: 'ack' }) : ui.button('Details', { small: true, kind: 'ghost', action: 'alarm-details' });
+							}
+						}
 					],
 					rows: data.alarms
 				}) +
@@ -296,13 +300,17 @@
 						{ label: 'Id', render: function (row) { return '<span class="cell-mono cell-strong">' + ui.esc(row.id) + '</span>'; } },
 						{ label: 'Label', render: function (row) { return ui.esc(row.label); } },
 						{ label: 'Type', render: function (row) { return '<span class="tag">' + ui.esc(row.type) + '</span>'; } },
-						{ label: 'Value', align: 'right', render: function (row) {
-							return '<span class="cell-mono cell-strong">' + ui.esc(row.value) + '</span> <span class="cell-muted">' + ui.esc(row.unit) + '</span>';
-						} },
+						{
+							label: 'Value', align: 'right', render: function (row) {
+								return '<span class="cell-mono cell-strong">' + ui.esc(row.value) + '</span> <span class="cell-muted">' + ui.esc(row.unit) + '</span>';
+							}
+						},
 						{ label: 'Range', render: function (row) { return '<span class="cell-muted cell-mono">' + ui.esc(row.range) + '</span>'; } },
-						{ label: 'Flags', render: function (row) {
-							return row.state === 'warn' ? ui.badge('Fault', 'warn') : '<span class="cell-muted">—</span>';
-						} }
+						{
+							label: 'Flags', render: function (row) {
+								return row.state === 'warn' ? ui.badge('Fault', 'warn') : '<span class="cell-muted">—</span>';
+							}
+						}
 					],
 					rows: data.points
 				}) +
@@ -365,9 +373,9 @@
 					title: 'Coverage',
 					body:
 						'<div class="progress-list">' +
-						'<div><div class="progress-list__label"><b>Mapped</b><span>4 of 7</span></div>' + ui.bar(57, 'warn') + '</div>' +
-						'<div><div class="progress-list__label"><b>Unmapped analog</b><span>1</span></div>' + ui.bar(14, 'warn') + '</div>' +
-						'<div><div class="progress-list__label"><b>Digital</b><span>2 of 2</span></div>' + ui.bar(100, 'ok') + '</div>' +
+						'<div><div class="progress-list__label"><b>Mapped</b><span>4 of 7</span></div>' + ui.bar(57) + '</div>' +
+						'<div><div class="progress-list__label"><b>Unmapped analog</b><span>1</span></div>' + ui.bar(14) + '</div>' +
+						'<div><div class="progress-list__label"><b>Digital</b><span>2 of 2</span></div>' + ui.bar(100) + '</div>' +
 						'</div>'
 				}) +
 				ui.card({
@@ -460,21 +468,25 @@
 				ui.table({
 					columns: [
 						{ label: 'Point', render: function (row) { return '<span class="cell-mono cell-strong">' + ui.esc(row.id) + '</span> <span class="cell-muted">' + ui.esc(row.label) + '</span>'; } },
-						{ label: 'Value', align: 'right', render: function (row) {
-							var pct = parseFloat(row.value);
-							if (isNaN(pct)) {
-								return '<span class="cell-mono cell-strong">' + ui.esc(row.value) + '</span>';
+						{
+							label: 'Value', align: 'right', render: function (row) {
+								var pct = parseFloat(row.value);
+								if (isNaN(pct)) {
+									return '<span class="cell-mono cell-strong">' + ui.esc(row.value) + '</span>';
+								}
+								return '<span class="cell-mono cell-strong">' + ui.esc(row.value) + '</span> <span class="cell-muted">' + ui.esc(row.unit) + '</span>';
 							}
-							return '<span class="cell-mono cell-strong">' + ui.esc(row.value) + '</span> <span class="cell-muted">' + ui.esc(row.unit) + '</span>';
-						} },
-						{ label: 'Level', render: function (row) {
-							var pct = parseFloat(row.value);
-							if (isNaN(pct)) {
-								return '<span class="cell-muted">—</span>';
+						},
+						{
+							label: 'Level', render: function (row) {
+								var pct = parseFloat(row.value);
+								if (isNaN(pct)) {
+									return '<span class="cell-muted">—</span>';
+								}
+								var scale = row.range.indexOf('0 – 100') >= 0 ? pct : Math.min(100, (pct / 50) * 100);
+								return '<div style="min-width:120px">' + ui.bar(scale, scale > 80 ? 'warn' : 'ok') + '</div>';
 							}
-							var scale = row.range.indexOf('0 – 100') >= 0 ? pct : Math.min(100, (pct / 50) * 100);
-							return '<div style="min-width:120px">' + ui.bar(scale, scale > 80 ? 'warn' : 'ok') + '</div>';
-						} },
+						},
 						{ label: 'Updated', render: function () { return '<span class="cell-muted">just now</span>'; } }
 					],
 					rows: data.points
@@ -582,9 +594,11 @@
 						{ label: 'Name', render: function (row) { return ui.esc(row.name); } },
 						{ label: 'Units', render: function (row) { return '<span class="cell-muted cell-mono">' + ui.esc(row.units) + '</span>'; } },
 						{ label: 'Value', align: 'right', render: function (row) { return '<span class="cell-mono">' + ui.esc(row.value) + '</span>'; } },
-						{ label: 'Flags', render: function (row) {
-							return row.flags === 'Fault' ? ui.badge('Fault', 'warn') : '<span class="cell-muted">—</span>';
-						} }
+						{
+							label: 'Flags', render: function (row) {
+								return row.flags === 'Fault' ? ui.badge('Fault', 'warn') : '<span class="cell-muted">—</span>';
+							}
+						}
 					],
 					rows: data.bacnetObjects
 				}) +
@@ -622,9 +636,11 @@
 						{ label: 'Message', render: function (row) { return ui.esc(row.message); } },
 						{ label: 'Priority', render: function (row) { return ui.badge(row.priority, row.priority === 'High' ? 'err' : row.priority === 'Medium' ? 'warn' : 'neutral'); } },
 						{ label: 'State', render: function (row) { return ui.badge(row.state, row.tone); } },
-						{ label: '', align: 'right', render: function (row) {
-							return row.state === 'Active' ? ui.button('Acknowledge', { small: true, action: 'ack' }) : '';
-						} }
+						{
+							label: '', align: 'right', render: function (row) {
+								return row.state === 'Active' ? ui.button('Acknowledge', { small: true, action: 'ack' }) : '';
+							}
+						}
 					],
 					rows: data.alarms
 				});
@@ -858,7 +874,7 @@
 						'<span class="tok-key">FROM</span> devices\n' +
 						'<span class="tok-key">WHERE</span> firmware &lt;&gt; <span class="tok-str">\'2.14.3\'</span>\n' +
 						'<span class="tok-key">ORDER BY</span> firmware <span class="tok-key">DESC</span>;'
-						.replace(/\n/g, '<br>') +
+							.replace(/\n/g, '<br>') +
 						'</pre>'
 				}) +
 				ui.table({

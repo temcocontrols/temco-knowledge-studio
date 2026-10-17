@@ -47,20 +47,22 @@
 				'<div class="mt-24 split">' +
 				ui.card({
 					title: 'Recent Activity',
+					cls: 'card--plain',
 					actions: ui.button('All Activity', { kind: 'ghost', small: true, open: 'dashboard/activity' }),
 					body: ui.list(
 						data.activity.map(function (item) {
 							return {
 								icon: item.icon,
 								title: item.title,
-								sub: '<span class="cell-muted">' + ui.esc(item.sub) + '</span>',
-								meta: ui.badge(item.tone === 'warn' ? 'Attention' : item.tone === 'ok' ? 'Done' : 'Info', item.tone === 'warn' ? 'warn' : item.tone === 'ok' ? 'ok' : 'info')
+								sub: '<span class="cell-muted">' + ui.esc(item.sub) + ' · ' + ui.esc(item.when) + '</span>',
+								meta: ui.status(item.tone)
 							};
 						})
 					)
 				}) +
 				ui.card({
 					title: 'Needs You',
+					cls: 'card--plain',
 					actions: ui.button('Open', { kind: 'ghost', small: true, open: 'dashboard/needs' }),
 					body: ui.list(
 						data.needs.slice(0, 4).map(function (item) {
@@ -92,17 +94,18 @@
 				{
 					label: 'Yesterday',
 					items: [
-						{ icon: 'upload', tone: 'ok', title: 'Release 12.9 archived', sub: 't3000 · kept for pinned links · yesterday' },
-						{ icon: 'download', tone: 'info', title: 'Firmware 2.15.0-rc2 downloaded', sub: 'Preview channel · 3.9 MB · yesterday' },
-						{ icon: 'link', tone: 'warn', title: 'SharePoint source needs re-authorisation', sub: 'Field Notes · expired 8 days ago · yesterday' }
+						{ icon: 'upload', tone: 'ok', title: 'Release 12.9 archived', sub: 't3000 · kept for pinned links', when: '17:20' },
+						{ icon: 'package', tone: 'info', title: 'Firmware 2.14.3 staged for 6 devices', sub: 'Fleet', when: '10:15' },
+						{ icon: 'download', tone: 'info', title: 'Firmware 2.15.0-rc2 downloaded', sub: 'Preview channel · 3.9 MB', when: '09:04' },
+						{ icon: 'link', tone: 'warn', title: 'SharePoint source needs re-authorisation', sub: 'Field Notes · expired 8 days ago', when: '08:32' }
 					]
 				},
 				{
 					label: 'This week',
 					items: [
-						{ icon: 'repo', tone: 'info', title: 'Source bacnet-stack read', sub: '52 pages found · 2 days ago' },
-						{ icon: 'check', tone: 'ok', title: '48 pages reviewed by Mei', sub: 'api-reference · 3 days ago' },
-						{ icon: 'package', tone: 'info', title: 'Project T3-8R Hardware Guide created', sub: 'from the Hardware template · 5 days ago' }
+						{ icon: 'repo', tone: 'info', title: 'Source bacnet-stack read', sub: '52 pages found', when: 'Tue' },
+						{ icon: 'check', tone: 'ok', title: '48 pages reviewed by Mei', sub: 'api-reference', when: 'Mon' },
+						{ icon: 'package', tone: 'info', title: 'Project T3-8R Hardware Guide created', sub: 'from the Hardware template', when: 'Sun' }
 					]
 				}
 			];
@@ -122,17 +125,28 @@
 				}) +
 				groups.map(function (group) {
 					return (
-						'<div class="mt-24">' +
-						'<div class="eyebrow">' + ui.esc(group.label) + '</div>' +
-						ui.list(group.items.map(function (item) {
-							return {
-								icon: item.icon,
-								title: item.title,
-								sub: '<span class="cell-muted">' + ui.esc(item.sub) + '</span>',
-								meta: ui.badge(item.tone === 'warn' ? 'Attention' : item.tone === 'ok' ? 'Done' : 'Info', item.tone === 'warn' ? 'warn' : item.tone === 'ok' ? 'ok' : 'info')
-							};
-						})) +
-						'</div>'
+						'<div class="feed__group">' +
+						'<span class="feed__label">' + ui.esc(group.label) + '</span>' +
+						'<span class="feed__rule"></span>' +
+						'<span class="feed__count">' + group.items.length + (group.items.length === 1 ? ' event' : ' events') + '</span>' +
+						'</div>' +
+						'<ol class="feed">' +
+						group.items.map(function (item) {
+							return (
+								'<li class="feed__item feed__item--' + ui.esc(item.tone || 'neutral') + '">' +
+								'<span class="feed__mark">' + ui.icon(item.icon, 'icon--sm') + '</span>' +
+								'<div class="feed__main">' +
+								'<div class="feed__title">' + ui.esc(item.title) + '</div>' +
+								'<div class="feed__meta">' + ui.esc(item.sub) + '</div>' +
+								'</div>' +
+								'<div class="feed__side">' +
+								ui.status(item.tone) +
+								'<time class="feed__when">' + ui.esc(item.when) + '</time>' +
+								'</div>' +
+								'</li>'
+							);
+						}).join('') +
+						'</ol>'
 					);
 				}).join('');
 
@@ -166,10 +180,12 @@
 						{ label: 'Pages', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.pages + '</span>'; } },
 						{ label: 'Reviewed', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.reviewed + '</span>'; } },
 						{ label: 'Stale', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.stale + '</span>'; } },
-						{ label: 'Coverage', render: function (row) {
-							var pct = Math.round((row.reviewed / row.pages) * 100);
-							return ui.barRow(pct, pct + '%', pct >= 85 ? 'ok' : pct >= 70 ? undefined : 'warn');
-						} }
+						{
+							label: 'Coverage', render: function (row) {
+								var pct = Math.round((row.reviewed / row.pages) * 100);
+								return ui.barRow(pct, pct + '%');
+							}
+						}
 					],
 					rows: areas
 				}) +
@@ -198,10 +214,12 @@
 						{ label: 'Page', render: function (row) { return '<span class="cell-strong">' + ui.esc(row.title) + '</span><div class="cell-muted" style="font-size:12px">' + ui.esc(row.where) + '</div>'; } },
 						{ label: 'Why It Is Here', render: function (row) { return ui.esc(row.issue); } },
 						{ label: 'Last Change', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.age) + '</span>'; } },
-						{ label: '', align: 'right', render: function () {
-							return ui.button('Open', { small: true, icon: 'document', action: 'open-page' }) +
-								ui.button('Ask AI', { small: true, kind: 'ghost', icon: 'sparkle', prompt: 'Draft an update for this page' });
-						} }
+						{
+							label: '', align: 'right', render: function () {
+								return ui.button('Open', { small: true, icon: 'document', action: 'open-page' }) +
+									ui.button('Ask AI', { small: true, kind: 'ghost', icon: 'sparkle', prompt: 'Draft an update for this page' });
+							}
+						}
 					],
 					rows: data.needs
 				});
@@ -281,6 +299,7 @@
 				'<div class="mt-24 split">' +
 				ui.card({
 					title: 'Areas',
+					cls: 'card--plain',
 					desc: 'The registry, as the side bar would show it when this workspace is open.',
 					body: ui.list(data.knowledge.map(function (area) {
 						return {
@@ -291,24 +310,30 @@
 						};
 					}))
 				}) +
-				'<div class="stack">' +
 				ui.card({
 					title: 'Sources',
+					cls: 'card--plain',
 					body: ui.list(data.sources.slice(0, 5).map(function (source) {
 						return { icon: source.kind === 'Repository' ? 'repo' : 'document', title: source.name, sub: '<span class="cell-muted">' + ui.esc(source.detail) + '</span>', meta: ui.badge(source.state, source.tone) };
 					}))
 				}) +
+				'</div>' +
+				/* How the workspace is set up is not activity — it is the last thing on the page. */
+				'<div class="mt-24">' +
 				ui.card({
 					title: 'Project Settings',
+					icon: 'gear',
+					cls: 'card--plain',
+					actions: ui.button('Edit Settings', { small: true, action: 'project-settings' }),
+					desc: 'Stored in the platform database, not in the repository.',
 					body:
-						'<dl class="kv">' +
-						'<dt>Owner</dt><dd>Derek</dd>' +
-						'<dt>Working folder</dt><dd class="cell-mono">~/Temco</dd>' +
-						'<dt>Default branch</dt><dd class="cell-mono">main</dd>' +
-						'<dt>Publishes to</dt><dd>Temco Learn · /t3000/</dd>' +
-						'</dl>'
+						'<div class="settings-strip">' +
+						'<div><div class="settings-strip__label">Owner</div><div class="settings-strip__value">Derek</div></div>' +
+						'<div><div class="settings-strip__label">Working Folder</div><div class="settings-strip__value cell-mono">~/Temco</div></div>' +
+						'<div><div class="settings-strip__label">Default Branch</div><div class="settings-strip__value cell-mono">main</div></div>' +
+						'<div><div class="settings-strip__label">Publishes To</div><div class="settings-strip__value">Temco Learn · /t3000/</div></div>' +
+						'</div>'
 				}) +
-				'</div>' +
 				'</div>';
 			return ui.view(body);
 		}

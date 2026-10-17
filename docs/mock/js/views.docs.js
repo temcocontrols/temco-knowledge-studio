@@ -25,9 +25,11 @@
 				}) +
 				ui.table({
 					columns: [
-						{ label: 'Project', render: function (row) {
-							return '<span class="cell-strong">' + ui.esc(row.name) + '</span><div class="cell-muted cell-mono" style="font-size:11px">v' + ui.esc(row.version) + '</div>';
-						} },
+						{
+							label: 'Project', render: function (row) {
+								return '<span class="cell-strong">' + ui.esc(row.name) + '</span><div class="cell-muted cell-mono" style="font-size:11px">v' + ui.esc(row.version) + '</div>';
+							}
+						},
 						{ label: 'Pages', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.pages + '</span>'; } },
 						{ label: 'Sources', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.sources + '</span>'; } },
 						{ label: 'Owner', render: function (row) { return ui.esc(row.owner); } },
@@ -64,6 +66,132 @@
 		}
 	};
 
+	M.views['docs/repositories'] = {
+		title: 'Repositories',
+		render: function () {
+			var body =
+				ui.pageHead({
+					title: 'Repositories',
+					icon: 'repo',
+					desc: 'The repositories this workspace reads, and whether their local copy is here. Reading a repository records the pages it declares; it never writes to it.',
+					actions:
+						ui.button('Add Repository', { kind: 'primary', icon: 'plus', action: 'add-source' }) +
+						ui.button('Read All', { icon: 'refresh', action: 'read-all' })
+				}) +
+				ui.tiles([
+					{ value: String(data.repositories.length), label: 'Repositories' },
+					{ value: '3', label: 'Cloned locally' },
+					{ value: '1,884', label: 'Files' },
+					{ value: '254', label: 'Pages found' }
+				]) +
+				'<div class="mt-24">' +
+				ui.table({
+					columns: [
+						{ label: 'Repository', render: function (row) {
+							return '<span class="cell-strong">' + ui.esc(row.name) + '</span><div class="cell-muted" style="font-size:11px">' + ui.esc(row.remote) + '</div>';
+						} },
+						{ label: 'Branch', render: function (row) {
+							return '<span class="cell-mono" style="white-space:nowrap">' + ui.esc(row.branch) + '</span> <span class="cell-muted" style="white-space:nowrap">of ' + row.branches + '</span>';
+						} },
+						{ label: 'Local copy', render: function (row) { return ui.badge(row.state, row.tone); } },
+						{ label: 'Files', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.files.toLocaleString() + '</span>'; } },
+						{ label: 'Pages', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.pages + '</span>'; } },
+						{ label: 'Last read', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.read) + '</span>'; } },
+						{ label: '', align: 'right', render: function (row) {
+							return row.state === 'Cloned'
+								? ui.button('Open', { small: true, kind: 'ghost', open: 'docs/repository' })
+								: ui.button('Clone', { small: true, action: 'clone-repository' });
+						} }
+					],
+					rows: data.repositories
+				}) +
+				'</div>' +
+				'<div class="mt-24">' +
+				ui.callout('A repository is cloned into the working area (<code>~/Temco</code>) with full history, so a draft can be about a commit. Nothing is ever pushed back.') +
+				'</div>';
+			return ui.view(body);
+		}
+	};
+
+	M.views['docs/repository'] = {
+		title: 'Repository',
+		render: function () {
+			var repo = data.repositories[0];
+			var reads = data.reads.filter(function (read) { return read.repo === repo.name; });
+
+			var body =
+				ui.pageHead({
+					eyebrow: 'Documentation · Repositories',
+					title: repo.name,
+					icon: 'repo',
+					desc: repo.remote + ' · on branch ' + repo.branch + ' of ' + repo.branches,
+					actions:
+						ui.button('Read Source', { kind: 'primary', icon: 'refresh', action: 'read-source' }) +
+						ui.button('Open Working Copy', { icon: 'folder', action: 'open-folder' })
+				}) +
+				ui.tiles([
+					{ value: repo.files.toLocaleString(), label: 'Files' },
+					{ value: String(repo.pages), label: 'Pages found' },
+					{ value: repo.size, label: 'Local copy' },
+					{ value: String(reads.length), label: 'Reads recorded' }
+				]) +
+				'<div class="mt-24 split">' +
+				'<div class="stack">' +
+				ui.card({
+					title: 'Branches',
+					desc: 'The local copy has every branch; a read uses one of them.',
+					body: ui.list([
+						{ icon: 'branch', title: 'main', sub: '<span class="cell-muted">default · read 1 hour ago</span>', meta: ui.badge('Checked out', 'accent') },
+						{ icon: 'branch', title: 't3000', sub: '<span class="cell-muted">read 3 days ago</span>', meta: ui.button('Read', { small: true, kind: 'ghost', action: 'read-source' }) },
+						{ icon: 'branch', title: 'release/13.0', sub: '<span class="cell-muted">never read</span>', meta: ui.button('Read', { small: true, kind: 'ghost', action: 'read-source' }) },
+						{ icon: 'branch', title: 'feature/web-ui', sub: '<span class="cell-muted">never read</span>', meta: ui.button('Read', { small: true, kind: 'ghost', action: 'read-source' }) }
+					])
+				}) +
+				ui.card({
+					title: 'Recent Reads',
+					desc: 'What each read found, keyed by the commit it read.',
+					flush: true,
+					body: ui.table({
+						compact: true,
+						columns: [
+							{ label: 'Commit', render: function (row) { return '<span class="cell-mono">' + ui.esc(row.commit) + '</span>'; } },
+							{ label: 'Branch', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.branch) + '</span>'; } },
+							{ label: 'Pages', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.pages + '</span>'; } },
+							{ label: 'Change', render: function (row) {
+								return '<span class="cell-mono cell-muted">+' + row.added + ' ~' + row.changed + ' −' + row.removed + '</span>';
+							} },
+							{ label: 'When', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.when) + '</span>'; } }
+						],
+						rows: reads
+					})
+				}) +
+				'</div>' +
+				'<div class="stack">' +
+				ui.card({
+					title: 'Repository',
+					body:
+						'<dl class="kv">' +
+						'<dt>Remote</dt><dd class="cell-mono">' + ui.esc(repo.remote) + '</dd>' +
+						'<dt>Working copy</dt><dd class="cell-mono">~/Temco/' + ui.esc(repo.name) + '</dd>' +
+						'<dt>Owner</dt><dd>' + ui.esc(repo.owner) + '</dd>' +
+						'<dt>Last read</dt><dd>' + ui.esc(repo.read) + '</dd>' +
+						'</dl>'
+				}) +
+				ui.card({
+					title: 'Documentation Scripts',
+					desc: 'The repository’s own vocabulary. The platform calls these and nothing else.',
+					body: ui.list([
+						{ icon: 'code', title: 'docs:registry', sub: '<span class="cell-muted">writes docs/help/registry.json</span>' },
+						{ icon: 'code', title: 'docs:build', sub: '<span class="cell-muted">builds the site into .temco/build</span>' },
+						{ icon: 'code', title: 'docs:check', sub: '<span class="cell-muted">structural checks, no writes</span>' }
+					])
+				}) +
+				'</div>' +
+				'</div>';
+			return ui.view(body);
+		}
+	};
+
 	M.views['docs/sources'] = {
 		title: 'Sources',
 		render: function () {
@@ -95,11 +223,13 @@
 						{ label: 'State', render: function (row) { return ui.badge(row.state, row.tone); } },
 						{ label: 'Pages Found', align: 'right', render: function (row) { return '<span class="cell-mono">' + ui.esc(row.found) + '</span>'; } },
 						{ label: 'Last Read', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.when) + '</span>'; } },
-						{ label: '', align: 'right', render: function (row) {
-							return row.state === 'Not read' || row.state === 'Changed'
-								? ui.button('Read', { small: true, kind: 'primary', action: 'read-source' })
-								: ui.button('Open', { small: true, kind: 'ghost', action: 'open-source' });
-						} }
+						{
+							label: '', align: 'right', render: function (row) {
+								return row.state === 'Not read' || row.state === 'Changed'
+									? ui.button('Read', { small: true, kind: 'primary', action: 'read-source' })
+									: ui.button('Open', { small: true, kind: 'ghost', action: 'open-source' });
+							}
+						}
 					],
 					rows: data.sources
 				}) +
@@ -139,7 +269,7 @@
 								'<span class="cell-muted">' + ui.icon(index === 3 ? 'chevron-down' : 'chevron-right') + '</span>' +
 								'<div class="list__main">' +
 								'<div class="list__title">' + ui.esc(area.area) + '</div>' +
-								'<div style="margin-top:6px;max-width:280px">' + ui.bar(pct, pct >= 85 ? 'ok' : pct >= 70 ? undefined : 'warn') + '</div>' +
+								'<div style="margin-top:6px;max-width:280px">' + ui.bar(pct) + '</div>' +
 								'</div>' +
 								'<div class="list__meta">' +
 								'<span>' + area.pages + ' pages</span>' +
@@ -320,11 +450,13 @@
 						{ label: 'State', render: function (row) { return ui.badge(row.state, row.tone); } },
 						{ label: 'Progress', render: function (row) { return '<div style="min-width:160px">' + ui.bar(row.pct, row.tone === 'ok' ? 'ok' : row.tone === 'info' ? undefined : 'warn') + '</div>'; } },
 						{ label: 'Time', align: 'right', render: function (row) { return '<span class="cell-mono">' + ui.esc(row.time) + '</span>'; } },
-						{ label: '', align: 'right', render: function (row) {
-							return row.state === 'Succeeded'
-								? ui.button('Open', { small: true, kind: 'ghost', action: 'open-artifact' })
-								: ui.button('Build', { small: true, action: 'build-target' });
-						} }
+						{
+							label: '', align: 'right', render: function (row) {
+								return row.state === 'Succeeded'
+									? ui.button('Open', { small: true, kind: 'ghost', action: 'open-artifact' })
+									: ui.button('Build', { small: true, action: 'build-target' });
+							}
+						}
 					],
 					rows: data.builds
 				}) +
@@ -370,10 +502,12 @@
 						{ label: 'Pages', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.pages.toLocaleString() + '</span>'; } },
 						{ label: 'Artifacts', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.artifacts) + '</span>'; } },
 						{ label: 'State', render: function (row) { return ui.badge(row.state, row.tone); } },
-						{ label: '', align: 'right', render: function (row) {
-							return ui.button('View', { small: true, kind: 'ghost', open: 'learn/home' }) +
-								(row.state === 'Published' ? ui.button('Pin', { small: true, kind: 'ghost', action: 'pin-release' }) : '');
-						} }
+						{
+							label: '', align: 'right', render: function (row) {
+								return ui.button('View', { small: true, kind: 'ghost', open: 'learn/home' }) +
+									(row.state === 'Published' ? ui.button('Pin', { small: true, kind: 'ghost', action: 'pin-release' }) : '');
+							}
+						}
 					],
 					rows: data.releases
 				}) +

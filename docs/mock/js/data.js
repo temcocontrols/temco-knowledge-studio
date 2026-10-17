@@ -61,7 +61,8 @@
 					label: 'Projects',
 					views: [
 						{ id: 'docs/projects', label: 'Projects', icon: 'folder', badge: 12 },
-						{ id: 'docs/sources', label: 'Sources', icon: 'repo', badge: 38 },
+						{ id: 'docs/repositories', label: 'Repositories', icon: 'repo', badge: 4 },
+						{ id: 'docs/sources', label: 'Sources', icon: 'link', badge: 38 },
 						{ id: 'docs/knowledge', label: 'Knowledge', icon: 'book' }
 					]
 				},
@@ -71,6 +72,52 @@
 						{ id: 'docs/review', label: 'Review Center', icon: 'check', badge: 17, tone: 'warn' },
 						{ id: 'docs/builds', label: 'Build Center', icon: 'play' },
 						{ id: 'docs/releases', label: 'Releases', icon: 'upload' }
+					]
+				}
+			]
+		},
+		{
+			id: 'ai',
+			label: 'AI Hub',
+			icon: 'sparkle',
+			defaultView: 'ai/chat',
+			sections: [
+				{
+					label: 'Assistant',
+					views: [
+						{ id: 'ai/chat', label: 'Chat', icon: 'sparkle' },
+						{ id: 'ai/actions', label: 'Actions', icon: 'play' },
+						{ id: 'ai/citations', label: 'Citations', icon: 'link' }
+					]
+				},
+				{
+					label: 'Runtime',
+					views: [
+						{ id: 'ai/models', label: 'Local Models', icon: 'chip' },
+						{ id: 'ai/knowledge', label: 'Knowledge Base', icon: 'book' }
+					]
+				}
+			]
+		},
+		{
+			id: 'learn',
+			label: 'Temco Learn',
+			icon: 'graduation',
+			defaultView: 'learn/home',
+			sections: [
+				{
+					label: 'Site',
+					views: [
+						{ id: 'learn/home', label: 'Home', icon: 'home' },
+						{ id: 'learn/t3000', label: 'T3000', icon: 'book' },
+						{ id: 'learn/article', label: 'Article Preview', icon: 'document' }
+					]
+				},
+				{
+					label: 'Delivery',
+					views: [
+						{ id: 'learn/downloads', label: 'Downloads', icon: 'download' },
+						{ id: 'learn/paths', label: 'Learning Paths', icon: 'graduation' }
 					]
 				}
 			]
@@ -184,52 +231,6 @@
 			]
 		},
 		{
-			id: 'ai',
-			label: 'AI Hub',
-			icon: 'sparkle',
-			defaultView: 'ai/chat',
-			sections: [
-				{
-					label: 'Assistant',
-					views: [
-						{ id: 'ai/chat', label: 'Chat', icon: 'sparkle' },
-						{ id: 'ai/actions', label: 'Actions', icon: 'play' },
-						{ id: 'ai/citations', label: 'Citations', icon: 'link' }
-					]
-				},
-				{
-					label: 'Runtime',
-					views: [
-						{ id: 'ai/models', label: 'Local Models', icon: 'chip' },
-						{ id: 'ai/knowledge', label: 'Knowledge Base', icon: 'book' }
-					]
-				}
-			]
-		},
-		{
-			id: 'learn',
-			label: 'Temco Learn',
-			icon: 'graduation',
-			defaultView: 'learn/home',
-			sections: [
-				{
-					label: 'Site',
-					views: [
-						{ id: 'learn/home', label: 'Home', icon: 'home' },
-						{ id: 'learn/t3000', label: 'T3000', icon: 'book' },
-						{ id: 'learn/article', label: 'Article Preview', icon: 'document' }
-					]
-				},
-				{
-					label: 'Delivery',
-					views: [
-						{ id: 'learn/downloads', label: 'Downloads', icon: 'download' },
-						{ id: 'learn/paths', label: 'Learning Paths', icon: 'graduation' }
-					]
-				}
-			]
-		},
-		{
 			id: 'settings',
 			label: 'Settings',
 			icon: 'gear',
@@ -263,6 +264,16 @@
 		});
 	});
 
+	/* A detail surface opens from a list, so it is a tab without a side-bar entry of its own. */
+	M.viewIndex['docs/repository'] = {
+		id: 'docs/repository',
+		label: 'Repository',
+		icon: 'repo',
+		moduleId: 'docs',
+		moduleLabel: 'Documentation',
+		sectionLabel: 'Projects'
+	};
+
 	/* ------------------------------------------------------------------ data */
 
 	M.data = {
@@ -292,11 +303,10 @@
 		],
 
 		activity: [
-			{ icon: 'check', tone: 'ok', title: 'Release 13.0 published to Temco Learn', sub: 't3000 · 1,254 pages · 3 minutes ago' },
-			{ icon: 'sparkle', tone: 'accent', title: 'AI drafted 8 page updates', sub: 'Data Points API · waiting for review · 26 minutes ago' },
-			{ icon: 'repo', tone: 'info', title: 'Source t3000webview read', sub: '412 files · 3 new pages found · 1 hour ago' },
-			{ icon: 'alert', tone: 'warn', title: 'T3-22I stopped reporting', sub: 'Device health · 2 hours ago' },
-			{ icon: 'package', tone: 'info', title: 'Firmware 2.14.3 staged for 6 devices', sub: 'Fleet · yesterday' }
+			{ icon: 'check', tone: 'ok', title: 'Release 13.0 published to Temco Learn', sub: 't3000 · 1,254 pages', when: 'Just now' },
+			{ icon: 'sparkle', tone: 'accent', title: 'AI drafted 8 page updates', sub: 'Data Points API · waiting for review', when: '26 min ago' },
+			{ icon: 'repo', tone: 'info', title: 'Source t3000webview read', sub: '412 files · 3 new pages found', when: '1 hr ago' },
+			{ icon: 'alert', tone: 'warn', title: 'T3-22I stopped reporting', sub: 'Device health', when: '2 hr ago' }
 		],
 
 		needs: [
@@ -324,6 +334,20 @@
 			{ name: 'T3000 User Manual.docx', kind: 'DOCX', detail: '94 pages · 2.1 MB', state: 'Changed', tone: 'warn', found: '—', when: '4 days ago' },
 			{ name: 'SharePoint · Field Notes', kind: 'SharePoint', detail: 'Connected · 3 libraries', state: 'Not read', tone: 'neutral', found: '—', when: 'never' },
 			{ name: 'LegacyDocs', kind: 'Folder', detail: '~/Temco/LegacyDocs', state: 'Partial', tone: 'warn', found: '18 pages', when: '2 weeks ago' }
+		],
+
+		repositories: [
+			{ name: 't3000webview', remote: 'github.com/temcocontrols/t3000webview', branch: 'main', branches: 4, state: 'Cloned', tone: 'ok', files: 412, pages: 138, size: '48 MB', read: '1 hour ago', owner: 'Derek' },
+			{ name: 't3000-esp', remote: 'github.com/temcocontrols/t3000-esp', branch: 'main', branches: 2, state: 'Cloned', tone: 'ok', files: 268, pages: 64, size: '22 MB', read: '3 hours ago', owner: 'Mei' },
+			{ name: 'bacnet-stack', remote: 'github.com/bacnet-stack/bacnet-stack', branch: 'v1.4', branches: 9, state: 'Cloned', tone: 'ok', files: 1204, pages: 52, size: '96 MB', read: 'yesterday', owner: 'Ana' },
+			{ name: 'temco-learn', remote: 'github.com/temcocontrols/temco-learn', branch: 'main', branches: 3, state: 'Not cloned', tone: 'neutral', files: 0, pages: 0, size: '—', read: 'never', owner: '—' }
+		],
+
+		reads: [
+			{ repo: 't3000webview', branch: 'main', commit: '4de5eda', when: '1 hour ago', pages: 138, added: 12, changed: 4, removed: 0 },
+			{ repo: 't3000webview', branch: 'main', commit: 'b968a0f', when: 'yesterday', pages: 134, added: 3, changed: 9, removed: 1 },
+			{ repo: 't3000webview', branch: 't3000', commit: '10e23fb', when: '3 days ago', pages: 131, added: 0, changed: 2, removed: 0 },
+			{ repo: 't3000-esp', branch: 'main', commit: 'c41f002', when: '3 hours ago', pages: 64, added: 5, changed: 0, removed: 2 }
 		],
 
 		knowledge: [

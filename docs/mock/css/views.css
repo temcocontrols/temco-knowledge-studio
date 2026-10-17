@@ -303,6 +303,33 @@
 	color: var(--accent);
 }
 
+/* A section of the page rather than a box on it: a heading and a list, separated by hairlines. */
+.card--plain {
+	padding: 0;
+	border: 0;
+	background: none;
+}
+
+.card--plain .card__head {
+	margin-bottom: 6px;
+}
+
+/* A section head is a step louder than the rows under it. */
+.card--plain .card__title {
+	font-size: 15px;
+}
+
+.card--plain .list {
+	border: 0;
+	border-radius: 0;
+	background: none;
+}
+
+.card--plain .list__item {
+	padding-left: 0;
+	padding-right: 0;
+}
+
 /* ---------------------------------------------------------------- KPI */
 
 .kpi {
@@ -649,6 +676,139 @@
 	white-space: nowrap;
 }
 
+/* ---------------------------------------------------------------- activity feed */
+
+/* A log, not a list: a rail of tone-coloured marks runs through a day, the time sits on the right,
+   and days are separated by a rule instead of being wrapped in a box each. */
+.feed__group {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 26px 0 2px;
+}
+
+.feed__group:first-of-type {
+	margin-top: 20px;
+}
+
+.feed__label {
+	font-size: var(--fs-xs);
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--fg-muted);
+}
+
+.feed__rule {
+	flex: 1;
+	height: 1px;
+	background: var(--border);
+}
+
+.feed__count {
+	color: var(--fg-subtle);
+	font-size: var(--fs-xs);
+	white-space: nowrap;
+}
+
+.feed {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.feed__item {
+	position: relative;
+	display: grid;
+	grid-template-columns: 24px minmax(0, 1fr) auto;
+	column-gap: 12px;
+	padding: 9px 0;
+}
+
+/* The rail belongs to the item, so the last event of a day simply ends it. */
+.feed__item::before {
+	content: '';
+	position: absolute;
+	left: 11.5px;
+	top: 33px;
+	bottom: -9px;
+	width: 1px;
+	background: var(--border);
+}
+
+.feed__item:last-child::before {
+	content: none;
+}
+
+.feed__mark {
+	display: grid;
+	place-items: center;
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	background: var(--bg-inset);
+	color: var(--fg-muted);
+}
+
+.feed__item--ok .feed__mark {
+	color: var(--ok);
+	background: color-mix(in srgb, var(--ok) 14%, transparent);
+}
+
+.feed__item--warn .feed__mark {
+	color: var(--warn);
+	background: color-mix(in srgb, var(--warn) 14%, transparent);
+}
+
+.feed__item--info .feed__mark {
+	color: var(--info);
+	background: color-mix(in srgb, var(--info) 14%, transparent);
+}
+
+.feed__item--accent .feed__mark {
+	color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.feed__title {
+	color: var(--fg);
+	font-size: var(--fs-sm);
+	line-height: 1.45;
+	overflow-wrap: anywhere;
+}
+
+.feed__meta {
+	color: var(--fg-muted);
+	font-size: var(--fs-xs);
+	margin-top: 1px;
+	overflow-wrap: anywhere;
+}
+
+.feed__when {
+	color: var(--fg-subtle);
+	font-size: var(--fs-xs);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	min-width: 66px;
+	text-align: right;
+}
+
+/* Status then time, both right-aligned, so the status reads down a column instead of hunting
+   for a chip at the end of every title. */
+.feed__side {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 10px;
+	padding-top: 1px;
+}
+
+.feed__side .badge {
+	flex: none;
+	justify-content: center;
+	min-width: 84px;
+}
+
 /* ---------------------------------------------------------------- misc */
 
 .kv {
@@ -667,6 +827,39 @@
 	color: var(--fg);
 	min-width: 0;
 	overflow-wrap: anywhere;
+}
+
+/* Settings that describe something rather than act on it: a label above its value, laid out as a
+   strip so a handful of pairs read across instead of down. */
+.settings-strip {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 12px 24px;
+	margin-top: 12px;
+}
+
+.settings-strip__label {
+	color: var(--fg-muted);
+	font-size: var(--fs-xs);
+}
+
+.settings-strip__value {
+	margin-top: 2px;
+	color: var(--fg);
+	font-size: var(--fs-sm);
+	overflow-wrap: anywhere;
+}
+
+@media (max-width: 980px) {
+	.settings-strip {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 620px) {
+	.settings-strip {
+		grid-template-columns: minmax(0, 1fr);
+	}
 }
 
 .callout {
@@ -1109,6 +1302,297 @@
 	line-height: 1.55;
 }
 
+/* ---------------------------------------------------------------- flows */
+
+/* A flow is not a card. The step rail is a section header, the body sits straight on the editor,
+   and the footer is a section of its own. */
+.wizard {
+	position: relative;
+}
+
+.wizard__steps {
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 2px 0 14px;
+	border-bottom: 1px solid var(--border);
+	background: var(--editor-bg);
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+.wizard__steps::-webkit-scrollbar {
+	height: 0;
+}
+
+.step {
+	position: relative;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--fg-subtle);
+	font-size: 15px;
+	font-weight: 500;
+	letter-spacing: -0.01em;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.step:hover {
+	color: var(--fg);
+}
+
+.step.is-done {
+	color: var(--fg-muted);
+}
+
+.step.is-active {
+	color: var(--fg-strong);
+}
+
+.step.is-active::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: -15px;
+	height: 2px;
+	background: var(--accent);
+}
+
+.step__arrow {
+	color: var(--fg-subtle);
+	font-size: 14px;
+	opacity: 0.7;
+	user-select: none;
+}
+
+.step__n {
+	margin-right: 5px;
+	color: var(--fg-subtle);
+	font-variant-numeric: tabular-nums;
+}
+
+.step.is-active .step__n {
+	color: var(--accent);
+}
+
+.wizard__body {
+	padding: 26px 0 28px;
+	min-height: 260px;
+}
+
+.wizard__title {
+	font-size: 19px;
+	font-weight: 600;
+	color: var(--fg-strong);
+	margin-bottom: 6px;
+}
+
+.wizard__hint {
+	color: var(--fg-muted);
+	font-size: var(--fs-sm);
+	line-height: 1.55;
+	margin: 0 0 18px;
+}
+
+.wizard__foot {
+	position: sticky;
+	bottom: 0;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 12px 0;
+	border-top: 1px solid var(--border);
+	background: var(--editor-bg);
+}
+
+.wizard__spacer {
+	flex: 1;
+}
+
+.wizard__error {
+	margin-top: 14px;
+	color: var(--err);
+	font-size: var(--fs-sm);
+}
+
+.choice-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 10px;
+}
+
+.choice {
+	display: flex;
+	gap: 10px;
+	padding: 12px 14px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--bg-inset);
+	cursor: pointer;
+}
+
+.choice:hover {
+	border-color: var(--border-strong);
+}
+
+.choice:has(input:checked) {
+	border-color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 8%, var(--bg-inset));
+}
+
+.choice input {
+	margin: 3px 0 0;
+}
+
+.choice__text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.choice__label {
+	font-weight: 500;
+	color: var(--fg);
+}
+
+.choice__desc {
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
+	line-height: 1.5;
+}
+
+.checklist {
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	overflow: hidden;
+	background: var(--bg-inset);
+}
+
+.checklist__row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 9px 12px;
+	border-bottom: 1px solid var(--border);
+	cursor: pointer;
+}
+
+.checklist__row:last-child {
+	border-bottom: 0;
+}
+
+.checklist__row:hover {
+	background: var(--bg-hover);
+}
+
+.checklist input {
+	margin: 0;
+	flex: none;
+}
+
+.checklist__text {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+
+.checklist__title {
+	color: var(--fg);
+}
+
+.checklist__sub {
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
+	line-height: 1.45;
+}
+
+/* Two groups in one list: repositories, then files. */
+.checklist-group + .checklist-group {
+	margin-top: 20px;
+}
+
+.checklist-heading {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 8px;
+	font-size: 11px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--fg-subtle);
+}
+
+.checklist-heading__count {
+	min-width: 16px;
+	padding: 0 5px;
+	border-radius: 8px;
+	background: var(--badge-bg);
+	color: var(--badge-fg);
+	font-size: 10px;
+	line-height: 16px;
+	text-align: center;
+	letter-spacing: 0;
+}
+
+.checklist-tools {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+
+.checklist-tools .input {
+	max-width: 260px;
+}
+
+.input--sm {
+	height: 26px;
+}
+
+/* The row rule sets `display: flex`, which would win over the user agent's `[hidden]`. */
+.checklist__row[hidden] {
+	display: none;
+}
+
+.disclosure > summary {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 0;
+	color: var(--link);
+	font-size: var(--fs-sm);
+	cursor: pointer;
+	list-style: none;
+}
+
+.disclosure > summary::-webkit-details-marker {
+	display: none;
+}
+
+.disclosure > summary::before {
+	content: "▸";
+	display: inline-block;
+	font-size: 10px;
+	color: var(--fg-subtle);
+	transition: transform 0.12s ease;
+}
+
+.disclosure[open] > summary::before {
+	transform: rotate(90deg);
+}
+
+.disclosure[open] > summary {
+	margin-bottom: 8px;
+}
+
 /* ---------------------------------------------------------------- device */
 
 .toolbar {
@@ -1157,7 +1641,7 @@
 
 .tiles {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 	gap: 10px;
 }
 

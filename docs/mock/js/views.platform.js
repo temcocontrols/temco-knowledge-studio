@@ -101,11 +101,13 @@
 					columns: [
 						{ label: 'Action', render: function (row) { return '<span class="cell-strong">' + ui.esc(row.name) + '</span><div class="cell-muted" style="font-size:12px">' + ui.esc(row.desc) + '</div>'; } },
 						{ label: 'State', render: function (row) { return ui.badge(row.state, row.tone); } },
-						{ label: '', align: 'right', render: function (row) {
-							return row.tone === 'ok'
-								? ui.button('Run', { small: true, kind: 'primary', action: 'run-action' })
-								: ui.button('Load Model', { small: true, action: 'load-model' });
-						} }
+						{
+							label: '', align: 'right', render: function (row) {
+								return row.tone === 'ok'
+									? ui.button('Run', { small: true, kind: 'primary', action: 'run-action' })
+									: ui.button('Load Model', { small: true, action: 'load-model' });
+							}
+						}
 					],
 					rows: data.aiActions
 				}) +
@@ -174,9 +176,11 @@
 						{ label: 'Context', render: function (row) { return '<span class="cell-mono">' + ui.esc(row.ctx) + '</span>'; } },
 						{ label: 'Size', render: function (row) { return '<span class="cell-mono cell-muted">' + ui.esc(row.size) + '</span>'; } },
 						{ label: 'State', render: function (row) { return ui.badge(row.state, row.tone); } },
-						{ label: '', align: 'right', render: function (row) {
-							return row.tone === 'ok' ? ui.button('Unload', { small: true, kind: 'ghost', action: 'unload-model' }) : ui.button('Load', { small: true, action: 'load-model' });
-						} }
+						{
+							label: '', align: 'right', render: function (row) {
+								return row.tone === 'ok' ? ui.button('Unload', { small: true, kind: 'ghost', action: 'unload-model' }) : ui.button('Load', { small: true, action: 'load-model' });
+							}
+						}
 					],
 					rows: data.aiModels
 				}) +
@@ -533,17 +537,21 @@
 				'<div class="mt-24">' +
 				ui.table({
 					columns: [
-						{ label: 'Module', render: function (row) {
-							return '<span class="cell-strong">' + ui.esc(row.name) + '</span><div class="cell-muted cell-mono" style="font-size:11px">' + ui.esc(row.id) + '</div>';
-						} },
+						{
+							label: 'Module', render: function (row) {
+								return '<span class="cell-strong">' + ui.esc(row.name) + '</span><div class="cell-muted cell-mono" style="font-size:11px">' + ui.esc(row.id) + '</div>';
+							}
+						},
 						{ label: 'State', render: function (row) { return ui.badge(row.state, row.state === 'Active' ? 'ok' : 'neutral'); } },
 						{ label: 'Namespace', render: function (row) { return '<span class="cell-mono cell-muted">' + ui.esc(row.namespace) + '</span>'; } },
 						{ label: 'What It Owns', render: function (row) { return ui.esc(row.owns); } },
-						{ label: '', align: 'right', render: function (row) {
-							return row.surface
-								? ui.button('Open', { small: true, kind: 'ghost', open: row.surface })
-								: '<span class="cell-muted">No surface</span>';
-						} }
+						{
+							label: '', align: 'right', render: function (row) {
+								return row.surface
+									? ui.button('Open', { small: true, kind: 'ghost', open: row.surface })
+									: '<span class="cell-muted">No surface</span>';
+							}
+						}
 					],
 					rows: data.modules
 				}) +

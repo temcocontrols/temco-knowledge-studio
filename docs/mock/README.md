@@ -80,23 +80,39 @@ Three tones: `accent` for something in motion, `warn` for something blocking, `o
 
 The card the window is actually standing in (the current workspace, the current project) uses the same tint at roughly half strength through `.card--current`, so "current" reads without a badge.
 
+## Coverage is not a warning
+
+A bar here is a fill on a track, one colour at every value. Coverage and mapping use the accent, never green or amber: 76 % of a documentation area is a quantity, and painting it amber made a healthy area look broken. `--ok` and `--warn` stay reserved for states — a running build, a failed check — where the colour *is* the message.
+
+## A section, not a box
+
+Content that is *part of* a page — Recent Activity and Needs You on the dashboard, Areas and Sources on a workspace — uses `.card--plain`: same heading, no border, no background, rows separated by hairlines and flush with the page grid. A card is for something that stands alone or can be clicked into; wrapping every block on a page in one turns a screen into a grid of rectangles and buries what matters.
+
+## Activity is a log
+
+Recent Activity (`M.ui` has no builder for it, the markup is in `views.overview.js`) is a grouped feed, not three lists. A day is a rule with a label and a count; under it, each event is a tone-tinted mark on a rail, its title and context, and a right-hand column carrying the **status word** (`Done`, `In Progress`, `Info`, `Attention`) and the time. The status is a word as well as a tint — colour alone is not a status for anyone who cannot see it. Both columns are fixed width, so statuses and times line up down the list instead of ending wherever each title happens to stop. Group order is newest first, times are absolute within a day (`17:20`, `09:04`) and weekday names across a week.
+
 ## The modules and their surfaces
 
 | Module | Surfaces in the mock |
 |---|---|
 | **Dashboard** | Overview · Recent Activity · Coverage & Health · Needs Review |
 | **Workspaces** | All Workspaces · T3000 · Templates |
-| **Documentation** | Projects · Sources · Knowledge · Review Center · Build Center · Releases |
+| **Documentation** | Projects · Repositories · Sources · Knowledge · Review Center · Build Center · Releases |
+| **AI Hub** | Chat · Actions · Citations · Local Models · Knowledge Base |
+| **Temco Learn** | Home · T3000 · Article Preview · Downloads · Learning Paths |
 | **Devices** | Devices · Firmware · Health & Alarms · Schedules · Trend Logs · Backups |
 | **I/O Studio** | Point Browser · Mapping · Logic · Live Values · Trends |
 | **BACnet Studio** | Discovery · Object Browser · Alarms · Trend Logs · Schedules |
 | **Network** | Discovery · Modbus Scanner · Diagnostics · Captures |
 | **SQL Studio** | Query Editor · Connections · Reports |
-| **AI Hub** | Chat · Actions · Citations · Local Models · Knowledge Base |
-| **Temco Learn** | Home · T3000 · Article Preview · Downloads · Learning Paths |
 | **Settings** | General · Modules · Branding · AI Models · Publishing |
 
+The order is the order of the activity bar, and it is the product's order of attention: the documentation pipeline first (Documentation, the AI that drafts into it, and the site it publishes to), then the device modules (Devices, I/O, BACnet, Network), then SQL Studio, with Settings at the bottom. Nothing is hidden — a module moving later is a statement about what is being built now, not about whether it ships.
+
 The reserved modules (`temco-device-manager`, `temco-bacnet`, `temco-nettools`, `temco-sql`) appear as full modules here on purpose: the point of the mock is to decide the shape **before** a module becomes active. **Settings › Modules** is where the mock says which of them the build actually ships.
+
+**Repositories** is the cloned half of Sources, and has its own two surfaces: a register with clone state, branch and pages found, and a detail page with the branches, the reads recorded against their commits, and the repository's own documentation scripts. It is where a read is audited.
 
 ## Modules, not a marketplace
 
@@ -114,8 +130,29 @@ So the mock keeps one honest surface, **Settings › Modules**: the seven active
 | Layout | `Ctrl+B` side bar · `Ctrl+J` panel · `Ctrl+Alt+B` AI bar |
 | Theme | the palette icon in the title bar, or **Settings › Branding** |
 | Ask the AI | the composer in the AI bar; answers cite what they read |
+| Start a flow | `File › New Project…`, or any **New** / **Add** / **Publish** / **Stage** button on a surface |
 
 State — theme, open tabs, which panel, which bars are visible — is kept in `localStorage`, so a reload returns to the same window. Below 780 px the mock hides the columns that no longer fit rather than squeezing the editor to nothing.
+
+## Flows
+
+A flow is a surface that asks for something in steps: the same tab, the same breadcrumbs, the same deep link (`#/flow/new-project`), with numbered step names as a section header — `1. Basics → 2. Sources → 3. Outputs → 4. Review` — and **Back** / **Next** in a second section at the bottom. A step can be clicked to jump to it; what was typed is read back before the step changes, so nothing is lost. There is no card around the flow: the two hairlines are the sections.
+
+Sources are grouped **by repository** and **by file or folder**, because the two are read differently — one is cloned with history, the other is opened where it lies. The repository group has a **search** that filters the rows in place and **Load all**; the file group is a **Choose files and folders…** disclosure, so a long list of files does not bury the repositories.
+
+| Flow | Steps | Finish does |
+|---|---|---|
+| **New Project** | Basics · Sources · Outputs · Review | adds a draft and opens Documentation › Projects |
+| **Add Source** | Kind · Location · Read | adds the source and opens Documentation › Sources |
+| **Publish Release** | Preflight · Version · Publish | marks 13.0 published and opens Documentation › Releases |
+| **Stage Firmware** | Devices · Image · Confirm | announces the staged image and opens Devices › Firmware |
+| **New Page** | Location · Template · Draft | creates the draft and opens Documentation › Knowledge |
+| **New Workspace** | Name · Modules | adds the workspace and opens Workspaces |
+| **Open Workspace** | a picker, not a wizard | opens the workspace the window would switch to |
+
+A flow is reachable from the place that needs it — `File › New Project…`, the **New Project** button in a page head, `Tools › Documentation › Publish Release…`, **Stage Firmware** on the Devices page — and no flow appears in the side bar, because a flow is an action, not a place.
+
+**Nothing is written until Finish.** Cancel drops the state and returns to the tab you came from. The engine is `js/views.flow.js`: a flow is a definition with `steps`, `defaults`, `validate` and `apply`, and `apply` returns what to open and what to announce. Adding a seventh flow is one object in `defs` — no shell change.
 
 Buttons that would write something are **announcements**, not actions: they toast what the real surface would do. The exception is anything that only moves the window, which really moves.
 
