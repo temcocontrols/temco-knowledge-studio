@@ -28,6 +28,8 @@
 	   fixture. View › Toggle Breadcrumbs brings it back. */
 	var breadcrumbsVisible = false;
 	var panelTab = 'problems';
+	/* The surfaces you came from, newest last: the side bar's back button walks it. */
+	var viewHistory = [];
 	var chat = [];
 	var chatBusy = false;
 	var paletteMode = null;
@@ -171,8 +173,97 @@
 		return '<div class="tree__children">' + leaves.join('') + '</div>';
 	}
 
-	function projectLeaf(project, isCurrent) {
+	/* ------------------------------------------------------------------ the content tree */
+
+	/* The page tree: areas at the top, folders below them, pages at the leaves. Folders only exist
+	   here — there is no directory on disk to keep in step — so this tree is where one is added,
+	   renamed or moved. */
+	function pagesUnder(nodes) {
+		var total = 0;
+		nodes.forEach(function (node) {
+			total += node.children ? pagesUnder(node.children) : 1;
+		});
+		return total;
+	}
+
+	/* Every folder path in the tree, for Expand All. */
+	function collectFolders(nodes, prefix) {
+		var paths = [];
+		nodes.forEach(function (node) {
+			if (!node.children) {
+				return;
+			}
+			var path = prefix ? prefix + '/' + node.name : node.name;
+			paths.push(path);
+			paths = paths.concat(collectFolders(node.children, path));
+		});
+		return paths;
+	}
+
+	/* The path from an area down to the page that is open, so it is unfolded on arrival. */
+	function pathToPage(nodes, page, prefix) {
+		for (var index = 0; index < nodes.length; index++) {
+			var node = nodes[index];
+			var path = prefix ? prefix + '/' + node.name : node.name;
+			if (!node.children) {
+				if (node.name === page) {
+					return path;
+				}
+				continue;
+			}
+			var deeper = pathToPage(node.children, page, path);
+			if (deeper) {
+				return deeper;
+			}
+		}
+		return '';
+	}
+
+	function containsPage(node, page) {
+		if (!node.children) {
+			return node.name === page;
+		}
+		return !!pathToPage(node.children, page, node.name);
+	}
+
+	function renderDocTree() {
+		var openPath = pathToPage(data.docTree, (M.state && M.state.page) || '', '');
+		var unfolded = ((M.state && M.state.expandedNodes) || ['API Reference', 'API Reference/Points']);
+		var autoUnfold = !M.state || M.state.autoExpand !== false;
+		var area = openPath.split('/')[0];
+
+		var node = function (entry, prefix) {
+			var path = prefix ? prefix + '/' + entry.name : entry.name;
+			if (!entry.children) {
+				var isOpen = (M.state && M.state.page) === entry.name;
+				return (
+					'<button type="button" class="tree__leaf' + (isOpen ? ' is-active' : '') + '" data-action="open-page" data-page="' + ui.esc(entry.name) + '" data-area="' + ui.esc(area) + '">' +
+					ui.icon('document') +
+					'<span class="tree__label">' + ui.esc(entry.name) + '</span>' +
+					'</button>'
+				);
+			}
+			var isOpenBranch = unfolded.indexOf(path) >= 0 || (autoUnfold && openPath.indexOf(path + '/') === 0);
+			var html =
+				'<button type="button" class="tree__leaf tree__leaf--node' + (openPath.indexOf(path + '/') === 0 ? ' tree__leaf--open-path' : '') + '" data-action="toggle-node" data-node="' + ui.esc(path) + '">' +
+				ui.icon(isOpenBranch ? 'chevron-down' : 'chevron-right', 'icon--sm') +
+				ui.icon('folder') +
+				'<span class="tree__label">' + ui.esc(entry.name) + '</span>' +
+				'<span class="tree__count">' + pagesUnder(entry.children) + '</span>' +
+				'</button>';
+			if (isOpenBranch) {
+				html += '<div class="tree__children">' + entry.children.map(function (child) { return node(child, path); }).join('') + '</div>';
+			}
+			return html;
+		};
+
 		return (
+			'<div class="tree__row"><span class="tree__section">Pages</span><span class="tree__count">' + pagesUnder(data.docTree) + '</span></div>' +
+			'<div class="tree__children tree__children--root">' + data.docTree.map(function (entry) { return node(entry, ''); }).join('') + '</div>'
+		);
+	}
+
+	function projectLeaf(project, isCurrent) {		return (
 			'<button type="button" class="tree__leaf' + (isCurrent ? ' is-active' : '') + '" data-action="tree-project" data-project="' + ui.esc(project.name) + '">' +
 			ui.icon(isCurrent ? 'layers' : 'folder') +
 			'<span class="tree__label">' + ui.esc(project.name) + '</span>' +
@@ -190,12 +281,41 @@
 		);
 	}
 
+	function renderSidebarActions(module) {
+		if (!el.sidebarActions) {
+			return;
+		}
+		/* The module list is a map, not a trail: nothing there needs stepping back through. */
+		var actions = module.id === 'docs'
+			? ''
+			: '<button type="button" class="icon-btn" data-action="go-back" title="Back" aria-label="Back">' + ui.icon('chevron-left', 'icon--sm') + '</button>';
+		if (module.tree === 'documents' || module.id === 'docs') {
+			actions +=
+				'<button type="button" class="icon-btn" data-action="expand-all" title="Expand All" aria-label="Expand All">' + ui.icon('expand-all') + '</button>' +
+				'<button type="button" class="icon-btn" data-action="collapse-all" title="Collapse All" aria-label="Collapse All">' + ui.icon('collapse-all') + '</button>';
+		}
+		if (module.tree === 'documents') {
+			actions += '<button type="button" class="icon-btn" data-action="new-page" title="New Page" aria-label="New Page">' + ui.icon('plus') + '</button>';
+		} else if (module.id === 'docs') {
+			actions += '<button type="button" class="icon-btn" data-action="new-project" title="New Project" aria-label="New Project">' + ui.icon('plus') + '</button>';
+		}
+		actions += '<button type="button" class="icon-btn" data-action="open-in-editor" title="Open in Editor" aria-label="Open in Editor">' + ui.icon('external') + '</button>';
+		el.sidebarActions.innerHTML = actions;
+	}
+
 	function renderSidebar() {
 		var module = moduleOf(moduleId);
 		if (!module) {
 			return;
 		}
 		el.sidebarTitle.textContent = module.label;
+		renderSidebarActions(module);
+
+		/* The Documents container is a tree, not a list of surfaces: the content's shape is the nav. */
+		if (module.tree === 'documents') {
+			el.sidebarBody.innerHTML = renderDocTree();
+			return;
+		}
 		var html = '';
 		module.sections.forEach(function (section) {
 			/* A heading above the only group of items names nothing the title did not. */
@@ -370,11 +490,26 @@
 			toast('There is no surface called ' + viewId + '.');
 			return;
 		}
+		if (!options.skipHistory && activeView && activeView !== viewId) {
+			viewHistory.push(activeView);
+			if (viewHistory.length > 30) {
+				viewHistory.shift();
+			}
+		}
 		if (tabs.indexOf(viewId) < 0) {
 			tabs.push(viewId);
 		}
 		activeView = viewId;
-		moduleId = view.moduleId;
+		/* The side bar follows the user, not the tab: a container that already hosts this surface
+		   stays where it is, so opening a page from the Documents tree does not throw the tree
+		   away and replace it with the Documentation list. */
+		var container = moduleOf(moduleId);
+		var hostsView = container && container.sections.some(function (section) {
+			return section.views.some(function (entry) { return entry.id === viewId; });
+		});
+		if (!hostsView) {
+			moduleId = view.moduleId;
+		}
 
 		/* A tab bar that grows without bound stops being a tab bar. The oldest surface that is not
 		   the one you just opened makes room. */
@@ -404,6 +539,8 @@
 		if (!module) {
 			return;
 		}
+		/* Picking a container is a decision, so it wins over whatever the tabs already hold. */
+		moduleId = id;
 		for (var index = tabs.length - 1; index >= 0; index--) {
 			var view = viewOf(tabs[index]);
 			if (view && view.moduleId === id) {
@@ -900,6 +1037,7 @@
 				}
 				M.state = M.state || {};
 				M.state.page = pageName;
+				M.state.autoExpand = true;
 				if (pageArea) {
 					M.state.area = pageArea;
 				}
@@ -909,8 +1047,25 @@
 				openView('docs/page');
 				return;
 			}
-			/* Folding a branch of the working set: the tree remembers which areas are closed. */
-			case 'toggle-branch': {
+			/* "Open the tree": the same surfaces, in the container that shows their shape. */
+			case 'open-tree':
+				moduleId = 'documents';
+				renderActivityBar();
+				renderSidebar();
+				persist();
+				return;
+			/* Folding a folder of the content tree. */
+			case 'toggle-node': {
+				var nodePath = target ? target.getAttribute('data-node') : '';
+				M.state = M.state || {};
+				var opened = M.state.expandedNodes || ['API Reference', 'API Reference/Points'];
+				M.state.expandedNodes = opened.indexOf(nodePath) >= 0
+					? opened.filter(function (name) { return name !== nodePath; })
+					: opened.concat([nodePath]);
+				renderSidebar();
+				return;
+			}
+			/* Folding a branch of the working set: the tree remembers which areas are closed. */			case 'toggle-branch': {
 				var branchName = target ? target.getAttribute('data-branch') : '';
 				M.state = M.state || {};
 				var foldedBranches = M.state.collapsed || [];
@@ -1009,6 +1164,43 @@
 			case 'new-project':
 				openView('flow/new-project');
 				return;
+			/* Back: the surface you were on before this one, not the last tab in the strip. */
+			case 'go-back': {
+				var previous = viewHistory.pop();
+				if (!previous) {
+					toast('Nothing to go back to yet.');
+					return;
+				}
+				openView(previous, { skipHistory: true });
+				return;
+			}
+			/* Expanding and collapsing the trees: every folder open, or every branch shut and the
+			   automatic unfold of the open page suspended so it stays shut. */
+			case 'expand-all':
+				M.state = M.state || {};
+				M.state.expandedNodes = collectFolders(data.docTree, '');
+				M.state.expandedGroups = ['projects', 'areas'];
+				M.state.collapsed = [];
+				M.state.autoExpand = true;
+				renderSidebar();
+				return;
+			case 'collapse-all':
+				M.state = M.state || {};
+				M.state.expandedNodes = [];
+				M.state.expandedGroups = [];
+				M.state.autoExpand = false;
+				M.state.collapsed = (M.state.working || []).map(function (entry) { return entry.area; });
+				renderSidebar();
+				return;
+			/* "Open in editor": the surface this container is about, in the panel where it reads at
+			   full width — the tree stays as it was. */
+			case 'open-in-editor': {
+				var container = moduleOf(moduleId);
+				if (container && container.defaultView) {
+					openView(container.defaultView);
+				}
+				return;
+			}
 			case 'add-source':
 				openView('flow/add-source');
 				return;
@@ -1440,6 +1632,7 @@
 		el.activitybar = document.getElementById('activitybar');
 		el.sidebar = document.getElementById('sidebar');
 		el.sidebarTitle = document.getElementById('sidebar-title');
+		el.sidebarActions = document.getElementById('sidebar-actions');
 		el.sidebarBody = document.getElementById('sidebar-body');
 		el.tabs = document.getElementById('tabs');
 		el.breadcrumbs = document.getElementById('breadcrumbs');

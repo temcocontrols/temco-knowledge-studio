@@ -466,6 +466,30 @@
 	color: var(--fg);
 }
 
+/* The content tree: folders are rows you fold, pages are leaves that open the editor, and the
+   path down to the open page is written a shade brighter so the fold is visible. */
+.tree__children--root {
+	margin-left: 0;
+	border-left: 0;
+	padding-left: 0;
+}
+
+.tree__leaf--node .icon--sm {
+	margin-right: -2px;
+}
+
+/* A folder's page count is a number, not a badge: eight badges down one tree is noise. */
+.tree__leaf--node .tree__count {
+	background: none;
+	padding: 0;
+	min-width: 0;
+	color: var(--fg-subtle);
+}
+
+.tree__leaf--open-path {
+	color: var(--fg-strong);
+}
+
 .tree__branch:hover {
 	background: var(--bg-hover);
 	color: var(--fg);

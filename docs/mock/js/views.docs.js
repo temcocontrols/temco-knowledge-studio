@@ -475,7 +475,8 @@
 					desc: totalPages.toLocaleString('en-US') + ' pages in ' + areas.length + ' areas, ' + totalReviewed.toLocaleString('en-US') + ' of them read by a person. The registry order is the order the documentation ships in, not the order the files sit on disk.',
 					actions:
 						ui.button('New Page', { kind: 'primary', icon: 'plus', action: 'new-page' }) +
-						ui.button('Generate from Sources', { icon: 'sparkle', action: 'generate-from-sources' })
+						ui.button('Generate from Sources', { icon: 'sparkle', action: 'generate-from-sources' }) +
+						ui.button('Open Tree', { icon: 'sidebar', action: 'open-tree', title: 'Show this content as a folder tree in the side bar' })
 				}) +
 				/* Master–detail: the areas on the left, the pages of the one you picked on the right,
 				   so a click changes something you can see without scrolling. */
@@ -553,6 +554,9 @@
 						{ title: 'Never reviewed', sub: '<span class="cell-muted">readable, but nobody has read it</span>', meta: ui.badge('341', 'neutral') }
 					])
 				}) +
+				'</div>' +
+				'<div class="mt-24">' +
+				ui.callout('A folder is a position in the content tree, not a directory on disk: <code>Hardware / Controllers / T3-8R</code>. The Documents container in the side bar is where folders are added, renamed and moved, and the order it shows is the order the site and the PDF use — this list is that order, flattened.') +
 				'</div>';
 			return ui.view(body);
 		}
@@ -656,20 +660,21 @@
 						ui.button('Read Source', { icon: 'code', action: 'browse-source' })
 				}) +
 				(issues ? '<div class="mt-16">' + ui.callout(issues, { kind: record.tone === 'err' ? 'warn' : '' }) + '</div>' : '') +
-				'<div class="split mt-24" style="grid-template-columns: minmax(0, 1fr) 300px">' +
-				editor +
-				'<div class="stack">' +
-				ui.rule({ label: 'Registry', count: '6 facts' }) +
-				'<div class="mt-16">' +
-				'<dl class="kv">' +
-				'<dt>Area</dt><dd>' + ui.esc(areaName) + '</dd>' +
-				'<dt>Order</dt><dd class="cell-mono">' + record.order + '</dd>' +
-				'<dt>State</dt><dd>' + ui.badge(record.state, record.tone) + '</dd>' +
-				'<dt>Owner</dt><dd>' + ui.esc(record.owner === '—' ? 'nobody yet' : record.owner) + '</dd>' +
-				'<dt>Source</dt><dd class="cell-mono">t3000webview</dd>' +
-				'<dt>Changed</dt><dd>' + ui.esc(record.changed) + '</dd>' +
-				'</dl>' +
+				/* The six facts a writer checks are a strip under the title, not a column beside the
+				   text: they are read once, and the editor gets the width instead. */
+				'<div class="settings-strip settings-strip--wide mt-16">' +
+				'<div><div class="settings-strip__label">Area</div><div class="settings-strip__value">' + ui.esc(areaName) + '</div></div>' +
+				'<div><div class="settings-strip__label">Order</div><div class="settings-strip__value cell-mono">' + record.order + '</div></div>' +
+				'<div><div class="settings-strip__label">State</div><div class="settings-strip__value">' + ui.badge(record.state, record.tone) + '</div></div>' +
+				'<div><div class="settings-strip__label">Owner</div><div class="settings-strip__value">' + ui.esc(record.owner === '—' ? 'nobody yet' : record.owner) + '</div></div>' +
+				'<div><div class="settings-strip__label">Source</div><div class="settings-strip__value cell-mono">t3000webview</div></div>' +
+				'<div><div class="settings-strip__label">Changed</div><div class="settings-strip__value">' + ui.esc(record.changed) + '</div></div>' +
 				'</div>' +
+				'<div class="mt-24">' + editor + '</div>' +
+				/* Under the editor: what this page points at, what happened to it, and what a save does.
+				   Three short sections in one row, so nothing has to be scrolled past a tall column. */
+				'<div class="mt-24 grid grid--2">' +
+				'<div>' +
 				ui.group({
 					label: 'Links',
 					count: '3',
@@ -684,19 +689,21 @@
 						'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">← Writing a Point</span></div>' +
 						'<div class="record-row__meta"><span>incoming · the link the build resolves</span></div></div><div class="record-row__state"></div><div class="record-row__state"></div></div>'
 				}) +
+				'</div>' +
+				'<div>' +
 				ui.group({
 					label: 'History',
 					count: '3 revisions',
 					body:
 						'<div class="record-row record-row--static">' + ui.toneMark('sparkle', 'accent') +
 						'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">AI draft · +42 −8</span></div>' +
-						'<div class="record-row__meta"><span>26 minutes ago</span><span>in Review Center</span></div></div><div class="record-row__state"></div><div class="record-row__state"></div></div>' +
+						'<div class="record-row__meta"><span>26 minutes ago</span> <span>·</span> <span>in Review Center</span></div></div><div class="record-row__state"></div><div class="record-row__state"></div></div>' +
 						'<div class="record-row record-row--static">' + ui.toneMark('check', 'ok') +
 						'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">Reviewed by Mei</span></div>' +
-						'<div class="record-row__meta"><span>2 weeks ago</span><span>12.9</span></div></div><div class="record-row__state"></div><div class="record-row__state"></div></div>' +
+						'<div class="record-row__meta"><span>2 weeks ago</span> <span>·</span> <span>12.9</span></div></div><div class="record-row__state"></div><div class="record-row__state"></div></div>' +
 						'<div class="record-row record-row--static">' + ui.toneMark('code') +
 						'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">Written from t3000webview</span></div>' +
-						'<div class="record-row__meta"><span>3 months ago</span><span>4de5eda</span></div></div><div class="record-row__state"></div><div class="record-row__state"></div></div>'
+						'<div class="record-row__meta"><span>3 months ago</span> <span>·</span> <span>4de5eda</span></div></div><div class="record-row__state"></div><div class="record-row__state"></div></div>'
 				}) +
 				'</div>' +
 				'</div>' +

@@ -96,6 +96,26 @@
 			]
 		},
 		{
+			id: 'documents',
+			label: 'Documents',
+			icon: 'edit',
+			defaultView: 'docs/knowledge',
+			/* A view container of its own, because the content has a shape the module list cannot
+			   show: areas inside folders inside sub-folders, and pages at the leaves. In the real
+			   window this is the tree view the extension contributes; here it is drawn from
+			   `data.docTree`. */
+			tree: 'documents',
+			sections: [
+				{
+					label: 'Documents',
+					views: [
+						{ id: 'docs/knowledge', label: 'Documents', icon: 'book' },
+						{ id: 'docs/page', label: 'Page', icon: 'document' }
+					]
+				}
+			]
+		},
+		{
 			id: 'ai',
 			label: 'AI Hub',
 			icon: 'sparkle',
@@ -547,8 +567,69 @@
 			]
 		},
 
-		/* What the coverage report checks besides coverage itself. `found: 0` is a pass. */
-		healthChecks: [
+		/* The content tree: the pages the registry holds, arranged the way a reader walks them. A
+		   folder is a position in this tree, not a directory on disk — the site and the PDF both
+		   order pages by it, and an area is just the top level of the same shape. */
+		docTree: [
+			{ name: 'Overview', children: [
+				{ name: 'What T3000 Is' },
+				{ name: 'Product Lineup' },
+				{ name: 'Getting Help' },
+				{ name: 'Reference', children: [
+					{ name: 'Glossary' },
+					{ name: 'Compatibility' }
+				] }
+			] },
+			{ name: 'Getting Started', children: [
+				{ name: 'Install T3000' },
+				{ name: 'First Connection' },
+				{ name: 'Licensing' },
+				{ name: 'Uninstall' }
+			] },
+			{ name: 'Architecture', children: [
+				{ name: 'Controller Model' },
+				{ name: 'Point Engine' },
+				{ name: 'Data Flow' }
+			] },
+			{ name: 'API Reference', children: [
+				{ name: 'Points', children: [
+					{ name: 'Points and Properties' },
+					{ name: 'Reading a Point' },
+					{ name: 'Writing a Point' }
+				] },
+				{ name: 'Types', children: [
+					{ name: 'Point Types' },
+					{ name: 'Data Points API' },
+					{ name: 'Data Points API (duplicate)' }
+				] }
+			] },
+			{ name: 'Hardware', children: [
+				{ name: 'Controllers', children: [
+					{ name: 'T3-8R', children: [ { name: 'T3-8R Wiring' } ] },
+					{ name: 'T3-22I', children: [ { name: 'T3-22I Wiring' }, { name: 'Lab Setup' } ] },
+					{ name: 'T3-BB', children: [ { name: 'T3-BB Overview' } ] }
+				] },
+				{ name: 'Terminal Layout' },
+				{ name: 'Power Requirements' }
+			] },
+			{ name: 'Protocols', children: [
+				{ name: 'Modbus Register Map' },
+				{ name: 'BACnet Object Model' },
+				{ name: 'MSTP Addressing' }
+			] },
+			{ name: 'Troubleshooting', children: [
+				{ name: 'Controller Offline' },
+				{ name: 'Sensor Drift' },
+				{ name: 'Comm Timeouts' }
+			] },
+			{ name: 'Release Notes', children: [
+				{ name: '13.0' },
+				{ name: '12.9' },
+				{ name: '12.8' }
+			] }
+		],
+
+		/* What the coverage report checks besides coverage itself. `found: 0` is a pass. */		healthChecks: [
 			{ name: 'Internal links', found: 12, tone: 'warn', detail: '12 of 1,266 links point at a page that no longer exists', view: 'docs/knowledge' },
 			{ name: 'Screenshots older than the firmware', found: 7, tone: 'warn', detail: '7 images show a UI from before 2.9', view: 'dashboard/needs' },
 			{ name: 'Pages with no owner', found: 4, tone: 'warn', detail: 'Nobody is told when these go stale', view: 'dashboard/needs' },

@@ -1415,6 +1415,7 @@
 					{ value: 'SQLite', label: 'Engine' }
 				]) +
 				'<div class="grid grid--2 mt-24">' +
+				'<div>' +
 				ui.group({
 					label: 'Tables',
 					count: n(data.sqlTables.length, 'table', 'tables'),
@@ -1432,6 +1433,8 @@
 						);
 					}).join('')
 				}) +
+				'</div>' +
+				'<div>' +
 				ui.group({
 					label: 'pages',
 					count: n(data.sqlColumns.length, 'column', 'columns'),
@@ -1454,6 +1457,7 @@
 						);
 					}).join('')
 				}) +
+				'</div>' +
 				'</div>';
 
 			return ui.view(body);
