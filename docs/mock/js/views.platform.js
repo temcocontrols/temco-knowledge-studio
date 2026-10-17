@@ -310,6 +310,17 @@
 				'</div>' +
 				'</div>' +
 				'<div class="view__inner view__inner--wide">' +
+				'<div style="margin-bottom:20px">' +
+				ui.hero({
+					tone: 'warn',
+					eyebrow: 'Release state',
+					title: '13.0 is building — readers still get 12.9',
+					desc: 'The build center is compiling the offline help. Until it publishes, the site keeps serving the last complete version and the version selector stays on 12.9.',
+					actions:
+						ui.button('Open Build Center', { kind: 'primary', icon: 'play', open: 'docs/builds' }) +
+						ui.button('Preview 13.0', { icon: 'document', open: 'learn/article' })
+				}) +
+				'</div>' +
 				'<div class="grid grid--3">' +
 				['Getting Started', 'Architecture', 'API Reference', 'Hardware', 'Protocols', 'Troubleshooting', 'Trends', 'Release Notes', 'Glossary'].map(function (area) {
 					return (
@@ -320,9 +331,6 @@
 						'</button>'
 					);
 				}).join('') +
-				'</div>' +
-				'<div class="mt-24">' +
-				ui.callout('Version 13.0 is not published yet. Readers still get 12.9; the build center decides when that changes.', { kind: 'warn' }) +
 				'</div>' +
 				'</div>';
 			return '<div class="view">' + body + '</div>';

@@ -28,15 +28,14 @@
 				}) +
 				ui.kpis(data.kpis) +
 				'<div class="mt-16">' +
-				'<div class="hero-panel">' +
-				'<div class="hero-panel__title">Release 13.0 is waiting on two checks</div>' +
-				'<p class="hero-panel__desc">The site, the PDF and the search index are built. The help compiler is still running and <b>Data Points API</b> carries an ordering error that the last release did not have.</p>' +
-				'<div class="hero-panel__actions">' +
-				ui.button('Open Review Center', { kind: 'primary', icon: 'check', open: 'docs/review' }) +
-				ui.button('See the Build', { icon: 'play', open: 'docs/builds' }) +
-				ui.button('Dismiss', { kind: 'ghost', action: 'toast-dismissed' }) +
-				'</div>' +
-				'</div>' +
+				ui.hero({
+					title: 'Release 13.0 is waiting on two checks',
+					desc: 'The site, the PDF and the search index are built. The help compiler is still running and <b>Data Points API</b> carries an ordering error that the last release did not have.',
+					actions:
+						ui.button('Open Review Center', { kind: 'primary', icon: 'check', open: 'docs/review' }) +
+						ui.button('See the Build', { icon: 'play', open: 'docs/builds' }) +
+						ui.button('Dismiss', { kind: 'ghost', action: 'toast-dismissed' })
+				}) +
 				'</div>' +
 				'<div class="mt-24">' +
 				'<div class="row row--between" style="margin-bottom:10px">' +
@@ -219,9 +218,10 @@
 				return ui.card({
 					interactive: true,
 					open: workspace.active ? 'workspaces/t3000' : 'workspaces/all',
+					cls: workspace.active ? 'card--current' : '',
 					title: workspace.name,
 					icon: workspace.active ? 'layers' : 'folder',
-					actions: workspace.active ? ui.badge('Open', 'accent') : '',
+					actions: workspace.active ? ui.badge('Current', 'accent') : '',
 					desc: ui.esc(workspace.desc),
 					body:
 						'<div class="row" style="gap:14px;margin-top:10px;color:var(--fg-muted);font-size:12px">' +
@@ -261,6 +261,15 @@
 						ui.button('Documentation', { icon: 'document', open: 'docs/projects' }) +
 						ui.button('Devices', { icon: 'chip', open: 'devices/all' })
 				}) +
+				ui.hero({
+					eyebrow: 'Current workspace',
+					title: 'Everything in this window is T3000',
+					desc: '5 projects, 14 sources and 34 devices, with one release in flight. Switching workspace closes nothing — the tabs come back when you return.',
+					actions:
+						ui.button('Open Review Center', { kind: 'primary', icon: 'check', open: 'docs/review' }) +
+						ui.button('Switch Workspace…', { icon: 'layers', action: 'switch-workspace' })
+				}) +
+				'<div class="mt-24">' +
 				ui.tiles([
 					{ value: '894', label: 'Pages' },
 					{ value: '14', label: 'Sources' },
@@ -268,6 +277,7 @@
 					{ value: '1', label: 'Open release' },
 					{ value: '17', label: 'Needs review' }
 				]) +
+				'</div>' +
 				'<div class="mt-24 split">' +
 				ui.card({
 					title: 'Areas',

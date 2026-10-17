@@ -40,6 +40,7 @@
 				'<div class="mt-24 split">' +
 				ui.card({
 					title: 'Current Project',
+					cls: 'card--current',
 					desc: 'T3000 Documentation is selected in this window.',
 					body:
 						'<dl class="kv">' +
@@ -210,9 +211,18 @@
 					icon: 'check',
 					desc: 'Drafts, edits and AI suggestions in one queue. Accepting a change is a diff; rejecting it is undo — nothing is written until you say so.',
 					actions:
-						ui.button('Review Next', { kind: 'primary', icon: 'check', action: 'review-next' }) +
 						ui.button('Filters', { icon: 'filter', action: 'filters' })
 				}) +
+				ui.hero({
+					tone: 'warn',
+					eyebrow: 'Release 13.0',
+					title: '2 errors keep 13.0 from publishing',
+					desc: 'Duplicate page order in <b>Data Points API</b>, and <b>Modbus Register Map</b> links to a page that no longer exists. Everything else — the site, the PDF and the search index — is built.',
+					actions:
+						ui.button('Open the first error', { kind: 'primary', icon: 'alert', action: 'open-page' }) +
+						ui.button('Review next draft', { icon: 'check', action: 'review-next' })
+				}) +
+				'<div class="mt-24">' +
 				ui.tiles([
 					{ value: '17', label: 'Waiting' },
 					{ value: '6', label: 'AI drafts' },
@@ -220,6 +230,7 @@
 					{ value: '2', label: 'Broken links' },
 					{ value: '14 months', label: 'Oldest unreviewed' }
 				]) +
+				'</div>' +
 				'<div class="mt-24 split">' +
 				'<div class="stack">' +
 				ui.table({
@@ -292,9 +303,17 @@
 					icon: 'play',
 					desc: 'One build produces every artifact of a release. Each target can be run alone; a publish needs all of them.',
 					actions:
-						ui.button('Build All', { kind: 'primary', icon: 'play', action: 'build-all' }) +
-						ui.button('Cancel', { icon: 'close', action: 'build-cancel' })
+						ui.button('Build All', { kind: 'primary', icon: 'play', action: 'build-all' })
 				}) +
+				ui.hero({
+					eyebrow: 'Build 13.0.482',
+					title: 'Offline help is still compiling — 612 of 1,254 topics',
+					desc: 'The website, the PDF and the search index are done. A publish waits for every target, so the release holds here.',
+					actions:
+						ui.button('Open the log', { kind: 'primary', icon: 'output', action: 'panel-output' }) +
+						ui.button('Cancel the build', { icon: 'close', action: 'build-cancel' })
+				}) +
+				'<div class="mt-24">' +
 				ui.table({
 					columns: [
 						{ label: 'Target', render: function (row) { return '<span class="cell-strong">' + ui.esc(row.target) + '</span><div class="cell-muted" style="font-size:11px">' + ui.esc(row.detail) + '</div>'; } },
@@ -309,6 +328,7 @@
 					],
 					rows: data.builds
 				}) +
+				'</div>' +
 				'<div class="mt-24 split">' +
 				ui.card({
 					title: 'Build Log',

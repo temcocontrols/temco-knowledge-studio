@@ -63,6 +63,23 @@ Two rules keep it from collapsing under more modules. **Every menu item also exi
 
 A module never adds a menu title. If `Tools` ever stops being the right home, the answer is a new *verb* that the whole platform shares, the way `Run` was added here — not an eleventh menu.
 
+## One state per surface
+
+The tinted panel (`.hero-panel`, built by `M.ui.hero`) appears **once** on a surface, names a state and offers the decision:
+
+| Surface | The state |
+|---|---|
+| Dashboard | Release 13.0 is waiting on two checks |
+| Review Center | two errors keep 13.0 from publishing |
+| Build Center | the offline help is still compiling |
+| Devices | one controller has not answered for two hours |
+| Temco Learn › T3000 | 13.0 is building; readers still get 12.9 |
+| Workspaces › T3000 | everything in this window is this workspace |
+
+Three tones: `accent` for something in motion, `warn` for something blocking, `ok` for something finished. Everything else — a note about how reading a source works, a preference, a definition — is a callout or a card. A second tinted panel on the same surface turns the signal into decoration.
+
+The card the window is actually standing in (the current workspace, the current project) uses the same tint at roughly half strength through `.card--current`, so "current" reads without a badge.
+
 ## The modules and their surfaces
 
 | Module | Surfaces in the mock |

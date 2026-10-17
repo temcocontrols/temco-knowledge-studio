@@ -95,6 +95,23 @@
 		);
 	};
 
+	/**
+	 * The one panel per surface that carries a state and a decision. `tone` picks the tint:
+	 * accent for something in motion, warn for something blocking, ok for something finished.
+	 * Use it once per surface — a second one turns the signal into decoration.
+	 */
+	ui.hero = function (options) {
+		var tone = options.tone || 'accent';
+		return (
+			'<div class="hero-panel' + (tone !== 'accent' ? ' hero-panel--' + tone : '') + '">' +
+			(options.eyebrow ? '<div class="eyebrow">' + ui.esc(options.eyebrow) + '</div>' : '') +
+			'<div class="hero-panel__title">' + ui.esc(options.title) + '</div>' +
+			(options.desc ? '<p class="hero-panel__desc">' + options.desc + '</p>' : '') +
+			(options.actions ? '<div class="hero-panel__actions">' + options.actions + '</div>' : '') +
+			'</div>'
+		);
+	};
+
 	ui.kpis = function (items) {
 		return (
 			'<div class="grid grid--4">' +

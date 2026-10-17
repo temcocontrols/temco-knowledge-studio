@@ -48,6 +48,16 @@
 						ui.button('Discover', { kind: 'primary', icon: 'search', action: 'discover-devices' }) +
 						ui.button('Add by Address', { icon: 'plus', action: 'add-device' })
 				}) +
+				ui.hero({
+					tone: 'warn',
+					eyebrow: 'Fleet',
+					title: 'T3-22I · Lab Wing has not answered for 2 hours',
+					desc: 'Last known firmware 2.12.1 — three releases behind — with 2 active alarms on the device. The other 31 controllers are answering normally.',
+					actions:
+						ui.button('Diagnose device', { kind: 'primary', icon: 'activity', action: 'diagnose' }) +
+						ui.button('Restore last backup', { icon: 'download', action: 'restore-backup' })
+				}) +
+				'<div class="mt-24">' +
 				ui.tiles([
 					{ value: '34', label: 'Devices' },
 					{ value: '31', label: 'Online' },
@@ -55,6 +65,7 @@
 					{ value: '2.14.3', label: 'Current firmware' },
 					{ value: '4', label: 'Active alarms' }
 				]) +
+				'</div>' +
 				'<div class="mt-24">' +
 				ui.table({
 					columns: [
@@ -72,8 +83,7 @@
 					rows: data.devices
 				}) +
 				'</div>' +
-				'<div class="mt-24 grid grid--3">' +
-				ui.card({ title: 'T3-22I · Lab Wing', icon: 'alert', desc: 'No answer for 2 hours. Last known firmware 2.12.1 — three releases behind.', actions: ui.button('Diagnose', { small: true, action: 'diagnose' }), foot: '<span>2 active alarms on this device</span>' }) +
+				'<div class="mt-24 grid grid--2">' +
 				ui.card({ title: 'Fleet Firmware', icon: 'package', desc: '21 of 34 devices run the current stable release. 6 can be updated without leaving this window.', actions: ui.button('Open', { small: true, open: 'devices/firmware' }), body: ui.barRow(62, '62%', 'warn') }) +
 				ui.card({ title: 'Schedules', icon: 'clock', desc: '48 schedules across the fleet; 3 were overridden by hand this week.', actions: ui.button('Open', { small: true, open: 'devices/schedules' }), body: '<span class="cell-muted" style="font-size:12px">Next run in 14 minutes</span>' }) +
 				'</div>';

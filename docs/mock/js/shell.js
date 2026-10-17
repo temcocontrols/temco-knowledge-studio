@@ -150,6 +150,18 @@
 				'</button>'
 			);
 		}).join('');
+
+		/* With more tabs than fit, the one you just opened has to be the one you can see. */
+		var active = el.tabs.querySelector('.tab.is-active');
+		if (active) {
+			var left = active.offsetLeft;
+			var right = left + active.offsetWidth;
+			if (left < el.tabs.scrollLeft) {
+				el.tabs.scrollLeft = left;
+			} else if (right > el.tabs.scrollLeft + el.tabs.clientWidth) {
+				el.tabs.scrollLeft = right - el.tabs.clientWidth;
+			}
+		}
 	}
 
 	function renderBreadcrumbs() {
