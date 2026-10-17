@@ -1,0 +1,28 @@
+{
+  "name": "temco-ui",
+  "displayName": "Temco UI",
+  "description": "Temco UI — the application's shared UI conventions: where a page of ours opens, and what a command argument means.",
+  "version": "0.0.1",
+  "publisher": "temcocontrols",
+  "private": true,
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/temcocontrols/temco-platform.git"
+  },
+  "bugs": {
+    "url": "https://github.com/temcocontrols/temco-platform/issues"
+  },
+  "engines": {
+    "vscode": "^1.143.0"
+  },
+  "type": "commonjs",
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "scripts": {
+    "check-commands": "node --experimental-strip-types scripts/check-commands.mts"
+  }
+}
