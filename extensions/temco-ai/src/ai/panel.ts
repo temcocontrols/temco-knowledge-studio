@@ -51,7 +51,7 @@ export class AiPanel implements vscode.WebviewViewProvider {
     private readonly context: vscode.ExtensionContext,
     private readonly roots: () => readonly DocsRoot[],
     private readonly selection: Selection
-  ) {}
+  ) { }
 
   resolveWebviewView(view: vscode.WebviewView): void {
     this.view = view;

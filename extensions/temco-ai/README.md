@@ -61,4 +61,4 @@ one of them in this module's namespace, and none of them read by another module.
 npm run check-commands      # no command id is registered twice
 ```
 
-The platform build runs the same check for every module (`npm run compile` → `check-temco-commands`).
+The platform build runs the same check for every module (`npm run compile` → `check-temco`, which also checks that no module requires another in a circle and that every menu id is declared).

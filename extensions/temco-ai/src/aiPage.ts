@@ -32,7 +32,7 @@ export class AiPage {
   /** Where to put the reader once the page has its data — `undefined` leaves them at the top. */
   private wanted: AiSection | undefined;
 
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  constructor(private readonly context: vscode.ExtensionContext) { }
 
   /**
    * Opens the page, or brings it forward.
@@ -54,7 +54,6 @@ export class AiPage {
       pageColumn(),
       { enableScripts: true, localResourceRoots: [] }
     );
-    this.panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'ai.svg');
     this.panel.webview.html = html(nonce());
     this.panel.webview.onDidReceiveMessage((message: AiPageMessage) => void this.receive(message));
     this.panel.onDidDispose(() => {

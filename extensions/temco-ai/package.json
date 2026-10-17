@@ -16,6 +16,7 @@
   "engines": {
     "vscode": "^1.143.0"
   },
+  "type": "commonjs",
   "categories": [
     "Other"
   ],

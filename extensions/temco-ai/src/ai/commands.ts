@@ -61,7 +61,7 @@ async function dockRight(): Promise<void> {
   } catch (error) {
     void vscode.window.showWarningMessage(
       'Temco AI: this VS Code build would not reset the container location. Drag the “Temco AI” ' +
-        `tab to the right side bar instead — it is the same move. (${String(error)})`
+      `tab to the right side bar instead — it is the same move. (${String(error)})`
     );
   }
 }
@@ -179,7 +179,7 @@ async function chooseModel(context: vscode.ExtensionContext): Promise<void> {
     await use(picked.entry.kind, picked.entry.id);
     void vscode.window.showInformationMessage(
       `Temco AI: ${picked.entry.label} is installed — ${formatBytes(artifact.bytes)}, ` +
-        `sha256 ${artifact.sha256.slice(0, 12)}…`
+      `sha256 ${artifact.sha256.slice(0, 12)}…`
     );
   } catch (error) {
     void vscode.window.showWarningMessage(`Temco AI: ${messageOf(error)}`);

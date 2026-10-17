@@ -24,22 +24,22 @@ import { docs } from './docs';
 
 /** What one analysis needs: a source, its files, the pages it already has, and the note the person added. */
 export interface AnalyseRequest {
-  name: string;
-  files: readonly string[];
-  pages: readonly string[];
-  note: string;
+	name: string;
+	files: readonly string[];
+	pages: readonly string[];
+	note: string;
 }
 
 /** What one draft needs: the form's answers, and where the text is to be written. */
 export interface DraftRequest {
-  title: string;
-  kind: string;
-  headings: readonly string[];
-  path: string;
-  area: string;
-  material: string;
-  /** Called as the answer arrives, so a draft appears while it is still being written. */
-  onToken?(text: string): void;
+	title: string;
+	kind: string;
+	headings: readonly string[];
+	path: string;
+	area: string;
+	material: string;
+	/** Called as the answer arrives, so a draft appears while it is still being written. */
+	onToken?(text: string): void;
 }
 
 /**
@@ -51,76 +51,76 @@ export interface DraftRequest {
  * running".
  */
 export interface TemcoAiApi {
-  /** The runtime, the model, and the server they are behind, right now. */
-  status(): AiStatus;
-  /** What the module knows, for a surface that only wants to say how much is available. */
-  facts(): { promptVersion: string; known: number };
-  /** The model in use as a person would name it, or `undefined` when none is chosen. */
-  modelLabel(): string | undefined;
-  /** What a source's documentation is missing, as the model proposes it. */
-  analyse(request: AnalyseRequest): Promise<string>;
-  /** A draft of a new page's body, streamed to `onToken` as it is written. */
-  draft(request: DraftRequest): Promise<void>;
+	/** The runtime, the model, and the server they are behind, right now. */
+	status(): AiStatus;
+	/** What the module knows, for a surface that only wants to say how much is available. */
+	facts(): { promptVersion: string; known: number };
+	/** The model in use as a person would name it, or `undefined` when none is chosen. */
+	modelLabel(): string | undefined;
+	/** What a source's documentation is missing, as the model proposes it. */
+	analyse(request: AnalyseRequest): Promise<string>;
+	/** A draft of a new page's body, streamed to `onToken` as it is written. */
+	draft(request: DraftRequest): Promise<void>;
 }
 
 export function activate(context: vscode.ExtensionContext): TemcoAiApi {
-  const documentation = docs();
+	const documentation = docs();
 
-  // The panel reads the page and the registry through the documentation module's model, and decides nothing.
-  const panel = new AiPanel(context, () => documentation.roots(), documentation.selection);
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(AI_VIEW_ID, panel, {
-      webviewOptions: { retainContextWhenHidden: true },
-    }),
-    vscode.window.onDidChangeActiveTextEditor(() => panel.refresh()),
-    documentation.onDidChange(() => panel.refresh())
-  );
+	// The panel reads the page and the registry through the documentation module's model, and decides nothing.
+	const panel = new AiPanel(context, () => documentation.roots(), documentation.selection);
+	context.subscriptions.push(
+		vscode.window.registerWebviewViewProvider(AI_VIEW_ID, panel, {
+			webviewOptions: { retainContextWhenHidden: true },
+		}),
+		vscode.window.onDidChangeActiveTextEditor(() => panel.refresh()),
+		documentation.onDidChange(() => panel.refresh())
+	);
 
-  registerAiCommands(context);
+	registerAiCommands(context);
 
-  return {
-    status: () => aiStatus(context),
+	return {
+		status: () => aiStatus(context),
 
-    facts: () => ({
-      promptVersion: PROMPT_VERSION,
-      known: [...RUNTIMES, ...MODELS].length,
-    }),
+		facts: () => ({
+			promptVersion: PROMPT_VERSION,
+			known: [...RUNTIMES, ...MODELS].length,
+		}),
 
-    modelLabel: () => {
-      const status = aiStatus(context);
-      return status.model ? entryById(status.model.id)?.label ?? status.model.id : undefined;
-    },
+		modelLabel: () => {
+			const status = aiStatus(context);
+			return status.model ? entryById(status.model.id)?.label ?? status.model.id : undefined;
+		},
 
-    analyse: async (request) => {
-      const prompt = analysePrompt(context, request);
-      return complete(
-        context,
-        [
-          { role: 'system', content: systemPrompt(context, undefined) },
-          { role: 'user', content: prompt },
-        ],
-        { maxTokens: 700 }
-      );
-    },
+		analyse: async (request) => {
+			const prompt = analysePrompt(context, request);
+			return complete(
+				context,
+				[
+					{ role: 'system', content: systemPrompt(context, undefined) },
+					{ role: 'user', content: prompt },
+				],
+				{ maxTokens: 700 }
+			);
+		},
 
-    draft: async (request) => {
-      const prompt = newPagePrompt(context, request);
-      await complete(
-        context,
-        [
-          { role: 'system', content: systemPrompt(context, undefined) },
-          { role: 'user', content: prompt },
-        ],
-        {
-          maxTokens: 1200,
-          onToken: (text) => request.onToken?.(text),
-        }
-      );
-    },
-  };
+		draft: async (request) => {
+			const prompt = newPagePrompt(context, request);
+			await complete(
+				context,
+				[
+					{ role: 'system', content: systemPrompt(context, undefined) },
+					{ role: 'user', content: prompt },
+				],
+				{
+					maxTokens: 1200,
+					onToken: (text) => request.onToken?.(text),
+				}
+			);
+		},
+	};
 }
 
 export function deactivate(): void {
-  // The local AI may have left a server process running; nothing else is holding anything open.
-  disposeAi();
+	// The local AI may have left a server process running; nothing else is holding anything open.
+	disposeAi();
 }
