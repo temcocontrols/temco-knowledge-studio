@@ -1,0 +1,557 @@
+{
+  "name": "temco-docs",
+  "displayName": "Temco Docs",
+  "description": "Temco Docs — the documentation module of Temco Platform: keeps product documentation in step with the code, with a local AI drafting the updates.",
+  "version": "0.0.1",
+  "publisher": "temcocontrols",
+  "private": true,
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/temcocontrols/temco-platform.git"
+  },
+  "bugs": {
+    "url": "https://github.com/temcocontrols/temco-platform/issues"
+  },
+  "engines": {
+    "vscode": "^1.143.0"
+  },
+  "type": "commonjs",
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "extensionDependencies": [
+    "temcocontrols.temco-store",
+    "temcocontrols.temco-ui",
+    "temcocontrols.temco-repositories",
+    "temcocontrols.temco-projects"
+  ],
+  "activationEvents": [
+    "onView:temcoDocs.pages"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "temco",
+          "title": "Temco",
+          "icon": "media/docs.svg"
+        }
+      ]
+    },
+    "views": {
+      "temco": [
+        {
+          "id": "temcoDocs.pages",
+          "name": "Workspace"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "temcoDocs.showStatus",
+        "title": "Temco Docs: Show Status"
+      },
+      {
+        "command": "temcoDocs.validate",
+        "title": "Validate",
+        "icon": "$(check)"
+      },
+      {
+        "command": "temcoDocs.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "temcoDocs.openRegistry",
+        "title": "Open Registry",
+        "icon": "$(json)"
+      },
+      {
+        "command": "temcoDocs.openPage",
+        "title": "Open the Page",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "temcoDocs.reveal",
+        "title": "Reveal in Explorer",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "temcoDocs.openTerminal",
+        "title": "Open in Integrated Terminal",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "temcoDocs.copyPath",
+        "title": "Copy Path",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "temcoDocs.copyRelativePath",
+        "title": "Copy Relative Path",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "temcoDocs.buildSite",
+        "title": "Build the Site",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "temcoDocs.buildHelp",
+        "title": "Build the Offline Help",
+        "icon": "$(book)"
+      },
+      {
+        "command": "temcoDocs.stalenessReport",
+        "title": "Documentation Owed",
+        "icon": "$(report)"
+      },
+      {
+        "command": "temcoDocs.startRegistry",
+        "title": "Start a Registry",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "temcoDocs.analyseSource",
+        "title": "Analyse the Source…",
+        "icon": "$(lightbulb)"
+      },
+      {
+        "command": "temcoDocs.feedback",
+        "title": "Feedback by Owner",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "temcoDocs.runScript",
+        "title": "Run One of the Repository's Documentation Scripts",
+        "icon": "$(run)"
+      },
+      {
+        "command": "temcoDocs.runOwed",
+        "title": "Run the Docs-Owed Check",
+        "icon": "$(law)"
+      },
+      {
+        "command": "temcoDocs.createPage",
+        "title": "Create the Missing Page File",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "temcoDocs.format.pick",
+        "title": "Format"
+      },
+      {
+        "command": "temcoDocs.format.bold",
+        "title": "Bold"
+      },
+      {
+        "command": "temcoDocs.format.italic",
+        "title": "Italic"
+      },
+      {
+        "command": "temcoDocs.format.code",
+        "title": "Inline Code"
+      },
+      {
+        "command": "temcoDocs.format.heading",
+        "title": "Heading Level"
+      },
+      {
+        "command": "temcoDocs.format.bullet",
+        "title": "Bullet List"
+      },
+      {
+        "command": "temcoDocs.format.numbered",
+        "title": "Numbered List"
+      },
+      {
+        "command": "temcoDocs.format.task",
+        "title": "Task List"
+      },
+      {
+        "command": "temcoDocs.format.quote",
+        "title": "Block Quote"
+      },
+      {
+        "command": "temcoDocs.format.codeBlock",
+        "title": "Code Block"
+      },
+      {
+        "command": "temcoDocs.format.table",
+        "title": "Table"
+      },
+      {
+        "command": "temcoDocs.format.rule",
+        "title": "Horizontal Rule"
+      },
+      {
+        "command": "temcoDocs.format.callout",
+        "title": "Callout"
+      },
+      {
+        "command": "temcoDocs.format.link",
+        "title": "Link"
+      },
+      {
+        "command": "temcoDocs.format.linkPage",
+        "title": "Link to a Page"
+      },
+      {
+        "command": "temcoDocs.format.outline",
+        "title": "Go to a Heading"
+      },
+      {
+        "command": "temcoDocs.newPage",
+        "title": "New Page",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "temcoDocs.newChapter",
+        "title": "New Chapter",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "temcoDocs.newPage.article",
+        "title": "New Article Page"
+      },
+      {
+        "command": "temcoDocs.newPage.task",
+        "title": "New Task Page"
+      },
+      {
+        "command": "temcoDocs.newPage.reference",
+        "title": "New Reference Page"
+      },
+      {
+        "command": "temcoDocs.newPage.troubleshooting",
+        "title": "New Troubleshooting Page"
+      },
+      {
+        "command": "temcoDocs.newPage.releaseNote",
+        "title": "New Release Note Page"
+      },
+      {
+        "command": "temcoDocs.renamePage",
+        "title": "Rename the Page Title",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "temcoDocs.movePageUp",
+        "title": "Move the Page Up",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "temcoDocs.movePageDown",
+        "title": "Move the Page Down",
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "temcoDocs.retirePage",
+        "title": "Retire the Page",
+        "icon": "$(archive)"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "temcoDocs.markdown",
+        "label": "Temco Docs"
+      },
+      {
+        "id": "temcoDocs.pageKinds",
+        "label": "New Page of a Kind"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "temcoDocs.format.bold",
+          "when": "editorLangId == markdown && resourceScheme == file",
+          "group": "temcoDocs@1"
+        },
+        {
+          "command": "temcoDocs.format.italic",
+          "when": "editorLangId == markdown && resourceScheme == file",
+          "group": "temcoDocs@2"
+        },
+        {
+          "command": "temcoDocs.format.linkPage",
+          "when": "editorLangId == markdown && resourceScheme == file",
+          "group": "temcoDocs@3"
+        },
+        {
+          "command": "temcoDocs.format.pick",
+          "when": "editorLangId == markdown && resourceScheme == file",
+          "group": "temcoDocs@4"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "submenu": "temcoDocs.markdown",
+          "when": "editorLangId == markdown && resourceScheme == file",
+          "group": "temcoDocs@1"
+        }
+      ],
+      "editor/context": [
+        {
+          "submenu": "temcoDocs.markdown",
+          "when": "editorLangId == markdown && resourceScheme == file",
+          "group": "temcoDocs@1"
+        }
+      ],
+      "temcoDocs.markdown": [
+        {
+          "command": "temcoDocs.format.pick",
+          "group": "0_top@1"
+        },
+        {
+          "command": "temcoDocs.format.bold",
+          "group": "1_inline@1"
+        },
+        {
+          "command": "temcoDocs.format.italic",
+          "group": "1_inline@2"
+        },
+        {
+          "command": "temcoDocs.format.code",
+          "group": "1_inline@3"
+        },
+        {
+          "command": "temcoDocs.format.heading",
+          "group": "2_blocks@1"
+        },
+        {
+          "command": "temcoDocs.format.bullet",
+          "group": "2_blocks@2"
+        },
+        {
+          "command": "temcoDocs.format.numbered",
+          "group": "2_blocks@3"
+        },
+        {
+          "command": "temcoDocs.format.task",
+          "group": "2_blocks@4"
+        },
+        {
+          "command": "temcoDocs.format.quote",
+          "group": "2_blocks@5"
+        },
+        {
+          "command": "temcoDocs.format.codeBlock",
+          "group": "2_blocks@6"
+        },
+        {
+          "command": "temcoDocs.format.table",
+          "group": "2_blocks@7"
+        },
+        {
+          "command": "temcoDocs.format.rule",
+          "group": "2_blocks@8"
+        },
+        {
+          "command": "temcoDocs.format.callout",
+          "group": "2_blocks@9"
+        },
+        {
+          "command": "temcoDocs.format.link",
+          "group": "3_insert@1"
+        },
+        {
+          "command": "temcoDocs.format.linkPage",
+          "group": "3_insert@2"
+        },
+        {
+          "command": "temcoDocs.format.outline",
+          "group": "4_navigate@1"
+        }
+      ],
+      "temcoDocs.pageKinds": [
+        {
+          "command": "temcoDocs.newPage.article",
+          "group": "1_kind@1"
+        },
+        {
+          "command": "temcoDocs.newPage.task",
+          "group": "1_kind@2"
+        },
+        {
+          "command": "temcoDocs.newPage.reference",
+          "group": "1_kind@3"
+        },
+        {
+          "command": "temcoDocs.newPage.troubleshooting",
+          "group": "1_kind@4"
+        },
+        {
+          "command": "temcoDocs.newPage.releaseNote",
+          "group": "1_kind@5"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "temcoDocs.newPage",
+          "when": "view == temcoDocs.pages",
+          "group": "navigation@0"
+        },
+        {
+          "command": "temcoDocs.newChapter",
+          "when": "view == temcoDocs.pages",
+          "group": "navigation@1"
+        },
+        {
+          "command": "temcoDocs.refresh",
+          "when": "view == temcoDocs.pages",
+          "group": "navigation@2"
+        },
+        {
+          "command": "temcoDocs.openPage",
+          "when": "view == temcoDocs.pages",
+          "group": "1_open@1"
+        },
+        {
+          "submenu": "temcoDocs.pageKinds",
+          "when": "view == temcoDocs.pages",
+          "group": "2_kind@1"
+        },
+        {
+          "command": "temcoDocs.createPage",
+          "when": "view == temcoDocs.pages",
+          "group": "2_missing@1"
+        },
+        {
+          "command": "temcoDocs.reveal",
+          "when": "view == temcoDocs.pages",
+          "group": "2_show@1"
+        },
+        {
+          "command": "temcoDocs.openTerminal",
+          "when": "view == temcoDocs.pages",
+          "group": "2_show@2"
+        },
+        {
+          "command": "temcoDocs.copyPath",
+          "when": "view == temcoDocs.pages",
+          "group": "2_show@3"
+        },
+        {
+          "command": "temcoDocs.copyRelativePath",
+          "when": "view == temcoDocs.pages",
+          "group": "2_show@4"
+        },
+        {
+          "command": "temcoDocs.renamePage",
+          "when": "view == temcoDocs.pages",
+          "group": "3_edit@1"
+        },
+        {
+          "command": "temcoDocs.movePageUp",
+          "when": "view == temcoDocs.pages",
+          "group": "3_edit@2"
+        },
+        {
+          "command": "temcoDocs.movePageDown",
+          "when": "view == temcoDocs.pages",
+          "group": "3_edit@3"
+        },
+        {
+          "command": "temcoDocs.retirePage",
+          "when": "view == temcoDocs.pages",
+          "group": "4_retire@1"
+        },
+        {
+          "command": "temcoWorkbench.home",
+          "when": "view == temcoDocs.pages",
+          "group": "5_view@1"
+        },
+        {
+          "command": "temcoDocs.validate",
+          "when": "view == temcoDocs.pages",
+          "group": "5_view@2"
+        },
+        {
+          "command": "temcoDocs.openRegistry",
+          "when": "view == temcoDocs.pages",
+          "group": "9_registry@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "temcoDocs.createPage",
+          "when": "view == temcoDocs.pages && viewItem == missingPage",
+          "group": "0_missing@1"
+        },
+        {
+          "command": "temcoDocs.newPage",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter)$/",
+          "group": "1_new@1"
+        },
+        {
+          "command": "temcoDocs.newChapter",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter)$/",
+          "group": "1_new@2"
+        },
+        {
+          "submenu": "temcoDocs.pageKinds",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter)$/",
+          "group": "1_new@3"
+        },
+        {
+          "command": "temcoDocs.openPage",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(page|missingPage)$/",
+          "group": "1_open@1"
+        },
+        {
+          "command": "temcoDocs.reveal",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|page|missingPage)$/",
+          "group": "2_show@1"
+        },
+        {
+          "command": "temcoDocs.openTerminal",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|page|missingPage)$/",
+          "group": "2_show@2"
+        },
+        {
+          "command": "temcoDocs.copyPath",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|page|missingPage)$/",
+          "group": "2_show@3"
+        },
+        {
+          "command": "temcoDocs.copyRelativePath",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|page|missingPage)$/",
+          "group": "2_show@4"
+        },
+        {
+          "command": "temcoDocs.renamePage",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(page|missingPage)$/",
+          "group": "3_edit@1"
+        },
+        {
+          "command": "temcoDocs.movePageUp",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(page|missingPage)$/",
+          "group": "3_edit@2"
+        },
+        {
+          "command": "temcoDocs.movePageDown",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(page|missingPage)$/",
+          "group": "3_edit@3"
+        },
+        {
+          "command": "temcoDocs.retirePage",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(page|missingPage)$/",
+          "group": "4_retire@1"
+        },
+        {
+          "command": "temcoDocs.openRegistry",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|page|missingPage)$/",
+          "group": "9_registry@1"
+        }
+      ]
+    },
+    "viewsWelcome": [],
+    "configuration": []
+  },
+  "scripts": {
+    "check-commands": "node --experimental-strip-types scripts/check-commands.mts"
+  }
+}
