@@ -5,7 +5,7 @@
 
 import { Disposable } from '../../vs/base/common/lifecycle.js';
 import { ICommandService } from '../../vs/platform/commands/common/commands.js';
-import { IStorageService, StorageScope } from '../../vs/platform/storage/common/storage.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../vs/platform/storage/common/storage.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../vs/workbench/common/contributions.js';
 import { TEMCO_DOCUMENTATION_COMMAND_ID, TEMCO_FIRST_RUN_STORAGE_KEY } from '../platform/temco.ids.js';
 
@@ -28,7 +28,7 @@ class TemcoFirstRun extends Disposable {
 
 		const seen = this.storageService.getBoolean(TEMCO_FIRST_RUN_STORAGE_KEY, StorageScope.APPLICATION, false);
 		if (!seen) {
-			this.storageService.store(TEMCO_FIRST_RUN_STORAGE_KEY, true, StorageScope.APPLICATION);
+			this.storageService.store(TEMCO_FIRST_RUN_STORAGE_KEY, true, StorageScope.APPLICATION, StorageTarget.USER);
 			void this.commandService.executeCommand(TEMCO_DOCUMENTATION_COMMAND_ID);
 		}
 	}

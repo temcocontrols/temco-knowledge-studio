@@ -10,6 +10,7 @@
 // file stays a list and never grows a body. See `docs/temco-platform/README.md`.
 
 import './services/temco.identity.js';
+import './branding/temco.branding.js';
 import './platform/temco.commands.js';
 import './branding/temco.about.js';
 import './menus/temco.menus.js';
