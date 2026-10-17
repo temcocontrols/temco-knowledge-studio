@@ -473,22 +473,31 @@
 
 	/* ------------------------------------------------------------------ menus */
 
+	/*
+	 * Menus are verbs, not features. A module contributes items into these shared titles; it never
+	 * gets a menu of its own, or the bar becomes the activity bar. `Tools` is the one title that
+	 * groups by module — a submenu once a module has three or more actions, otherwise a flat item
+	 * carrying the module's word (`I/O Studio: Auto-Map Points`).
+	 */
 	var menus = {
 		File: [
-			{ label: 'New Documentation Project', action: 'new-project' },
-			{ label: 'Add Source…', action: 'add-source' },
+			{ label: 'New Project…', action: 'new-project' },
 			{ label: 'Open Workspace…', action: 'open-workspace' },
+			{ label: 'Add Source…', action: 'add-source' },
 			{ separator: true },
 			{ label: 'Save All', keys: 'Ctrl+K S', action: 'save-all' },
 			{ separator: true },
-			{ label: 'Close Tab', keys: 'Ctrl+W', run: function () { if (activeView) { closeTab(activeView); } } }
+			{ label: 'Close Tab', keys: 'Ctrl+W', run: function () { if (activeView) { closeTab(activeView); } } },
+			{ label: 'Close Window', run: function () { toast('The window stays open in the mock.'); } }
 		],
 		Edit: [
 			{ label: 'Undo', keys: 'Ctrl+Z', action: 'undo' },
 			{ label: 'Redo', keys: 'Ctrl+Y', action: 'redo' },
 			{ separator: true },
 			{ label: 'Find', keys: 'Ctrl+F', action: 'find' },
-			{ label: 'Replace', keys: 'Ctrl+H', action: 'replace' }
+			{ label: 'Replace', keys: 'Ctrl+H', action: 'replace' },
+			{ separator: true },
+			{ label: 'Copy Path', action: 'copy-path' }
 		],
 		View: [
 			{ label: 'Command Palette…', keys: 'Ctrl+Shift+P', run: function () { openPalette('commands'); } },
@@ -498,31 +507,99 @@
 			{ label: 'Toggle Panel', keys: 'Ctrl+J', run: function () { togglePanel(); } },
 			{ label: 'Toggle AI Bar', keys: 'Ctrl+Alt+B', run: function () { toggleAux(); } },
 			{ separator: true },
+			{ label: 'Problems', run: function () { showPanel('problems'); } },
+			{ label: 'Output', run: function () { showPanel('output'); } },
+			{ label: 'Terminal', run: function () { showPanel('terminal'); } },
+			{ label: 'Ports', run: function () { showPanel('ports'); } },
+			{ separator: true },
 			{ label: 'Color Theme', run: function () { toggleTheme(); } }
 		],
 		Go: [
 			{ label: 'Dashboard', run: function () { openModule('dashboard'); } },
+			{ label: 'Workspaces', run: function () { openModule('workspaces'); } },
 			{ label: 'Documentation', run: function () { openModule('docs'); } },
 			{ label: 'Devices', run: function () { openModule('devices'); } },
 			{ label: 'I/O Studio', run: function () { openModule('io'); } },
-			{ label: 'Temco Learn', run: function () { openModule('learn'); } }
+			{ label: 'BACnet Studio', run: function () { openModule('bacnet'); } },
+			{ label: 'Network', run: function () { openModule('network'); } },
+			{ label: 'SQL Studio', run: function () { openModule('sql'); } },
+			{ label: 'AI Hub', run: function () { openModule('ai'); } },
+			{ label: 'Temco Learn', run: function () { openModule('learn'); } },
+			{ separator: true },
+			{ label: 'Go to Surface…', keys: 'Ctrl+P', run: function () { openPalette('views'); } },
+			{ label: 'Settings', run: function () { openModule('settings'); } }
+		],
+		Run: [
+			{ label: 'Build Documentation', action: 'build-site' },
+			{ label: 'Build Offline Help', action: 'build-help' },
+			{ separator: true },
+			{ label: 'Run Query', action: 'run-query' },
+			{ separator: true },
+			{ label: 'Discover Devices', action: 'discover-devices' },
+			{ label: 'Start Capture', action: 'new-capture' },
+			{ separator: true },
+			{ label: 'Stop Running Task', action: 'build-cancel', disabled: true, hint: 'Nothing running' }
 		],
 		Tools: [
-			{ label: 'Read All Sources', action: 'read-all' },
-			{ label: 'Build the Site', action: 'build-site' },
-			{ label: 'Build the Offline Help', action: 'build-help' },
+			{ label: 'Documentation', children: [
+				{ label: 'Read All Sources', action: 'read-all' },
+				{ label: 'Validate Structure', action: 'validate-docs' },
+				{ label: 'Build Website', action: 'build-site' },
+				{ label: 'Build Offline Help', action: 'build-help' },
+				{ label: 'Publish Release…', action: 'publish-release' }
+			] },
+			{ label: 'Devices', children: [
+				{ label: 'Discover Devices', action: 'discover-devices' },
+				{ label: 'Stage Firmware…', action: 'stage-firmware' },
+				{ label: 'Back Up All', action: 'backup-all' }
+			] },
+			{ label: 'I/O Studio: Auto-Map Points', action: 'auto-map' },
+			{ label: 'Network: Scan Segment', action: 'net-scan' },
+			{ label: 'AI', children: [
+				{ label: 'Load Model…', action: 'load-model' },
+				{ label: 'Rebuild Index', action: 'rebuild-index' },
+				{ label: 'Open Actions', run: function () { openView('ai/actions'); } }
+			] },
 			{ separator: true },
-			{ label: 'Publish Release…', action: 'publish-release' },
-			{ separator: true },
-			{ label: 'Open Review Center', run: function () { openView('docs/review'); } }
+			{ label: 'Developer: Open Settings JSON', action: 'open-settings-json' }
 		],
 		Help: [
 			{ label: 'Documentation', action: 'help-docs' },
 			{ label: 'Keyboard Shortcuts', action: 'help-keys' },
 			{ separator: true },
+			{ label: 'Show Logs', action: 'show-logs' },
+			{ label: 'Report an Issue', action: 'report-issue' },
+			{ separator: true },
 			{ label: 'About Temco Platform', action: 'about' }
 		]
 	};
+
+	function buildMenu(items) {
+		var menu = document.createElement('div');
+		menu.className = 'menu';
+		menu.__items = items;
+		menu.innerHTML = items.map(function (item, index) {
+			if (item.separator) {
+				return '<div class="menu__separator"></div>';
+			}
+			var cls = 'menu__item' + (item.disabled ? ' menu__item--disabled' : '');
+			var trailing = '';
+			if (item.children) {
+				trailing = ui.icon('chevron-right', 'icon--sm');
+			} else if (item.disabled && item.hint) {
+				trailing = '<span class="menu__hint">' + ui.esc(item.hint) + '</span>';
+			} else if (item.keys) {
+				trailing = '<span class="menu__keys">' + ui.esc(item.keys) + '</span>';
+			}
+			return (
+				'<button type="button" class="' + cls + '" data-menu-index="' + index + '"' + (item.disabled ? ' aria-disabled="true"' : '') + '>' +
+				'<span class="menu__label">' + ui.esc(item.label) + '</span>' +
+				trailing +
+				'</button>'
+			);
+		}).join('');
+		return menu;
+	}
 
 	function openMenu(name, anchor) {
 		closeMenu();
@@ -530,37 +607,52 @@
 		if (!items) {
 			return;
 		}
-		var menu = document.createElement('div');
-		menu.className = 'menu';
+		var menu = buildMenu(items);
 		menu.setAttribute('data-menu-name', name);
-		menu.innerHTML = items.map(function (item, index) {
-			if (item.separator) {
-				return '<div class="menu__separator"></div>';
-			}
-			return (
-				'<button type="button" class="menu__item" data-menu-index="' + index + '">' +
-				'<span class="menu__label">' + ui.esc(item.label) + '</span>' +
-				(item.keys ? '<span class="menu__keys">' + ui.esc(item.keys) + '</span>' : '') +
-				'</button>'
-			);
-		}).join('');
 		document.body.appendChild(menu);
 		var rect = anchor.getBoundingClientRect();
 		menu.style.left = rect.left + 'px';
 		menu.style.top = rect.bottom + 2 + 'px';
+		var menuRect = menu.getBoundingClientRect();
+		if (menuRect.right > window.innerWidth - 4) {
+			menu.style.left = Math.max(4, window.innerWidth - menuRect.width - 4) + 'px';
+		}
 		anchor.setAttribute('aria-expanded', 'true');
-		el.currentMenu = menu;
-		el.currentMenuItems = items;
+		el.openMenus = [menu];
+		el.menuOpenedAt = Date.now();
+	}
+
+	function openSubmenu(parentMenu, itemEl, items, index) {
+		if (parentMenu.__openFor === index) {
+			return;
+		}
+		parentMenu.__openFor = index;
+		var depth = el.openMenus.indexOf(parentMenu);
+		el.openMenus.slice(depth + 1).forEach(function (node) { node.remove(); });
+		el.openMenus = el.openMenus.slice(0, depth + 1);
+
+		var sub = buildMenu(items);
+		document.body.appendChild(sub);
+		var itemRect = itemEl.getBoundingClientRect();
+		var parentRect = parentMenu.getBoundingClientRect();
+		sub.style.left = itemRect.right - 2 + 'px';
+		sub.style.top = itemRect.top - 4 + 'px';
+		var subRect = sub.getBoundingClientRect();
+		if (subRect.right > window.innerWidth - 4) {
+			sub.style.left = Math.max(4, parentRect.left - subRect.width + 2) + 'px';
+		}
+		if (subRect.bottom > window.innerHeight - 4) {
+			sub.style.top = Math.max(4, window.innerHeight - subRect.height - 4) + 'px';
+		}
+		el.openMenus.push(sub);
 	}
 
 	function closeMenu() {
-		if (el.currentMenu) {
-			el.currentMenu.remove();
-			el.currentMenu = null;
-			Array.prototype.forEach.call(document.querySelectorAll('.menubar__button'), function (button) {
-				button.setAttribute('aria-expanded', 'false');
-			});
-		}
+		(el.openMenus || []).forEach(function (menu) { menu.remove(); });
+		el.openMenus = [];
+		Array.prototype.forEach.call(document.querySelectorAll('.menubar__button'), function (button) {
+			button.setAttribute('aria-expanded', 'false');
+		});
 	}
 
 	/* ------------------------------------------------------------------ toggles */
@@ -678,8 +770,17 @@
 	function wire() {
 		document.addEventListener('click', function (event) {
 			var menuItem = event.target.closest('[data-menu-index]');
-			if (menuItem && el.currentMenuItems) {
-				var item = el.currentMenuItems[Number(menuItem.getAttribute('data-menu-index'))];
+			if (menuItem) {
+				var menu = menuItem.closest('.menu');
+				var item = menu && menu.__items ? menu.__items[Number(menuItem.getAttribute('data-menu-index'))] : null;
+				if (item && item.children) {
+					openSubmenu(menu, menuItem, item.children, Number(menuItem.getAttribute('data-menu-index')));
+					return;
+				}
+				if (item && item.disabled) {
+					toast(item.hint || item.label + ' is not available.');
+					return;
+				}
 				closeMenu();
 				if (item && item.run) {
 					item.run();
@@ -692,7 +793,8 @@
 			var menuButton = event.target.closest('[data-menu]');
 			if (menuButton) {
 				var name = menuButton.getAttribute('data-menu');
-				if (el.currentMenu && el.currentMenu.getAttribute('data-menu-name') === name) {
+				var isOpen = el.openMenus && el.openMenus.length > 0 && el.openMenus[0].getAttribute('data-menu-name') === name;
+				if (isOpen) {
 					closeMenu();
 				} else {
 					openMenu(name, menuButton);
@@ -829,6 +931,35 @@
 		el.paletteInput.addEventListener('input', function () {
 			paletteIndex = 0;
 			filterPalette(el.paletteInput.value);
+		});
+
+		/* A submenu opens when the pointer reaches its parent item and closes when it leaves the
+		   branch, the way a desktop menu bar behaves. */
+		document.addEventListener('mouseover', function (event) {
+			var menuItem = event.target.closest('[data-menu-index]');
+			if (!menuItem || !el.openMenus || !el.openMenus.length) {
+				return;
+			}
+			/* A menu that just appeared under a resting pointer must not open a submenu by itself. */
+			if (Date.now() - (el.menuOpenedAt || 0) < 180) {
+				return;
+			}
+			var menu = menuItem.closest('.menu');
+			if (!menu || !menu.__items) {
+				return;
+			}
+			var index = Number(menuItem.getAttribute('data-menu-index'));
+			var item = menu.__items[index];
+			if (item && item.children) {
+				openSubmenu(menu, menuItem, item.children, index);
+				return;
+			}
+			if (item && menu.__openFor !== undefined) {
+				var depth = el.openMenus.indexOf(menu);
+				el.openMenus.slice(depth + 1).forEach(function (node) { node.remove(); });
+				el.openMenus = el.openMenus.slice(0, depth + 1);
+				menu.__openFor = undefined;
+			}
 		});
 
 		el.chatForm.addEventListener('submit', function (event) {

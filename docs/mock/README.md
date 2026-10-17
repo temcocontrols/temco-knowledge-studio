@@ -45,6 +45,24 @@ Every number in it — 1,254 pages, 34 devices, 17 drafts — is invented. The *
 
 The mock keeps the sides at fixed widths and the editor flexible, which is what the workbench does. Nothing here is a webview: a surface is a normal editor tab, so it keeps tabs, breadcrumbs, the panel and the status bar for free.
 
+## The menu bar
+
+Menus are **verbs**, not features. A module contributes items into these shared titles; it never gets a menu of its own, or the bar would become the activity bar.
+
+| Menu | Holds |
+|---|---|
+| **File** | workspace and project lifecycle: new project, open workspace, add source, save, close |
+| **Edit** | text operations on what has focus |
+| **View** | layout and panels: palette, quick open, the bars, Problems/Output/Terminal, theme |
+| **Go** | navigation between modules and surfaces |
+| **Run** | long actions that start and stop: build, query, discover, capture |
+| **Tools** | module toolkits — a submenu at three or more actions, otherwise a flat item carrying the module's word (`I/O Studio: Auto-Map Points`) |
+| **Help** | documentation, shortcuts, logs, an issue, about |
+
+Two rules keep it from collapsing under more modules. **Every menu item also exists as a control on the surface it acts on** — the menu is an accelerator, never the only home for a feature. And **the long tail is not in the menus at all**: it is in `Ctrl+Shift+P`, where every command is searchable by its module prefix (`Devices: Discover`, `BACnet: Read Objects`).
+
+A module never adds a menu title. If `Tools` ever stops being the right home, the answer is a new *verb* that the whole platform shares, the way `Run` was added here — not an eleventh menu.
+
 ## The modules and their surfaces
 
 | Module | Surfaces in the mock |
