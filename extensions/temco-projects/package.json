@@ -1,0 +1,82 @@
+{
+  "name": "temco-projects",
+  "displayName": "Temco Projects",
+  "description": "Temco Projects — a documentation project as a thing: its sources, its outputs, its builds, and the pages it produces.",
+  "version": "0.0.1",
+  "publisher": "temcocontrols",
+  "private": true,
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/temcocontrols/temco-platform.git"
+  },
+  "bugs": {
+    "url": "https://github.com/temcocontrols/temco-platform/issues"
+  },
+  "engines": {
+    "vscode": "^1.143.0"
+  },
+  "type": "commonjs",
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "extensionDependencies": [
+    "temcocontrols.temco-store",
+    "temcocontrols.temco-ui",
+    "temcocontrols.temco-repositories"
+  ],
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "temcoProjects.openProjects",
+        "title": "Projects",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "temcoProjects.newProject",
+        "title": "Create a Project",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "temcoProjects.openProject",
+        "title": "Open a Project",
+        "icon": "$(book)"
+      },
+      {
+        "command": "temcoProjects.editProject",
+        "title": "Edit a Project",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "temcoProjects.removeProject",
+        "title": "Remove the Project",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "temcoProjects.selectProject",
+        "title": "Work on a Project",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "temcoProjects.clearProject",
+        "title": "Stop Working on a Project",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "temcoProjects.addSource",
+        "title": "Add a Source",
+        "icon": "$(add)"
+      },
+      {
+        "command": "temcoProjects.buildProject",
+        "title": "Build the Project",
+        "icon": "$(tools)"
+      }
+    ]
+  },
+  "scripts": {
+    "check-commands": "node --experimental-strip-types scripts/check-commands.mts"
+  }
+}

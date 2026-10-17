@@ -1,0 +1,48 @@
+// The projects module's entry point.
+//
+// A project is a documentation project: a name, a version, an audience, an owner, the sources it is made of, the
+// outputs it produces, and what building it left behind. This module owns all of that — the list, the edit page,
+// the hub, and the build that produces an output.
+//
+// Two things are deliberately *not* here:
+//
+//   * what a page of documentation is. The registry, its checks and the pages themselves belong to `temco-docs`;
+//     this module reads the pages a project *has* from the platform's memory, where a read recorded them.
+//   * the sources themselves. Reading one, cloning one and running one's own scripts belong to
+//     `temco-repositories`; this module names a source in a project and records what its build produced.
+//
+// Nothing is written to a repository. A build is invoked in the source's own folder and judged by the files it
+// left behind, never by an exit code, and the deploying form of the help build is never invoked.
+
+import * as vscode from 'vscode';
+import { registerProjectCommands } from './project';
+import { registerProjectBuildCommands } from './projectBuild';
+import { selection } from './store';
+
+/** What this module offers the rest of the platform. */
+export interface TemcoProjectsApi {
+	/** Fires when a project or its sources changed: created, edited, removed, or built. */
+	onDidChange(listener: () => void): vscode.Disposable;
+}
+
+export function activate(context: vscode.ExtensionContext): TemcoProjectsApi {
+	const output = vscode.window.createOutputChannel('Temco Projects');
+	// One signal for the surfaces that list projects: the Library's rows re-read when a project changes.
+	const changed = new vscode.EventEmitter<void>();
+	context.subscriptions.push(output, changed);
+	const refresh = (): void => changed.fire();
+
+	// The project's own acts: create, edit, remove, work on one, add a source to it.
+	registerProjectCommands(context, selection, refresh);
+	// Building a project's outputs, invoked in the source repository that owns the script.
+	registerProjectBuildCommands(context, output);
+
+	return {
+		onDidChange: (listener: () => void) => changed.event(listener),
+	};
+}
+
+export function deactivate(): void {
+	// Nothing to unwind: the pages are webviews the window closes, and every command is registered on the
+	// extension's own context. A build task that was already running finishes on its own.
+}
