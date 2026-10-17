@@ -351,6 +351,11 @@
 	color: var(--fg-subtle);
 }
 
+/* A module with one section has no heading to open its list, so the first item opens it. */
+.tree__item:first-child {
+	margin-top: 8px;
+}
+
 .tree__item {
 	display: flex;
 	align-items: center;
@@ -509,9 +514,30 @@
 	overflow: hidden;
 }
 
+/* The row is a setting (View › Toggle Breadcrumbs), and off by default: without it the editor
+   keeps the 22 pixels. */
+.breadcrumbs[hidden] {
+	display: none;
+}
+
 .breadcrumbs__item {
 	color: var(--fg-muted);
 	cursor: default;
+}
+
+/* A level above the current page is somewhere you can go, so it looks and behaves like a link. */
+.breadcrumbs__item--link {
+	padding: 0;
+	border: 0;
+	background: none;
+	font: inherit;
+	color: var(--fg-muted);
+	cursor: pointer;
+}
+
+.breadcrumbs__item--link:hover {
+	color: var(--fg-strong);
+	text-decoration: underline;
 }
 
 .breadcrumbs__item.is-current {
@@ -790,6 +816,32 @@
 
 .chat__row .btn {
 	margin-left: auto;
+}
+
+/* The same bubbles on a page instead of the AI bar: the thread takes the width, each bubble keeps a
+   readable measure, and nothing scrolls inside the section. */
+.chat--page {
+	flex: none;
+	overflow: visible;
+	padding: 0;
+}
+
+.chat--page .chat__bubble {
+	max-width: 72ch;
+}
+
+/* Starters sit between the last answer and the box: prompts for this conversation, not a section. */
+.chat__starters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 14px 0 0;
+}
+
+/* On a page the composer belongs to the section it sits in, so it keeps the section's edges. */
+.card--plain .chat__composer {
+	padding: 12px 0 0;
+	margin-top: 12px;
 }
 
 .chip {

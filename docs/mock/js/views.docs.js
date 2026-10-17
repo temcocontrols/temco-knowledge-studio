@@ -14,6 +14,42 @@
 	M.views['docs/projects'] = {
 		title: 'Projects',
 		render: function () {
+			var projects = data.docsProjects;
+			var current = projects[0];
+
+			/* A project is one row, and its name never shares a line with its numbers — that is what
+			   lets the row survive a narrow editor, which a seven-column table of the same facts did
+			   not: the name column collapsed to 108 px and the timestamp wrapped onto three lines. */
+			var projectRow = function (project, isCurrent) {
+				var facts = [
+					'v' + project.version,
+					project.audience,
+					project.owner,
+					project.pages + ' pages',
+					project.sources + ' sources',
+					'updated ' + project.updated
+				];
+				return (
+					'<div class="record-row' + (isCurrent ? ' record-row--current' : '') + '" data-open="docs/knowledge">' +
+					(isCurrent ? ui.toneMark('layers', 'accent') : ui.toneMark('folder')) +
+					'<div class="record-row__main">' +
+					'<div class="record-row__title">' +
+					'<span class="record-row__name">' + ui.esc(project.name) + '</span>' +
+					(isCurrent ? ui.badge('Current', 'accent') : '') +
+					'</div>' +
+					/* Each fact keeps its trailing dot, so a line never breaks in the middle of a count. */
+					'<div class="record-row__meta">' +
+					facts.map(function (fact, index) {
+						return '<span>' + ui.esc(fact) + (index < facts.length - 1 ? ' ·' : '') + '</span>';
+					}).join(' ') +
+					'</div>' +
+					'</div>' +
+					'<div class="record-row__state">' + ui.badge(project.state, project.tone) + '</div>' +
+					'<span class="record-row__go">' + ui.icon('chevron-right', 'icon--sm') + '</span>' +
+					'</div>'
+				);
+			};
+
 			var body =
 				ui.pageHead({
 					title: 'Projects',
@@ -23,43 +59,38 @@
 						ui.button('New Project', { kind: 'primary', icon: 'plus', action: 'new-project' }) +
 						ui.button('Import', { icon: 'download', action: 'import-project' })
 				}) +
-				ui.table({
-					columns: [
-						{
-							label: 'Project', render: function (row) {
-								return '<span class="cell-strong">' + ui.esc(row.name) + '</span><div class="cell-muted cell-mono" style="font-size:11px">v' + ui.esc(row.version) + '</div>';
-							}
-						},
-						{ label: 'Pages', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.pages + '</span>'; } },
-						{ label: 'Sources', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.sources + '</span>'; } },
-						{ label: 'Owner', render: function (row) { return ui.esc(row.owner); } },
-						{ label: 'State', render: function (row) { return ui.badge(row.state, row.tone); } },
-						{ label: 'Updated', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.updated) + '</span>'; } },
-						{ label: '', align: 'right', render: function () { return ui.button('Open', { small: true, open: 'docs/knowledge' }); } }
-					],
-					rows: data.docsProjects
-				}) +
-				'<div class="mt-24 split">' +
-				ui.card({
-					title: 'Current Project',
-					cls: 'card--current',
-					desc: 'T3000 Documentation is selected in this window.',
-					body:
-						'<dl class="kv">' +
-						'<dt>Version</dt><dd class="cell-mono">13.0</dd>' +
-						'<dt>Audience</dt><dd>Integrators and installers</dd>' +
-						'<dt>Areas</dt><dd>8</dd>' +
-						'<dt>Build targets</dt><dd>Website · PDF · CHM · Search · AI index</dd>' +
-						'<dt>Publishes to</dt><dd>Temco Learn · /t3000/13.0/</dd>' +
-						'</dl>',
-					foot: ui.button('Project Settings', { small: true, action: 'project-settings' }) + '<span>Stored in the platform database, not in the repository</span>'
-				}) +
+				'<div class="record-list">' +
+				projects.map(function (project, index) {
+					return projectRow(project, index === 0);
+				}).join('') +
+				'</div>' +
+				'<div class="mt-24">' +
 				ui.card({
 					title: 'Sources of This Project',
+					icon: 'repo',
+					cls: 'card--plain',
+					actions: ui.button('All Sources', { small: true, kind: 'ghost', open: 'docs/sources' }),
+					desc: 'What ' + ui.esc(current.name) + ' reads. Reading a source is what puts pages in the knowledge base; it never writes to the source.',
 					body: ui.list(data.sources.slice(0, 4).map(function (source) {
-						return { icon: source.kind === 'Repository' ? 'repo' : 'document', title: source.name, sub: '<span class="cell-muted">' + ui.esc(source.found) + '</span>', meta: ui.badge(source.state, source.tone) };
-					})),
-					foot: ui.button('All Sources', { small: true, kind: 'ghost', open: 'docs/sources' })
+						return { icon: source.kind === 'Repository' ? 'repo' : 'document', title: source.name, sub: '<span class="cell-muted">' + (source.pages ? source.pages + ' pages' : 'not read') + '</span>', meta: ui.badge(source.state, source.tone) };
+					}))
+				}) +
+				'</div>' +
+				/* How the project is set up is not activity — it is the last thing on the page. */
+				'<div class="mt-24">' +
+				ui.card({
+					title: 'Project Settings',
+					icon: 'gear',
+					cls: 'card--plain',
+					actions: ui.button('Edit Settings', { small: true, action: 'project-settings' }),
+					desc: 'Stored in the platform database, not in the repository.',
+					body:
+						'<div class="settings-strip">' +
+						'<div><div class="settings-strip__label">Version</div><div class="settings-strip__value cell-mono">13.0</div></div>' +
+						'<div><div class="settings-strip__label">Areas</div><div class="settings-strip__value">8</div></div>' +
+						'<div><div class="settings-strip__label">Build Targets</div><div class="settings-strip__value">Website · PDF · CHM · Search · AI index</div></div>' +
+						'<div><div class="settings-strip__label">Publishes To</div><div class="settings-strip__value">Temco Learn · /t3000/13.0/</div></div>' +
+						'</div>'
 				}) +
 				'</div>';
 			return ui.view(body);
@@ -69,43 +100,91 @@
 	M.views['docs/repositories'] = {
 		title: 'Repositories',
 		render: function () {
+			var repos = data.repositories;
+			var cloned = repos.filter(function (repo) { return repo.state === 'Cloned'; });
+			var files = repos.reduce(function (total, repo) { return total + repo.files; }, 0);
+			var pages = repos.reduce(function (total, repo) { return total + repo.pages; }, 0);
+
+			var repoRow = function (repo) {
+				var facts = [repo.remote, repo.branch + ' of ' + repo.branches + ' branches'];
+				if (repo.state === 'Cloned') {
+					facts.push(repo.files.toLocaleString('en-US') + ' files');
+					facts.push(repo.pages + ' pages');
+					facts.push('read ' + repo.read);
+					if (repo.owner !== '—') {
+						facts.push(repo.owner);
+					}
+				} else {
+					facts.push('no local copy');
+				}
+				var isOpen = repo.state === 'Cloned';
+				return (
+					'<div class="record-row' + (isOpen ? '' : ' record-row--static') + '"' + (isOpen ? ' data-open="docs/repository"' : '') + '>' +
+					(repo.temco ? ui.toneMark('repo', 'accent') : ui.toneMark('repo')) +
+					'<div class="record-row__main">' +
+					'<div class="record-row__title">' +
+					'<span class="record-row__name">' + ui.esc(repo.name) + '</span>' +
+					'</div>' +
+					'<div class="record-row__meta">' +
+					facts.map(function (fact, index) {
+						return '<span>' + ui.esc(fact) + (index < facts.length - 1 ? ' ·' : '') + '</span>';
+					}).join(' ') +
+					'</div>' +
+					'</div>' +
+					'<div class="record-row__state">' + ui.badge(repo.state, repo.tone) + '</div>' +
+					(isOpen
+						? '<span class="record-row__go">' + ui.icon('chevron-right', 'icon--sm') + '</span>'
+						: ui.button('Clone', { small: true, action: 'clone-repository' })) +
+					'</div>'
+				);
+			};
+
+			var group = function (title, note, items, actions) {
+				if (!items.length) {
+					return '';
+				}
+				return ui.group({
+					label: title,
+					count: items.length + (items.length === 1 ? ' repository' : ' repositories'),
+					note: note,
+					actions: actions,
+					body: items.map(repoRow).join('')
+				});
+			};
+
+			var temcoRepos = repos.filter(function (repo) { return repo.temco; });
+			var thirdPartyRepos = repos.filter(function (repo) { return !repo.temco; });
+			var missing = temcoRepos.filter(function (repo) { return repo.state !== 'Cloned'; }).length;
+
 			var body =
 				ui.pageHead({
 					title: 'Repositories',
 					icon: 'repo',
 					desc: 'The repositories this workspace reads, and whether their local copy is here. Reading a repository records the pages it declares; it never writes to it.',
 					actions:
-						ui.button('Add Repository', { kind: 'primary', icon: 'plus', action: 'add-source' }) +
-						ui.button('Read All', { icon: 'refresh', action: 'read-all' })
+						ui.button('Add Repository', { kind: 'primary', icon: 'plus', action: 'add-source' })
 				}) +
 				ui.tiles([
-					{ value: String(data.repositories.length), label: 'Repositories' },
-					{ value: '3', label: 'Cloned locally' },
-					{ value: '1,884', label: 'Files' },
-					{ value: '254', label: 'Pages found' }
+					{ value: String(repos.length), label: 'Repositories' },
+					{ value: String(cloned.length), label: 'Cloned locally' },
+					{ value: files.toLocaleString('en-US'), label: 'Files' },
+					{ value: String(pages), label: 'Pages found' }
 				]) +
-				'<div class="mt-24">' +
-				ui.table({
-					columns: [
-						{ label: 'Repository', render: function (row) {
-							return '<span class="cell-strong">' + ui.esc(row.name) + '</span><div class="cell-muted" style="font-size:11px">' + ui.esc(row.remote) + '</div>';
-						} },
-						{ label: 'Branch', render: function (row) {
-							return '<span class="cell-mono" style="white-space:nowrap">' + ui.esc(row.branch) + '</span> <span class="cell-muted" style="white-space:nowrap">of ' + row.branches + '</span>';
-						} },
-						{ label: 'Local copy', render: function (row) { return ui.badge(row.state, row.tone); } },
-						{ label: 'Files', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.files.toLocaleString() + '</span>'; } },
-						{ label: 'Pages', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.pages + '</span>'; } },
-						{ label: 'Last read', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.read) + '</span>'; } },
-						{ label: '', align: 'right', render: function (row) {
-							return row.state === 'Cloned'
-								? ui.button('Open', { small: true, kind: 'ghost', open: 'docs/repository' })
-								: ui.button('Clone', { small: true, action: 'clone-repository' });
-						} }
-					],
-					rows: data.repositories
-				}) +
-				'</div>' +
+				group(
+					'From Temco',
+					'Temco publishes these under <b class="cell-mono">github.com/temcocontrols</b>. They are the sources the platform ships documentation for, so their pages carry product names, register maps and firmware behaviour that Temco stands behind.',
+					temcoRepos,
+					(missing
+						? ui.button('Clone ' + missing + ' Missing', { small: true, kind: 'primary', icon: 'download', action: 'clone-repository' })
+						: '') +
+					ui.button('Read All', { small: true, kind: 'ghost', icon: 'refresh', action: 'read-all' })
+				) +
+				group(
+					'Third-party',
+					'Read exactly like a Temco repository — same clone, same read, same pages — but nothing in one is Temco\'s word. Useful for protocol references; never for product behaviour.',
+					thirdPartyRepos,
+					ui.button('Read All', { small: true, kind: 'ghost', icon: 'refresh', action: 'read-all' })
+				) +
 				'<div class="mt-24">' +
 				ui.callout('A repository is cloned into the working area (<code>~/Temco</code>) with full history, so a draft can be about a commit. Nothing is ever pushed back.') +
 				'</div>';
@@ -195,44 +274,107 @@
 	M.views['docs/sources'] = {
 		title: 'Sources',
 		render: function () {
+			var sources = data.sources;
+			var read = sources.filter(function (source) { return source.state === 'Read' || source.state === 'Partial'; });
+			var pending = sources.filter(function (source) { return source.state !== 'Read' && source.state !== 'Partial'; });
+			var pages = sources.reduce(function (total, source) { return total + source.pages; }, 0);
+
+			var iconFor = function (source) {
+				if (source.kind === 'Repository') {
+					return 'repo';
+				}
+				if (source.kind === 'Folder') {
+					return 'folder';
+				}
+				if (source.kind === 'SharePoint') {
+					return 'globe';
+				}
+				return 'document';
+			};
+
+			/* A source that needs reading wears the warning, because that is the only thing to do here. */
+			var toneFor = function (source) {
+				return source.state === 'Read' ? '' : source.state === 'Not read' ? 'info' : 'warn';
+			};
+
+			var sourceRow = function (source) {
+				var facts = [source.detail];
+				if (source.state === 'Not read') {
+					facts.push('not read yet');
+				} else if (source.state === 'Changed') {
+					facts.push('changed since the last read');
+					facts.push('last read ' + source.when);
+				} else {
+					facts.push(source.pages ? source.pages + ' pages found' : 'nothing found');
+					facts.push('read ' + source.when);
+				}
+				var needsRead = source.state === 'Changed' || source.state === 'Not read';
+				return (
+					'<div class="record-row' + (needsRead ? ' record-row--static' : '') + '"' + (needsRead ? '' : ' data-action="open-source"') + '>' +
+					ui.toneMark(iconFor(source), toneFor(source)) +
+					'<div class="record-row__main">' +
+					'<div class="record-row__title">' +
+					'<span class="record-row__name">' + ui.esc(source.name) + '</span>' +
+					(source.kind === 'Repository' ? '' : '<span class="tag">' + ui.esc(source.kind) + '</span>') +
+					'</div>' +
+					'<div class="record-row__meta">' +
+					facts.map(function (fact, index) {
+						return '<span>' + ui.esc(fact) + (index < facts.length - 1 ? ' ·' : '') + '</span>';
+					}).join(' ') +
+					'</div>' +
+					'</div>' +
+					'<div class="record-row__state">' + ui.badge(source.state, source.tone) + '</div>' +
+					(needsRead
+						? ui.button('Read', { small: true, kind: 'primary', action: 'read-source' })
+						: '<span class="record-row__go">' + ui.icon('chevron-right', 'icon--sm') + '</span>') +
+					'</div>'
+				);
+			};
+
+			var group = function (title, note, kinds) {
+				var items = sources.filter(function (source) { return kinds.indexOf(source.kind) !== -1; });
+				if (!items.length) {
+					return '';
+				}
+				return ui.group({
+					label: title,
+					count: items.length + (items.length === 1 ? ' source' : ' sources'),
+					note: note,
+					actions: items.length > 1
+						? ui.button('Read All', { small: true, kind: 'ghost', icon: 'refresh', action: 'read-all' })
+						: '',
+					body: items.map(sourceRow).join('')
+				});
+			};
+
 			var body =
 				ui.pageHead({
 					title: 'Sources',
 					icon: 'repo',
 					desc: 'Everything a project reads: repositories, documents, folders and connected libraries. Reading a source is what puts pages in the knowledge base.',
-					actions:
-						ui.button('Add Source', { kind: 'primary', icon: 'plus', action: 'add-source' }) +
-						ui.button('Read All', { icon: 'refresh', action: 'read-all' })
+					actions: ui.button('Add Source', { kind: 'primary', icon: 'plus', action: 'add-source' })
 				}) +
-				'<div class="toolbar">' +
-				'<input class="input" type="search" placeholder="Filter sources" aria-label="Filter sources">' +
-				'<div class="segmented" role="group" aria-label="Source kind">' +
-				'<button type="button" aria-pressed="true">All</button>' +
-				'<button type="button" aria-pressed="false">Repositories</button>' +
-				'<button type="button" aria-pressed="false">Documents</button>' +
-				'<button type="button" aria-pressed="false">Folders</button>' +
-				'</div>' +
-				'<span class="toolbar__spacer"></span>' +
-				'<span class="cell-muted" style="font-size:12px">38 sources · 1 changed since the last read</span>' +
-				'</div>' +
-				ui.table({
-					columns: [
-						{ label: 'Source', render: function (row) { return '<span class="cell-strong">' + ui.esc(row.name) + '</span>'; } },
-						{ label: 'Kind', render: function (row) { return '<span class="tag">' + ui.esc(row.kind) + '</span>'; } },
-						{ label: 'Detail', render: function (row) { return '<span class="cell-muted cell-mono">' + ui.esc(row.detail) + '</span>'; } },
-						{ label: 'State', render: function (row) { return ui.badge(row.state, row.tone); } },
-						{ label: 'Pages Found', align: 'right', render: function (row) { return '<span class="cell-mono">' + ui.esc(row.found) + '</span>'; } },
-						{ label: 'Last Read', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.when) + '</span>'; } },
-						{
-							label: '', align: 'right', render: function (row) {
-								return row.state === 'Not read' || row.state === 'Changed'
-									? ui.button('Read', { small: true, kind: 'primary', action: 'read-source' })
-									: ui.button('Open', { small: true, kind: 'ghost', action: 'open-source' });
-							}
-						}
-					],
-					rows: data.sources
-				}) +
+				ui.tiles([
+					{ value: String(sources.length), label: 'Sources' },
+					{ value: String(read.length), label: 'Read' },
+					{ value: String(pages), label: 'Pages found' },
+					{ value: String(pending.length), label: 'Need a read' }
+				]) +
+				group(
+					'Repositories',
+					'Cloned with full history and read by commit, so a draft can point at the commit it came from.',
+					['Repository']
+				) +
+				group(
+					'Documents',
+					'Read in place from disk — one read per file, no clone and no history. A document that changed keeps its old pages until it is read again.',
+					['PDF', 'DOCX']
+				) +
+				group(
+					'Folders and connections',
+					'A folder reads like a repository but has no history; a connection is read over the network and can expire.',
+					['Folder', 'SharePoint']
+				) +
 				'<div class="mt-24">' +
 				ui.callout('Reading a source never edits it. The pages it finds are recorded in the platform database; the source stays the only copy of its own content.') +
 				'</div>';
@@ -243,90 +385,107 @@
 	M.views['docs/knowledge'] = {
 		title: 'Knowledge',
 		render: function () {
-			var areaRows = data.knowledge;
+			var areas = data.knowledge;
+			/* The area whose pages are shown. Picking another one re-renders the page (open-area in
+			   the shell); the first one shown is the weak area, not the first alphabetically. */
+			var openAreaName = (M.state && M.state.area) || 'API Reference';
+			var openArea = areas.filter(function (area) { return area.area === openAreaName; })[0] || areas[3];
+			var totalPages = areas.reduce(function (total, area) { return total + area.pages; }, 0);
+			var totalReviewed = areas.reduce(function (total, area) { return total + area.reviewed; }, 0);
+
+			/* One line per area, with the reviewed share painted behind it. The bar and the number
+			   say the same thing, so they are the same thing; only a stale area gets a badge. */
+			var areaRow = function (area) {
+				var pct = Math.round((area.reviewed / area.pages) * 100);
+				var isOpen = area === openArea;
+				return (
+					'<div class="area-row' + (isOpen ? ' area-row--open' : '') + '"' +
+					' data-action="open-area" data-area="' + ui.esc(area.area) + '"' +
+					' style="--coverage: ' + pct + '%"' +
+					' title="' + ui.esc(area.reviewed + ' of ' + area.pages + ' pages read') + '">' +
+					ui.icon(isOpen ? 'chevron-down' : 'chevron-right', 'icon--sm') +
+					'<span class="area-row__name">' + ui.esc(area.area) + '</span>' +
+					'<span class="area-row__pct">' + pct + '%</span>' +
+					'<span class="area-row__stale">' + (area.stale ? ui.badge(area.stale + ' stale', 'warn') : '') + '</span>' +
+					'</div>'
+				);
+			};
+
+			var pages = data.areaPages[openArea.area] || [];
+			var openPct = Math.round((openArea.reviewed / openArea.pages) * 100);
 
 			var body =
 				ui.pageHead({
 					eyebrow: 'T3000 Documentation · 13.0',
 					title: 'Knowledge',
 					icon: 'book',
-					desc: '1,254 pages in 8 areas. The tree on the left is the registry; the counts say how much of each area a person has actually read.',
+					desc: totalPages.toLocaleString('en-US') + ' pages in ' + areas.length + ' areas, ' + totalReviewed.toLocaleString('en-US') + ' of them read by a person. The registry order is the order the documentation ships in, not the order the files sit on disk.',
 					actions:
-						ui.button('New Page', { icon: 'plus', action: 'new-page' }) +
+						ui.button('New Page', { kind: 'primary', icon: 'plus', action: 'new-page' }) +
 						ui.button('Generate from Sources', { icon: 'sparkle', prompt: 'Find knowledge gaps in the API Reference area' })
 				}) +
-				'<div class="split">' +
-				'<div class="stack">' +
+				/* Master–detail: the areas on the left, the pages of the one you picked on the right,
+				   so a click changes something you can see without scrolling. */
+				'<div class="know-wrap mt-24">' +
+				'<div class="know-split">' +
 				ui.card({
 					title: 'Areas',
-					flush: true,
-					body:
-						'<div class="list">' +
-						areaRows.map(function (area, index) {
-							var pct = Math.round((area.reviewed / area.pages) * 100);
-							return (
-								'<div class="list__item">' +
-								'<span class="cell-muted">' + ui.icon(index === 3 ? 'chevron-down' : 'chevron-right') + '</span>' +
-								'<div class="list__main">' +
-								'<div class="list__title">' + ui.esc(area.area) + '</div>' +
-								'<div style="margin-top:6px;max-width:280px">' + ui.bar(pct) + '</div>' +
-								'</div>' +
-								'<div class="list__meta">' +
-								'<span>' + area.pages + ' pages</span>' +
-								(area.stale ? ui.badge(area.stale + ' stale', 'warn') : ui.badge('Current', 'ok')) +
-								'</div>' +
-								'</div>'
-							);
-						}).join('') +
-						'</div>'
+					icon: 'book',
+					cls: 'card--plain',
+					actions: ui.button('Coverage & Health', { small: true, kind: 'ghost', open: 'dashboard/health' }),
+					desc: 'Read is what a person signed off; stale is what the sources have outrun. Pick an area.',
+					body: '<div class="area-list">' + areas.map(areaRow).join('') + '</div>'
 				}) +
 				ui.card({
-					title: 'Pages in API Reference',
-					desc: 'Order matters: the number on the left is the page order in the area, not a file line.',
+					title: 'Pages in ' + openArea.area,
+					icon: 'document',
+					cls: 'card--plain',
+					actions: ui.button('Add Page', { small: true, kind: 'ghost', icon: 'plus', action: 'new-page' }),
+					desc: openArea.pages + ' pages · ' + openArea.reviewed + ' read (' + openPct + '%) · ' + (openArea.stale ? openArea.stale + ' stale' : 'nothing stale') + '. Order is the page order inside the area, not a file line.',
 					body: ui.table({
+						plain: true,
 						compact: true,
 						columns: [
-							{ label: 'Order', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.order + '</span>'; } },
-							{ label: 'Page', render: function (row) { return '<span class="cell-strong">' + ui.esc(row.page) + '</span>'; } },
-							{ label: 'State', render: function (row) { return ui.badge(row.state, row.tone); } },
-							{ label: 'Owner', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.owner) + '</span>'; } },
-							{ label: 'Changed', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.changed) + '</span>'; } }
+							{ label: 'Order', render: function (row) { return '<span class="cell-mono">' + row.order + '</span>'; } },
+							{
+								label: 'Page', render: function (row) {
+									return '<span class="cell-strong">' + ui.esc(row.page) + '</span>' +
+										'<div class="cell-muted" style="font-size:12px">' + ui.esc(row.owner === '—' ? 'no owner' : row.owner) + ' · changed ' + ui.esc(row.changed) + '</div>';
+								}
+							},
+							{ label: 'State', align: 'right', render: function (row) { return ui.badge(row.state, row.tone); } }
 						],
-						rows: [
-							{ order: 18, page: 'Points and Properties', state: 'Reviewed', tone: 'ok', owner: 'Mei', changed: '2 weeks ago' },
-							{ order: 19, page: 'Reading a Point', state: 'Reviewed', tone: 'ok', owner: 'Mei', changed: '2 weeks ago' },
-							{ order: 20, page: 'Data Points API', state: 'Conflict', tone: 'err', owner: 'Derek', changed: '3 hours ago' },
-							{ order: 20, page: 'Data Points API (duplicate)', state: 'Duplicate', tone: 'err', owner: '—', changed: '14 months ago' },
-							{ order: 21, page: 'Writing a Point', state: 'Stale', tone: 'warn', owner: 'Derek', changed: '9 months ago' },
-							{ order: 22, page: 'Point Types', state: 'Draft', tone: 'info', owner: 'Ana', changed: 'yesterday' }
-						]
+						rows: pages
 					})
 				}) +
 				'</div>' +
-				'<div class="stack">' +
+				'</div>' +
+				'<div class="mt-24 grid grid--2">' +
 				ui.card({
 					title: 'Gaps',
 					icon: 'alert',
+					cls: 'card--plain',
+					actions: ui.button('Draft All', { small: true, kind: 'primary', icon: 'sparkle', prompt: 'Draft pages for the knowledge gaps' }),
 					desc: 'Topics the sources mention that no page covers.',
 					body: ui.list([
-						{ title: 'Point scaling (14 mentions)', meta: ui.badge('Open', 'warn') },
-						{ title: 'Retry and back-off rules (9)', meta: ui.badge('Open', 'warn') },
-						{ title: 'Alarm priority mapping (6)', meta: ui.badge('Open', 'warn') }
-					]),
-					foot: ui.button('Draft All', { small: true, kind: 'primary', icon: 'sparkle', prompt: 'Draft pages for the knowledge gaps' })
+						{ title: 'Point scaling', sub: '<span class="cell-muted">14 mentions in t3000webview</span>', meta: ui.badge('Open', 'warn') },
+						{ title: 'Retry and back-off rules', sub: '<span class="cell-muted">9 mentions in bacnet-stack</span>', meta: ui.badge('Open', 'warn') },
+						{ title: 'Alarm priority mapping', sub: '<span class="cell-muted">6 mentions in the BACnet guide</span>', meta: ui.badge('Open', 'warn') }
+					])
 				}) +
 				ui.card({
 					title: 'Checks',
-					body:
-						'<div class="list">' +
-						'<div class="list__item"><div class="list__main"><div class="list__title">Duplicate order</div><div class="list__sub">order 20 in api-reference</div></div><div class="list__meta">' + ui.badge('2', 'err') + '</div></div>' +
-						'<div class="list__item"><div class="list__main"><div class="list__title">Broken links</div><div class="list__sub">targets that do not exist</div></div><div class="list__meta">' + ui.badge('12', 'warn') + '</div></div>' +
-						'<div class="list__item"><div class="list__main"><div class="list__title">Unowned pages</div><div class="list__sub">no owner in the registry</div></div><div class="list__meta">' + ui.badge('4', 'warn') + '</div></div>' +
-						'<div class="list__item"><div class="list__main"><div class="list__title">Never reviewed</div><div class="list__sub">readable, but nobody has read it</div></div><div class="list__meta">' + ui.badge('341', 'neutral') + '</div></div>' +
-						'</div>',
-					foot: '<span>Problems panel holds the same findings</span>'
+					icon: 'check',
+					cls: 'card--plain',
+					actions: ui.button('Open Problems', { small: true, kind: 'ghost', action: 'panel-problems' }),
+					desc: 'What the structural checks found in this project. The Problems panel holds the same findings.',
+					body: ui.list([
+						{ title: 'Duplicate order', sub: '<span class="cell-muted">order 20 is claimed by two pages</span>', meta: ui.badge('1', 'err') },
+						{ title: 'Broken links', sub: '<span class="cell-muted">targets that do not exist</span>', meta: ui.badge('12', 'warn') },
+						{ title: 'Unowned pages', sub: '<span class="cell-muted">no owner in the registry</span>', meta: ui.badge('4', 'warn') },
+						{ title: 'Never reviewed', sub: '<span class="cell-muted">readable, but nobody has read it</span>', meta: ui.badge('341', 'neutral') }
+					])
 				}) +
-				'</div>' +
 				'</div>';
 			return ui.view(body);
 		}
@@ -335,13 +494,42 @@
 	M.views['docs/review'] = {
 		title: 'Review Center',
 		render: function () {
+			var reviews = data.reviews;
+			var drafts = reviews.filter(function (review) { return review.kind === 'Draft'; }).length;
+			var selected = reviews[0];
+
+			/* The queue is the page, so it takes the width. The row whose diff is open is marked on
+			   itself instead of being pulled out into a second column. */
+			var reviewRow = function (review) {
+				var isDraft = review.kind === 'Draft';
+				var isOpen = review === selected;
+				var facts = [review.area, 'by ' + review.author, review.changes, 'waiting ' + review.age];
+				return (
+					'<div class="record-row' + (isOpen ? ' record-row--current' : '') + '">' +
+					ui.toneMark(isDraft ? 'sparkle' : review.kind === 'New page' ? 'plus' : 'document', isDraft ? 'accent' : review.kind === 'New page' ? 'ok' : '') +
+					'<div class="record-row__main">' +
+					'<div class="record-row__title">' +
+					'<span class="record-row__name">' + ui.esc(review.page) + '</span>' +
+					(isOpen ? '<span class="cell-muted" style="font-size:12px">open below</span>' : '') +
+					'</div>' +
+					'<div class="record-row__meta">' +
+					facts.map(function (fact, index) {
+						return '<span>' + ui.esc(fact) + (index < facts.length - 1 ? ' ·' : '') + '</span>';
+					}).join(' ') +
+					'</div>' +
+					'</div>' +
+					'<div class="record-row__state">' + ui.badge(review.kind, review.tone) + '</div>' +
+					ui.button('Review', { small: true, kind: isOpen ? 'primary' : 'ghost', action: 'open-diff' }) +
+					'</div>'
+				);
+			};
+
 			var body =
 				ui.pageHead({
 					title: 'Review Center',
 					icon: 'check',
 					desc: 'Drafts, edits and AI suggestions in one queue. Accepting a change is a diff; rejecting it is undo — nothing is written until you say so.',
-					actions:
-						ui.button('Filters', { icon: 'filter', action: 'filters' })
+					actions: ui.button('Filters', { icon: 'filter', action: 'filters' })
 				}) +
 				ui.hero({
 					tone: 'warn',
@@ -353,31 +541,21 @@
 						ui.button('Review next draft', { icon: 'check', action: 'review-next' })
 				}) +
 				'<div class="mt-24">' +
-				ui.tiles([
-					{ value: '17', label: 'Waiting' },
-					{ value: '6', label: 'AI drafts' },
-					{ value: '3', label: 'Outdated pages' },
-					{ value: '2', label: 'Broken links' },
-					{ value: '14 months', label: 'Oldest unreviewed' }
-				]) +
-				'</div>' +
-				'<div class="mt-24 split">' +
-				'<div class="stack">' +
-				ui.table({
-					columns: [
-						{ label: 'Page', render: function (row) { return '<span class="cell-strong">' + ui.esc(row.page) + '</span><div class="cell-muted" style="font-size:11px">' + ui.esc(row.area) + '</div>'; } },
-						{ label: 'Kind', render: function (row) { return ui.badge(row.kind, row.tone); } },
-						{ label: 'By', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.author) + '</span>'; } },
-						{ label: 'Lines', render: function (row) { return '<span class="cell-mono">' + ui.esc(row.changes) + '</span>'; } },
-						{ label: 'Reviewer', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.reviewer) + '</span>'; } },
-						{ label: 'Age', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.age) + '</span>'; } },
-						{ label: '', align: 'right', render: function () { return ui.button('Review', { small: true, action: 'open-diff' }); } }
-					],
-					rows: data.reviews
-				}) +
 				ui.card({
-					title: 'Selected Diff · Data Points API',
+					title: 'Queue',
+					icon: 'check',
+					cls: 'card--plain',
+					desc: reviews.length + ' items waiting, ' + drafts + ' of them AI drafts. Newest first; the one whose diff is open below carries its age on the line.',
+					body: '<div class="record-list">' + reviews.map(reviewRow).join('') + '</div>'
+				}) +
+				'</div>' +
+				'<div class="mt-24">' +
+				ui.card({
+					title: 'Selected diff · Data Points API',
+					icon: 'document',
+					cls: 'card--plain',
 					actions: ui.badge('AI draft', 'info') + ui.badge('+42 −8', 'neutral'),
+					desc: 'Accepting writes the page; rejecting leaves it exactly as it was. Either way it is one undo step.',
 					body:
 						'<div class="diff">' +
 						'<div class="diff__line diff__line--hunk"><span class="diff__sign"></span>@@ -18,6 +18,9 @@</div>' +
@@ -394,30 +572,33 @@
 						'<span>written on accept · undoable after</span>'
 				}) +
 				'</div>' +
-				'<div class="stack">' +
+				'<div class="mt-24 grid grid--2">' +
 				ui.card({
 					title: 'AI Suggestions',
 					icon: 'sparkle',
+					cls: 'card--plain',
+					actions: ui.button('Review All', { small: true, kind: 'ghost', action: 'review-all' }),
 					desc: 'The model read the page, its area and the source it came from. Each suggestion cites what it used.',
 					body: ui.list([
 						{ title: 'Point scaling changed in 2.14', sub: '<span class="cell-muted">api-reference › data-points</span>', meta: ui.badge('Draft', 'info') },
 						{ title: 'Firmware screenshot is 5 versions old', sub: '<span class="cell-muted">hardware › t3-8r</span>', meta: ui.badge('Draft', 'info') },
 						{ title: 'Trend retention table is incomplete', sub: '<span class="cell-muted">trends › retention</span>', meta: ui.badge('Draft', 'info') }
-					]),
-					foot: ui.button('Review All', { small: true, action: 'review-all' })
+					])
 				}) +
 				ui.card({
 					title: 'Checks Before Publish',
+					icon: 'check',
+					cls: 'card--plain',
+					actions: ui.button('Open Problems', { small: true, kind: 'ghost', action: 'panel-problems' }),
+					desc: 'Two errors must be fixed before 13.0 can publish; the warnings can ship.',
 					body:
 						'<div class="progress-list">' +
 						'<div><div class="progress-list__label"><b>Structure</b><span>10 of 12</span></div>' + ui.bar(83, 'warn') + '</div>' +
 						'<div><div class="progress-list__label"><b>Links</b><span>1,254 of 1,266</span></div>' + ui.bar(99, 'ok') + '</div>' +
 						'<div><div class="progress-list__label"><b>Ownership</b><span>1,250 of 1,254</span></div>' + ui.bar(99, 'ok') + '</div>' +
 						'<div><div class="progress-list__label"><b>Help ids</b><span>1,198 of 1,254</span></div>' + ui.bar(95, undefined) + '</div>' +
-						'</div>',
-					foot: '<span>2 errors must be fixed before 13.0 can publish</span>'
+						'</div>'
 				}) +
-				'</div>' +
 				'</div>';
 			return ui.view(body);
 		}
@@ -426,53 +607,76 @@
 	M.views['docs/builds'] = {
 		title: 'Build Center',
 		render: function () {
+			var builds = data.builds;
+			var done = builds.filter(function (build) { return build.state === 'Succeeded'; }).length;
+			var queued = builds.filter(function (build) { return build.state === 'Queued'; }).length;
+
 			var body =
 				ui.pageHead({
 					eyebrow: 'T3000 Documentation · 13.0',
 					title: 'Build Center',
 					icon: 'play',
 					desc: 'One build produces every artifact of a release. Each target can be run alone; a publish needs all of them.',
-					actions:
-						ui.button('Build All', { kind: 'primary', icon: 'play', action: 'build-all' })
+					actions: ui.button('Build All', { kind: 'primary', icon: 'play', action: 'build-all' })
 				}) +
 				ui.hero({
 					eyebrow: 'Build 13.0.482',
 					title: 'Offline help is still compiling — 612 of 1,254 topics',
-					desc: 'The website, the PDF and the search index are done. A publish waits for every target, so the release holds here.',
+					desc: 'The website, the PDF and the search index are done: ' + done + ' of ' + builds.length + ' targets, ' + queued + ' still queued. A publish waits for every target, so the release holds here.',
 					actions:
 						ui.button('Open the log', { kind: 'primary', icon: 'output', action: 'panel-output' }) +
 						ui.button('Cancel the build', { icon: 'close', action: 'build-cancel' })
 				}) +
 				'<div class="mt-24">' +
-				ui.table({
-					columns: [
-						{ label: 'Target', render: function (row) { return '<span class="cell-strong">' + ui.esc(row.target) + '</span><div class="cell-muted" style="font-size:11px">' + ui.esc(row.detail) + '</div>'; } },
-						{ label: 'State', render: function (row) { return ui.badge(row.state, row.tone); } },
-						{ label: 'Progress', render: function (row) { return '<div style="min-width:160px">' + ui.bar(row.pct, row.tone === 'ok' ? 'ok' : row.tone === 'info' ? undefined : 'warn') + '</div>'; } },
-						{ label: 'Time', align: 'right', render: function (row) { return '<span class="cell-mono">' + ui.esc(row.time) + '</span>'; } },
-						{
-							label: '', align: 'right', render: function (row) {
-								return row.state === 'Succeeded'
-									? ui.button('Open', { small: true, kind: 'ghost', action: 'open-artifact' })
-									: ui.button('Build', { small: true, action: 'build-target' });
+				ui.card({
+					title: 'Targets',
+					icon: 'package',
+					cls: 'card--plain',
+					desc: 'Everything is written into .temco/build. Running one target does not touch the others.',
+					body: ui.table({
+						plain: true,
+						compact: true,
+						columns: [
+							{
+								label: 'Target', render: function (row) {
+									return '<span class="cell-strong">' + ui.esc(row.target) + '</span>' +
+										'<div class="cell-muted" style="font-size:12px">' + ui.esc(row.detail) + '</div>';
+								}
+							},
+							{ label: 'State', render: function (row) { return ui.badge(row.state, row.tone); } },
+							{ label: 'Progress', render: function (row) { return '<div style="min-width:120px">' + ui.bar(row.pct, row.tone === 'ok' ? 'ok' : row.tone === 'info' ? undefined : 'warn') + '</div>'; } },
+							{ label: 'Time', align: 'right', render: function (row) { return '<span class="cell-mono">' + ui.esc(row.time) + '</span>'; } },
+							{
+								label: '', align: 'right', render: function (row) {
+									return row.state === 'Succeeded'
+										? ui.button('Open', { small: true, kind: 'ghost', action: 'open-artifact' })
+										: ui.button('Build', { small: true, action: 'build-target' });
+								}
 							}
-						}
-					],
-					rows: data.builds
+						],
+						rows: builds
+					})
 				}) +
 				'</div>' +
-				'<div class="mt-24 split">' +
+				'<div class="mt-24">' +
 				ui.card({
 					title: 'Build Log',
+					icon: 'output',
+					cls: 'card--plain',
 					actions: ui.button('Copy', { small: true, kind: 'ghost', action: 'copy-log' }),
-					flush: true,
-					body: '<pre class="code" style="border:0;border-radius:0;max-height:280px">' + ui.esc(data.buildLog.join('\n')) + '</pre>'
+					desc: 'Each line is stamped with the time it happened; the help compiler is the last thing in it.',
+					body: '<pre class="code" style="border:0;border-radius:0;max-height:300px">' + ui.esc(data.buildLog.join('\n')) + '</pre>'
 				}) +
+				'</div>' +
+				'<div class="mt-24">' +
 				ui.card({
 					title: 'Artifacts',
+					icon: 'download',
+					cls: 'card--plain',
+					desc: 'What this build has written so far. A target that is still running has a partial file.',
 					body: ui.list([
 						{ icon: 'globe', title: 't3000-13.0-site.zip', sub: '<span class="cell-muted">1,254 pages · 18.2 MB</span>', meta: ui.badge('Ready', 'ok') },
-						{ icon: 'document', title: 't3000-13.0.pdf', sub: '<span class="cell-muted">894 pages · 6.2 MB</span>', meta: ui.badge('Ready', 'ok') },
+						{ icon: 'document', title: 't3000-13.0.pdf', sub: '<span class="cell-muted">1,254 pages · 6.2 MB</span>', meta: ui.badge('Ready', 'ok') },
 						{ icon: 'package', title: 't3000-13.0.chm', sub: '<span class="cell-muted">612 of 1,254 topics</span>', meta: ui.badge('Running', 'info') },
 						{ icon: 'search', title: 'search-index.json', sub: '<span class="cell-muted">12,884 terms</span>', meta: ui.badge('Queued', 'neutral') }
 					]),
@@ -486,50 +690,73 @@
 	M.views['docs/releases'] = {
 		title: 'Releases',
 		render: function () {
+			var releases = data.releases;
+			var current = releases[0];
+			var published = releases.filter(function (release) { return release.state === 'Published'; }).length;
+
+			var releaseRow = function (release) {
+				var isCurrent = release === current;
+				var facts = [release.date, release.pages.toLocaleString('en-US') + ' pages', release.artifacts];
+				return (
+					'<div class="record-row' + (isCurrent ? ' record-row--current' : '') + '">' +
+					ui.toneMark('upload', isCurrent ? 'accent' : '') +
+					'<div class="record-row__main">' +
+					'<div class="record-row__title">' +
+					'<span class="record-row__name cell-mono">' + ui.esc(release.version) + '</span>' +
+					(isCurrent ? '<span class="cell-muted" style="font-size:12px">in flight</span>' : '') +
+					'</div>' +
+					'<div class="record-row__meta">' +
+					facts.map(function (fact, index) {
+						return '<span>' + ui.esc(fact) + (index < facts.length - 1 ? ' ·' : '') + '</span>';
+					}).join(' ') +
+					'</div>' +
+					'</div>' +
+					'<div class="record-row__state">' + ui.badge(release.state, release.tone) + '</div>' +
+					'<span class="row" style="gap:4px">' +
+					ui.button('View', { small: true, kind: 'ghost', open: 'learn/home' }) +
+					(release.state === 'Published' ? ui.button('Pin', { small: true, kind: 'ghost', action: 'pin-release' }) : '') +
+					'</span>' +
+					'</div>'
+				);
+			};
+
 			var body =
 				ui.pageHead({
 					title: 'Releases',
 					icon: 'upload',
 					desc: 'A release pins a version of the documentation to a version of the product. Published versions stay reachable forever.',
 					actions:
-						ui.button('Publish 13.0', { kind: 'primary', icon: 'upload', action: 'publish-release' }) +
-						ui.button('Changelog', { icon: 'list', action: 'open-changelog' })
+						ui.button('Publish 13.0', { kind: 'primary', icon: 'upload', action: 'publish-release' })
 				}) +
-				ui.table({
-					columns: [
-						{ label: 'Version', render: function (row) { return '<span class="cell-strong cell-mono">' + ui.esc(row.version) + '</span>'; } },
-						{ label: 'Released', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.date) + '</span>'; } },
-						{ label: 'Pages', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.pages.toLocaleString() + '</span>'; } },
-						{ label: 'Artifacts', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.artifacts) + '</span>'; } },
-						{ label: 'State', render: function (row) { return ui.badge(row.state, row.tone); } },
-						{
-							label: '', align: 'right', render: function (row) {
-								return ui.button('View', { small: true, kind: 'ghost', open: 'learn/home' }) +
-									(row.state === 'Published' ? ui.button('Pin', { small: true, kind: 'ghost', action: 'pin-release' }) : '');
-							}
-						}
-					],
-					rows: data.releases
+				ui.hero({
+					tone: 'warn',
+					eyebrow: 'Version ' + current.version,
+					title: '13.0 is not published yet',
+					desc: 'Two pages claim the same order and the offline help is at 612 of 1,254 topics. The site, the PDF and the search index are waiting in the build folder, one action from Temco Learn.',
+					actions:
+						ui.button('Open Review Center', { kind: 'primary', icon: 'check', open: 'docs/review' }) +
+						ui.button('See the Build', { icon: 'play', open: 'docs/builds' })
 				}) +
-				'<div class="mt-24 split">' +
+				'<div class="mt-24">' +
 				ui.card({
-					title: 'Publish 13.0',
-					desc: 'Publishing copies the built artifacts to Temco Learn and freezes this version of the pages.',
-					body:
-						'<div class="progress-list">' +
-						'<div><div class="progress-list__label"><b>Website</b><span>ready</span></div>' + ui.bar(100, 'ok') + '</div>' +
-						'<div><div class="progress-list__label"><b>PDF</b><span>ready</span></div>' + ui.bar(100, 'ok') + '</div>' +
-						'<div><div class="progress-list__label"><b>Offline help</b><span>612 of 1,254</span></div>' + ui.bar(62, 'warn') + '</div>' +
-						'<div><div class="progress-list__label"><b>Checks</b><span>2 errors</span></div>' + ui.bar(83, 'err') + '</div>' +
-						'</div>',
-					foot: ui.button('Open Review Center', { small: true, kind: 'primary', open: 'docs/review' }) + '<span>fixes the two errors blocking the publish</span>'
+					title: 'Versions',
+					icon: 'upload',
+					cls: 'card--plain',
+					actions: ui.button('Changelog', { small: true, kind: 'ghost', icon: 'list', action: 'open-changelog' }),
+					desc: 'Newest first. ' + published + ' published, one in flight; a published version is never rewritten.',
+					body: '<div class="record-list">' + releases.map(releaseRow).join('') + '</div>'
 				}) +
+				'</div>' +
+				'<div class="mt-24">' +
 				ui.card({
 					title: '13.0 Changelog',
+					icon: 'list',
+					cls: 'card--plain',
+					desc: 'What changed between 12.9 and 13.0, counted from the pages themselves.',
 					body: ui.list([
-						{ title: '48 new pages', sub: '<span class="cell-muted">API Reference · Protocol</span>' },
-						{ title: '112 pages updated', sub: '<span class="cell-muted">firmware 2.14 changes</span>' },
-						{ title: '6 pages removed', sub: '<span class="cell-muted">superseded by the new object model</span>' },
+						{ title: '48 new pages', sub: '<span class="cell-muted">API Reference · Protocol</span>', meta: ui.badge('New', 'ok') },
+						{ title: '112 pages updated', sub: '<span class="cell-muted">firmware 2.14 changes</span>', meta: ui.badge('Edit', 'neutral') },
+						{ title: '6 pages removed', sub: '<span class="cell-muted">superseded by the new object model</span>', meta: ui.badge('Removed', 'neutral') },
 						{ title: '12 broken links fixed', sub: '<span class="cell-muted">3 still open</span>', meta: ui.badge('3 open', 'warn') }
 					])
 				}) +

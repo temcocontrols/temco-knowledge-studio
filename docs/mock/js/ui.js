@@ -20,7 +20,9 @@
 	};
 
 	ui.icon = function (name, cls) {
-		return '<svg class="icon ' + (cls || '') + '" aria-hidden="true"><use href="#i-' + name + '"></use></svg>';
+		/* The sprite draws in a 24-unit box; without a viewBox the browser uses CSS pixels instead
+		   and clips the glyph to the top-left corner of whatever size the class asks for. */
+		return '<svg viewBox="0 0 24 24" class="icon ' + (cls || '') + '" aria-hidden="true"><use href="#i-' + name + '"></use></svg>';
 	};
 
 	ui.badge = function (text, kind) {
@@ -44,6 +46,43 @@
 
 	ui.dot = function (kind) {
 		return '<span class="dot' + (kind ? ' dot--' + kind : '') + '"></span>';
+	};
+
+	/**
+	 * A state you can see before you read it: one icon inside a tinted circle. The same mark is used
+	 * by the activity feed and by the review queue, so a colour means one thing everywhere.
+	 */
+	ui.toneMark = function (icon, tone) {
+		return '<span class="tone-mark' + (tone ? ' tone-mark--' + tone : '') + '">' + ui.icon(icon, 'icon--sm') + '</span>';
+	};
+
+	/**
+	 * The rule above a group, on its own: a label, a hairline that fills the row, how many things
+	 * the group holds, what you can do to the whole of it, and one sentence saying what it is.
+	 *
+	 * Sections that do not hold a record list — settings rows, a form, a code block — use this and
+	 * put their own content under it; `ui.group` is this rule plus a record list.
+	 *
+	 * `plain` keeps the label in its own capitalisation instead of the upper-case category style —
+	 * use it when the label is a name (a product and its version) rather than a category.
+	 */
+	ui.rule = function (options) {
+		return (
+			'<div class="group-head">' +
+			'<span class="group-head__label' + (options.plain ? ' group-head__label--plain' : '') + '">' + ui.esc(options.label) + '</span>' +
+			'<span class="group-head__rule"></span>' +
+			(options.count ? '<span class="group-head__count">' + ui.esc(options.count) + '</span>' : '') +
+			(options.actions ? '<span class="group-head__actions">' + options.actions + '</span>' : '') +
+			'</div>' +
+			(options.note ? '<p class="group-note">' + options.note + '</p>' : '')
+		);
+	};
+
+	/**
+	 * A group inside a page: a rule, and the rows under it.
+	 */
+	ui.group = function (options) {
+		return ui.rule(options) + '<div class="record-list">' + (options.body || '') + '</div>';
 	};
 
 	ui.pageHead = function (options) {
@@ -167,7 +206,7 @@
 		}
 
 		return (
-			'<div class="table-wrap">' +
+			'<div class="table-wrap' + (options.plain ? ' table-wrap--plain' : '') + '">' +
 			'<table class="table' + (options.compact ? ' table--compact' : '') + '">' +
 			'<thead>' + head + '</thead>' +
 			'<tbody>' + body + '</tbody>' +
@@ -262,14 +301,39 @@
 		);
 	};
 
-	ui.formRow = function (label, desc, control) {
+	/**
+	 * One setting: what it is, what it does, and the control that holds its value. The description
+	 * takes the wide column and the control sits at the right, so a two-line explanation never
+	 * squeezes the control into a narrow column.
+	 *
+	 * `tag` names something the reader needs before changing the value — that it can be overridden
+	 * per workspace, or that it waits for a restart.
+	 */
+	ui.formRow = function (label, desc, control, options) {
+		options = options || {};
 		return (
 			'<div class="form-row">' +
-			'<div>' +
-			'<div class="form-row__label">' + ui.esc(label) + '</div>' +
+			'<div class="form-row__main">' +
+			'<div class="form-row__label">' + ui.esc(label) +
+			(options.tag ? '<span class="tag">' + ui.esc(options.tag) + '</span>' : '') +
+			'</div>' +
 			(desc ? '<div class="form-row__desc">' + ui.esc(desc) + '</div>' : '') +
 			'</div>' +
-			'<div>' + control + '</div>' +
+			'<div class="form-row__control">' + control + '</div>' +
+			'</div>'
+		);
+	};
+
+	/**
+	 * A choice shown as the value set rather than as a menu that hides it. `name` is what the
+	 * platform calls the setting, and is what the click reports back.
+	 */
+	ui.segmented = function (name, choices, value) {
+		return (
+			'<div class="segmented" data-setting="' + ui.esc(name) + '">' +
+			choices.map(function (choice) {
+				return '<button type="button" aria-pressed="' + (choice === value ? 'true' : 'false') + '">' + ui.esc(choice) + '</button>';
+			}).join('') +
 			'</div>'
 		);
 	};

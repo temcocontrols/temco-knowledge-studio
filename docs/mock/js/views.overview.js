@@ -94,18 +94,18 @@
 				{
 					label: 'Yesterday',
 					items: [
-						{ icon: 'upload', tone: 'ok', title: 'Release 12.9 archived', sub: 't3000 · kept for pinned links', when: '17:20' },
-						{ icon: 'package', tone: 'info', title: 'Firmware 2.14.3 staged for 6 devices', sub: 'Fleet', when: '10:15' },
-						{ icon: 'download', tone: 'info', title: 'Firmware 2.15.0-rc2 downloaded', sub: 'Preview channel · 3.9 MB', when: '09:04' },
-						{ icon: 'link', tone: 'warn', title: 'SharePoint source needs re-authorisation', sub: 'Field Notes · expired 8 days ago', when: '08:32' }
+						{ module: 'Documentation', icon: 'upload', tone: 'ok', title: 'Release 12.9 archived', sub: 't3000 · kept for pinned links', when: '17:20' },
+						{ module: 'Devices', icon: 'package', tone: 'info', title: 'Firmware 2.14.3 staged for 6 devices', sub: 'Fleet', when: '10:15' },
+						{ module: 'Devices', icon: 'download', tone: 'info', title: 'Firmware 2.15.0-rc2 downloaded', sub: 'Preview channel · 3.9 MB', when: '09:04' },
+						{ module: 'Documentation', icon: 'link', tone: 'warn', title: 'SharePoint source needs re-authorisation', sub: 'Field Notes · expired 8 days ago', when: '08:32' }
 					]
 				},
 				{
 					label: 'This week',
 					items: [
-						{ icon: 'repo', tone: 'info', title: 'Source bacnet-stack read', sub: '52 pages found', when: 'Tue' },
-						{ icon: 'check', tone: 'ok', title: '48 pages reviewed by Mei', sub: 'api-reference', when: 'Mon' },
-						{ icon: 'package', tone: 'info', title: 'Project T3-8R Hardware Guide created', sub: 'from the Hardware template', when: 'Sun' }
+						{ module: 'Documentation', icon: 'repo', tone: 'info', title: 'Source bacnet-stack read', sub: '52 pages found', when: 'Tue' },
+						{ module: 'Documentation', icon: 'check', tone: 'ok', title: '48 pages reviewed by Mei', sub: 'api-reference', when: 'Mon' },
+						{ module: 'Documentation', icon: 'package', tone: 'info', title: 'Project T3-8R Hardware Guide created', sub: 'from the Hardware template', when: 'Sun' }
 					]
 				}
 			];
@@ -123,22 +123,24 @@
 						'<button type="button" aria-pressed="false" data-action="filter-ai">AI</button>' +
 						'</div>'
 				}) +
+				'<div class="feed-wrap">' +
 				groups.map(function (group) {
 					return (
-						'<div class="feed__group">' +
-						'<span class="feed__label">' + ui.esc(group.label) + '</span>' +
-						'<span class="feed__rule"></span>' +
-						'<span class="feed__count">' + group.items.length + (group.items.length === 1 ? ' event' : ' events') + '</span>' +
+						'<div class="group-head">' +
+						'<span class="group-head__label">' + ui.esc(group.label) + '</span>' +
+						'<span class="group-head__rule"></span>' +
+						'<span class="group-head__count">' + group.items.length + (group.items.length === 1 ? ' event' : ' events') + '</span>' +
 						'</div>' +
 						'<ol class="feed">' +
 						group.items.map(function (item) {
 							return (
-								'<li class="feed__item feed__item--' + ui.esc(item.tone || 'neutral') + '">' +
-								'<span class="feed__mark">' + ui.icon(item.icon, 'icon--sm') + '</span>' +
+								'<li class="feed__item">' +
+								ui.toneMark(item.icon, item.tone) +
 								'<div class="feed__main">' +
 								'<div class="feed__title">' + ui.esc(item.title) + '</div>' +
 								'<div class="feed__meta">' + ui.esc(item.sub) + '</div>' +
 								'</div>' +
+								'<div class="feed__module">' + ui.esc(item.module || '') + '</div>' +
 								'<div class="feed__side">' +
 								ui.status(item.tone) +
 								'<time class="feed__when">' + ui.esc(item.when) + '</time>' +
@@ -148,51 +150,97 @@
 						}).join('') +
 						'</ol>'
 					);
-				}).join('');
+				}).join('') +
+				'</div>';
 
-			return ui.view(body, { narrow: true });
+			return ui.view(body);
 		}
 	};
 
 	M.views['dashboard/health'] = {
 		title: 'Coverage & Health',
 		render: function () {
-			var areas = data.knowledge;
+			var areas = data.knowledge.slice().sort(function (a, b) {
+				return a.reviewed / a.pages - b.reviewed / b.pages;
+			});
+			var total = areas.reduce(function (sum, area) {
+				return { pages: sum.pages + area.pages, reviewed: sum.reviewed + area.reviewed, stale: sum.stale + area.stale };
+			}, { pages: 0, reviewed: 0, stale: 0 });
+			var pct = function (reviewed, pages) { return Math.round((reviewed / pages) * 100); };
+			var failing = data.healthChecks.filter(function (check) { return check.found > 0; }).length;
+
+			var coverageRow = function (name, pages, reviewed, stale, extra) {
+				return (
+					'<div class="coverage__row' + (extra || '') + '">' +
+					'<div class="coverage__name">' +
+					'<span class="coverage__area">' + ui.esc(name) + '</span>' +
+					'<span class="coverage__pages">' + pages.toLocaleString('en-US') + ' pages</span>' +
+					'</div>' +
+					ui.bar(pct(reviewed, pages)) +
+					'<span class="coverage__value">' + reviewed.toLocaleString('en-US') + ' of ' + pages.toLocaleString('en-US') + '</span>' +
+					'<span class="coverage__pct">' + pct(reviewed, pages) + '%</span>' +
+					'<span class="coverage__stale">' + (stale === 0 ? '<span class="cell-muted">—</span>' : ui.badge(stale + ' stale', 'warn')) + '</span>' +
+					'</div>'
+				);
+			};
+
 			var body =
 				ui.pageHead({
 					title: 'Coverage & Health',
 					icon: 'check',
 					desc: 'Where the documentation stands against the sources it was read from. A page is "stale" when its source changed after the page did.',
-					actions: ui.button('Rebuild Report', { icon: 'refresh', action: 'rebuild-report' })
+					actions: ui.button('Export Report', { icon: 'download', action: 'export-report' })
 				}) +
-				ui.tiles([
-					{ value: '94%', label: 'Areas covered' },
-					{ value: '1,254', label: 'Pages' },
-					{ value: '73%', label: 'Reviewed' },
-					{ value: '89', label: 'Stale pages' },
-					{ value: '12', label: 'Broken links' },
-					{ value: '4', label: 'Unowned pages' }
-				]) +
+				ui.hero({
+					tone: 'warn',
+					eyebrow: 'Scanned 14 minutes ago · ' + data.sources.length + ' sources',
+					title: total.stale + ' pages describe a source that has already moved on',
+					desc: 'API Reference carries 45 of them, and the last read of <b>t3000webview</b> changed 12 signatures that no page mentions. Reviewed coverage everywhere else is between 73% and 100%.',
+					actions:
+						ui.button('Review the Stale Pages', { kind: 'primary', icon: 'check', open: 'docs/review' }) +
+						ui.button('Rebuild Report', { icon: 'refresh', action: 'rebuild-report' })
+				}) +
 				'<div class="mt-24">' +
-				ui.table({
-					columns: [
-						{ label: 'Area', render: function (row) { return '<span class="cell-strong">' + ui.esc(row.area) + '</span>'; } },
-						{ label: 'Pages', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.pages + '</span>'; } },
-						{ label: 'Reviewed', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.reviewed + '</span>'; } },
-						{ label: 'Stale', align: 'right', render: function (row) { return '<span class="cell-mono">' + row.stale + '</span>'; } },
-						{
-							label: 'Coverage', render: function (row) {
-								var pct = Math.round((row.reviewed / row.pages) * 100);
-								return ui.barRow(pct, pct + '%');
-							}
-						}
-					],
-					rows: areas
+				ui.kpis([
+					{ label: 'Pages', value: total.pages.toLocaleString('en-US'), meta: 'across ' + areas.length + ' areas' },
+					{ label: 'Reviewed', value: pct(total.reviewed, total.pages) + '%', meta: total.reviewed.toLocaleString('en-US') + ' of ' + total.pages.toLocaleString('en-US') },
+					{ label: 'Stale', value: String(total.stale), meta: 'source moved after the page' },
+					{ label: 'Health checks', value: (data.healthChecks.length - failing) + ' of ' + data.healthChecks.length, meta: 'passing' }
+				]) +
+				'</div>' +
+				'<div class="mt-24">' +
+				ui.card({
+					title: 'Coverage by Area',
+					cls: 'card--plain',
+					actions: ui.button('Open Knowledge', { small: true, kind: 'ghost', open: 'docs/knowledge' }),
+					desc: 'Worst first. Reviewed counts pages a person has signed off since the last source read; stale counts pages the source has since outrun.',
+					body:
+						'<div class="coverage">' +
+						areas.map(function (area) {
+							return coverageRow(area.area, area.pages, area.reviewed, area.stale);
+						}).join('') +
+						coverageRow('All areas', total.pages, total.reviewed, total.stale, ' coverage__row--total') +
+						'</div>'
 				}) +
 				'</div>' +
 				'<div class="mt-24">' +
-				ui.callout('<b>API Reference is the weak area.</b> 45 of 186 pages are older than the code they describe; the last source read changed 12 signatures that no page mentions.', { kind: 'warn' }) +
-				'</div>';
+				ui.card({
+					title: 'Health Checks',
+					cls: 'card--plain',
+					actions: ui.button('Run Checks', { small: true, kind: 'ghost', icon: 'refresh', action: 'run-checks' }),
+					desc: 'What the report looks at besides coverage. A check with a count is a queue you can open, not a number to glance at.',
+					body: ui.list(data.healthChecks.map(function (check) {
+						return {
+							icon: check.found === 0 ? 'check' : 'alert',
+							title: check.name,
+							sub: '<span class="cell-muted">' + ui.esc(check.detail) + '</span>',
+							meta: check.found === 0 ? ui.badge('Pass', 'ok') : ui.badge(check.found + ' found', 'warn'),
+							open: check.found === 0 ? undefined : check.view
+						};
+					}))
+				}) +
+				'</div>' +
+				'<div class="mt-16 cell-muted" style="font-size:12px">Every number here is derived from the source reads, not typed in. Rebuild the report after a source changes.</div>';
 
 			return ui.view(body);
 		}
@@ -201,28 +249,74 @@
 	M.views['dashboard/needs'] = {
 		title: 'Needs Review',
 		render: function () {
+			var groups = [
+				{ kind: 'err', label: 'Blocking the release' },
+				{ kind: 'warn', label: 'Needs a decision' },
+				{ kind: 'info', label: 'AI drafts waiting' }
+			];
+
+			var rowActions = function (row) {
+				if (row.kind === 'err') {
+					return ui.button('Fix with AI', { small: true, kind: 'primary', icon: 'sparkle', prompt: 'Fix this page for me' }) +
+						ui.button('Open', { small: true, kind: 'ghost', action: 'open-page' });
+				}
+				if (row.kind === 'info') {
+					/* Secondary on purpose: only the errors that stop a release get the loud button. */
+					return ui.button('Review Draft', { small: true, icon: 'check', action: 'open-page' });
+				}
+				return ui.button('Open', { small: true, icon: 'document', action: 'open-page' });
+			};
+
+			/* The mark says the kind before the reason does: broken, waiting on a person, or a draft. */
+			var marks = { err: ['alert', 'err'], warn: ['clock', 'warn'], info: ['sparkle', 'accent'] };
+			var rowMark = function (row) {
+				var mark = marks[row.kind] || ['info', 'info'];
+				return ui.toneMark(mark[0], mark[1]);
+			};
+
 			var body =
 				ui.pageHead({
 					title: 'Needs Review',
 					icon: 'alert',
-					desc: 'The queue, not the report: each row names the page and the reason it is here, and opens that page in the editor.',
-					actions: ui.button('Select All', { icon: 'check', action: 'select-all' })
+					desc: data.needs.length + ' pages are waiting on a person. Each group says what it wants from you — a fix, a decision, or a look at a draft — and nothing here is a report.',
+					actions:
+						ui.button('Review Next', { kind: 'primary', icon: 'check', action: 'open-page' }) +
+						ui.button('Ask AI to Draft', { icon: 'sparkle', prompt: 'Draft updates for every page in the review queue' })
 				}) +
-				ui.table({
-					columns: [
-						{ label: '', render: function (row) { return ui.dot(row.kind === 'err' ? 'err' : row.kind === 'warn' ? 'warn' : 'accent'); } },
-						{ label: 'Page', render: function (row) { return '<span class="cell-strong">' + ui.esc(row.title) + '</span><div class="cell-muted" style="font-size:12px">' + ui.esc(row.where) + '</div>'; } },
-						{ label: 'Why It Is Here', render: function (row) { return ui.esc(row.issue); } },
-						{ label: 'Last Change', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.age) + '</span>'; } },
-						{
-							label: '', align: 'right', render: function () {
-								return ui.button('Open', { small: true, icon: 'document', action: 'open-page' }) +
-									ui.button('Ask AI', { small: true, kind: 'ghost', icon: 'sparkle', prompt: 'Draft an update for this page' });
-							}
-						}
-					],
-					rows: data.needs
-				});
+				'<div class="mt-16">' +
+				ui.callout('<b>Two errors keep 13.0 from publishing.</b> Everything under them is ownership, an out-of-date screenshot or a draft — worth clearing, none of it blocking the build.', { kind: 'warn' }) +
+				'</div>' +
+				groups.map(function (group) {
+					var rows = data.needs.filter(function (row) { return row.kind === group.kind; });
+					if (!rows.length) {
+						return '';
+					}
+					return (
+						'<div class="group-head">' +
+						'<span class="group-head__label">' + ui.esc(group.label) + '</span>' +
+						'<span class="group-head__rule"></span>' +
+						'<span class="group-head__count">' + rows.length + (rows.length === 1 ? ' page' : ' pages') + '</span>' +
+						'</div>' +
+						ui.table({
+							plain: true,
+							compact: true,
+							columns: [
+								{ label: '', render: rowMark },
+								{
+									label: 'Page', render: function (row) {
+										return '<span class="cell-strong">' + ui.esc(row.title) + '</span>' +
+											'<div class="cell-muted" style="font-size:12px">' + ui.esc(row.where) + '</div>';
+									}
+								},
+								{ label: 'Why It Is Here', render: function (row) { return ui.esc(row.issue); } },
+								{ label: 'Waiting', align: 'right', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.age) + '</span>'; } },
+								{ label: '', align: 'right', render: rowActions }
+							],
+							rows: rows
+						})
+					);
+				}).join('');
+
 			return ui.view(body);
 		}
 	};
@@ -242,7 +336,7 @@
 					actions: workspace.active ? ui.badge('Current', 'accent') : '',
 					desc: ui.esc(workspace.desc),
 					body:
-						'<div class="row" style="gap:14px;margin-top:10px;color:var(--fg-muted);font-size:12px">' +
+						'<div class="facts">' +
 						'<span>' + workspace.projects + ' projects</span>' +
 						'<span>' + workspace.sources + ' sources</span>' +
 						'<span>' + workspace.devices + ' devices</span>' +
@@ -289,7 +383,7 @@
 				}) +
 				'<div class="mt-24">' +
 				ui.tiles([
-					{ value: '894', label: 'Pages' },
+					{ value: '1,254', label: 'Pages' },
 					{ value: '14', label: 'Sources' },
 					{ value: '34', label: 'Devices' },
 					{ value: '1', label: 'Open release' },

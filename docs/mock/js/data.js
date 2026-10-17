@@ -62,7 +62,7 @@
 					views: [
 						{ id: 'docs/projects', label: 'Projects', icon: 'folder', badge: 12 },
 						{ id: 'docs/repositories', label: 'Repositories', icon: 'repo', badge: 4 },
-						{ id: 'docs/sources', label: 'Sources', icon: 'link', badge: 38 },
+						{ id: 'docs/sources', label: 'Sources', icon: 'link', badge: 7 },
 						{ id: 'docs/knowledge', label: 'Knowledge', icon: 'book' }
 					]
 				},
@@ -254,11 +254,17 @@
 	/* The index the router and the side bar share. */
 	M.viewIndex = {};
 	M.modules.forEach(function (module) {
+		/* A module with one section has no level to distinguish, so nothing in the chrome should
+		   name that section: not the side bar, not the breadcrumb. */
+		var singleSection = module.sections.length === 1;
 		module.sections.forEach(function (section) {
 			section.views.forEach(function (view) {
 				view.moduleId = module.id;
 				view.moduleLabel = module.label;
+				view.moduleDefaultView = module.defaultView || section.views[0].id;
 				view.sectionLabel = section.label;
+				view.sectionFirstView = section.views[0].id;
+				view.singleSection = singleSection;
 				M.viewIndex[view.id] = view;
 			});
 		});
@@ -271,7 +277,10 @@
 		icon: 'repo',
 		moduleId: 'docs',
 		moduleLabel: 'Documentation',
-		sectionLabel: 'Projects'
+		moduleDefaultView: 'docs/projects',
+		sectionLabel: 'Projects',
+		sectionFirstView: 'docs/projects',
+		singleSection: false
 	};
 
 	/* ------------------------------------------------------------------ data */
@@ -294,7 +303,7 @@
 		],
 
 		pipeline: [
-			{ n: '01', name: 'Sources', meta: '38 read', view: 'docs/sources', current: false },
+			{ n: '01', name: 'Sources', meta: '7 read', view: 'docs/sources', current: false },
 			{ n: '02', name: 'Knowledge', meta: '1,254 pages', view: 'docs/knowledge', current: false },
 			{ n: '03', name: 'Review', meta: '17 waiting', view: 'docs/review', current: true },
 			{ n: '04', name: 'Build', meta: '4 targets', view: 'docs/builds', current: false },
@@ -303,44 +312,62 @@
 		],
 
 		activity: [
-			{ icon: 'check', tone: 'ok', title: 'Release 13.0 published to Temco Learn', sub: 't3000 · 1,254 pages', when: 'Just now' },
-			{ icon: 'sparkle', tone: 'accent', title: 'AI drafted 8 page updates', sub: 'Data Points API · waiting for review', when: '26 min ago' },
-			{ icon: 'repo', tone: 'info', title: 'Source t3000webview read', sub: '412 files · 3 new pages found', when: '1 hr ago' },
-			{ icon: 'alert', tone: 'warn', title: 'T3-22I stopped reporting', sub: 'Device health', when: '2 hr ago' }
+			{ module: 'Documentation', icon: 'check', tone: 'ok', title: 'Release 13.0 published to Temco Learn', sub: 't3000 · 1,254 pages', when: 'Just now' },
+			{ module: 'AI', icon: 'sparkle', tone: 'accent', title: 'AI drafted 8 page updates', sub: 'Data Points API · waiting for review', when: '26 min ago' },
+			{ module: 'Documentation', icon: 'repo', tone: 'info', title: 'Source t3000webview read', sub: '412 files · 3 new pages found', when: '1 hr ago' },
+			{ module: 'Devices', icon: 'alert', tone: 'warn', title: 'T3-22I stopped reporting', sub: 'Device health', when: '2 hr ago' }
 		],
 
+		/* The review queue, in the order it is worked: the two errors that stop a release first, then
+		   the pages a person has to make a decision about, then the AI drafts. 17 pages, which is
+		   the number the pipeline and the workspace tiles quote. */
 		needs: [
 			{ title: 'Data Points API', where: 't3000 › api-reference', issue: 'Order 20 is used by more than one page', kind: 'err', age: '14 months' },
-			{ title: 'Getting Started', where: 't3000 › overview', issue: 'No owner assigned', kind: 'warn', age: '6 months' },
-			{ title: 'T3-8R Wiring', where: 't3000 › hardware', issue: 'Screenshot from firmware 2.9, current is 2.14', kind: 'warn', age: '9 months' },
 			{ title: 'BACnet Object Model', where: 't3-bacnet › concepts', issue: 'Missing 3 object types', kind: 'err', age: '2 months' },
-			{ title: 'Trend Log Retention', where: 't3000 › trends', issue: 'Broken link to /help/retention', kind: 'err', age: '3 weeks' },
+			{ title: 'Time Schedules', where: 't3000 › schedules', issue: 'No owner assigned', kind: 'warn', age: '11 months' },
+			{ title: 'T3-8R Wiring', where: 't3000 › hardware', issue: 'Screenshot from firmware 2.9, current is 2.14', kind: 'warn', age: '9 months' },
+			{ title: 'Getting Started', where: 't3000 › overview', issue: 'No owner assigned', kind: 'warn', age: '6 months' },
+			{ title: 'User Accounts', where: 't3000 › security', issue: 'Missing the sections the template requires', kind: 'warn', age: '5 months' },
+			{ title: 'T3-8R Datasheet', where: 't3000 › hardware', issue: 'References the 2.9 pinout', kind: 'warn', age: '4 months' },
+			{ title: 'Screen Designer', where: 't3000 › ui', issue: 'Broken image on "Toolbar"', kind: 'warn', age: '1 month' },
+			{ title: 'Trend Log Retention', where: 't3000 › trends', issue: 'Broken link to /help/retention', kind: 'warn', age: '3 weeks' },
+			{ title: 'Network Settings', where: 't3000 › network', issue: 'Broken link to /help/ip-config', kind: 'warn', age: '2 weeks' },
 			{ title: 'Modbus Register Map', where: 't3000 › protocols', issue: 'Never reviewed', kind: 'warn', age: '—' },
-			{ title: 'Alarm Routing', where: 't3000 › alarms', issue: 'AI draft pending since yesterday', kind: 'info', age: '1 day' }
+			{ title: 'Point Types', where: 't3000 › protocols', issue: 'AI draft pending', kind: 'info', age: '3 days' },
+			{ title: 'Firmware Upgrade', where: 't3000 › firmware', issue: 'AI draft pending', kind: 'info', age: '2 days' },
+			{ title: 'Alarm Routing', where: 't3000 › alarms', issue: 'AI draft pending since yesterday', kind: 'info', age: '1 day' },
+			{ title: 'Alarm Limits', where: 't3000 › alarms', issue: 'AI draft waiting for review', kind: 'info', age: '1 day' },
+			{ title: 'BACnet Object Types', where: 't3-bacnet › concepts', issue: 'AI draft rewritten from v1.4', kind: 'info', age: '6 hours' },
+			{ title: 'Trend Logs', where: 't3000 › trends', issue: 'AI draft updated 4 tables', kind: 'info', age: '4 hours' }
 		],
 
 		docsProjects: [
-			{ name: 'T3000 Documentation', version: '13.0', pages: 894, sources: 14, owner: 'Derek', state: 'In review', tone: 'warn', updated: '12 minutes ago' },
-			{ name: 'T3-BACnet Reference', version: '4.2', pages: 186, sources: 6, owner: 'Mei', state: 'Published', tone: 'ok', updated: '2 days ago' },
-			{ name: 'T3-8R Hardware Guide', version: '2.1', pages: 74, sources: 4, owner: 'Derek', state: 'Draft', tone: 'neutral', updated: '5 days ago' },
-			{ name: 'Temco SDK', version: '1.4', pages: 100, sources: 8, owner: 'Ana', state: 'Published', tone: 'ok', updated: '1 week ago' }
+			{ name: 'T3000 Documentation', version: '13.0', audience: 'Integrators and installers', pages: 1254, sources: 14, owner: 'Derek', state: 'In review', tone: 'warn', updated: '12 minutes ago' },
+			{ name: 'T3-BACnet Reference', version: '4.2', audience: 'BACnet integrators', pages: 186, sources: 6, owner: 'Mei', state: 'Published', tone: 'ok', updated: '2 days ago' },
+			{ name: 'T3-8R Hardware Guide', version: '2.1', audience: 'Installers and service technicians', pages: 74, sources: 4, owner: 'Derek', state: 'Draft', tone: 'neutral', updated: '5 days ago' },
+			{ name: 'Temco SDK', version: '1.4', audience: 'Application developers', pages: 100, sources: 8, owner: 'Ana', state: 'Published', tone: 'ok', updated: '1 week ago' }
 		],
 
+		/* `pages` is what a read found, 0 when nothing has been read. Seven sources is the count every
+		   surface quotes for this project: the pipeline stage, the health scan, the toolbar, the output
+		   line and the command palette. */
 		sources: [
-			{ name: 't3000webview', kind: 'Repository', detail: 'main · 412 files', state: 'Read', tone: 'ok', found: '138 pages', when: '1 hour ago' },
-			{ name: 't3000-esp', kind: 'Repository', detail: 'main · 268 files', state: 'Read', tone: 'ok', found: '64 pages', when: '3 hours ago' },
-			{ name: 'bacnet-stack', kind: 'Repository', detail: 'v1.4 · 1,204 files', state: 'Read', tone: 'ok', found: '52 pages', when: 'yesterday' },
-			{ name: 'BACnet Protocol Guide.pdf', kind: 'PDF', detail: '248 pages · 6.2 MB', state: 'Read', tone: 'ok', found: '31 pages', when: 'yesterday' },
-			{ name: 'T3000 User Manual.docx', kind: 'DOCX', detail: '94 pages · 2.1 MB', state: 'Changed', tone: 'warn', found: '—', when: '4 days ago' },
-			{ name: 'SharePoint · Field Notes', kind: 'SharePoint', detail: 'Connected · 3 libraries', state: 'Not read', tone: 'neutral', found: '—', when: 'never' },
-			{ name: 'LegacyDocs', kind: 'Folder', detail: '~/Temco/LegacyDocs', state: 'Partial', tone: 'warn', found: '18 pages', when: '2 weeks ago' }
+			{ name: 't3000webview', kind: 'Repository', detail: 'main · 412 files', state: 'Read', tone: 'ok', pages: 138, when: '1 hour ago' },
+			{ name: 't3000-esp', kind: 'Repository', detail: 'main · 268 files', state: 'Read', tone: 'ok', pages: 64, when: '3 hours ago' },
+			{ name: 'bacnet-stack', kind: 'Repository', detail: 'v1.4 · 1,204 files', state: 'Read', tone: 'ok', pages: 52, when: 'yesterday' },
+			{ name: 'BACnet Protocol Guide.pdf', kind: 'PDF', detail: '248 pages · 6.2 MB', state: 'Read', tone: 'ok', pages: 31, when: 'yesterday' },
+			{ name: 'T3000 User Manual.docx', kind: 'DOCX', detail: '94 pages · 2.1 MB', state: 'Changed', tone: 'warn', pages: 0, when: '4 days ago' },
+			{ name: 'SharePoint · Field Notes', kind: 'SharePoint', detail: 'Connected · 3 libraries', state: 'Not read', tone: 'neutral', pages: 0, when: 'never' },
+			{ name: 'LegacyDocs', kind: 'Folder', detail: '~/Temco/LegacyDocs', state: 'Partial', tone: 'warn', pages: 18, when: '2 weeks ago' }
 		],
 
+		/* `temco` marks the repositories Temco itself publishes under github.com/temcocontrols —
+		   the ones the platform ships documentation for. Everything else is read as a third party. */
 		repositories: [
-			{ name: 't3000webview', remote: 'github.com/temcocontrols/t3000webview', branch: 'main', branches: 4, state: 'Cloned', tone: 'ok', files: 412, pages: 138, size: '48 MB', read: '1 hour ago', owner: 'Derek' },
-			{ name: 't3000-esp', remote: 'github.com/temcocontrols/t3000-esp', branch: 'main', branches: 2, state: 'Cloned', tone: 'ok', files: 268, pages: 64, size: '22 MB', read: '3 hours ago', owner: 'Mei' },
-			{ name: 'bacnet-stack', remote: 'github.com/bacnet-stack/bacnet-stack', branch: 'v1.4', branches: 9, state: 'Cloned', tone: 'ok', files: 1204, pages: 52, size: '96 MB', read: 'yesterday', owner: 'Ana' },
-			{ name: 'temco-learn', remote: 'github.com/temcocontrols/temco-learn', branch: 'main', branches: 3, state: 'Not cloned', tone: 'neutral', files: 0, pages: 0, size: '—', read: 'never', owner: '—' }
+			{ name: 't3000webview', remote: 'github.com/temcocontrols/t3000webview', temco: true, branch: 'main', branches: 4, state: 'Cloned', tone: 'ok', files: 412, pages: 138, size: '48 MB', read: '1 hour ago', owner: 'Derek' },
+			{ name: 't3000-esp', remote: 'github.com/temcocontrols/t3000-esp', temco: true, branch: 'main', branches: 2, state: 'Cloned', tone: 'ok', files: 268, pages: 64, size: '22 MB', read: '3 hours ago', owner: 'Mei' },
+			{ name: 'temco-learn', remote: 'github.com/temcocontrols/temco-learn', temco: true, branch: 'main', branches: 3, state: 'Not cloned', tone: 'neutral', files: 0, pages: 0, size: '—', read: 'never', owner: '—' },
+			{ name: 'bacnet-stack', remote: 'github.com/bacnet-stack/bacnet-stack', temco: false, branch: 'v1.4', branches: 9, state: 'Cloned', tone: 'ok', files: 1204, pages: 52, size: '96 MB', read: 'yesterday', owner: 'Ana' }
 		],
 
 		reads: [
@@ -350,15 +377,78 @@
 			{ repo: 't3000-esp', branch: 'main', commit: 'c41f002', when: '3 hours ago', pages: 64, added: 5, changed: 0, removed: 2 }
 		],
 
+		/* `reviewed` counts pages a person signed off; `stale` counts pages whose source moved after
+		   they were written. The two are independent, so reviewed + stale is not the page count: an
+		   area can be fully reviewed and still stale. Totals: 1,254 pages, 913 reviewed, 89 stale. */
 		knowledge: [
-			{ area: 'Overview', pages: 12, reviewed: 12, stale: 0 },
-			{ area: 'Getting Started', pages: 24, reviewed: 21, stale: 3 },
-			{ area: 'Architecture', pages: 38, reviewed: 35, stale: 3 },
-			{ area: 'API Reference', pages: 186, reviewed: 141, stale: 45 },
-			{ area: 'Hardware', pages: 94, reviewed: 88, stale: 6 },
-			{ area: 'Protocols', pages: 121, reviewed: 96, stale: 25 },
-			{ area: 'Troubleshooting', pages: 68, reviewed: 61, stale: 7 },
-			{ area: 'Release Notes', pages: 54, reviewed: 54, stale: 0 }
+			{ area: 'Overview', pages: 24, reviewed: 24, stale: 0, desc: 'What the platform is, in one sitting' },
+			{ area: 'Getting Started', pages: 56, reviewed: 47, stale: 3, desc: 'Install, connect, and a first point that answers' },
+			{ area: 'Architecture', pages: 92, reviewed: 82, stale: 3, desc: 'How the controller, the points and the schedules fit' },
+			{ area: 'API Reference', pages: 402, reviewed: 194, stale: 45, desc: 'Endpoints, schemas and the scale factor of every type' },
+			{ area: 'Hardware', pages: 208, reviewed: 186, stale: 6, desc: 'Controllers, terminals, power and wiring diagrams' },
+			{ area: 'Protocols', pages: 268, reviewed: 196, stale: 25, desc: 'Modbus, BACnet and MSTP, with worked examples' },
+			{ area: 'Troubleshooting', pages: 148, reviewed: 128, stale: 7, desc: 'The failures people actually call about' },
+			{ area: 'Release Notes', pages: 56, reviewed: 56, stale: 0, desc: 'What changed, version by version' }
+		],
+
+		/* The pages of each area, so picking an area on the Knowledge page shows its own registry
+		   instead of a fixed example. `order` is the page order inside the area, not a file line. */
+		areaPages: {
+			'Overview': [
+				{ order: 1, page: 'What T3000 Is', state: 'Reviewed', tone: 'ok', owner: 'Derek', changed: '3 weeks ago' },
+				{ order: 2, page: 'Product Lineup', state: 'Reviewed', tone: 'ok', owner: 'Derek', changed: '3 weeks ago' },
+				{ order: 3, page: 'Getting Help', state: 'Reviewed', tone: 'ok', owner: 'Mei', changed: '2 months ago' }
+			],
+			'Getting Started': [
+				{ order: 1, page: 'Install T3000', state: 'Reviewed', tone: 'ok', owner: 'Mei', changed: '2 weeks ago' },
+				{ order: 2, page: 'First Connection', state: 'Reviewed', tone: 'ok', owner: 'Mei', changed: '2 weeks ago' },
+				{ order: 3, page: 'Licensing', state: 'Stale', tone: 'warn', owner: 'Ana', changed: '5 months ago' },
+				{ order: 4, page: 'Uninstall', state: 'Draft', tone: 'info', owner: '—', changed: 'yesterday' }
+			],
+			'Architecture': [
+				{ order: 1, page: 'Controller Model', state: 'Reviewed', tone: 'ok', owner: 'Derek', changed: '1 month ago' },
+				{ order: 2, page: 'Point Engine', state: 'Reviewed', tone: 'ok', owner: 'Derek', changed: '1 month ago' },
+				{ order: 3, page: 'Data Flow', state: 'Stale', tone: 'warn', owner: 'Mei', changed: '4 months ago' }
+			],
+			'API Reference': [
+				{ order: 18, page: 'Points and Properties', state: 'Reviewed', tone: 'ok', owner: 'Mei', changed: '2 weeks ago' },
+				{ order: 19, page: 'Reading a Point', state: 'Reviewed', tone: 'ok', owner: 'Mei', changed: '2 weeks ago' },
+				{ order: 20, page: 'Data Points API', state: 'Conflict', tone: 'err', owner: 'Derek', changed: '3 hours ago' },
+				{ order: 20, page: 'Data Points API (duplicate)', state: 'Duplicate', tone: 'err', owner: '—', changed: '14 months ago' },
+				{ order: 21, page: 'Writing a Point', state: 'Stale', tone: 'warn', owner: 'Derek', changed: '9 months ago' },
+				{ order: 22, page: 'Point Types', state: 'Draft', tone: 'info', owner: 'Ana', changed: 'yesterday' }
+			],
+			'Hardware': [
+				{ order: 1, page: 'T3-8R Wiring', state: 'Stale', tone: 'warn', owner: 'Derek', changed: '9 months ago' },
+				{ order: 2, page: 'Terminal Layout', state: 'Reviewed', tone: 'ok', owner: 'Derek', changed: '3 weeks ago' },
+				{ order: 3, page: 'Power Requirements', state: 'Reviewed', tone: 'ok', owner: 'Ana', changed: '1 month ago' }
+			],
+			'Protocols': [
+				{ order: 1, page: 'Modbus Register Map', state: 'Stale', tone: 'warn', owner: 'Derek', changed: '6 months ago' },
+				{ order: 2, page: 'BACnet Object Model', state: 'Conflict', tone: 'err', owner: '—', changed: '2 months ago' },
+				{ order: 3, page: 'MSTP Addressing', state: 'Reviewed', tone: 'ok', owner: 'Ana', changed: '3 weeks ago' }
+			],
+			'Troubleshooting': [
+				{ order: 1, page: 'Controller Offline', state: 'Reviewed', tone: 'ok', owner: 'Mei', changed: '2 weeks ago' },
+				{ order: 2, page: 'Sensor Drift', state: 'Reviewed', tone: 'ok', owner: 'Mei', changed: '1 month ago' },
+				{ order: 3, page: 'Comm Timeouts', state: 'Stale', tone: 'warn', owner: 'Ana', changed: '7 months ago' }
+			],
+			'Release Notes': [
+				{ order: 1, page: '13.0', state: 'Draft', tone: 'info', owner: 'Derek', changed: '2 hours ago' },
+				{ order: 2, page: '12.9', state: 'Reviewed', tone: 'ok', owner: 'Derek', changed: '3 weeks ago' },
+				{ order: 3, page: '12.8', state: 'Reviewed', tone: 'ok', owner: 'Derek', changed: '3 months ago' }
+			]
+		},
+
+		/* What the coverage report checks besides coverage itself. `found: 0` is a pass. */
+		healthChecks: [
+			{ name: 'Internal links', found: 12, tone: 'warn', detail: '12 of 1,266 links point at a page that no longer exists', view: 'docs/knowledge' },
+			{ name: 'Screenshots older than the firmware', found: 7, tone: 'warn', detail: '7 images show a UI from before 2.9', view: 'dashboard/needs' },
+			{ name: 'Pages with no owner', found: 4, tone: 'warn', detail: 'Nobody is told when these go stale', view: 'dashboard/needs' },
+			{ name: 'Duplicate order keys', found: 1, tone: 'warn', detail: 'Two pages claim order 20 in API Reference', view: 'dashboard/needs' },
+			{ name: 'Orphan pages', found: 0, tone: 'ok', detail: 'Every page is reachable from a landing page' },
+			{ name: 'Missing alt text', found: 0, tone: 'ok', detail: 'Every image has a description' },
+			{ name: 'Empty areas', found: 0, tone: 'ok', detail: 'Every area has at least one page' }
 		],
 
 		reviews: [
@@ -372,7 +462,7 @@
 
 		builds: [
 			{ target: 'Website', detail: '1,254 pages · static', state: 'Succeeded', tone: 'ok', pct: 100, time: '1 m 42 s' },
-			{ target: 'PDF', detail: '894 pages · 6.2 MB', state: 'Succeeded', tone: 'ok', pct: 100, time: '4 m 08 s' },
+			{ target: 'PDF', detail: '1,254 pages · 6.2 MB', state: 'Succeeded', tone: 'ok', pct: 100, time: '4 m 08 s' },
 			{ target: 'Offline Help (CHM)', detail: '1,254 topics · 18.4 MB', state: 'Running', tone: 'info', pct: 62, time: '2 m 51 s' },
 			{ target: 'Search Index', detail: 'lunr · 12,884 terms', state: 'Queued', tone: 'neutral', pct: 0, time: '—' },
 			{ target: 'AI Index', detail: 'embeddings · 1,254 chunks', state: 'Queued', tone: 'neutral', pct: 0, time: '—' }
@@ -385,7 +475,7 @@
 			'[12:04:18] knowledge: 1,254 pages, 3,412 links',
 			'[12:04:19] check: 12 issues (2 errors, 10 warnings)',
 			'[12:04:24] website: 1,254 pages -> .temco/build/site',
-			'[12:06:02] pdf: 894 pages -> .temco/build/t3000-13.0.pdf',
+			'[12:06:02] pdf: 1254 pages -> .temco/build/t3000-13.0.pdf',
 			'[12:08:53] chm: 612 of 1,254 topics',
 			'[12:08:53] waiting for the help compiler...'
 		],
@@ -491,23 +581,33 @@
 		],
 
 		citations: [
-			{ title: 'Data Points API', where: 't3000 › api-reference › data-points', kind: 'page' },
-			{ title: 'Point object', where: 'bacnet-stack › src/bacnet/point.h', kind: 'source' },
-			{ title: 'T3000 User Manual.pdf', where: 'page 148 · §7.3', kind: 'document' },
-			{ title: 'Trend Log Retention', where: 't3000 › trends › retention', kind: 'page' }
+			{ title: 'Data Points API', where: 't3000 › api-reference › data-points', kind: 'page', usedIn: 'Answer · 26 m ago' },
+			{ title: 'Point object', where: 'bacnet-stack › src/bacnet/point.h', kind: 'source', usedIn: 'Draft · 1 h ago' },
+			{ title: 'T3000 User Manual.pdf', where: 'page 148 · §7.3', kind: 'document', usedIn: 'Answer · 26 m ago' },
+			{ title: 'Trend Log Retention', where: 't3000 › trends › retention', kind: 'page', usedIn: 'Suggestion · 3 h ago' }
 		],
 
 		learnProducts: [
-			{ id: 't3000', name: 'T3000', desc: 'The controller platform: hardware, points, programs and the web UI', version: '13.0', pages: 894 },
+			{ id: 't3000', name: 'T3000', desc: 'The controller platform: hardware, points, programs and the web UI', version: '13.0', pages: 1254 },
 			{ id: 'bacnet', name: 'BACnet', desc: 'Protocol reference, object model and conformance', version: '4.2', pages: 186 },
 			{ id: 'devices', name: 'Devices', desc: 'Every T3 controller, its wiring and its specifications', version: '2.14', pages: 94 },
 			{ id: 'sdk', name: 'SDK', desc: 'Build on the platform: APIs, schemas and samples', version: '1.4', pages: 80 }
 		],
 
+		/* The offline artifacts the site offers. `version` and `date` belong to the release, so the
+		   Downloads page can group by them instead of repeating the product on every row. */
+		downloads: [
+			{ name: 'T3000 Documentation', version: '13.0', format: 'PDF', size: '6.2 MB', date: 'Today', state: 'Ready', tone: 'ok' },
+			{ name: 'T3000 Documentation', version: '13.0', format: 'CHM', size: '—', date: 'Today', state: 'Building', tone: 'info' },
+			{ name: 'T3000 Documentation', version: '12.9', format: 'PDF', size: '6.0 MB', date: '12 Sep', state: 'Ready', tone: 'ok' },
+			{ name: 'T3000 Documentation', version: '12.9', format: 'ZIP', size: '18.2 MB', date: '12 Sep', state: 'Ready', tone: 'ok' },
+			{ name: 'T3-BACnet Reference', version: '4.2', format: 'PDF', size: '1.8 MB', date: '2 days ago', state: 'Ready', tone: 'ok' }
+		],
+
 		learnPaths: [
-			{ name: 'Commission a T3 controller', level: 'Beginner', steps: 6, minutes: 55, desc: 'From unboxing to a device that answers on the network.' },
-			{ name: 'Design a control strategy', level: 'Intermediate', steps: 9, minutes: 130, desc: 'Points, programs, schedules and the logic behind them.' },
-			{ name: 'Write a BACnet integration', level: 'Advanced', steps: 11, minutes: 210, desc: 'Objects, services, alarms and trend logs across vendors.' }
+			{ name: 'Commission a T3 controller', level: 'Beginner', steps: 6, minutes: 55, desc: 'From unboxing to a device that answers on the network.', outline: ['Mount and wire the controller', 'Set the IP and add it to the platform', 'Name the first points'] },
+			{ name: 'Design a control strategy', level: 'Intermediate', steps: 9, minutes: 130, desc: 'Points, programs, schedules and the logic behind them.', outline: ['Choose point types and scaling', 'Write the program', 'Schedule the setpoints'] },
+			{ name: 'Write a BACnet integration', level: 'Advanced', steps: 11, minutes: 210, desc: 'Objects, services, alarms and trend logs across vendors.', outline: ['Map objects to points', 'Read a foreign device', 'Route alarms to the platform'] }
 		],
 
 		/* The module register, as `docs/temco-platform/modules/README.md` states it: seven active modules
@@ -536,7 +636,7 @@
 
 		output: [
 			'[Temco Docs] registry loaded: 8 areas, 54 chapters, 1,254 pages',
-			'[Temco Docs] sources: 38 read, 1 changed since the last build',
+			'[Temco Docs] sources: 7 read, 1 changed since the last build',
 			'[Temco AI] runtime ready · qwen2.5-3b-instruct (local)',
 			'[Temco Projects] project T3000 Documentation selected',
 			'[Temco Docs] build 13.0.482 · website 1,254 pages · 1 m 42 s'

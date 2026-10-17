@@ -23,6 +23,10 @@
 	var sidebarVisible = true;
 	var auxVisible = true;
 	var panelVisible = true;
+	/* The breadcrumb row is off by default. This window has no file system, so the bar could only
+	   repeat the side bar's module and the tab's page — and in VS Code it is a setting, not a
+	   fixture. View › Toggle Breadcrumbs brings it back. */
+	var breadcrumbsVisible = false;
 	var panelTab = 'problems';
 	var chat = [];
 	var chatBusy = false;
@@ -49,7 +53,7 @@
 	}
 
 	function persist() {
-		storageSet({ theme: theme, moduleId: moduleId, activeView: activeView, tabs: tabs, sidebarVisible: sidebarVisible, auxVisible: auxVisible, panelVisible: panelVisible, panelTab: panelTab });
+		storageSet({ theme: theme, moduleId: moduleId, activeView: activeView, tabs: tabs, sidebarVisible: sidebarVisible, auxVisible: auxVisible, panelVisible: panelVisible, breadcrumbsVisible: breadcrumbsVisible, panelTab: panelTab });
 	}
 
 	function viewOf(viewId) {
@@ -123,7 +127,10 @@
 		el.sidebarTitle.textContent = module.label;
 		var html = '';
 		module.sections.forEach(function (section) {
-			html += '<div class="tree__section">' + ui.esc(section.label) + '</div>';
+			/* A heading above the only group of items names nothing the title did not. */
+			if (module.sections.length > 1) {
+				html += '<div class="tree__section">' + ui.esc(section.label) + '</div>';
+			}
 			section.views.forEach(function (view) {
 				html +=
 					'<button type="button" class="tree__item' + (view.id === activeView ? ' is-active' : '') + '" data-open="' + view.id + '">' +
@@ -165,20 +172,32 @@
 	}
 
 	function renderBreadcrumbs() {
+		el.breadcrumbs.hidden = !breadcrumbsVisible;
 		var view = viewOf(activeView);
-		if (!view) {
+		if (!view || !breadcrumbsVisible) {
 			el.breadcrumbs.innerHTML = '';
 			return;
 		}
-		var parts = ['<span class="breadcrumbs__item">' + ui.esc(view.moduleLabel) + '</span>'];
-		/* A section named after its own module would read "Workspaces › Workspaces › Templates". */
-		if (view.sectionLabel && view.sectionLabel !== view.moduleLabel) {
+		/* The bar names the path, not the whole chrome. The side bar already shows the module and
+		   its groups, so a module with a single section contributes one level rather than two:
+		   "Settings › Temco Platform › Modules" named Settings twice and pointed at a group with no
+		   sibling to distinguish it from. A level is also a place you can go back to, so every
+		   segment above the page is a button. */
+		var parts = [crumb(view.moduleLabel, view.moduleDefaultView)];
+		if (!view.singleSection && view.sectionLabel && view.sectionLabel !== view.moduleLabel && view.sectionLabel !== view.label) {
 			parts.push(ui.icon('chevron-right', 'icon--sm'));
-			parts.push('<span class="breadcrumbs__item">' + ui.esc(view.sectionLabel) + '</span>');
+			parts.push(crumb(view.sectionLabel, view.sectionFirstView));
 		}
 		parts.push(ui.icon('chevron-right', 'icon--sm'));
 		parts.push('<span class="breadcrumbs__item is-current">' + ui.esc(view.label) + '</span>');
 		el.breadcrumbs.innerHTML = parts.join('');
+	}
+
+	function crumb(label, viewId) {
+		if (!viewId || viewId === activeView) {
+			return '<span class="breadcrumbs__item">' + ui.esc(label) + '</span>';
+		}
+		return '<button type="button" class="breadcrumbs__item breadcrumbs__item--link" data-open="' + ui.esc(viewId) + '">' + ui.esc(label) + '</button>';
 	}
 
 	/* ------------------------------------------------------------------ editor */
@@ -429,9 +448,10 @@
 			{ label: 'View: Toggle Primary Side Bar', keys: 'Ctrl+B', run: function () { toggleSidebar(); } },
 			{ label: 'View: Toggle Panel', keys: 'Ctrl+J', run: function () { togglePanel(); } },
 			{ label: 'View: Toggle AI Bar', keys: 'Ctrl+Alt+B', run: function () { toggleAux(); } },
+			{ label: 'View: Toggle Breadcrumbs', run: function () { toggleBreadcrumbs(); } },
 			{ label: 'Preferences: Color Theme', run: function () { toggleTheme(); } },
 			{ label: 'Temco: New Documentation Project', run: function () { toast('A project needs a name, a version and an owner. The form is not part of this mock.'); } },
-			{ label: 'Temco: Read All Sources', run: function () { showPanel('output'); toast('Reading 38 sources…'); } },
+			{ label: 'Temco: Read All Sources', run: function () { showPanel('output'); toast('Reading ' + M.data.sources.length + ' sources…'); } },
 			{ label: 'Temco: Build Everything', run: function () { showPanel('output'); toast('Build queued: website, PDF, help file, indexes.'); } },
 			{ label: 'Temco: Publish Release 13.0', run: function () { showPanel('problems'); toast('Two errors must be fixed before 13.0 can publish.'); } },
 			{ label: 'Temco: Open Review Center', run: function () { openView('docs/review'); } },
@@ -529,6 +549,7 @@
 			{ label: 'Toggle Primary Side Bar', keys: 'Ctrl+B', run: function () { toggleSidebar(); } },
 			{ label: 'Toggle Panel', keys: 'Ctrl+J', run: function () { togglePanel(); } },
 			{ label: 'Toggle AI Bar', keys: 'Ctrl+Alt+B', run: function () { toggleAux(); } },
+			{ label: 'Toggle Breadcrumbs', run: function () { toggleBreadcrumbs(); } },
 			{ separator: true },
 			{ label: 'Problems', run: function () { showPanel('problems'); } },
 			{ label: 'Output', run: function () { showPanel('output'); } },
@@ -703,6 +724,15 @@
 		setAux(!auxVisible);
 	}
 
+	function toggleBreadcrumbs() {
+		breadcrumbsVisible = !breadcrumbsVisible;
+		M.state = M.state || {};
+		M.state.breadcrumbs = breadcrumbsVisible;
+		renderBreadcrumbs();
+		persist();
+		toast(breadcrumbsVisible ? 'Breadcrumbs on. The bar names the path above the editor.' : 'Breadcrumbs off — the side bar and the tab already name where you are.');
+	}
+
 	function toggleTheme() {
 		setTheme(theme === 'dark' ? 'light' : 'dark');
 	}
@@ -728,6 +758,9 @@
 				return;
 			case 'toggle-aux':
 				toggleAux();
+				return;
+			case 'toggle-breadcrumbs':
+				toggleBreadcrumbs();
 				return;
 			case 'theme':
 				toggleTheme();
@@ -773,6 +806,16 @@
 			case 'open-workspace':
 				openView('flow/open-workspace');
 				return;
+			/* An in-page selection, not a new surface: the Knowledge page keeps which area is open, and
+			   the reader keeps their place instead of being thrown back to the top of the page. */
+			case 'open-area': {
+				M.state = M.state || {};
+				M.state.area = target.getAttribute('data-area');
+				var readingAt = el.editor.scrollTop;
+				renderAll();
+				el.editor.scrollTop = readingAt;
+				return;
+			}
 			case 'flow-next':
 				M.flow.next(activeView, el.editor);
 				renderAll();
@@ -844,6 +887,19 @@
 			case 'open-citation':
 				toast('Citations open the page they name; in the mock they only announce it.');
 				return;
+			/* The page has a composer of its own; it answers like the AI bar does, in one line. */
+			case 'send-chat': {
+				var composer = target ? target.closest('.chat__composer') : null;
+				var box = composer ? composer.querySelector('textarea') : null;
+				var asked = box ? box.value.trim() : '';
+				if (!asked) {
+					toast('Type a question first.');
+					return;
+				}
+				box.value = '';
+				toast('Asked: “' + asked + '” · the answer arrives in this thread.');
+				return;
+			}
 			case 'about':
 				toast('Temco Platform 1.143.0 · layout mock · not a build.');
 				return;
@@ -926,6 +982,29 @@
 				return;
 			}
 
+			/* A segmented control shows the value that is set. Pressing one sets it and says so. */
+			var segment = event.target.closest('.segmented[data-setting] button');
+			if (segment) {
+				var group = segment.parentElement;
+				var setting = group.getAttribute('data-setting');
+				var value = segment.textContent.trim();
+				Array.prototype.forEach.call(group.querySelectorAll('button'), function (button) {
+					button.setAttribute('aria-pressed', button === segment ? 'true' : 'false');
+				});
+				/* The theme setting is the one that changes the window it is set in. */
+				if (setting === 'Theme' && (value === 'Dark' || value === 'Light')) {
+					setTheme(value.toLowerCase());
+					toast('Theme set to ' + value + '.');
+					return;
+				}
+				if (setting === 'Theme') {
+					toast('Theme set to System — the mock keeps the dark shell, which is what this machine reports.');
+					return;
+				}
+				toast(setting + ' set to ' + value + '.');
+				return;
+			}
+
 			var actionTarget = event.target.closest('[data-action]');
 			if (actionTarget) {
 				var action = actionTarget.getAttribute('data-action');
@@ -957,6 +1036,14 @@
 			if (openTarget) {
 				openView(openTarget.getAttribute('data-open'));
 				return;
+			}
+		});
+
+		/* A setting that is a switch says what it now is; the mock changes the box, not a stored value. */
+		document.addEventListener('change', function (event) {
+			var box = event.target.closest('input[data-setting]');
+			if (box) {
+				toast(box.getAttribute('data-setting') + (box.checked ? ' turned on.' : ' turned off.'));
 			}
 		});
 
@@ -1137,6 +1224,7 @@
 			sidebarVisible = saved.sidebarVisible !== false;
 			auxVisible = saved.auxVisible !== false;
 			panelVisible = saved.panelVisible !== false;
+			breadcrumbsVisible = saved.breadcrumbsVisible === true;
 			panelTab = saved.panelTab || 'problems';
 			tabs = Array.isArray(saved.tabs) ? saved.tabs.filter(viewOf) : [];
 		} else if (window.innerWidth < 1180) {
@@ -1144,6 +1232,9 @@
 			   editor keeps its width. The title bar can bring it back. */
 			auxVisible = window.innerWidth >= 900;
 		}
+
+		M.state = M.state || {};
+		M.state.breadcrumbs = breadcrumbsVisible;
 
 		/* A window too narrow for three columns hides the ones that do not fit, the way the real
 		   workbench does; the title bar still toggles them. */

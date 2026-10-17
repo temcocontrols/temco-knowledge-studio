@@ -22,10 +22,8 @@ Every number in it — 1,254 pages, 34 devices, 17 drafts — is invented. The *
 ├────┬─────────────────────┬───────────────────────────────────────────┬───────────────┤
 │    │ SIDE BAR  300       │ tabs                                      │ AI BAR  340   │
 │ 48 │                     ├───────────────────────────────────────────┤               │
-│    │ the module's tree   │ breadcrumbs                        22     │ chat about    │
-│    │                     ├───────────────────────────────────────────┤ the page      │
-│    │                     │ editor                                    │               │
-│    │                     │  the surface the module draws             │               │
+│    │ the module's tree   │ editor                                    │ chat about    │
+│    │                     │  the surface the module draws             │ the page      │
 │    │                     ├───────────────────────────────────────────┤               │
 │    │                     │ PANEL  Problems Output Terminal Ports     │               │
 ├────┴─────────────────────┴───────────────────────────────────────────┴───────────────┤
@@ -38,12 +36,14 @@ Every number in it — 1,254 pages, 34 devices, 17 drafts — is invented. The *
 | **Title bar** | 35 px | menus, the command centre, the layout controls | the shell's |
 | **Activity bar** | 48 px | one icon per module; the badge is that module's own open work | ours — one entry per module |
 | **Side bar** | 300 px | the module's tree: sections, surfaces, counts | each module's |
-| **Editor group** | flexible | tabs, breadcrumbs, and the one surface in front | the shell's; the surface is ours |
+| **Editor group** | flexible | tabs and the one surface in front, plus the breadcrumb row when it is on | the shell's; the surface is ours |
 | **Panel** | `clamp(132px, 26vh, 240px)` | Problems · Output · Terminal · Ports | mostly ours |
 | **AI bar** | 340 px | the conversation, its context and its citations | `temco-ai` |
 | **Status bar** | 22 px | branch, problems, cursor, encoding, product | mixed |
 
 The mock keeps the sides at fixed widths and the editor flexible, which is what the workbench does. Nothing here is a webview: a surface is a normal editor tab, so it keeps tabs, breadcrumbs, the panel and the status bar for free.
+
+**There is no breadcrumb row by default.** In VS Code breadcrumbs are a setting (`breadcrumbs.enabled`, View › Appearance › Breadcrumbs), and this window has no file system for them to name: the bar could only repeat the side bar's module and the tab's page, which is what `Settings › Temco Platform › Modules` did. So the row is off, the editor keeps its 22 pixels, and `View › Toggle Breadcrumbs` / `View: Toggle Breadcrumbs` in the palette / the `Breadcrumbs` switch on Settings › General brings it back — a real toggle rather than a fixture, remembered with the other chrome flags. When it is on, the bar reads `Module › Page` and adds the section in between only when the module has more than one: `Documentation › Pipeline › Releases`, not `Settings › Temco Platform › Modules`. A module with a single section also drops that group's heading in the side bar, because a heading above the only group of items names nothing the title did not (`Workspaces › Workspaces › T3000` had the same problem). Every segment above the page is a button that opens that level, since a level you cannot go back to is only a label.
 
 ## The menu bar
 
@@ -84,6 +84,8 @@ The card the window is actually standing in (the current workspace, the current 
 
 A bar here is a fill on a track, one colour at every value. Coverage and mapping use the accent, never green or amber: 76 % of a documentation area is a quantity, and painting it amber made a healthy area look broken. `--ok` and `--warn` stay reserved for states — a running build, a failed check — where the colour *is* the message.
 
+**Coverage & Health is a report, not a table.** The tinted panel names the finding (`89 pages describe a source that has already moved on`), four stats say how big the problem is, then two plain sections do the work: *Coverage by Area* sorted worst first with a total row (`All areas · 913 of 1,254 · 73% · 89 stale`), and *Health Checks* — link rot, ownership, duplicate order keys — where a check with a count opens the queue instead of being a number to glance at. Every figure is derived from the area rows, so the page cannot disagree with itself; the area rows themselves sum to the 1,254 pages the rest of the mock quotes.
+
 ## A section, not a box
 
 Content that is *part of* a page — Recent Activity and Needs You on the dashboard, Areas and Sources on a workspace — uses `.card--plain`: same heading, no border, no background, rows separated by hairlines and flush with the page grid. A card is for something that stands alone or can be clicked into; wrapping every block on a page in one turns a screen into a grid of rectangles and buries what matters.
@@ -91,6 +93,93 @@ Content that is *part of* a page — Recent Activity and Needs You on the dashbo
 ## Activity is a log
 
 Recent Activity (`M.ui` has no builder for it, the markup is in `views.overview.js`) is a grouped feed, not three lists. A day is a rule with a label and a count; under it, each event is a tone-tinted mark on a rail, its title and context, and a right-hand column carrying the **status word** (`Done`, `In Progress`, `Info`, `Attention`) and the time. The status is a word as well as a tint — colour alone is not a status for anyone who cannot see it. Both columns are fixed width, so statuses and times line up down the list instead of ending wherever each title happens to stop. Group order is newest first, times are absolute within a day (`17:20`, `09:04`) and weekday names across a week.
+
+The mark itself is `.tone-mark` (`M.ui.toneMark(icon, tone)`): one icon in a tinted circle, built once and shared by the feed and the review queue, so red always means a page is broken, amber always means it is waiting on a person, and blue always means AI wrote it.
+
+The page is full width like Overview, and the extra room goes to a **module column** — the same three words the filter above it offers (`Documentation`, `Devices`, `AI`) — between the text and the status. That column is behind a `@container (min-width: 620px)` query on `.feed-wrap` rather than a viewport media query: the question is whether *the list* has room, not whether the window does, so a narrow editor drops the column instead of squeezing every title onto three lines.
+
+## A queue, not a report
+
+**Needs Review** is the list the Activity feed links into, so it is ordered by *what it wants from you*: `Blocking the release` (the two errors that stop 13.0), `Needs a decision` (ownership, out-of-date screenshots, link rot) and `AI drafts waiting`. Each group is the same label/rule/count header the activity feed uses (`.group-head`), each group is a `.table--plain` — columns without a frame — and each row carries exactly one action: `Fix with AI` for the two blocking errors, `Review Draft` for a draft, `Open` for a decision. Only the blocking group gets the loud primary button; a column of six blue buttons makes a queue look like a dashboard.
+
+The queue holds **17 pages**, the number the pipeline meta, the workspace tiles, the sidebar badge and the dashboard all quote — the mock never says "17 waiting" and then lists seven.
+
+## Rows or cards
+
+Both are used, for different reasons. A **card** is for a small set where each item is a place you enter and carries prose: Workspaces (3), Templates (4). A **row** is for a set that grows and whose items you compare: Projects, Sources, Repositories, Knowledge, Releases. Projects is the interesting one — it was a card grid for a while, and the row version won once it stopped being a seven-column table: name and state on the first line, `v13.0 · Integrators and installers · Derek · 894 pages · 14 sources · updated 12 minutes ago` on the second, each fact its own `nowrap` span so a line never breaks inside a count. At a 1200-wide window that row wraps to two meta lines and stays readable; the table squeezed the name to 108 px and broke the timestamp across three lines.
+
+Both of those use the same row primitive (`.record-row`): a tone mark, a name line, a facts line, a state badge, and either a chevron (the row opens something) or the one action it needs (`Clone`). A row with nothing to open carries `.record-row--static` and stops pretending to be a link.
+
+## Where a repository comes from
+
+**Repositories** groups by origin instead of listing everything in one table: `From Temco` (everything under `github.com/temcocontrols`) and `Third-party`, each with a sentence under its heading saying what that origin means — Temco's own repositories are the sources the platform ships documentation for and stand behind; a third-party one is read exactly the same way but is nobody's promise about product behaviour. A repository added from another owner lands in the second group automatically, because the split is computed from the remote (`temco: true` in `data.repositories`), not hand-maintained per row.
+
+The operation belongs to the group, not to the page: each heading ends with `Read All` for *that* group, and `From Temco` also carries `Clone 1 Missing` — a label and a button that both disappear when nothing is missing (`Clone 2 Missing` when two are). The page header keeps only `Add Repository`. A group header that runs out of room wraps its actions onto a second line rather than crushing the rule to zero width.
+
+## One list of sources
+
+**Sources** is grouped by what the source *is* — `Repositories`, `Documents`, `Folders and connections` — because that is what decides how a read behaves: a repository is cloned and read by commit, a document is read in place, a folder has no history, a connection can expire. Each group carries a `Read All` for its own members and one sentence saying exactly that.
+
+Every row answers "what did reading it produce?": `main · 412 files · 138 pages found · read 1 hour ago`, `94 pages · 2.1 MB · changed since the last read · last read 4 days ago`, `Connected · 3 libraries · not read yet`. A source that is behind keeps the warning tint on its mark and the only action left is `Read`; a source that is up to date gets a chevron. The word "found nothing" is never used to mean "not read yet" — those are different sentences.
+
+The page is the single source of truth for the count. The sidebar badge, the pipeline stage meta, the output line, the health scan's eyebrow and the `Read All Sources` palette command all read `7` from `data.sources` — the mock used to claim 38 in five places while listing seven.
+
+## The registry
+
+**Knowledge** browses 1,254 pages, so it is a master–detail on one surface: the areas on the left (a 260–300 px column), the pages of the area you picked on the right.
+
+The area list is one line per area — chevron, name, percentage, and a `N stale` badge only when there is something stale. The reviewed share is **painted behind the row** as a soft accent band (`--coverage` on `.area-row`), because a bar and a percentage say the same thing and printing both costs a line per area. The selected area gets a bolder name, an accent chevron and a stronger band. The percentages are held in one column by reserving the badge width even when the area is current.
+
+The right pane is deliberately only three columns (`Order`, `Page`, `State`) with the owner and the last change folded into a line under the page name. The earlier version put the same table in a ~360 px column with five columns and it did not fit; the panes are sized from what the table needs, and below a 640 px container the pair stacks and the areas go full width. `order` is the order of the page inside the area, not a file line — which is why two pages claiming order 20 is a release blocker rather than a cosmetic problem, and the pane's description says so with that area's own numbers (`402 pages · 194 read (48%) · 45 stale`).
+
+Picking an area is real, not a picture: the row carries `data-action="open-area" data-area="…"`, the shell keeps the choice in `M.state.area` and re-renders — preserving `el.editor.scrollTop` so the reader stays where they were instead of being thrown to the top. `Gaps` and `Checks` sit side by side at the bottom as plain sections; `Checks` is a summary of the same findings the Problems panel and the health report hold, and counts them the same way (`1` duplicate order key, not `2` pages).
+
+## The pipeline pages
+
+Review Center, Build Center and Releases move one version from working copy to published, and they share a shape: a tinted panel states the condition, a plain section lists what that condition is made of, and a second plain section holds the thing you act on.
+
+- **Review Center** — the queue takes the full width, and the row whose diff is open is marked on itself (`open below`), with the diff underneath carrying `Accept` / `Reject` in its footer. The five summary tiles that used to sit above the queue are gone: the panel already says what blocks the release, and the queue says how much is waiting (`6 items waiting, 3 of them AI drafts`, computed).
+- **Build Center** — targets are a plain table with the progress column (the only bar on the page), then the log at full width so long lines never wrap, then the artifacts. The panel's count is computed (`2 of 5 targets, 2 still queued`).
+- **Releases** — versions are rows; the in-flight one is tinted and marked `in flight`, `Pin` appears only on published versions and `View` on all of them, and the changelog is a section under the list rather than a card competing with the publish card.
+
+None of the three keeps an action in the page head that is not the page's own verb (`Filters`, `Build All`, `Publish 13.0`): a second button in a head that already has one wraps the pair onto two lines at the mock's own window size, which is exactly what happened while Releases carried both `Publish 13.0` and `Changelog`.
+
+## The AI Hub pages
+
+Chat, Actions, Citations, Local Models and Knowledge Base describe one thing from five sides: what the model may read, what it may do, what it used, what is loaded, and what it was indexed from.
+
+- **Chat** is the conversation at full width with a readable measure (`.chat--page` caps a bubble at 72ch), and the whole surface is **one section**: the thread, three starter prompts, then a composer whose first line is the context — `Reading · Data Points API · API Reference · t3000webview · registry.json`. What the model may read is a property of this conversation, not a page section of its own, and the page that had a `Context` list and a `Try` list below the thread made the reader ask what those sections were for. `Send` takes what was typed (the mock stops at a toast), so the composer is not a picture.
+- **Actions** lists what it may do, then where the output goes (drafts → Review Center, answers → the AI bar, suggestions → the Gaps list) and the guard rails that are not settings but invariants.
+- **Citations** keeps a `Used In` column, so a citation is checkable against the answer that used it.
+- **Local Models** counts what is downloaded and what is loaded, and keeps `Runtime Settings` in the section head so the page head still has exactly one verb.
+- **Knowledge Base** derives its chunk count from the knowledge areas (`1,254`), says how a question becomes chunks, and marks the source whose file changed under the index.
+
+One layout rule came out of these pages and applies everywhere: `.page-head__main` is `flex: 1 1 auto` and `.page-head__actions` is `flex: 0 0 auto`, so the description wraps before a pair of buttons is stacked into a column.
+
+## The Temco Learn pages
+
+Temco Learn is the published site shown as a reader sees it, so it keeps its own look — a hero with a search box, product cards, a three-part article — but it takes its facts from the same registers as everything else.
+
+- **Home** — the hero, then `Products` as a group head whose note is derived from the releases (`12.9 is live, 13.0 is still building`), then a row of four product cards whose page counts come from `data.knowledge`, and a pair of plain sections: `Learning Paths` and `Downloads`, each four rows deep at most and each with a `All …` action in its head.
+- **Product page** (T3000) — the same group-head-and-note shape over the eight areas, one card each, using the area's own sentence and the count and stale number the registry holds. The panel above says what state the version is in, so no card has to.
+- **Article** — a reading surface, not a form: `.learn-nav` (product nav, then the section's pages), the article itself capped at 78ch, and a `.learn-rail` holding `On this page`, the page's facts as a `.kv`, and the feedback pair. The zone is measured with a **container query** on `.learn-reader`, because a container query cannot restyle the container itself and the reader is 750px wide inside a 1440px window: under 1080px the rail moves under the article as three columns, under 860px the navigation becomes a strip of chips and the article takes the full width. A media query here would never fire at the mock's own size — the first version left the article 167px wide with its title wrapping twice.
+- **Downloads** — grouped by product and version (`T3000 Documentation · 13.0`, `2 artifacts · published Today`), because what differs between rows is the format, not the product. The row is the format, its size, its state, and `Download` only when there is something to fetch; a group whose build is still running says so once, in its note, instead of repeating `not built yet` per row. Those labels pass `plain: true` to `ui.group` so a product name keeps its capitalisation instead of the upper-case category style.
+- **Learning Paths** — three cards, each with a level, the cost, and the first steps of the path numbered, so a card says what the path asks you to do rather than only how long it takes. The group head counts them (`3 paths · 26 steps · 6 h 35 min of reading`).
+
+The one number that had to be reconciled: the sample PDF page count. It was `894` on six surfaces while the knowledge registry, the release and the product card all said `1,254`; the artifact is a rendering of the same version, so it says `1,254` too.
+
+## The Settings pages
+
+Settings is where a value is set, not where a state is reported, so the five pages are rules and rows rather than cards: `ui.rule` names the group and counts what it holds, `.settings-rows` holds `ui.formRow`s under it, and the only box on any of them is a callout.
+
+- **The page title is the page's own name.** `Settings` is the module — it is already in the breadcrumb and the side bar — so the General page says `General`. Five pages titled `Settings` made the tab strip useless.
+- **`ui.formRow` gives the description the width.** The label and its sentence take the flexible column and the control sits at the end of the row, where every other control on the page sits (`minmax(0, 1fr) 240px`). The old `220px 1fr` put the *explanation* in the narrow column and wrapped every sentence at 180px.
+- **A row can carry a tag** — `Workspace` when a workspace may override the value, `Restart` when the change waits for one. A settings page that never says which of those is true is a page the reader has to test.
+- **`ui.segmented` shows the value that is set**, where a `<select>` hides it. The shell wires `[data-setting]`: pressing an option moves `aria-pressed` and reports the new value, and because `Theme` is the one setting that changes the window it is set in, pressing it applies the theme instead of only describing it. Checkboxes report `on` / `off` the same way.
+- **Modules** groups `Active` and `Reserved` instead of one table plus a card that listed the reserved ones a second time, drops the `temcocontrols.` prefix (the full id wraps mid-word at this width and reads as an error) and ends with `Platform Updates` as a fact strip. The four summary tiles are gone: the group heads already count what they hold.
+- **Branding** draws the mark at the three sizes the shell actually draws it (64, 32, 16), and names the five colour roles under their swatches — a row of unlabelled squares is not a preview of anything.
+- **AI Models** is grouped by what the setting decides — `Answering`, `Retrieval`, `Drafts and Network` — and says in its head that the AI Hub shows what is loaded now while this page decides what loads next, so the two pages stop looking like copies.
+- **Publishing** puts `Test Connection` in the `Target` rule rather than the page head, and computes `4 of 5 published` from the artifact list. Each artifact is a labelled checkbox row, so what a version publishes is readable without counting ticks.
 
 ## The modules and their surfaces
 

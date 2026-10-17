@@ -143,7 +143,7 @@
 							'<div data-filter-list="repos">' +
 							checklist(
 								repositories.map(function (source) {
-									return { value: source.name, label: source.name, sub: source.detail + ' · ' + source.found };
+									return { value: source.name, label: source.name, sub: source.detail + ' · ' + (source.pages ? source.pages + ' pages' : 'not read') };
 								}),
 								isChecked,
 								'sources'
@@ -344,7 +344,7 @@
 					render: function () {
 						var checks = [
 							{ label: 'Website', sub: '1,254 pages · built', ok: true },
-							{ label: 'PDF', sub: '894 pages · 6.2 MB · built', ok: true },
+							{ label: 'PDF', sub: '1,254 pages · 6.2 MB · built', ok: true },
 							{ label: 'Offline help', sub: '612 of 1,254 topics — still compiling', ok: false },
 							{ label: 'Search index', sub: '12,884 terms · built', ok: true },
 							{ label: 'Structure checks', sub: '2 errors in API Reference', ok: false }
@@ -775,7 +775,9 @@
 			icon: def.icon,
 			moduleId: def.moduleId,
 			moduleLabel: module ? module.label : '',
-			sectionLabel: 'New'
+			/* A flow opens from a button, not from a group in the side bar: there is no level to
+			   name between the module and the flow itself. */
+			singleSection: true
 		};
 		M.views[def.id] = {
 			title: def.title,
@@ -792,7 +794,7 @@
 		icon: 'layers',
 		moduleId: 'workspaces',
 		moduleLabel: 'Workspaces',
-		sectionLabel: 'New'
+		singleSection: true
 	};
 	M.views['flow/open-workspace'] = {
 		title: 'Open Workspace',

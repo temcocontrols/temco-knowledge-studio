@@ -38,6 +38,9 @@
 }
 
 .page-head__main {
+	/* The text column gives way before the actions do: a head with two buttons should not stack
+	   them into a column just because the description is long. */
+	flex: 1 1 auto;
 	min-width: 0;
 }
 
@@ -65,6 +68,7 @@
 }
 
 .page-head__actions {
+	flex: 0 0 auto;
 	margin-left: auto;
 	display: flex;
 	gap: 8px;
@@ -192,6 +196,16 @@
 
 .row--between {
 	justify-content: space-between;
+}
+
+/* The countable facts of a thing, under its description: pages, sources, owner. */
+.facts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 14px;
+	margin-top: 10px;
+	color: var(--fg-muted);
+	font-size: var(--fs-sm);
 }
 
 .mt-16 {
@@ -328,6 +342,13 @@
 .card--plain .list__item {
 	padding-left: 0;
 	padding-right: 0;
+}
+
+/* In a page section a row may run to two lines: cutting a rule of the product with an ellipsis is
+   worse than letting it wrap. The side bar and the AI bar keep their single line. */
+.card--plain .list__title,
+.card--plain .list__sub {
+	white-space: normal;
 }
 
 /* ---------------------------------------------------------------- KPI */
@@ -492,6 +513,33 @@
 	padding: 5px 10px;
 }
 
+/* A table that is a section of the page rather than a box on it: same columns, no frame, cells
+   flush with the page grid. */
+.table-wrap--plain {
+	overflow: visible;
+	border: 0;
+	border-radius: 0;
+	background: none;
+}
+
+.table-wrap--plain thead th {
+	position: static;
+	background: none;
+	padding-left: 0;
+	padding-right: 0;
+}
+
+.table-wrap--plain tbody td {
+	padding-left: 0;
+	padding-right: 0;
+}
+
+/* Without the frame, neighbouring columns still need room between them. */
+.table-wrap--plain th:not(:last-child),
+.table-wrap--plain td:not(:last-child) {
+	padding-right: 16px;
+}
+
 .cell-strong {
 	color: var(--fg-strong);
 	font-weight: 500;
@@ -563,6 +611,306 @@
 	font-size: var(--fs-xs);
 	color: var(--fg-muted);
 	font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- record rows */
+
+/* A record in a list — a project, a repository: the name owns the first line, the facts it carries
+   ride the line under it, and the state sits at the right. No column has to be squeezed to keep a
+   name whole, which is what a seven-column table of the same facts could not promise. */
+.record-list {
+	display: flex;
+	flex-direction: column;
+	margin-top: 18px;
+}
+
+.record-row {
+	display: grid;
+	grid-template-columns: 24px minmax(0, 1fr) auto auto;
+	align-items: center;
+	gap: 12px;
+	padding: 11px 10px;
+	margin: 0 -10px;
+	border-bottom: 1px solid var(--border);
+	cursor: pointer;
+	border-radius: var(--radius);
+}
+
+.record-row:last-child {
+	border-bottom: 0;
+}
+
+.record-row:hover {
+	background: var(--bg-hover);
+}
+
+/* A row that is not a link (nothing to open yet) does not pretend to be one. */
+.record-row--static {
+	cursor: default;
+}
+
+.record-row--static:hover {
+	background: none;
+}
+
+/* Standing in it, not merely selected in it. */
+.record-row--current {
+	background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.record-row--current:hover {
+	background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.record-row__main {
+	min-width: 0;
+}
+
+.record-row__title {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.record-row__name {
+	color: var(--fg-strong);
+	font-size: var(--fs-ui);
+	font-weight: 600;
+}
+
+.record-row__meta {
+	margin-top: 2px;
+	color: var(--fg-muted);
+	font-size: var(--fs-xs);
+}
+
+/* One fact per span, so "894 pages" and "14 sources" never split across a line break. */
+.record-row__meta span {
+	white-space: nowrap;
+}
+
+/* The boxier glyphs read as a smudge at 14 px, so rows give the mark one more pixel. */
+.record-row .tone-mark .icon {
+	width: 16px;
+	height: 16px;
+}
+
+.record-row__state {
+	display: flex;
+	justify-content: flex-end;
+}
+
+.record-row__go {
+	display: grid;
+	place-items: center;
+	color: var(--fg-subtle);
+}
+
+.record-row:hover .record-row__go {
+	color: var(--fg);
+}
+
+/* ---------------------------------------------------------------- coverage */
+
+/* A report, not a table: the area reads first, the bar carries the shape of the list, and the
+   numbers it is made of sit to the right of it. Worst coverage first, totals on the last row. */
+.coverage {
+	display: flex;
+	flex-direction: column;
+	margin-top: 4px;
+	container-type: inline-size;
+}
+
+.coverage__row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(90px, 160px) 88px 40px 84px;
+	align-items: center;
+	gap: 12px;
+	padding: 9px 0;
+	border-bottom: 1px solid var(--border);
+}
+
+.coverage__row:last-child {
+	border-bottom: 0;
+}
+
+.coverage__row--total {
+	margin-top: 2px;
+	padding-top: 11px;
+	border-top: 1px solid var(--border-strong);
+	border-bottom: 0;
+}
+
+.coverage__name {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	min-width: 0;
+}
+
+.coverage__area {
+	color: var(--fg);
+	font-size: var(--fs-sm);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.coverage__row--total .coverage__area {
+	font-weight: 600;
+	color: var(--fg-strong);
+}
+
+.coverage__pages {
+	color: var(--fg-subtle);
+	font-size: var(--fs-xs);
+	white-space: nowrap;
+}
+
+.coverage__value {
+	color: var(--fg-muted);
+	font-size: var(--fs-xs);
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+	white-space: nowrap;
+}
+
+.coverage__pct {
+	color: var(--fg);
+	font-size: var(--fs-sm);
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+}
+
+.coverage__stale {
+	display: flex;
+	justify-content: flex-end;
+	font-size: var(--fs-xs);
+}
+
+/* Narrow: the row becomes the name on one line and the bar under it — the bar is the point of the
+   list, so it moves below the numbers rather than out of the row. The query is on the list itself,
+   because a wide window with two side bars open leaves this section as narrow as a small one. */
+@container (max-width: 600px) {
+	.coverage__row {
+		grid-template-columns: minmax(0, 1fr) 44px 84px;
+		grid-template-areas:
+			'name pct stale'
+			'bar bar bar';
+		gap: 7px 12px;
+	}
+
+	.coverage__name {
+		grid-area: name;
+	}
+
+	.coverage__row .bar {
+		grid-area: bar;
+	}
+
+	.coverage__pct {
+		grid-area: pct;
+	}
+
+	.coverage__stale {
+		grid-area: stale;
+	}
+
+	.coverage__value {
+		display: none;
+	}
+}
+
+/* ---------------------------------------------------------------- knowledge */
+
+/* Master and detail side by side: the areas on the left, the pages of the picked area on the right.
+   The query sits on the wrapper, because the pair stacks once the editor — not the window — is
+   too narrow for both. */
+.know-wrap {
+	container-type: inline-size;
+}
+
+.know-split {
+	display: grid;
+	grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+	gap: 28px;
+	align-items: start;
+}
+
+@container (max-width: 640px) {
+	.know-split {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 24px;
+	}
+}
+
+/* An area in the registry is one line, with the share a person has read painted behind it — the
+   bar and the number say the same thing, so here they are the same thing. */
+.area-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin-top: 4px;
+}
+
+.area-row {
+	display: grid;
+	grid-template-columns: 14px minmax(0, 1fr) auto auto;
+	align-items: center;
+	gap: 10px;
+	padding: 9px 10px;
+	margin: 0 -10px;
+	border-radius: var(--radius);
+	background-image: linear-gradient(to right, color-mix(in srgb, var(--accent) 9%, transparent) var(--coverage, 0%), transparent var(--coverage, 0%));
+	cursor: pointer;
+}
+
+.area-row:hover {
+	background-color: var(--bg-hover);
+}
+
+.area-row--open {
+	background-color: color-mix(in srgb, var(--accent) 6%, transparent);
+	background-image: linear-gradient(to right, color-mix(in srgb, var(--accent) 18%, transparent) var(--coverage, 0%), transparent var(--coverage, 0%));
+}
+
+.area-row__name {
+	color: var(--fg);
+	font-size: var(--fs-sm);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.area-row--open .area-row__name {
+	color: var(--fg-strong);
+	font-weight: 600;
+}
+
+.area-row__pct {
+	color: var(--fg-subtle);
+	font-size: var(--fs-xs);
+	font-variant-numeric: tabular-nums;
+}
+
+.area-row--open .area-row__pct {
+	color: var(--fg);
+}
+
+.area-row__stale {
+	display: flex;
+	justify-content: flex-end;
+	/* Reserved even when the area is current, so the percentages stay in one column. */
+	min-width: 72px;
+}
+
+.area-row .icon {
+	color: var(--fg-subtle);
+}
+
+.area-row--open .icon {
+	color: var(--accent);
 }
 
 /* ---------------------------------------------------------------- pipeline */
@@ -676,22 +1024,23 @@
 	white-space: nowrap;
 }
 
-/* ---------------------------------------------------------------- activity feed */
+/* ---------------------------------------------------------------- group rule */
 
-/* A log, not a list: a rail of tone-coloured marks runs through a day, the time sits on the right,
-   and days are separated by a rule instead of being wrapped in a box each. */
-.feed__group {
+/* A heading that separates groups inside a section: label, a hairline that fills the row, and how
+   many things are in the group. Used by the activity feed and by any grouped queue. */
+.group-head {
 	display: flex;
 	align-items: center;
-	gap: 10px;
+	flex-wrap: wrap;
+	gap: 6px 10px;
 	margin: 26px 0 2px;
 }
 
-.feed__group:first-of-type {
+.group-head:first-of-type {
 	margin-top: 20px;
 }
 
-.feed__label {
+.group-head__label {
 	font-size: var(--fs-xs);
 	font-weight: 600;
 	letter-spacing: 0.06em;
@@ -699,22 +1048,97 @@
 	color: var(--fg-muted);
 }
 
-.feed__rule {
+/* A label that is a name and not a category: keep the capitalisation it was written with. */
+.group-head__label--plain {
+	text-transform: none;
+	letter-spacing: 0;
+	font-size: var(--fs-sm);
+	color: var(--fg-strong);
+}
+
+/* The steps of a learning path, numbered: a card should say what the path asks you to do, not only
+   how long it takes. */
+.path-steps {
+	counter-reset: path-step;
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	margin: 10px 0 0;
+	padding: 0;
+	list-style: none;
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
+	line-height: 1.45;
+}
+
+.path-steps li {
+	display: flex;
+	gap: 8px;
+	align-items: baseline;
+}
+
+.path-steps li::before {
+	counter-increment: path-step;
+	content: counter(path-step);
+	flex: none;
+	width: 14px;
+	font-size: var(--fs-xs);
+	color: var(--fg-subtle);
+	font-variant-numeric: tabular-nums;
+}
+
+/* The last line is a count, not a step: no number in front of it, but it stays in the step column. */
+.path-steps li.cell-muted {
+	padding-left: 22px;
+}
+
+.path-steps li.cell-muted::before {
+	content: none;
+}
+
+.group-head__rule {
 	flex: 1;
 	height: 1px;
 	background: var(--border);
 }
 
-.feed__count {
+.group-head__count {
 	color: var(--fg-subtle);
 	font-size: var(--fs-xs);
 	white-space: nowrap;
 }
 
+/* What you can do to the whole group, at the end of its rule. */
+.group-head__actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: none;
+}
+
+/* The sentence under a group heading: what this group is, in one line. */
+.group-note {
+	margin: 6px 0 10px;
+	max-width: 88ch;
+	color: var(--fg-muted);
+	font-size: var(--fs-sm);
+	line-height: 1.55;
+}
+
+/* ---------------------------------------------------------------- activity feed */
+
+/* A log, not a list: a rail of tone-coloured marks runs through a day, the time sits on the right,
+   and days are separated by a rule instead of being wrapped in a box each. */
 .feed {
 	list-style: none;
 	margin: 0;
 	padding: 0;
+}
+
+/* The module column only earns its space when the list is wide: the query is on the feed itself,
+   so a narrow editor hides it however wide the window is. */
+.feed-wrap {
+	container-type: inline-size;
 }
 
 .feed__item {
@@ -723,6 +1147,12 @@
 	grid-template-columns: 24px minmax(0, 1fr) auto;
 	column-gap: 12px;
 	padding: 9px 0;
+}
+
+@container (min-width: 620px) {
+	.feed__item {
+		grid-template-columns: 24px minmax(0, 1fr) 108px auto;
+	}
 }
 
 /* The rail belongs to the item, so the last event of a day simply ends it. */
@@ -740,9 +1170,14 @@
 	content: none;
 }
 
-.feed__mark {
-	display: grid;
+/* ---------------------------------------------------------------- tone mark */
+
+/* A state you can see before you read it: one icon in a tinted circle. Shared by the activity
+   feed and by the review queue, so a colour means the same thing on both. */
+.tone-mark {
+	display: inline-grid;
 	place-items: center;
+	flex: none;
 	width: 24px;
 	height: 24px;
 	border-radius: 50%;
@@ -750,22 +1185,27 @@
 	color: var(--fg-muted);
 }
 
-.feed__item--ok .feed__mark {
+.tone-mark--ok {
 	color: var(--ok);
 	background: color-mix(in srgb, var(--ok) 14%, transparent);
 }
 
-.feed__item--warn .feed__mark {
+.tone-mark--warn {
 	color: var(--warn);
 	background: color-mix(in srgb, var(--warn) 14%, transparent);
 }
 
-.feed__item--info .feed__mark {
+.tone-mark--err {
+	color: var(--err);
+	background: color-mix(in srgb, var(--err) 14%, transparent);
+}
+
+.tone-mark--info {
 	color: var(--info);
 	background: color-mix(in srgb, var(--info) 14%, transparent);
 }
 
-.feed__item--accent .feed__mark {
+.tone-mark--accent {
 	color: var(--accent);
 	background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
@@ -807,6 +1247,22 @@
 	flex: none;
 	justify-content: center;
 	min-width: 84px;
+}
+
+/* Which module recorded the event — the same three words the filter above the list offers. */
+.feed__module {
+	display: none;
+	color: var(--fg-subtle);
+	font-size: var(--fs-xs);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+@container (min-width: 620px) {
+	.feed__module {
+		display: block;
+	}
 }
 
 /* ---------------------------------------------------------------- misc */
@@ -1022,20 +1478,30 @@
 	border-color: var(--accent);
 }
 
+/* One setting per row: the name and what it does take the width, the control sits at the end of
+   the row where every other control on the page sits. Rows carry the rule between them, so a
+   group of settings needs no box around it. */
 .form-row {
 	display: grid;
-	grid-template-columns: 220px minmax(0, 1fr);
-	gap: 18px;
-	padding: 14px 0;
+	grid-template-columns: minmax(0, 1fr) 240px;
+	gap: 24px;
+	padding: 13px 0;
 	border-bottom: 1px solid var(--border);
-	align-items: start;
+	align-items: center;
 }
 
 .form-row:last-child {
 	border-bottom: 0;
 }
 
+.form-row__main {
+	min-width: 0;
+}
+
 .form-row__label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
 	color: var(--fg);
 	font-weight: 500;
 }
@@ -1045,6 +1511,37 @@
 	color: var(--fg-subtle);
 	font-size: var(--fs-sm);
 	line-height: 1.5;
+}
+
+.form-row__control {
+	display: flex;
+	justify-content: flex-end;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+
+.form-row__control .input,
+.form-row__control .select {
+	width: 100%;
+	max-width: none;
+}
+
+/* Rows of settings under a rule. The section head already says what the group is; a border around
+   four rows would only add a frame to read past. */
+.settings-rows {
+	margin-top: 8px;
+}
+
+@media (max-width: 700px) {
+	.form-row {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 8px;
+	}
+
+	.form-row__control {
+		justify-content: flex-start;
+	}
 }
 
 .check {
@@ -1138,13 +1635,19 @@
 	color: var(--fg-subtle);
 }
 
+/* The reading surface: the outer element is only a measuring container, because a container query
+   cannot restyle the container itself. */
+.learn-reader {
+	container-type: inline-size;
+	max-width: 1400px;
+	margin: 0 auto;
+}
+
 .learn-grid {
 	display: grid;
 	grid-template-columns: 240px minmax(0, 1fr) 220px;
 	gap: 28px;
 	padding: 26px 34px 56px;
-	max-width: 1400px;
-	margin: 0 auto;
 	align-items: start;
 }
 
@@ -1233,7 +1736,8 @@
 	margin: 0 0 16px;
 	border: 1px solid var(--border);
 	border-radius: var(--radius);
-	overflow: hidden;
+	overflow: auto;
+	max-width: 100%;
 }
 
 .article__body th,
@@ -1740,26 +2244,48 @@
 	margin: 18px 0;
 }
 
-/* The Learn reader drops its navigation first, then its table of contents — the article is the
-   last thing to lose width. These rules sit after the base `.learn-grid` declaration so they win
-   the cascade. */
-@media (max-width: 1240px) {
+/* The Learn reader gives up its side columns in the order that costs the reader least: the rail of
+   page facts drops under the article first, then the product navigation turns into a strip above it.
+   These are container queries because the reader is measured against the width of the editor pane —
+   a 1440px window still only gives it 750px, so a media query would never fire. */
+@container (max-width: 1080px) {
 	.learn-grid {
-		grid-template-columns: minmax(0, 1fr) 210px;
+		grid-template-columns: 240px minmax(0, 1fr);
 	}
 
-	.learn-grid > :first-child {
-		display: none;
+	.learn-rail {
+		grid-column: 1 / -1;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+		gap: 24px;
+		align-items: start;
+		padding-top: 20px;
+		border-top: 1px solid var(--border);
 	}
 }
 
-@media (max-width: 980px) {
+@container (max-width: 860px) {
 	.learn-grid {
 		grid-template-columns: minmax(0, 1fr);
-		padding: 20px 24px 48px;
+		padding: 22px 26px 48px;
 	}
 
-	.learn-grid > :last-child {
-		display: none;
+	.learn-nav {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+	}
+
+	.learn-nav .learn-nav__title {
+		flex: 0 0 100%;
+		margin: 0 0 2px;
+	}
+
+	.learn-nav__item {
+		display: inline-block;
+		width: auto;
+		padding: 4px 11px;
+		border: 1px solid var(--border);
+		border-radius: 999px;
 	}
 }
