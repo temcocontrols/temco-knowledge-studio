@@ -1,0 +1,318 @@
+{
+  "name": "temco-workbench",
+  "displayName": "Temco Workbench",
+  "description": "Temco Workbench — the application's own surfaces: the Library that lists what every module has, the dashboard, and what needs doing.",
+  "version": "0.0.1",
+  "publisher": "temcocontrols",
+  "private": true,
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/temcocontrols/temco-platform.git"
+  },
+  "bugs": {
+    "url": "https://github.com/temcocontrols/temco-platform/issues"
+  },
+  "engines": {
+    "vscode": "^1.143.0"
+  },
+  "type": "commonjs",
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "extensionDependencies": [
+    "temcocontrols.temco-store",
+    "temcocontrols.temco-ui",
+    "temcocontrols.temco-repositories",
+    "temcocontrols.temco-docs"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:temcoWorkbench.library"
+  ],
+  "contributes": {
+    "views": {
+      "temco": [
+        {
+          "id": "temcoWorkbench.library",
+          "name": "Library"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "temcoWorkbench.home",
+        "title": "Home",
+        "icon": "$(home)"
+      },
+      {
+        "command": "temcoWorkbench.openNeeds",
+        "title": "What Needs Doing",
+        "icon": "$(checklist)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "temcoProjects.newProject",
+          "when": "view == temcoWorkbench.library",
+          "group": "navigation@0"
+        },
+        {
+          "command": "temcoProjects.openProjects",
+          "when": "view == temcoWorkbench.library",
+          "group": "navigation@1"
+        },
+        {
+          "command": "temcoWorkbench.openNeeds",
+          "when": "view == temcoWorkbench.library",
+          "group": "navigation@2"
+        },
+        {
+          "command": "temcoAi.openPanel",
+          "when": "view == temcoWorkbench.library && temcoDocs.aiInstalled",
+          "group": "5_ai@1"
+        },
+        {
+          "command": "temcoRepositories.page",
+          "when": "view == temcoWorkbench.library",
+          "group": "1_read@4"
+        },
+        {
+          "command": "temcoRepositories.fetchSource",
+          "when": "view == temcoWorkbench.library",
+          "group": "1_read@5"
+        },
+        {
+          "command": "temcoRepositories.pullSource",
+          "when": "view == temcoWorkbench.library",
+          "group": "1_read@6"
+        },
+        {
+          "command": "temcoRepositories.openClone",
+          "when": "view == temcoWorkbench.library",
+          "group": "1_read@7"
+        },
+        {
+          "command": "temcoDocs.analyseSource",
+          "when": "view == temcoWorkbench.library",
+          "group": "2_work@3"
+        },
+        {
+          "command": "temcoRepositories.openWorkFolder",
+          "when": "view == temcoWorkbench.library",
+          "group": "3_run@3"
+        },
+        {
+          "command": "temcoRepositories.changeWorkspaceFolder",
+          "when": "view == temcoWorkbench.library",
+          "group": "3_run@4"
+        },
+        {
+          "command": "temcoRepositories.readAllSources",
+          "when": "view == temcoWorkbench.library",
+          "group": "1_read@1"
+        },
+        {
+          "command": "temcoRepositories.readSource",
+          "when": "view == temcoWorkbench.library",
+          "group": "1_read@2"
+        },
+        {
+          "command": "temcoProjects.addSource",
+          "when": "view == temcoWorkbench.library",
+          "group": "1_read@3"
+        },
+        {
+          "command": "temcoProjects.selectProject",
+          "when": "view == temcoWorkbench.library",
+          "group": "2_work@1"
+        },
+        {
+          "command": "temcoProjects.buildProject",
+          "when": "view == temcoWorkbench.library",
+          "group": "2_work@2"
+        },
+        {
+          "command": "temcoDocs.runScript",
+          "when": "view == temcoWorkbench.library",
+          "group": "3_run@1"
+        },
+        {
+          "command": "temcoDocs.stalenessReport",
+          "when": "view == temcoWorkbench.library",
+          "group": "3_run@2"
+        },
+        {
+          "command": "temcoStore.status",
+          "when": "view == temcoWorkbench.library",
+          "group": "4_catalog@1"
+        },
+        {
+          "command": "temcoRepositories.setToken",
+          "when": "view == temcoWorkbench.library",
+          "group": "9_settings@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "temcoProjects.openProject",
+          "when": "view == temcoWorkbench.library && viewItem == project",
+          "group": "inline"
+        },
+        {
+          "command": "temcoRepositories.readSource",
+          "when": "view == temcoWorkbench.library && viewItem == source",
+          "group": "inline"
+        },
+        {
+          "command": "temcoRepositories.openFile",
+          "when": "view == temcoWorkbench.library && viewItem == page",
+          "group": "inline"
+        },
+        {
+          "command": "temcoProjects.selectProject",
+          "when": "view == temcoWorkbench.library && viewItem == project",
+          "group": "1_work@1"
+        },
+        {
+          "command": "temcoProjects.editProject",
+          "when": "view == temcoWorkbench.library && viewItem == project",
+          "group": "1_work@2"
+        },
+        {
+          "command": "temcoProjects.addSource",
+          "when": "view == temcoWorkbench.library && viewItem == project",
+          "group": "1_work@3"
+        },
+        {
+          "command": "temcoProjects.buildProject",
+          "when": "view == temcoWorkbench.library && viewItem == project",
+          "group": "1_work@4"
+        },
+        {
+          "command": "temcoProjects.removeProject",
+          "when": "view == temcoWorkbench.library && viewItem == project",
+          "group": "9_forget@1"
+        },
+        {
+          "command": "temcoRepositories.revealSource",
+          "when": "view == temcoWorkbench.library && viewItem == source",
+          "group": "1_open@1"
+        },
+        {
+          "command": "temcoRepositories.setSourceBranch",
+          "when": "view == temcoWorkbench.library && viewItem == source",
+          "group": "1_open@2"
+        },
+        {
+          "command": "temcoRepositories.removeSource",
+          "when": "view == temcoWorkbench.library && viewItem == source",
+          "group": "9_forget@1"
+        },
+        {
+          "command": "temcoAi.page",
+          "when": "view == temcoWorkbench.library && viewItem == ai && temcoDocs.aiInstalled",
+          "group": "1_open@1"
+        },
+        {
+          "command": "temcoAi.dockRight",
+          "when": "view == temcoWorkbench.library && viewItem == ai && temcoDocs.aiInstalled",
+          "group": "1_place@1"
+        },
+        {
+          "command": "temcoAi.status",
+          "when": "view == temcoWorkbench.library && viewItem == ai && temcoDocs.aiInstalled",
+          "group": "1_open@2"
+        },
+        {
+          "command": "temcoAi.models",
+          "when": "view == temcoWorkbench.library && viewItem == ai && temcoDocs.aiInstalled",
+          "group": "1_open@3"
+        },
+        {
+          "command": "temcoAi.openModelFolder",
+          "when": "view == temcoWorkbench.library && viewItem == ai && temcoDocs.aiInstalled",
+          "group": "1_open@4"
+        },
+        {
+          "command": "temcoAi.openPanel",
+          "when": "view == temcoWorkbench.library && viewItem == ai && temcoDocs.aiInstalled",
+          "group": "1_open@5"
+        },
+        {
+          "command": "temcoRepositories.page",
+          "when": "view == temcoWorkbench.library && viewItem == repositories",
+          "group": "1_open@1"
+        },
+        {
+          "command": "temcoRepositories.setToken",
+          "when": "view == temcoWorkbench.library && viewItem == repositories",
+          "group": "2_token@1"
+        },
+        {
+          "command": "temcoRepositories.fetchSource",
+          "when": "view == temcoWorkbench.library && viewItem == source",
+          "group": "1_local@1"
+        },
+        {
+          "command": "temcoRepositories.pullSource",
+          "when": "view == temcoWorkbench.library && viewItem == source",
+          "group": "1_local@2"
+        },
+        {
+          "command": "temcoRepositories.openClone",
+          "when": "view == temcoWorkbench.library && viewItem == source",
+          "group": "1_local@3"
+        },
+        {
+          "command": "temcoRepositories.removeClone",
+          "when": "view == temcoWorkbench.library && viewItem == source",
+          "group": "1_local@4"
+        },
+        {
+          "command": "temcoDocs.analyseSource",
+          "when": "view == temcoWorkbench.library && viewItem == source",
+          "group": "2_analyse@1"
+        },
+        {
+          "command": "temcoRepositories.openWorkFolder",
+          "when": "view == temcoWorkbench.library && viewItem == source",
+          "group": "1_local@5"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Temco Workbench",
+      "properties": {
+        "temcoWorkbench.start.open": {
+          "type": "string",
+          "enum": [
+            "project",
+            "page",
+            "home",
+            "none"
+          ],
+          "enumDescriptions": [
+            "The dashboard of the project being worked on. With no project, the page you were last on.",
+            "The page you were last working on in the project being worked on. With none, that project's dashboard.",
+            "The platform's home page.",
+            "Nothing — no tab opens by itself."
+          ],
+          "default": "project",
+          "markdownDescription": "What opens in the editor when the extension is activated. Each choice falls through to the next when it cannot be honoured: `project`, then the page you were last on, then the home page. Only `none` opens nothing."
+        }
+      }
+    },
+    "viewsWelcome": [
+      {
+        "view": "temcoWorkbench.library",
+        "contents": "Nothing recorded yet.\n\nA project is what you manage: name it, then give it the sources it is built from — a repository at a branch you choose, a folder on this machine, or an archive. Read a source and its pages appear in the Workspace, beside the code they document.\n\n[Create a project](command:temcoProjects.newProject) · [Add a source](command:temcoProjects.addSource)"
+      }
+    ]
+  },
+  "scripts": {
+    "check-commands": "node --experimental-strip-types scripts/check-commands.mts"
+  }
+}
