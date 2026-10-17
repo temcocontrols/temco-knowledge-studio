@@ -61,3 +61,6 @@
 # Vendored third-party libraries
 src/vs/base/common/lit-html/**
 src/vs/base/common/signals-core/**
+
+# Temco fork: documentation is prose and static prototypes (docs/mock), not product source.
+docs/**

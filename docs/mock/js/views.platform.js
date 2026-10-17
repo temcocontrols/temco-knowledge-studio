@@ -480,100 +480,6 @@
 		}
 	};
 
-	/* ------------------------------------------------------------------ store */
-
-	M.views['store/marketplace'] = {
-		title: 'Marketplace',
-		render: function () {
-			var cards = data.extensions.map(function (extension) {
-				return (
-					'<div class="store-card">' +
-					'<div class="store-card__top">' +
-					'<span class="store-card__icon">' + ui.icon(extension.icon, 'icon--lg') + '</span>' +
-					'<div style="min-width:0">' +
-					'<div class="store-card__name">' + ui.esc(extension.name) + ' ' + (extension.official ? ui.badge('Temco', 'accent') : '') + '</div>' +
-					'<div class="store-card__publisher">' + ui.esc(extension.publisher) + ' · v' + ui.esc(extension.version) + '</div>' +
-					'</div>' +
-					'</div>' +
-					'<p class="store-card__desc">' + ui.esc(extension.desc) + '</p>' +
-					'<div class="store-card__foot">' +
-					(extension.installed ? ui.badge('Installed', 'ok') : ui.badge('Not installed', 'neutral')) +
-					ui.button(extension.installed ? 'Manage' : 'Install', { small: true, kind: extension.installed ? undefined : 'primary', action: extension.installed ? 'manage-extension' : 'install-extension' }) +
-					'</div>' +
-					'</div>'
-				);
-			}).join('');
-
-			var body =
-				ui.pageHead({
-					title: 'Marketplace',
-					icon: 'bag',
-					desc: 'Extensions add a module or a tool. Temco extensions are built into the platform; community ones are installed into your user folder.',
-					actions: '<input class="input" type="search" placeholder="Search extensions" aria-label="Search extensions">'
-				}) +
-				'<div class="toolbar">' +
-				'<div class="segmented" role="group" aria-label="Extension source">' +
-				'<button type="button" aria-pressed="true">All</button>' +
-				'<button type="button" aria-pressed="false">Temco</button>' +
-				'<button type="button" aria-pressed="false">Community</button>' +
-				'<button type="button" aria-pressed="false">Installed</button>' +
-				'</div>' +
-				'<span class="toolbar__spacer"></span>' +
-				'<span class="cell-muted" style="font-size:12px">5 extensions · 2 installed · 3 updates</span>' +
-				'</div>' +
-				'<div class="grid grid--2">' + cards + '</div>';
-			return ui.view(body);
-		}
-	};
-
-	M.views['store/installed'] = {
-		title: 'Installed',
-		render: function () {
-			var body =
-				ui.pageHead({
-					title: 'Installed',
-					icon: 'package',
-					desc: 'What this window loads. A built-in module cannot be uninstalled; a community extension can.',
-					actions: ui.button('Check for Updates', { icon: 'refresh', action: 'check-updates' })
-				}) +
-				ui.table({
-					columns: [
-						{ label: 'Extension', render: function (row) { return '<span class="cell-strong">' + ui.esc(row.name) + '</span><div class="cell-muted" style="font-size:12px">' + ui.esc(row.publisher) + '</div>'; } },
-						{ label: 'Version', render: function (row) { return '<span class="cell-mono">' + ui.esc(row.version) + '</span>'; } },
-						{ label: 'Source', render: function (row) { return ui.badge(row.official ? 'Built in' : 'Community', row.official ? 'accent' : 'neutral'); } },
-						{ label: 'State', render: function (row) { return ui.badge(row.installed ? 'Enabled' : 'Disabled', row.installed ? 'ok' : 'neutral'); } },
-						{ label: '', align: 'right', render: function (row) {
-							return row.official ? ui.button('Settings', { small: true, kind: 'ghost', action: 'manage-extension' }) : ui.button('Uninstall', { small: true, kind: 'danger', action: 'uninstall-extension' });
-						} }
-					],
-					rows: data.extensions.filter(function (extension) { return extension.installed; })
-				});
-			return ui.view(body);
-		}
-	};
-
-	M.views['store/updates'] = {
-		title: 'Updates',
-		render: function () {
-			var body =
-				ui.pageHead({
-					title: 'Updates',
-					icon: 'sync',
-					desc: 'Updates the platform found. A built-in module updates with the platform; a community one updates here.',
-					actions: ui.button('Update All', { kind: 'primary', icon: 'download', action: 'update-all' })
-				}) +
-				ui.list([
-					{ icon: 'building', title: 'Temco BACnet Studio 0.9.2 → 0.9.4', sub: '<span class="cell-muted">Temco · changelog available</span>', meta: ui.button('Update', { small: true, kind: 'primary', action: 'update-extension' }) },
-					{ icon: 'database', title: 'Temco SQL Studio 0.4.0 → 0.5.0', sub: '<span class="cell-muted">Temco · new results grid</span>', meta: ui.button('Update', { small: true, kind: 'primary', action: 'update-extension' }) },
-					{ icon: 'sparkle', title: 'Fluent Icon Preview 2.0.0 → 2.1.2', sub: '<span class="cell-muted">Community</span>', meta: ui.button('Update', { small: true, kind: 'primary', action: 'update-extension' }) }
-				]) +
-				'<div class="mt-24">' +
-				ui.callout('An update is staged, not applied: the platform restarts the extension host when the window is idle so a running query is never cut in half.') +
-				'</div>';
-			return ui.view(body);
-		}
-	};
-
 	/* ------------------------------------------------------------------ settings */
 
 	M.views['settings/general'] = {
@@ -592,6 +498,75 @@
 				ui.formRow('Working folder', 'Where repositories are cloned and captures are written.', '<input class="input" value="~/Temco" aria-label="Working folder">') +
 				ui.formRow('Telemetry', 'Documentation checks and build failures only. Never page content.', '<label class="check"><input type="checkbox" checked><span>Send diagnostics</span></label>') +
 				ui.formRow('Update channel', 'Preview adds release candidates one version earlier.', '<select class="select"><option>Stable</option><option>Preview</option></select>') +
+				'</div>';
+			return ui.view(body);
+		}
+	};
+
+	M.views['settings/modules'] = {
+		title: 'Modules',
+		render: function () {
+			var active = data.modules.filter(function (module) { return module.state === 'Active'; });
+			var reserved = data.modules.filter(function (module) { return module.state === 'Reserved'; });
+
+			var body =
+				ui.pageHead({
+					title: 'Modules',
+					icon: 'package',
+					desc: 'A module is a built-in extension: it ships with the platform and is never installed, removed or updated from the window. A reserved module is a folder with a README only — the build ignores it until it has a first feature.',
+					actions: ui.button('Show on Disk', { icon: 'folder', action: 'open-modules-folder' })
+				}) +
+				ui.tiles([
+					{ value: String(active.length), label: 'Active modules' },
+					{ value: String(reserved.length), label: 'Reserved modules' },
+					{ value: '0', label: 'Installable add-ons' },
+					{ value: '1.143.0', label: 'Platform version' }
+				]) +
+				'<div class="mt-24">' +
+				ui.table({
+					columns: [
+						{ label: 'Module', render: function (row) {
+							return '<span class="cell-strong">' + ui.esc(row.name) + '</span><div class="cell-muted cell-mono" style="font-size:11px">' + ui.esc(row.id) + '</div>';
+						} },
+						{ label: 'State', render: function (row) { return ui.badge(row.state, row.state === 'Active' ? 'ok' : 'neutral'); } },
+						{ label: 'Namespace', render: function (row) { return '<span class="cell-mono cell-muted">' + ui.esc(row.namespace) + '</span>'; } },
+						{ label: 'What It Owns', render: function (row) { return ui.esc(row.owns); } },
+						{ label: '', align: 'right', render: function (row) {
+							return row.surface
+								? ui.button('Open', { small: true, kind: 'ghost', open: row.surface })
+								: '<span class="cell-muted">No surface</span>';
+						} }
+					],
+					rows: data.modules
+				}) +
+				'</div>' +
+				'<div class="mt-24">' +
+				ui.callout('<b>There is no marketplace.</b> The build refuses a <code>product.json</code> that configures an extension gallery, so this window loads the modules in <code>extensions/</code> and nothing else — there is nothing to install and nothing to update on its own.', { kind: 'warn' }) +
+				'</div>' +
+				'<div class="mt-24 split">' +
+				ui.card({
+					title: 'Reserved Modules',
+					desc: 'Drawn in this mock because their surfaces are being designed; the platform build ships nothing for them until each has a first real feature.',
+					body: ui.list(reserved.map(function (module) {
+						return {
+							icon: 'package',
+							title: module.name,
+							sub: '<span class="cell-muted">' + ui.esc(module.owns) + '</span>',
+							meta: ui.badge('Reserved', 'neutral')
+						};
+					}))
+				}) +
+				ui.card({
+					title: 'Platform Updates',
+					body:
+						'<dl class="kv">' +
+						'<dt>Version</dt><dd class="cell-mono">1.143.0</dd>' +
+						'<dt>Channel</dt><dd>Stable</dd>' +
+						'<dt>Last checked</dt><dd>2 hours ago</dd>' +
+						'<dt>Modules</dt><dd>7 active, 4 reserved — none optional</dd>' +
+						'</dl>',
+					foot: ui.button('Check for Updates', { small: true, icon: 'refresh', action: 'check-updates' }) + '<span>a module updates with the platform, never on its own</span>'
+				}) +
 				'</div>';
 			return ui.view(body);
 		}

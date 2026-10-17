@@ -59,10 +59,15 @@ The mock keeps the sides at fixed widths and the editor flexible, which is what 
 | **SQL Studio** | Query Editor · Connections · Reports |
 | **AI Hub** | Chat · Actions · Citations · Local Models · Knowledge Base |
 | **Temco Learn** | Home · T3000 · Article Preview · Downloads · Learning Paths |
-| **Store** | Marketplace · Installed · Updates |
-| **Settings** | General · Branding · AI Models · Publishing |
+| **Settings** | General · Modules · Branding · AI Models · Publishing |
 
-The reserved modules (`temco-device-manager`, `temco-bacnet`, `temco-nettools`, `temco-sql`) appear as full modules here on purpose: the point of the mock is to decide the shape **before** a module becomes active.
+The reserved modules (`temco-device-manager`, `temco-bacnet`, `temco-nettools`, `temco-sql`) appear as full modules here on purpose: the point of the mock is to decide the shape **before** a module becomes active. **Settings › Modules** is where the mock says which of them the build actually ships.
+
+## Modules, not a marketplace
+
+There is no Store and no Install button, because there is nothing to install. `temco-store` is not a shop — it is the platform's own SQLite memory (the catalog, the selection, the naming rules), with no view of its own. Every other extension is a **module**: it ships with the platform, activates with it and cannot be removed. The build also refuses a `product.json` that configures an extension gallery, so a community marketplace is not reachable from this window at all.
+
+So the mock keeps one honest surface, **Settings › Modules**: the seven active modules with their ids, namespaces and the surfaces they open; the four reserved ones marked as such; and platform updates, because a module updates with the platform and never on its own. If Temco later ships optional add-ons outside the platform's release cadence, that is a new surface — curated, Temco-only — not a marketplace.
 
 ## What moves
 
@@ -106,3 +111,4 @@ M.views['docs/releases'] = {
 - **Where the AI bar lives.** A container contributed to the panel can be docked on the right, but a fresh profile needs one drag; a webview beside the page is a tab instead of a dock. The mock draws it docked.
 - **Learn inside the window, or only a preview?** The mock treats it as both: a module that previews the site with the shipped template, so the layout is decided once.
 - **The dashboard's place.** `ui/app-layout.md` puts the organisation-wide dashboard on the site at `/_admin/`, and the extension is the hand-off target. The mock keeps a dashboard in the window **and** a needs queue beside it; which of the two is the product is still open.
+- **Whether anything is ever optional.** Today every module ships with the platform and none can be removed. If an add-on catalogue ever exists, it is a surface of its own with a publisher, a signature and a rollback — not a tab added to Settings.

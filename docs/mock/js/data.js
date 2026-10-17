@@ -230,22 +230,6 @@
 			]
 		},
 		{
-			id: 'store',
-			label: 'Store',
-			icon: 'bag',
-			defaultView: 'store/marketplace',
-			sections: [
-				{
-					label: 'Marketplace',
-					views: [
-						{ id: 'store/marketplace', label: 'Marketplace', icon: 'bag' },
-						{ id: 'store/installed', label: 'Installed', icon: 'package', badge: 7 },
-						{ id: 'store/updates', label: 'Updates', icon: 'sync', badge: 3, tone: 'warn' }
-					]
-				}
-			]
-		},
-		{
 			id: 'settings',
 			label: 'Settings',
 			icon: 'gear',
@@ -256,6 +240,7 @@
 					label: 'Temco Platform',
 					views: [
 						{ id: 'settings/general', label: 'General', icon: 'gear' },
+						{ id: 'settings/modules', label: 'Modules', icon: 'package', badge: 7 },
 						{ id: 'settings/branding', label: 'Branding', icon: 'palette' },
 						{ id: 'settings/ai', label: 'AI Models', icon: 'sparkle' },
 						{ id: 'settings/publishing', label: 'Publishing', icon: 'upload' }
@@ -501,12 +486,21 @@
 			{ name: 'Write a BACnet integration', level: 'Advanced', steps: 11, minutes: 210, desc: 'Objects, services, alarms and trend logs across vendors.' }
 		],
 
-		extensions: [
-			{ name: 'Temco BACnet Studio', publisher: 'Temco', desc: 'Object browser, alarms and trend logs for BACnet networks.', version: '0.9.2', installed: true, official: true, icon: 'building' },
-			{ name: 'Temco SQL Studio', publisher: 'Temco', desc: 'Query the platform database with a results grid and export.', version: '0.4.0', installed: false, official: true, icon: 'database' },
-			{ name: 'Modbus Toolkit', publisher: 'Temco Labs', desc: 'Register scanner, polling and write helpers.', version: '1.2.1', installed: true, official: true, icon: 'list' },
-			{ name: 'Fluent Icon Preview', publisher: 'Community', desc: 'Browse and insert Fluent UI icons into any webview.', version: '2.0.0', installed: false, official: false, icon: 'sparkle' },
-			{ name: 'Markdown Lint Plus', publisher: 'Community', desc: 'Structural checks for large documentation repositories.', version: '3.6.4', installed: false, official: false, icon: 'document' }
+		/* The module register, as `docs/temco-platform/modules/README.md` states it: seven active modules
+		   that ship with the platform, and four reserved ones whose folders hold a README only. A module
+		   is never installed, removed or updated from the window. */
+		modules: [
+			{ name: 'Temco Workbench', id: 'temcocontrols.temco-workbench', namespace: 'temcoWorkbench', state: 'Active', owns: 'The application\u2019s own surfaces: the Library, the dashboard, what needs doing', surface: 'dashboard/overview' },
+			{ name: 'Temco UI', id: 'temcocontrols.temco-ui', namespace: 'temcoUi', state: 'Active', owns: 'Where a page of ours opens, and what a command argument means' },
+			{ name: 'Temco Store', id: 'temcocontrols.temco-store', namespace: 'temcoStore', state: 'Active', owns: 'The platform\u2019s own memory: the catalog, the selection, the naming rules' },
+			{ name: 'Temco Docs', id: 'temcocontrols.temco-docs', namespace: 'temcoDocs', state: 'Active', owns: 'The registry, pages, checks, editor surfaces, and the writes', surface: 'docs/knowledge' },
+			{ name: 'Temco Repositories', id: 'temcocontrols.temco-repositories', namespace: 'temcoRepositories', state: 'Active', owns: 'The organisation, local copies, the working area, reading a source', surface: 'docs/sources' },
+			{ name: 'Temco Projects', id: 'temcocontrols.temco-projects', namespace: 'temcoProjects', state: 'Active', owns: 'Projects, sources, outputs, builds', surface: 'docs/projects' },
+			{ name: 'Temco AI', id: 'temcocontrols.temco-ai', namespace: 'temcoAi', state: 'Active', owns: 'The local runtime and models, the prompts, the panel, drafts and answers', surface: 'ai/chat' },
+			{ name: 'Temco SQL', id: 'temcocontrols.temco-sql', namespace: 'temcoSql', state: 'Reserved', owns: 'Registers, queries, export', surface: 'sql/query' },
+			{ name: 'Temco NetTools', id: 'temcocontrols.temco-nettools', namespace: 'temcoNettools', state: 'Reserved', owns: 'Devices on the wire', surface: 'network/discovery' },
+			{ name: 'Temco BACnet', id: 'temcocontrols.temco-bacnet', namespace: 'temcoBacnet', state: 'Reserved', owns: 'Objects, points, trends', surface: 'bacnet/objects' },
+			{ name: 'Temco Device Manager', id: 'temcocontrols.temco-device-manager', namespace: 'temcoDevices', state: 'Reserved', owns: 'Fleets, firmware, health', surface: 'devices/all' }
 		],
 
 		problems: [

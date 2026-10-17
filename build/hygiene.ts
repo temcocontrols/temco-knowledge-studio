@@ -67,7 +67,9 @@ export function checkNoNewJavaScriptFiles(repoRoot: string): string | undefined 
 	});
 	const tracked = out.split(/\r?\n/).filter(line => !!line);
 
-	const unknown = tracked.filter(file => !allowed.has(file));
+	// `docs/` is documentation: prose and the static layout mock. No build consumes it, so the rule
+	// that keeps product sources in TypeScript does not apply there.
+	const unknown = tracked.filter(file => !file.startsWith('docs/') && !allowed.has(file));
 	if (unknown.length > 0) {
 		return [
 			'New JavaScript files are not allowed. Use TypeScript (.ts) instead.',
