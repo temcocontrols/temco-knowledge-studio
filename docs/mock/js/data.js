@@ -92,6 +92,14 @@
 						{ id: 'docs/builds', label: 'Build Center', icon: 'play' },
 						{ id: 'docs/releases', label: 'Releases', icon: 'upload' }
 					]
+				},
+				{
+					/* The one surface about the module itself rather than about the work in it: a step-by-step
+					   way in for someone who has just opened Documentation for the first time. */
+					label: 'How-To',
+					views: [
+						{ id: 'docs/how-to', label: 'How To Use', icon: 'graduation' }
+					]
 				}
 			]
 		},
@@ -316,6 +324,7 @@
 				{
 					label: 'Learn',
 					views: [
+						{ id: 'help/welcome', label: 'Welcome', icon: 'home' },
 						{ id: 'help/home', label: 'Help', icon: 'info' },
 						{ id: 'help/keys', label: 'Keyboard Shortcuts', icon: 'key' }
 					]
@@ -595,62 +604,86 @@
 		   folder is a position in this tree, not a directory on disk — the site and the PDF both
 		   order pages by it, and an area is just the top level of the same shape. */
 		docTree: [
-			{ name: 'Overview', children: [
-				{ name: 'What T3000 Is' },
-				{ name: 'Product Lineup' },
-				{ name: 'Getting Help' },
-				{ name: 'Reference', children: [
-					{ name: 'Glossary' },
-					{ name: 'Compatibility' }
-				] }
-			] },
-			{ name: 'Getting Started', children: [
-				{ name: 'Install T3000' },
-				{ name: 'First Connection' },
-				{ name: 'Licensing' },
-				{ name: 'Uninstall' }
-			] },
-			{ name: 'Architecture', children: [
-				{ name: 'Controller Model' },
-				{ name: 'Point Engine' },
-				{ name: 'Data Flow' }
-			] },
-			{ name: 'API Reference', children: [
-				{ name: 'Points', children: [
-					{ name: 'Points and Properties' },
-					{ name: 'Reading a Point' },
-					{ name: 'Writing a Point' }
-				] },
-				{ name: 'Types', children: [
-					{ name: 'Point Types' },
-					{ name: 'Data Points API' },
-					{ name: 'Data Points API (duplicate)' }
-				] }
-			] },
-			{ name: 'Hardware', children: [
-				{ name: 'Controllers', children: [
-					{ name: 'T3-8R', children: [ { name: 'T3-8R Wiring' } ] },
-					{ name: 'T3-22I', children: [ { name: 'T3-22I Wiring' }, { name: 'Lab Setup' } ] },
-					{ name: 'T3-BB', children: [ { name: 'T3-BB Overview' } ] }
-				] },
-				{ name: 'Terminal Layout' },
-				{ name: 'Power Requirements' }
-			] },
-			{ name: 'Protocols', children: [
-				{ name: 'Modbus Register Map' },
-				{ name: 'BACnet Object Model' },
-				{ name: 'MSTP Addressing' }
-			] },
-			{ name: 'Troubleshooting', children: [
-				{ name: 'Controller Offline' },
-				{ name: 'Sensor Drift' },
-				{ name: 'Comm Timeouts' }
-			] },
-			{ name: 'Release Notes', children: [
-				{ name: '13.0' },
-				{ name: '12.9' },
-				{ name: '12.8' }
-			] }
+			{
+				name: 'Overview', children: [
+					{ name: 'What T3000 Is' },
+					{ name: 'Product Lineup' },
+					{ name: 'Getting Help' },
+					{
+						name: 'Reference', children: [
+							{ name: 'Glossary' },
+							{ name: 'Compatibility' }
+						]
+					}
+				]
+			},
+			{
+				name: 'Getting Started', children: [
+					{ name: 'Install T3000' },
+					{ name: 'First Connection' },
+					{ name: 'Licensing' },
+					{ name: 'Uninstall' }
+				]
+			},
+			{
+				name: 'Architecture', children: [
+					{ name: 'Controller Model' },
+					{ name: 'Point Engine' },
+					{ name: 'Data Flow' }
+				]
+			},
+			{
+				name: 'API Reference', children: [
+					{
+						name: 'Points', children: [
+							{ name: 'Points and Properties' },
+							{ name: 'Reading a Point' },
+							{ name: 'Writing a Point' }
+						]
+					},
+					{
+						name: 'Types', children: [
+							{ name: 'Point Types' },
+							{ name: 'Data Points API' },
+							{ name: 'Data Points API (duplicate)' }
+						]
+					}
+				]
+			},
+			{
+				name: 'Hardware', children: [
+					{
+						name: 'Controllers', children: [
+							{ name: 'T3-8R', children: [{ name: 'T3-8R Wiring' }] },
+							{ name: 'T3-22I', children: [{ name: 'T3-22I Wiring' }, { name: 'Lab Setup' }] },
+							{ name: 'T3-BB', children: [{ name: 'T3-BB Overview' }] }
+						]
+					},
+					{ name: 'Terminal Layout' },
+					{ name: 'Power Requirements' }
+				]
+			},
+			{
+				name: 'Protocols', children: [
+					{ name: 'Modbus Register Map' },
+					{ name: 'BACnet Object Model' },
+					{ name: 'MSTP Addressing' }
+				]
+			},
+			{
+				name: 'Troubleshooting', children: [
+					{ name: 'Controller Offline' },
+					{ name: 'Sensor Drift' },
+					{ name: 'Comm Timeouts' }
+				]
+			},
+			{
+				name: 'Release Notes', children: [
+					{ name: '13.0' },
+					{ name: '12.9' },
+					{ name: '12.8' }
+				]
+			}
 		],
 
 		/* What the coverage report checks besides coverage itself. `found: 0` is a pass. */		healthChecks: [
@@ -824,22 +857,28 @@
 
 		/* What the Help pages read: the keys the window binds, and the files a report would attach. */
 		shortcuts: [
-			{ group: 'Window', items: [
-				{ label: 'Command palette', keys: ['Ctrl', 'Shift', 'P'], note: 'every command, including the ones without a key' },
-				{ label: 'Go to a surface', keys: ['Ctrl', 'P'], note: 'the same list the side bar walks' },
-				{ label: 'Toggle side bar', keys: ['Ctrl', 'B'] },
-				{ label: 'Toggle panel', keys: ['Ctrl', 'J'] },
-				{ label: 'Toggle AI bar', keys: ['Ctrl', 'Alt', 'B'] }
-			] },
-			{ group: 'Documents', items: [
-				{ label: 'New page', keys: ['Ctrl', 'Alt', 'N'], note: 'opens the New Page flow' },
-				{ label: 'Read all sources', keys: ['Ctrl', 'Alt', 'R'] },
-				{ label: 'Build everything', keys: ['Ctrl', 'Shift', 'B'] }
-			] },
-			{ group: 'Editor', items: [
-				{ label: 'Save draft', keys: ['Ctrl', 'S'], note: 'writes the registry, not a source file' },
-				{ label: 'Submit for review', keys: ['Ctrl', 'Enter'] }
-			] }
+			{
+				group: 'Window', items: [
+					{ label: 'Command palette', keys: ['Ctrl', 'Shift', 'P'], note: 'every command, including the ones without a key' },
+					{ label: 'Go to a surface', keys: ['Ctrl', 'P'], note: 'the same list the side bar walks' },
+					{ label: 'Toggle side bar', keys: ['Ctrl', 'B'] },
+					{ label: 'Toggle panel', keys: ['Ctrl', 'J'] },
+					{ label: 'Toggle AI bar', keys: ['Ctrl', 'Alt', 'B'] }
+				]
+			},
+			{
+				group: 'Documents', items: [
+					{ label: 'New page', keys: ['Ctrl', 'Alt', 'N'], note: 'opens the New Page flow' },
+					{ label: 'Read all sources', keys: ['Ctrl', 'Alt', 'R'] },
+					{ label: 'Build everything', keys: ['Ctrl', 'Shift', 'B'] }
+				]
+			},
+			{
+				group: 'Editor', items: [
+					{ label: 'Save draft', keys: ['Ctrl', 'S'], note: 'writes the registry, not a source file' },
+					{ label: 'Submit for review', keys: ['Ctrl', 'Enter'] }
+				]
+			}
 		],
 
 		logFiles: [

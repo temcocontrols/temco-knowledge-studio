@@ -27,6 +27,9 @@
 	   repeat the side bar's module and the tab's page — and in VS Code it is a setting, not a
 	   fixture. View › Toggle Breadcrumbs brings it back. */
 	var breadcrumbsVisible = false;
+	/* The welcome page opens at startup until the reader turns it off — the same promise the
+	   checkbox on that page makes. */
+	var showWelcomeOnStart = true;
 	var panelTab = 'problems';
 	/* The surfaces you came from, newest last: the side bar's back button walks it. */
 	var viewHistory = [];
@@ -55,7 +58,7 @@
 	}
 
 	function persist() {
-		storageSet({ theme: theme, moduleId: moduleId, activeView: activeView, tabs: tabs, sidebarVisible: sidebarVisible, auxVisible: auxVisible, panelVisible: panelVisible, breadcrumbsVisible: breadcrumbsVisible, panelTab: panelTab });
+		storageSet({ theme: theme, moduleId: moduleId, activeView: activeView, tabs: tabs, sidebarVisible: sidebarVisible, auxVisible: auxVisible, panelVisible: panelVisible, breadcrumbsVisible: breadcrumbsVisible, showWelcome: showWelcomeOnStart, panelTab: panelTab });
 	}
 
 	function viewOf(viewId) {
@@ -263,7 +266,8 @@
 		);
 	}
 
-	function projectLeaf(project, isCurrent) {		return (
+	function projectLeaf(project, isCurrent) {
+		return (
 			'<button type="button" class="tree__leaf' + (isCurrent ? ' is-active' : '') + '" data-action="tree-project" data-project="' + ui.esc(project.name) + '">' +
 			ui.icon(isCurrent ? 'layers' : 'folder') +
 			'<span class="tree__label">' + ui.esc(project.name) + '</span>' +
@@ -785,19 +789,19 @@
 			{ label: 'Open Workspace…', action: 'open-workspace' },
 			{ label: 'Add Source…', action: 'add-source' },
 			{ separator: true },
-			{ label: 'Save All', keys: 'Ctrl+K S', action: 'save-all' },
+			{ label: 'Save All', keys: 'Ctrl+K S', disabled: true, hint: 'the page editor is a mock' },
 			{ separator: true },
 			{ label: 'Close Tab', keys: 'Ctrl+W', run: function () { if (activeView) { closeTab(activeView); } } },
 			{ label: 'Close Window', run: function () { toast('The window stays open in the mock.'); } }
 		],
 		Edit: [
-			{ label: 'Undo', keys: 'Ctrl+Z', action: 'undo' },
-			{ label: 'Redo', keys: 'Ctrl+Y', action: 'redo' },
+			{ label: 'Undo', keys: 'Ctrl+Z', disabled: true, hint: 'no text editor' },
+			{ label: 'Redo', keys: 'Ctrl+Y', disabled: true, hint: 'no text editor' },
 			{ separator: true },
-			{ label: 'Find', keys: 'Ctrl+F', action: 'find' },
-			{ label: 'Replace', keys: 'Ctrl+H', action: 'replace' },
+			{ label: 'Find', keys: 'Ctrl+F', disabled: true, hint: 'no text editor' },
+			{ label: 'Replace', keys: 'Ctrl+H', disabled: true, hint: 'no text editor' },
 			{ separator: true },
-			{ label: 'Copy Path', action: 'copy-path' }
+			{ label: 'Copy Path', disabled: true, hint: 'this window has no files' }
 		],
 		View: [
 			{ label: 'Command Palette…', keys: 'Ctrl+Shift+P', run: function () { openPalette('commands'); } },
@@ -872,6 +876,7 @@
 			{ label: 'Developer: Open Settings JSON', action: 'open-settings-json' }
 		],
 		Help: [
+			{ label: 'Welcome', run: function () { openView('help/welcome'); } },
 			{ label: 'Help', run: function () { openView('help/home'); } },
 			{ label: 'Documentation', run: function () { openView('learn/home'); } },
 			{ label: 'Keyboard Shortcuts', run: function () { openView('help/keys'); } },
@@ -1050,6 +1055,14 @@
 				openView('docs/page');
 				return;
 			}
+			/* The welcome page's own checkbox: it changes what the next start does, and says so. */
+			case 'toggle-welcome-startup':
+				showWelcomeOnStart = !showWelcomeOnStart;
+				M.state = M.state || {};
+				M.state.showWelcome = showWelcomeOnStart;
+				persist();
+				toast(showWelcomeOnStart ? 'The welcome page opens at startup.' : 'The window opens the Dashboard at startup.');
+				return;
 			/* "Open the tree": the same surfaces, in the container that shows their shape. */			case 'open-tree':
 				moduleId = 'documents';
 				renderActivityBar();
@@ -1165,6 +1178,39 @@
 				return;
 			case 'new-project':
 				openView('flow/new-project');
+				return;
+			/* A command with a page behind it opens that page: the mock has no processes to run, so the
+			   surface where the thing is done is the honest destination. */
+			case 'build-help':
+			case 'validate-docs':
+				openView('docs/builds');
+				return;
+			case 'run-query':
+				openView('sql/query');
+				return;
+			case 'discover-devices':
+				openView('devices/all');
+				return;
+			case 'new-capture':
+				openView('network/captures');
+				return;
+			case 'read-all':
+				openView('docs/sources');
+				return;
+			case 'auto-map':
+				openView('io/mapping');
+				return;
+			case 'load-model':
+				openView('ai/models');
+				return;
+			case 'rebuild-index':
+				openView('ai/knowledge');
+				return;
+			case 'net-scan':
+				openView('network/discovery');
+				return;
+			case 'open-settings-json':
+				openView('settings/general');
 				return;
 			/* Back: the surface you were on before this one, not the last tab in the strip. */
 			case 'go-back': {
@@ -1659,6 +1705,7 @@
 			auxVisible = saved.auxVisible !== false;
 			panelVisible = saved.panelVisible !== false;
 			breadcrumbsVisible = saved.breadcrumbsVisible === true;
+			showWelcomeOnStart = saved.showWelcome !== false;
 			panelTab = saved.panelTab || 'problems';
 			tabs = Array.isArray(saved.tabs) ? saved.tabs.filter(viewOf) : [];
 		} else if (window.innerWidth < 1180) {
@@ -1679,15 +1726,31 @@
 			sidebarVisible = false;
 		}
 
+		M.state = M.state || {};
+		M.state.showWelcome = showWelcomeOnStart;
+
 		var fromHash = window.location.hash.replace(/^#\//, '');
+		/* "Do not show the welcome page" has to beat both the address bar and the last session,
+		   otherwise turning it off appears to do nothing on the next start. */
+		if (!showWelcomeOnStart && fromHash === 'help/welcome') {
+			fromHash = '';
+		}
 		if (fromHash && viewOf(fromHash)) {
 			activeView = fromHash;
-		} else if (saved && saved.activeView && viewOf(saved.activeView)) {
+		} else if (saved && saved.activeView && viewOf(saved.activeView) && (showWelcomeOnStart || saved.activeView !== 'help/welcome')) {
 			activeView = saved.activeView;
 		}
 
 		if (!tabs.length && activeView) {
 			tabs = [activeView];
+		}
+		/* Welcome is a tab this window opens for you: it goes to the front of the strip, and any
+		   surface restored from the last session stays beside it. */
+		if (showWelcomeOnStart && !fromHash && viewOf('help/welcome')) {
+			if (tabs.indexOf('help/welcome') < 0) {
+				tabs.unshift('help/welcome');
+			}
+			activeView = 'help/welcome';
 		}
 		if (tabs.indexOf(activeView) < 0 && tabs.length) {
 			activeView = tabs[tabs.length - 1];

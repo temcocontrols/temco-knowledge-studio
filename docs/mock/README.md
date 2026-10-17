@@ -45,6 +45,12 @@ The mock keeps the sides at fixed widths and the editor flexible, which is what 
 
 **There is no breadcrumb row by default.** In VS Code breadcrumbs are a setting (`breadcrumbs.enabled`, View › Appearance › Breadcrumbs), and this window has no file system for them to name: the bar could only repeat the side bar's module and the tab's page. So the row is off, the editor keeps its 22 pixels, and `View › Toggle Breadcrumbs` / `View: Toggle Breadcrumbs` in the palette / the `Breadcrumbs` switch on Settings › General brings it back — a real toggle rather than a fixture, remembered with the other chrome flags. When it is on, the bar reads `Module › Page` and adds the section in between only when the module has more than one: `Settings › Platform › Publishing`, `Documentation › Pipeline › Releases`, but `Workspaces › T3000`. A module with a single section also drops that group's heading in the side bar, because a heading above the only group of items names nothing the title did not. Every segment above the page is a button that opens that level, since a level you cannot go back to is only a label.
 
+## The welcome page
+
+A window that opens on a page you did not ask for is a window that has to justify the page. So `Welcome` is one editor tab, in front of whatever the last session left open, and it carries only things a person can act on: `Start` (open a project, add a source, browse a device, read the documents, open settings), `Recent Pages` — which stays away until the session has any — and three `Walkthroughs` with real progress. Nothing on it is a picture of the product.
+
+It is the one page that is easy to turn off, because it is the one page that opens itself: the checkbox in its footer writes `showWelcome` with the other chrome flags, and `Help › Welcome` still opens it on demand. With the box cleared, the next start ignores both the address bar and the last session's page and lands on `Dashboard › Overview`, so "do not show it again" means what it says rather than reappearing on every reload.
+
 ## The menu bar
 
 Menus are **verbs**, not features. A module contributes items into these shared titles; it never gets a menu of its own, or the bar would become the activity bar.
@@ -208,7 +214,7 @@ The Query Editor opens with *Stale pages by area*, and its result is computed fr
 |---|---|
 | **Dashboard** | Overview · Recent Activity · Coverage & Health · Needs Review |
 | **Workspaces** | All Workspaces · T3000 · Templates |
-| **Documentation** | Projects · Repositories · Sources · Knowledge · Review Center · Build Center · Releases |
+| **Documentation** | Projects · Repositories · Sources · Knowledge · Review Center · Build Center · Releases · How To Use |
 | **AI Hub** | Chat · Actions · Citations · Local Models · Knowledge Base |
 | **Temco Learn** | Home · T3000 · Article Preview · Downloads · Learning Paths |
 | **Devices** | Devices · Firmware · Health & Alarms · Schedules · Trend Logs · Backups |

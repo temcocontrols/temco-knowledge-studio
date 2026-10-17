@@ -17,6 +17,96 @@
 		return keys.map(function (key) { return '<kbd>' + ui.esc(key) + '</kbd>'; }).join(' ');
 	}
 
+	M.views['help/welcome'] = {
+		title: 'Welcome',
+		render: function () {
+			var startRow = function (icon, title, note, open) {
+				return (
+					'<div class="record-row" data-open="' + open + '">' +
+					ui.toneMark(icon, 'accent') +
+					'<div class="record-row__main">' +
+					'<div class="record-row__title"><span class="record-row__name">' + ui.esc(title) + '</span></div>' +
+					'<div class="record-row__meta"><span>' + ui.esc(note) + '</span></div>' +
+					'</div>' +
+					'<div class="record-row__state"></div>' +
+					ui.icon('chevron-right', 'icon--sm') +
+					'</div>'
+				);
+			};
+
+			var walkthrough = function (title, note, done, total, open) {
+				return ui.card({
+					title: title,
+					cls: 'card--plain',
+					desc: note,
+					actions: ui.button('Open', { small: true, kind: 'ghost', open: open }),
+					body:
+						'<div class="facts" style="margin-top:0">' +
+						'<span>' + done + ' of ' + total + ' steps</span>' +
+						'</div>' +
+						'<div class="mt-16">' + ui.bar(Math.round((done / total) * 100), done === total ? 'ok' : '') + '</div>'
+				});
+			};
+
+			var recent = (M.state && M.state.working) || [];
+
+			var body =
+				'<div class="learn-hero learn-hero--flush">' +
+				'<div class="learn-hero__inner">' +
+				'<div class="row" style="gap:10px;margin-bottom:10px">' + ui.badge('Temco Platform', 'accent') + '<span class="cell-muted" style="font-size:12px">1.143.0 · this profile</span></div>' +
+				'<h1 class="learn-hero__title">Documentation, read and written in one window</h1>' +
+				'<p class="learn-hero__desc">A project holds the pages of a product, the sources they are written from, and the artifacts a build produces. Start with what you came to do.</p>' +
+				'</div>' +
+				'</div>' +
+				'<div class="mt-24">' +
+				ui.group({
+					label: 'Start',
+					count: '6 ways in',
+					body:
+						startRow('plus', 'Create a documentation project', 'a name, a version, and the sources it reads', 'flow/new-project') +
+						startRow('repo', 'Read a source', 'a repository, a document, a folder or a connected library', 'flow/add-source') +
+						startRow('document', 'Open the content tree', 'every area, folder and page this workspace holds', 'docs/knowledge') +
+						startRow('graduation', 'See how Documentation works', 'five steps from a repository to a published page', 'docs/how-to') +
+						startRow('chip', 'Bring in a controller', 'discover one on the segment, or add it by address', 'devices/all') +
+						startRow('sparkle', 'Ask the AI about this workspace', 'answers cite the pages and sources they used', 'ai/chat')
+				}) +
+				(recent.length
+					? ui.group({
+						label: 'Recent Pages',
+						count: recent.length + ' open',
+						body: recent.map(function (entry) {
+							return (
+								'<div class="record-row record-row--static">' +
+								ui.toneMark('document') +
+								'<div class="record-row__main">' +
+								'<div class="record-row__title"><span class="record-row__name">' + ui.esc(entry.page) + '</span></div>' +
+								'<div class="record-row__meta"><span>' + ui.esc(entry.area) + '</span> · <span>still open in the Documents tree</span></div>' +
+								'</div>' +
+								'<div class="record-row__state"></div>' +
+								'<div class="record-row__state"></div>' +
+								'</div>'
+							);
+						}).join('')
+					})
+					: '') +
+				ui.rule({ label: 'Walkthroughs', count: '3 guides' }) +
+				'<div class="grid grid--3 mt-16">' +
+				walkthrough('Set up a workspace', 'The folder, the sources it reads, and the devices it can reach.', 2, 4, 'flow/new-workspace') +
+				walkthrough('Write and review a page', 'From a source read to a reviewed page in an area.', 1, 5, 'docs/knowledge') +
+				walkthrough('Publish a version', 'Build every artifact, then freeze the version for readers.', 3, 4, 'flow/publish') +
+				'</div>' +
+				'<div class="mt-24 row" style="gap:16px;align-items:center;font-size:13px;color:var(--fg-muted)">' +
+				'<label class="check"><input type="checkbox" data-action="toggle-welcome-startup"' + (M.state && M.state.showWelcome === false ? '' : ' checked') + '><span>Show the welcome page at startup</span></label>' +
+				'<span class="toolbar__spacer"></span>' +
+				ui.button('Keyboard Shortcuts', { small: true, kind: 'ghost', open: 'help/keys' }) +
+				ui.button('Release Notes', { small: true, kind: 'ghost', open: 'docs/releases' }) +
+				'</div>' +
+				'</div>';
+
+			return ui.view(body, { full: true });
+		}
+	};
+
 	M.views['help/home'] = {
 		title: 'Help',
 		render: function () {

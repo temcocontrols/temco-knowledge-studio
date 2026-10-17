@@ -347,7 +347,7 @@
 
 	ui.view = function (body, options) {
 		options = options || {};
-		var cls = options.wide ? 'view__inner view__inner--wide' : options.narrow ? 'view__inner view__inner--narrow' : 'view__inner';
+		var cls = options.full ? 'view__inner view__inner--full' : options.wide ? 'view__inner view__inner--wide' : options.narrow ? 'view__inner view__inner--narrow' : 'view__inner';
 		return '<div class="view">' + '<div class="' + cls + '">' + body + '</div>' + '</div>';
 	};
 

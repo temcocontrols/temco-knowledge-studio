@@ -178,10 +178,10 @@
 					'</div>';
 			}).join('')
 			: '<div class="record-row record-row--static">' + ui.toneMark('document') +
-				'<div class="record-row__main">' +
-				'<div class="record-row__title"><span class="record-row__name">Title only</span></div>' +
-				'<div class="record-row__meta"><span>the body is yours to write</span></div>' +
-				'</div><div class="record-row__state"></div><div class="record-row__state"></div></div>';
+			'<div class="record-row__main">' +
+			'<div class="record-row__title"><span class="record-row__name">Title only</span></div>' +
+			'<div class="record-row__meta"><span>the body is yours to write</span></div>' +
+			'</div><div class="record-row__state"></div><div class="record-row__state"></div></div>';
 
 		return '<div class="mt-16">' + ui.group({
 			label: 'This Template',
@@ -704,11 +704,11 @@
 					label: 'Location',
 					render: function (s) {
 						return stepHead('Where does it go?', 'The area decides who is asked to review it.') +
-						'<div class="settings-rows">' +
-						ui.formRow('Area', 'Each area has its own order, so 20 here is not 20 there.', '<select class="select" data-field="area" aria-label="Area">' + options(['Overview', 'Getting Started', 'Architecture', 'API Reference', 'Hardware', 'Protocols', 'Troubleshooting', 'Release Notes'], s.values.area) + '</select>') +
-						ui.formRow('Order', 'Position inside the area. The next free one is ' + nextFreeOrder(s.values.area) + '.', '<input class="input" data-field="order" value="' + ui.esc(s.values.order) + '" aria-label="Order">') +
-						'</div>' +
-						locationPreview(s);
+							'<div class="settings-rows">' +
+							ui.formRow('Area', 'Each area has its own order, so 20 here is not 20 there.', '<select class="select" data-field="area" aria-label="Area">' + options(['Overview', 'Getting Started', 'Architecture', 'API Reference', 'Hardware', 'Protocols', 'Troubleshooting', 'Release Notes'], s.values.area) + '</select>') +
+							ui.formRow('Order', 'Position inside the area. The next free one is ' + nextFreeOrder(s.values.area) + '.', '<input class="input" data-field="order" value="' + ui.esc(s.values.order) + '" aria-label="Order">') +
+							'</div>' +
+							locationPreview(s);
 					}
 				},
 				{
@@ -727,26 +727,26 @@
 					render: function (s) {
 						var slug = slugify(s.values.title);
 						return stepHead('Name it', 'The slug comes from the title and never changes afterwards — links and help ids point at it.') +
-						'<div class="settings-rows">' +
-						ui.formRow('Title', 'What a reader sees in the list and in the PDF.', '<input class="input" data-field="title" value="' + ui.esc(s.values.title) + '" aria-label="Page title">') +
-						ui.formRow('Slug', 'Derived from the title; two pages cannot share one inside an area.', '<input class="input" value="' + ui.esc(slug) + '" aria-label="Slug" readonly>') +
-						ui.formRow('Owner', 'Who is told when this page goes stale.', '<select class="select" data-field="owner" aria-label="Owner">' + options(['Derek', 'Mei', 'Ana', 'nobody yet'], s.values.owner) + '</select>') +
-						'</div>' +
-						'<div class="mt-16">' +
-						ui.group({
-							label: 'Address',
-							count: s.values.template === 'ai' ? 'draft first' : 'draft',
-							body: '<div class="record-row record-row--static">' +
-								ui.toneMark('link') +
-								'<div class="record-row__main">' +
-								'<div class="record-row__title"><span class="record-row__name cell-mono">t3000 › ' + ui.esc(slugify(s.values.area)) + ' › ' + ui.esc(slug || '…') + '</span></div>' +
-								'<div class="record-row__meta"><span>where the site and the search index will list it</span></div>' +
-								'</div><div class="record-row__state"></div><div class="record-row__state"></div></div>'
-						}) +
-						'</div>' +
-						'<div class="mt-16">' +
-						ui.callout('The page is created as a draft. It reaches the site only through a build and a release.') +
-						'</div>';
+							'<div class="settings-rows">' +
+							ui.formRow('Title', 'What a reader sees in the list and in the PDF.', '<input class="input" data-field="title" value="' + ui.esc(s.values.title) + '" aria-label="Page title">') +
+							ui.formRow('Slug', 'Derived from the title; two pages cannot share one inside an area.', '<input class="input" value="' + ui.esc(slug) + '" aria-label="Slug" readonly>') +
+							ui.formRow('Owner', 'Who is told when this page goes stale.', '<select class="select" data-field="owner" aria-label="Owner">' + options(['Derek', 'Mei', 'Ana', 'nobody yet'], s.values.owner) + '</select>') +
+							'</div>' +
+							'<div class="mt-16">' +
+							ui.group({
+								label: 'Address',
+								count: s.values.template === 'ai' ? 'draft first' : 'draft',
+								body: '<div class="record-row record-row--static">' +
+									ui.toneMark('link') +
+									'<div class="record-row__main">' +
+									'<div class="record-row__title"><span class="record-row__name cell-mono">t3000 › ' + ui.esc(slugify(s.values.area)) + ' › ' + ui.esc(slug || '…') + '</span></div>' +
+									'<div class="record-row__meta"><span>where the site and the search index will list it</span></div>' +
+									'</div><div class="record-row__state"></div><div class="record-row__state"></div></div>'
+							}) +
+							'</div>' +
+							'<div class="mt-16">' +
+							ui.callout('The page is created as a draft. It reaches the site only through a build and a release.') +
+							'</div>';
 					}
 				}
 			],

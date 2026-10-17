@@ -1096,4 +1096,131 @@
 			return ui.view(body);
 		}
 	};
+
+	/* How-To: the module explained as a path, not as a manual. One row per step, each row carrying
+	   the sentence a new reader needs and — folded away — what the window actually does, so someone
+	   who only wants the next click is not made to read the mechanics. */
+	M.views['docs/how-to'] = {
+		title: 'How To Use',
+		render: function () {
+			var step = function (n, title, text, detail, label, open) {
+				return (
+					'<div class="howto__row">' +
+					'<span class="howto__n">' + n + '</span>' +
+					'<div class="howto__main">' +
+					'<div class="howto__title">' + ui.esc(title) + '</div>' +
+					'<p class="howto__text">' + text + '</p>' +
+					(detail
+						? '<details class="disclosure howto__more"><summary>What happens underneath</summary>' +
+							'<div class="howto__detail">' + detail + '</div></details>'
+						: '') +
+					'</div>' +
+					'<div class="howto__do">' + ui.button(label, { small: true, kind: 'ghost', open: open }) + '</div>' +
+					'</div>'
+				);
+			};
+
+			var question = function (q, a) {
+				return (
+					'<details class="howto__q">' +
+					'<summary>' + ui.esc(q) + '</summary>' +
+					'<div class="howto__a">' + a + '</div>' +
+					'</details>'
+				);
+			};
+
+			/* The glance: the whole path in five clicks, three words each. Everything the guide has
+			   to say is still below it — this row exists so a reader can see the shape of the work
+			   without reading a paragraph first. */
+			var railStep = function (n, title, hint, open) {
+				return (
+					'<button type="button" class="howto-rail__step" data-open="' + open + '">' +
+					'<span class="howto-rail__n">' + n + '</span>' +
+					'<span class="howto-rail__title">' + ui.esc(title) + '</span>' +
+					'<span class="howto-rail__hint">' + ui.esc(hint) + '</span>' +
+					'</button>'
+				);
+			};
+
+			var linkRow = function (icon, title, note, open) {
+				return (
+					'<div class="record-row" data-open="' + open + '">' +
+					ui.toneMark(icon) +
+					'<div class="record-row__main">' +
+					'<div class="record-row__title"><span class="record-row__name">' + ui.esc(title) + '</span></div>' +
+					'<div class="record-row__meta"><span>' + ui.esc(note) + '</span></div>' +
+					'</div>' +
+					'<div class="record-row__state"></div>' +
+					'<span class="record-row__go">' + ui.icon('chevron-right', 'icon--sm') + '</span>' +
+					'</div>'
+				);
+			};
+
+			var body =
+				ui.pageHead({
+					title: 'How To Use',
+					icon: 'graduation',
+					desc: 'From a repository to a page a reader can open, in five steps.',
+					actions:
+						ui.button('Open Documents', { kind: 'primary', icon: 'book', open: 'docs/knowledge' }) +
+						ui.button('Ask the AI', { icon: 'sparkle', open: 'ai/chat' })
+				}) +
+				'<div class="howto-rail">' +
+				railStep('01', 'Pick a project', '13.0 is current', 'docs/projects') +
+				railStep('02', 'Add a source', 'a repo or a library', 'docs/sources') +
+				railStep('03', 'Read it', 'files become pages', 'docs/sources') +
+				railStep('04', 'Edit and review', 'one approval', 'docs/knowledge') +
+				railStep('05', 'Build and publish', 'readers get it', 'docs/builds') +
+				'</div>' +
+				ui.rule({ label: 'Each Step, In Full', count: 'about 10 minutes' }) +
+				'<div class="howto">' +
+				step(1, 'Choose the project',
+					'A project is one version of a product\u2019s documentation — <strong>13.0</strong> is the current one. Everything below happens inside it.',
+					'<p>The text stays in the repositories you already own. The project keeps only the choices around it: version, audience, owner and where it publishes. Two versions of the same repository therefore share files but never share pages.</p>',
+					'Projects', 'docs/projects') +
+				step(2, 'Say where the text comes from',
+					'A repository you have cloned, or a connected library. Adding a source records <code>where to read</code>; it copies nothing.',
+					'<p>A repository is read at a commit, a connected library at a version. The commit is kept with every read, so a page can always name the exact file and revision it came from.</p>',
+					'Sources', 'docs/sources') +
+				step(3, 'Read it',
+					'Reading turns files into pages. A file becomes a page, its heading becomes the name, its folder becomes the <strong>area</strong>, and its order in the file becomes the reading order.',
+					'<p>A read writes <code>docs/help/registry.json</code> inside a repository, and <code>docs/index.json</code> for a connected library. Files that did not change are skipped, so a second read is quick, and a page written by hand in the window is never overwritten by a read.</p>',
+					'Read Now', 'docs/sources') +
+				step(4, 'Open, edit and review',
+					'Open a page from the Documents tree or the Documents list, edit it in the page editor and save. The change waits in Review Center until someone approves it.',
+					'<p>Every page carries an area, an order, an owner and the source it came from. Two pages cannot share an order inside one area — the build reports it as an error — and <strong>17</strong> pages are waiting for review right now.</p>',
+					'Documents', 'docs/knowledge') +
+				step(5, 'Build, then publish',
+					'A build turns approved pages into the artifacts readers get: the website, the PDF, the offline CHM, the search index and the AI index. Publishing points Temco Learn at one build.',
+					'<p>The AI index never blocks a build: a slow embedding pass delays answers, not readers. A published version is frozen, so a correction after release starts the next version rather than rewriting a link someone already sent.</p>',
+					'Build Center', 'docs/builds') +
+				'</div>' +
+				'<div class="mt-24">' +
+				ui.rule({ label: 'Questions That Come Up', count: '5 answers' }) +
+				'<div class="howto__faq">' +
+				question('I edited a page — why has the site not changed?',
+					'Saving edits the page in the registry; the site reads a <em>build</em>. Run Build Center, then publish, and the page is on Temco Learn. Until then the edit is visible here and in review, and nowhere else.') +
+				question('Do I lose a hand-written page when the source is read again?',
+					'No. A read only writes pages for files that changed, and leaves pages that were written in this window alone — <code>docs/scale-factor.md</code> is one of them.') +
+				question('Two pages have the same order. What now?',
+					'The build refuses it as an error. Open one of the two pages, change its order in the facts strip, and build again; Review Center lists the pair so you do not have to search for it.') +
+				question('Where does the text actually live?',
+					'The pages live in the registry — the platform database — and the files stay in the repository untouched. SQL Studio queries that same database, which is why its numbers match the dashboard.') +
+				question('Can I publish the site without the PDF?',
+					'A build produces the targets you tick. A release publishes the artifacts it includes, so a version can ship the website and the search index on its own and add the PDF later.') +
+				'</div>' +
+				'</div>' +
+				'<div class="mt-24">' +
+				ui.rule({ label: 'Where the Rest Lives', count: '5 pages' }) +
+				'<div class="record-list">' +
+				linkRow('folder', 'Projects', 'the versions, their sources and what each one publishes', 'docs/projects') +
+				linkRow('link', 'Sources', 'repositories and connected libraries, and when each was last read', 'docs/sources') +
+				linkRow('check', 'Review Center', 'the 17 changes waiting for an approval', 'docs/review') +
+				linkRow('play', 'Build Center', 'the targets and the errors that block them', 'docs/builds') +
+				linkRow('upload', 'Releases', 'published versions, and the one still in flight', 'docs/releases') +
+				'</div>' +
+				'</div>';
+			return ui.view(body);
+		}
+	};
 })(window.TemcoMock = window.TemcoMock || { views: {} });
