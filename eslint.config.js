@@ -51,7 +51,7 @@ export default defineConfig(
 		},
 		plugins: {
 			'local': pluginLocal,
-			'header': fixupPluginRules(/** @type {any} */ (pluginHeader)),
+			'header': fixupPluginRules(/** @type {any} */(pluginHeader)),
 		},
 		rules: {
 			'constructor-super': 'warn',
