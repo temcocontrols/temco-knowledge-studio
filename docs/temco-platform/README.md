@@ -149,5 +149,5 @@ A container with no views is not shown, so a container may be declared before it
 | 1 | Rename the repository, add the `upstream` remote, apply the naming |
 | 2 | `extensions/temco-docs` — the existing extension, ids renamed, gates wired |
 | 3 | The shell — `src/temco`, the two entry points, `product.json`, menus, welcome |
-| 4 | Split `temco-ai` (**done**), then `temco-repositories`, then `temco-projects` |
+| 4 | Split `temco-ai`, `temco-store`, `temco-ui`, `temco-repositories`, `temco-projects`, `temco-workbench` (**all done** — every module is now one domain, and the workbench is the application) |
 | 5 | `temco-learn` serves T3000 end to end, then T3001 and T3002 |

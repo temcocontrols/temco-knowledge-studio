@@ -8,14 +8,20 @@
 | `src/tree.ts` | the Content view: which nodes exist, what they show, what a click does |
 | `src/diagnostics.ts` | which issues become Problems, and on which file |
 | `src/extension.ts` | activation, the view and status bar, the commands, the file watcher, and the model it publishes to other modules (`src/api.ts`) |
+| `src/store.ts` | what this module reads of `temco-store` — the catalog, the selection, the slug rule — in one file, and the only place that crosses modules |
+| `src/ui.ts` | what it reads of `temco-ui` — where a page of ours opens, and what a command argument names |
+| `src/projects.ts` | what it knows of `temco-projects` — one signal, so the Library's rows come back when a project changes |
+| `src/repositories.ts` | what it reads of `temco-repositories` — a source's code files, the material for a draft, and the repository's own scripts |
+| `src/api.ts` | what this module publishes: the documentation model `temco-ai` reads (the sets, the pages, the selection, the editor column, one change signal) |
 | `src/aiModule.ts` | what this module knows of `temco-ai`: whether it is installed, its commands, and the two calls it makes when it is (a draft, an analysis) |
 | `src/builds.ts` | the product repo's own builds, invoked as VS Code tasks and judged by the artifact they leave — never by an exit code, and never the form that deploys |
 | `src/report.ts` | the staleness report: what needs attention, grouped by owner, as Markdown. Counts rather than lists for the pages that have merely never been reviewed |
 | `src/scaffold.ts` | starting a registry in an open folder that has none: the smallest valid file, on a confirmation, with the seeding left to the repository's own generator |
 | `src/home.ts` | the dashboard: the one page that is not about a folder — identity, how the application works, what exists now, how to start, and every feature with its state |
 | `src/views.ts` | the other two sidebar sections: **Work** (what needs doing, and what changed) and **Library** (what it reads and produces) |
-| `src/catalog/` | `schema.ts` (the tables) · `store.ts` (`node:sqlite`, in the extension's own storage — never in a repository) · `commands.ts` (the catalog status) |
 | `src/feedback.ts` | feedback rows routed to their page's owner, against a proposed file shape, with the aging called out |
+
+It no longer has a `src/catalog/` or a `src/selected.ts`: the database, the selection and the slug rule are `temco-store`'s, reached through `src/store.ts`.
 
 `registry.ts` is deliberately free of presentation: it is the part that would survive replacing the view, and
 the part any other module reuses to know what pages exist — `temco-ai` reads it through the exported model rather
@@ -102,8 +108,6 @@ already owns.**
 | `temcoDocs.buildSite` | invokes the repository's own `docs:site` as a task and reports the files it produced |
 | `temcoDocs.buildHelp` | invokes the non-deploying help build (`build:help:dry`) and reports the CHM it produced |
 | `temcoDocs.stalenessReport` | opens the report of what is owed as an untitled Markdown document — nothing is written |
-| `temcoDocs.startRegistry` | creates the smallest valid `docs/help/registry.json` in an open folder that has none, after a confirmation — and is also the Content view's empty state |
-| `temcoDocs.repositories` | opens the organisation's repositories as a page — every repository the `organisation` setting names, with **Start** on each: cite it in the project being worked on, then read its registry over the API. The library's *Repositories* row opens it |
 | `temcoDocs.newPage` · `newChapter` · the five kind commands | open the **New page page** (`src/newPagePage.ts`) with the row's place and, for a kind, its kind already chosen. The page writes through `writePage()` — one write, one confirmation that names the file |
 | `temcoDocs.feedback` | reads each repository's `docs/help/feedback.json`, routes the rows to their owners, and calls out the aging |
 

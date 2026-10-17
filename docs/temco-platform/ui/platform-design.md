@@ -79,7 +79,7 @@ and what is still owed.
 The platform's memory: documents, sources, builds, artifacts, commits and what changed since you last looked.
 Relational, long-lived, queryable offline.
 
-**Where:** `context.globalStorageUri` — a `catalog.db` and a `sources/` cache of materialised trees.
+**Where:** `context.globalStorageUri` of the **store module** — a `catalog.db` and a `sources/` cache of materialised trees. One window, one file, opened by the module that owns it: a caller that opened it with its own storage would find an empty database beside its own code.
 **Never inside a repository**, never committed, never in a product's git history.
 
 ```sql
@@ -203,10 +203,12 @@ you are working on.
 
 **What opens when the platform is activated is the project you are on** — its dashboard, the one surface that
 says what is in it and what next — then the page you were last working on, then the home page when there is
-neither. `temcoDocs.start.open` (`project` · `page` · `home` · `none`) chooses, and `none` opens no tab at
+neither. `temcoWorkbench.start.open` (`project` · `page` · `home` · `none`) chooses, and `none` opens no tab at
 all for anyone who would rather nothing opened by itself.
 
-**The Workspace is the first view, and the Library is beneath it.** The Workspace shows the project being
+**The Workspace is the first view, and the Library is beneath it.** Both sit in the `temco` activity bar: the
+Workspace tree is the documentation module's, the Library is the workbench's — the one index of everything every
+module has. The Workspace shows the project being
 worked on and never the open folders, so the registry checks, the status bar and the faults follow the project
 too — a tree built from whatever happens to be open would be a second, unrelated answer to the same question.
 The view is never hidden and never blank: with nothing to show it carries **rows that say why and offer the one
@@ -257,7 +259,7 @@ the whole edit form at you. What changed, in the order it matters:
 | **E** | a build ran only the output script | a build runs the repository's own **`docs:registry`** first when it has one — that is what writes the index, the headings and the stale verdict — then the output script, and says which of the two it ran |
 | **F** | the AI answered about the open folder only, and said nothing about what it was answering | the panel is **about the project**: it names it, and when no editor is in front it falls back to the page the project remembers you were on |
 
-**The projects page** (`src/projectsPage.ts`) is the list of what this application manages, and the Library's
+**The projects page** (`extensions/temco-projects/src/projectsPage.ts`) is the list of what this application manages, and the Library's
 *Projects* row opens it. Each card carries what a project is made of and what can be done with it — the four
 technical facts are on the card, so nothing has to be opened to decide: version · owner · outputs; its sources
 with how many pages each holds and how it was read; how many pages, how many without an owner, how many
@@ -290,7 +292,7 @@ that script as a task and reports what a run is: where, when, the exit code. Its
 verdict, and the page says so. A second opinion about what is owed is the one thing a documentation platform
 must not invent.
 
-The selection is state, in one place (`src/selected.ts`, in `workspaceState`): which project, and which page
+The selection is state, in one place (`extensions/temco-store/src/selection.ts`, in `workspaceState`): which project, and which page
 of it you were last on. A project belongs to the window, not the machine — two windows on two products must not
 answer about each other's pages. Opening a project makes it the one being worked on, and the library row, the
 view's description and the dashboard all say so; a project that is removed while selected clears the selection
@@ -299,10 +301,10 @@ rather than leaving a view about something that is not there.
 **On activation, nothing has to be clicked.** The one project with nothing chosen selects itself (with two or
 more nothing is guessed — see *Surfaces*); the Workspace view arrives with the only repository's areas open and
 their chapters beneath them; the Library opens *Projects*, so the names of what you have are on screen; and the
-tab that opens is the selected project's dashboard, or the page you were last on (`temcoDocs.start.open`).
+tab that opens is the selected project's dashboard, or the page you were last on (`temcoWorkbench.start.open`).
 A tree that re-decided itself after every refresh would be worse than one that never opened at all, so a
 person's own expand or collapse is remembered for the session and beats both defaults — a refresh re-reads the
-data, never the layout (`src/views.ts`).
+data, never the layout (`extensions/temco-workbench/src/views.ts`).
 
 ### The window
 
@@ -313,15 +315,15 @@ names, and the difference is recorded here rather than left to be discovered:
   projects, the sources with their pages beneath them, and the catalog's own state).
 - The unit is called a **project** in everything a person reads. The catalog's table is still `documents`; a
   project is what that row is, and renaming the table buys nothing but a migration.
-- **Five pages, one job each.** The **projects page** (`src/projectsPage.ts`) is the list — every project, what it
-  is made of, and its operations; the Library's *Projects* row opens it. The **hub** (`src/projectHub.ts`) is what
+- **Five pages, one job each.** The **projects page** (`extensions/temco-projects/src/projectsPage.ts`) is the list — every project, what it
+  is made of, and its operations; the Library's *Projects* row opens it. The **hub** (`extensions/temco-projects/src/projectHub.ts`) is what
   one project *is* — Overview · Pages · Sources · AI · Builds, with Read and Build at the top. The **edit page**
-  (`src/projectPage.ts`) is what it is *made of*. Opening the editor for every look at a project would make
+  (`extensions/temco-projects/src/projectPage.ts`) is what it is *made of*. Opening the editor for every look at a project would make
   reading its pages and editing its fields the same act, so they are separate commands (`openProject` and
-  `editProject`). The **dashboard** (`src/home.ts`) is the application itself, and the **AI page**
+  `editProject`). The **dashboard** (`extensions/temco-workbench/src/home.ts`) is the application itself, and the **AI page**
   (`extensions/temco-ai/src/aiPage.ts`) is the AI. All five are tabs in one group.
 - **The project's pages are tabs in one group**, and so are the documentation pages they open — never a split. The rule
-  lives in `src/surface.ts` and is stated there once, together with the two wrong answers that led to it: a page
+  lives in `extensions/temco-ui/src/columns.ts` and is stated there once, together with the two wrong answers that led to it: a page
   opened `Beside` produced a second column a few hundred pixels wide, and "is the tab in front one of ours?" —
   tried twice — is not a question a webview tab answers reliably. So the file asks nothing about what is in
   front; it finds the group that already holds a page of ours and opens there, which makes one group the only
@@ -629,8 +631,8 @@ changes with it.
 | **The catalog's store** | **`node:sqlite`** — built into the Node the extension host runs, so the platform adds no dependency for it. Where that built-in is missing, the store refuses in words at the point of use and activation is unaffected |
 | **Branch policy** | the default branch, with the mismatch reported and a per-source override |
 | **Notification default** | `docs-only` — a daily summary of documentation change, no modals |
-| **The entry point** | **the project's dashboard opens on activation** (`temcoDocs.start.open`, default `project`), then the page you were last on, then the home page. The one recorded project selects itself, so the tree is ready without anyone picking it |
-| **The Workspace, gated by content** | **the Workspace stays the first view and the Library sits beneath it**, and the open folders are never read into it. Its empty states are **rows the tree draws itself**, offering the act that fills it — *create a project* · *choose one in the Library* · *open this project and read its sources*. Hiding the view on `when: temcoDocs.working` and phrasing these states as `viewsWelcome` were both tried and rejected: a selected project with no visible tree reads as a fault, and a welcome's `when` is resolved before the refresh has read anything |
+| **The entry point** | **the project's dashboard opens on activation** (`temcoWorkbench.start.open`, default `project`), then the page you were last on, then the home page. The one recorded project selects itself, so the tree is ready without anyone picking it |
+| **The Workspace, gated by content** | **the Workspace stays the first view and the Library sits beneath it**, and the open folders are never read into it. Its empty states are **rows the tree draws itself**, offering the act that fills it — *create a project* · *choose one in the Library* · *open this project and read its sources*. Hiding the view on a context key (`when:`) and phrasing these states as `viewsWelcome` were both tried and rejected: a selected project with no visible tree reads as a fault, and a welcome's `when` is resolved before the refresh has read anything |
 
 ## Build order
 

@@ -52,7 +52,7 @@ VS Code's gates encode policies for Microsoft's own code: a Microsoft copyright 
 | `eslint.config.js` | one override for both paths, turning off the Microsoft header, sync-fs, unexternalized-strings, in-operator and bracket-notation rules |
 | `.eslint-allowed-javascript-files` | `extensions/temco-ai/media/ai-panel.js` — a webview asset, not extension code |
 | `build/gulpfile.extensions.ts` | the module's `tsconfig.json` in the compiled list |
-| `package.json` | `check-temco-commands`, run by `compile` |
+| `package.json` | `check-temco` (the module guards, the dependency graph, the menu ids), run by `compile` |
 
 None of these is a seam into VS Code's behaviour: remove them and Temco's files stop passing the gates, but the application still builds and runs unchanged.
 

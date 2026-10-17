@@ -20,7 +20,7 @@ C:\QN\temcocontrols\
 │   │   ├─ src/tree.ts            the Content view: areas, chapters, pages, gaps
 │   │   ├─ src/diagnostics.ts     problems, in the file that has to be fixed
 │   │   ├─ src/extension.ts       view, status bar, commands, file watcher
-│   │   ├─ src/…                  builds, report, scaffold, feedback, ai/ — the module table is in extension-design.md
+│   │   └─ src/…                  builds, report, scaffold, feedback, ai/ — the module table is in extension-design.md
 │   │   └─ media/docs.svg         the view icon
 │   ├─ docs/temco-learn/design/ the platform design (17 documents)
 │   └─ product.json               branding of the application: name, icon, protocol, gallery

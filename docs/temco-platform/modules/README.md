@@ -6,10 +6,13 @@ A module is a real VS Code extension inside the application. Namespaces follow t
 
 | Module | Purpose | Namespace | State |
 |---|---|---|---|
-| `temco-docs` | the registry, pages, checks, editor surfaces, the catalog and the writes | `temcoDocs` | **active** |
+| `temco-workbench` | the application's own surfaces: the Library, the dashboard, what needs doing | `temcoWorkbench` | **active** |
+| `temco-ui` | where a page of ours opens, and what a command argument means | `temcoUi` | **active** |
+| `temco-store` | the platform's own memory: the catalog database, the selection, the naming rules | `temcoStore` | **active** |
+| `temco-docs` | the registry, pages, checks, editor surfaces, and the writes | `temcoDocs` | **active** |
+| `temco-repositories` | the organisation, local copies, the working area, reading a source | `temcoRepositories` | **active** |
 | `temco-ai` | the local runtime and models, the prompts, the panel, drafts and answers | `temcoAi` | **active** |
-| `temco-repositories` | the organisation, clones, pulls, history, the working area | `temcoRepositories` | reserved |
-| `temco-projects` | projects, sources, outputs, builds | `temcoProjects` | reserved |
+| `temco-projects` | projects, sources, outputs, builds | `temcoProjects` | **active** |
 | `temco-sql` | registers, queries, export | `temcoSql` | reserved |
 | `temco-nettools` | devices on the wire | `temcoNettools` | reserved |
 | `temco-bacnet` | objects, points, trends | `temcoBacnet` | reserved |
@@ -26,7 +29,13 @@ A module becomes active on the day it has a first real feature. Reserving a modu
 
 ## Ownership
 
-**`temco-docs`** — the content side: the registry of areas, chapters and pages, the structural checks, the Workspace and Library views, the pages, the Markdown surfaces, the **catalog** and the five writes. It owns the only write a page ever gets.
+**`temco-store`** — the platform's own memory, and only that: one SQLite file per window (sources read, projects, their sources, the pages a read found, builds, artifacts, commits, events), the **selection** (which project the window is on, and the page it last opened), and the naming rules the tables are keyed by (a slug). It has one command, no views and no settings. It is the base every other module stands on, and it is deliberately *not* `temco-sql`: that module is about the databases a **product** uses, and it neither owns nor knows about this file.
+
+**`temco-docs`** — the content side: the registry of areas, chapters and pages, the structural checks, the **Workspace tree** (its own view), the pages, the Markdown surfaces, the reports and the builds, and the five writes. It owns the only write a page ever gets, and it publishes the documentation model other modules read (`src/api.ts`) — the Library and the dashboard are the workbench's, and they read that model rather than a copy of it.
+
+**`temco-ui`** — the shared UI conventions, and nothing else: the editor column a page of ours opens in (one group, never a split) and what a command argument names (a slug, a row, or a row's own command argument). It has no command, no view and no setting.
+
+**`temco-workbench`** — the application's own surfaces, and the only module that is not a domain: the **Library** (the index of what every module has; each row's action is that module's own command), the **dashboard** (the application talking about itself), the **needs page**, which tab opens at startup, and which sidebar section comes forward when the project changes. It writes nothing and owns no data: its rows come from the store and from the documentation module's published model.
 
 **`temco-ai`** — the local model: the runtime and models downloaded on request into the user's own folder, the prompts, the AI panel, drafts and their diffs, and the citations that open the page they name. It reads the documentation through `temco-docs` and never writes a page.
 
@@ -37,11 +46,13 @@ Only one shape is allowed, and it runs in one direction:
 * **A provider publishes, a consumer declares.** `temco-ai` requires `temcocontrols.temco-docs` (`extensionDependencies`), so that module activates first and its exports — the sets, the pages, the selection, the editor column, one change signal — are there when the consumer's `activate()` runs. The shapes are spelled twice, once in each module (`src/api.ts` in the provider, `src/docs.ts` in the consumer), because an extension cannot import another extension's sources.
 * **A consumer never requires a provider that requires it.** That is a cycle, and a cycle is a load-order bug waiting to happen. The second direction is always a *command* the first module calls and may find missing, and the caller gates what it shows on a context key it sets itself (`temcoDocs.aiInstalled`).
 
-`temco-docs` and `temco-ai` are the worked example: one declared dependency, one optional command surface.
+`temco-docs` and `temco-ai` are the worked example: one declared dependency, one optional command surface. `temco-store` is the other shape a module can have — a base with no surface of its own, which every other module requires and none calls back into.
 
-**`temco-repositories`** — the organisation and the local copies: the repository list, a source's files, cloning one branch with full history, `pull --ff-only`, removing the local copy, reading a file's text and history. It owns the working area (`temcoRepositories.workspaceFolder`, default `~/Temco`).
+`npm run check-temco` refuses the two mistakes this section warns about: a dependency graph with a circle in it (VS Code disables *every* extension in a circle, so the application comes up with a silent sidebar), and a menu, submenu or welcome link that names an id no module declares.
 
-**`temco-projects`** — a project as a first-class thing: name, version, sources, outputs, and the builds that produce an output. It reads sources through `temco-repositories` and asks `temco-docs` for the pages it produces.
+**`temco-repositories`** — the organisation and the local copies: the repository list, a source's files, cloning one branch with full history, `pull --ff-only`, removing the local copy, reading a file's text, **reading a source** — the registry a repository declares, from a folder or over the API, recorded into the store — and the **vocabulary of the repository's own documentation scripts** (which scripts exist and what each is for). It owns the working area (`temcoRepositories.workspaceFolder`, default `~/Temco`). It reads the platform's memory through `temco-store` and the shared page rules through `temco-ui`, and it needs nothing of `temco-docs`: what a registry *means* is that module's business, what a repository *has* is this one's.
+
+**`temco-projects`** — a project as a first-class thing: name, version, audience, owner, the sources it is made of, the outputs it produces, and what building one left behind. Its pages are the list, the hub and the edit form. It reads sources and the repository's own scripts through `temco-repositories`, the platform's memory through `temco-store`, and it needs nothing from `temco-docs`: the pages a project *has* were recorded in the store by a read.
 
 **`temco-sql`** — registers, queries and export against the databases the products use. It owns its own connections and storage.
 
