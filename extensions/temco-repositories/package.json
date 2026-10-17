@@ -1,0 +1,121 @@
+{
+  "name": "temco-repositories",
+  "displayName": "Temco Repositories",
+  "description": "Temco Repositories — the organisation and its local copies: the repository list, the working area, and reading a source into the platform's memory.",
+  "version": "0.0.1",
+  "publisher": "temcocontrols",
+  "private": true,
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/temcocontrols/temco-platform.git"
+  },
+  "bugs": {
+    "url": "https://github.com/temcocontrols/temco-platform/issues"
+  },
+  "engines": {
+    "vscode": "^1.143.0"
+  },
+  "type": "commonjs",
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "extensionDependencies": [
+    "temcocontrols.temco-store",
+    "temcocontrols.temco-ui"
+  ],
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "temcoRepositories.page",
+        "title": "The Repositories",
+        "icon": "$(github)"
+      },
+      {
+        "command": "temcoRepositories.readSource",
+        "title": "Read a Source",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "temcoRepositories.readAllSources",
+        "title": "Read Every Source",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "temcoRepositories.removeSource",
+        "title": "Forget the Source",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "temcoRepositories.revealSource",
+        "title": "Open the Source",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "temcoRepositories.setSourceBranch",
+        "title": "Set the Branch to Read",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "temcoRepositories.openFile",
+        "title": "Open the File",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "temcoRepositories.setToken",
+        "title": "Set a GitHub Token",
+        "icon": "$(key)"
+      },
+      {
+        "command": "temcoRepositories.fetchSource",
+        "title": "Clone the Source",
+        "icon": "$(repo-clone)"
+      },
+      {
+        "command": "temcoRepositories.pullSource",
+        "title": "Pull the Source",
+        "icon": "$(repo-pull)"
+      },
+      {
+        "command": "temcoRepositories.openClone",
+        "title": "Open the Local Copy",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "temcoRepositories.removeClone",
+        "title": "Remove the Local Copy",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "temcoRepositories.changeWorkspaceFolder",
+        "title": "Change the Working Area",
+        "icon": "$(file-directory)"
+      },
+      {
+        "command": "temcoRepositories.openWorkFolder",
+        "title": "Open the Working Area",
+        "icon": "$(folder-opened)"
+      }
+    ],
+    "configuration": {
+      "title": "Temco Repositories",
+      "properties": {
+        "temcoRepositories.organisation": {
+          "type": "string",
+          "default": "temcocontrols",
+          "markdownDescription": "The GitHub organisation the dashboard links to for a starting point. Nothing is read from it automatically."
+        },
+        "temcoRepositories.workspaceFolder": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Where local copies of sources are cloned, and where what we make from them is written. Empty means `~/Temco`. It is outside every repository on purpose: **nothing is ever written to a source, and nothing is ever pushed**."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "check-commands": "node --experimental-strip-types scripts/check-commands.mts"
+  }
+}
