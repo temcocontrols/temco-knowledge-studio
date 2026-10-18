@@ -1,0 +1,75 @@
+{
+  "name": "temco-tools",
+  "displayName": "Temco Tools",
+  "description": "Temco Tools — the device and data surfaces: Devices, I/O Studio, BACnet Studio, Network and SQL Studio.",
+  "version": "0.0.1",
+  "publisher": "temcocontrols",
+  "private": true,
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/temcocontrols/temco-platform.git"
+  },
+  "bugs": {
+    "url": "https://github.com/temcocontrols/temco-platform/issues"
+  },
+  "engines": {
+    "vscode": "^1.143.0"
+  },
+  "type": "commonjs",
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "extensionDependencies": [
+    "temcocontrols.temco-ui"
+  ],
+  "activationEvents": [
+    "onView:temcoTools.devices",
+    "onView:temcoTools.io",
+    "onView:temcoTools.bacnet",
+    "onView:temcoTools.network",
+    "onView:temcoTools.sql"
+  ],
+  "contributes": {
+    "views": {
+      "temcoDevices": [
+        {
+          "id": "temcoTools.devices",
+          "name": "Devices"
+        }
+      ],
+      "temcoIo": [
+        {
+          "id": "temcoTools.io",
+          "name": "I/O Studio"
+        }
+      ],
+      "temcoBacnet": [
+        {
+          "id": "temcoTools.bacnet",
+          "name": "BACnet Studio"
+        }
+      ],
+      "temcoNetwork": [
+        {
+          "id": "temcoTools.network",
+          "name": "Network"
+        }
+      ],
+      "temcoSql": [
+        {
+          "id": "temcoTools.sql",
+          "name": "SQL Studio"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "temcoTools.open",
+        "title": "Open a Tool Page",
+        "icon": "$(tools)"
+      }
+    ]
+  }
+}
