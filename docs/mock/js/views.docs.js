@@ -1112,7 +1112,7 @@
 					'<p class="howto__text">' + text + '</p>' +
 					(detail
 						? '<details class="disclosure howto__more"><summary>What happens underneath</summary>' +
-							'<div class="howto__detail">' + detail + '</div></details>'
+						'<div class="howto__detail">' + detail + '</div></details>'
 						: '') +
 					'</div>' +
 					'<div class="howto__do">' + ui.button(label, { small: true, kind: 'ghost', open: open }) + '</div>' +

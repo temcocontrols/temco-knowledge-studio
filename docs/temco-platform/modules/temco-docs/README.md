@@ -27,6 +27,16 @@ because that is where the content has to be.
 One name for the tool, one for the module, one for the artifact. The module maintains content; Temco Learn
 displays it. Keeping them apart is what stops "put it in Temco Learn" from being ambiguous.
 
+## The guide, and why a module has one
+
+`temcoDocs.howTo` opens **How To Use** (`src/docsPages.ts`): five steps from a source to a page a reader can open, each step carrying the sentence a new person needs and, folded under it, what the window actually does. It is the one surface in the module about the module — every other page is about the work — and it explains rather than re-implements: each button runs a command another module already owns (`temcoProjects.newProject`, `temcoRepositories.readSource`, `temcoDocs.buildSite`, …).
+
+The rest of the container is the mock's Documentation module, page for page: **Projects**, **Repositories** and a repository, **Sources**, **Documents** and a page, a **Source Explorer**, **Review Center**, **Build Center**, **Releases** and **How To Use** (`src/docsPages.ts`, drawn from `src/mockDocs.ts`). The side bar holds the mock's five sections and rows — Projects · Repositories, Sources · Documents · Review Center, Build Center, Releases · How To Use — so a surface is found where the design puts it.
+
+`temcoDocs.overview` opens **Documentation** (`src/overview.ts`): the tree answers "where is this page", and this page answers "what am I looking at" — pages, areas, how much is behind its source, which faults the checks found. Every number is computed from the same registry the tree reads, so the page and the tree cannot disagree.
+
+Both are drawn with the shared page vocabulary from `temco-ui` (`page.css` + `page()`), so they are the pages whose look is the mock's design rather than a private `<style>` block. The pattern they establish is the one the module's other pages move to: a page describes what it draws, and `temco-ui` decides how that looks and how a click becomes a command.
+
 ## Where the platform design lives
 
 [`temco-learn/design/`](../../../temco-learn/design/README.md) — 17 documents covering the content model, the

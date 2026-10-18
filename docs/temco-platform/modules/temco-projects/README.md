@@ -1,6 +1,6 @@
 # `temco-projects`
 
-A documentation project as a first-class thing: its name, its sources, its outputs, its builds, and the pages it produces. Three pages — the list, the hub and the edit form.
+A documentation project as a first-class thing: its name, its sources, its outputs, its builds, and the pages it produces. Two pages — the hub and the edit form.
 
 | | |
 |---|---|
@@ -8,7 +8,7 @@ A documentation project as a first-class thing: its name, its sources, its outpu
 | Extension id | `temcocontrols.temco-projects` |
 | Namespace | `temcoProjects` |
 | State | active |
-| Pages | `temcoProjects.page` (the list), `temcoProjects.hub` (one project), `temcoProjects.project` (the form) |
+| Pages | `temcoProjects.hub` (one project), `temcoProjects.project` (the form) |
 | Settings | none |
 | Requires | `temco-store` (memory), `temco-ui` (page columns), `temco-repositories` (sources and their scripts) |
 | Required by | `temco-docs` — for the one signal that brings the Library's project rows back |
@@ -18,17 +18,16 @@ A documentation project as a first-class thing: its name, its sources, its outpu
 | Module | Owns |
 |---|---|
 | `src/extension.ts` | activation, the output channel a build writes to, and the change signal |
-| `src/projectsPage.ts` | the list: every project, what it is made of, which of the repository's own scripts its sources have, and the operations on each |
 | `src/projectHub.ts` | one project in depth — Overview · Pages · Sources · AI · Builds — reading pages and artifacts from the store and the AI's facts from the AI module when it is installed |
 | `src/projectPage.ts` | the form: name, version, audience, owner, sources, outputs |
 | `src/project.ts` | the commands that act on a project, and the argument tolerance they need to be called from a row |
 | `src/projectBuild.ts` | building a project's output: the generator first when the repository has one, then the script, judged by the files it left behind |
-| `src/surface.ts` | the three view types |
+| `src/surface.ts` | the two view types |
 | `src/store.ts` · `src/ui.ts` · `src/repositories.ts` · `src/aiModule.ts` | what this module reads of the store, the UI rules, the repository scripts and the AI — each in one file, because an extension cannot import another extension's sources |
 
 ## Commands
 
-`temcoProjects.page` · `newProject` · `openProject` · `editProject` · `removeProject` · `selectProject` · `clearProject` · `addSource` · `buildProject` — nine, each doing one thing to a project.
+`temcoProjects.newProject` · `openProject` · `editProject` · `removeProject` · `selectProject` · `clearProject` · `addSource` · `buildProject` — eight, each doing one thing to a project.
 
 ## Boundary rules
 

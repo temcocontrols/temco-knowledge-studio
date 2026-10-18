@@ -259,12 +259,12 @@ the whole edit form at you. What changed, in the order it matters:
 | **E** | a build ran only the output script | a build runs the repository's own **`docs:registry`** first when it has one — that is what writes the index, the headings and the stale verdict — then the output script, and says which of the two it ran |
 | **F** | the AI answered about the open folder only, and said nothing about what it was answering | the panel is **about the project**: it names it, and when no editor is in front it falls back to the page the project remembers you were on |
 
-**The projects page** (`extensions/temco-projects/src/projectsPage.ts`) is the list of what this application manages, and the Library's
-*Projects* row opens it. Each card carries what a project is made of and what can be done with it — the four
-technical facts are on the card, so nothing has to be opened to decide: version · owner · outputs; its sources
-with how many pages each holds and how it was read; how many pages, how many without an owner, how many
-artifacts and when the last one was built; and the operations — *Work on it* · *Open* · *Read sources* ·
-*Build* · *Edit* · *Remove…*. The one being worked on is first and marked, because this page is read top-down.
+**The Library's *Projects* row** (`extensions/temco-workbench/src/views.ts`) is the list of what this application manages.
+Each project's row carries what a project is made of and what can be done with it — the four technical facts are
+on the row and its children, so nothing has to be opened to decide: version · owner · outputs; its sources with how
+many pages each holds and how it was read; how many pages, how many without an owner, how many artifacts and when
+the last one was built; and the operations — *Work on it* · *Open* · *Read sources* · *Build* · *Edit* · *Remove…*.
+The one being worked on is first and marked, because the panel is read top-down.
 
 **A page for a project that has been removed closes itself, and the projects page takes its place.** The first
 version kept the tab and put a notice in it — which was wrong twice over. It cleared `document.body`, taking the
@@ -315,13 +315,13 @@ names, and the difference is recorded here rather than left to be discovered:
   projects, the sources with their pages beneath them, and the catalog's own state).
 - The unit is called a **project** in everything a person reads. The catalog's table is still `documents`; a
   project is what that row is, and renaming the table buys nothing but a migration.
-- **Five pages, one job each.** The **projects page** (`extensions/temco-projects/src/projectsPage.ts`) is the list — every project, what it
-  is made of, and its operations; the Library's *Projects* row opens it. The **hub** (`extensions/temco-projects/src/projectHub.ts`) is what
-  one project *is* — Overview · Pages · Sources · AI · Builds, with Read and Build at the top. The **edit page**
+- **Four pages, one job each.** The **hub** (`extensions/temco-projects/src/projectHub.ts`) is what one project *is* —
+  Overview · Pages · Sources · AI · Builds, with Read and Build at the top; the list of projects is the Library's
+  *Projects* row, not a page of its own. The **edit page**
   (`extensions/temco-projects/src/projectPage.ts`) is what it is *made of*. Opening the editor for every look at a project would make
   reading its pages and editing its fields the same act, so they are separate commands (`openProject` and
   `editProject`). The **dashboard** (`extensions/temco-workbench/src/home.ts`) is the application itself, and the **AI page**
-  (`extensions/temco-ai/src/aiPage.ts`) is the AI. All five are tabs in one group.
+  (`extensions/temco-ai/src/aiPage.ts`) is the AI. All four are tabs in one group.
 - **The project's pages are tabs in one group**, and so are the documentation pages they open — never a split. The rule
   lives in `extensions/temco-ui/src/columns.ts` and is stated there once, together with the two wrong answers that led to it: a page
   opened `Beside` produced a second column a few hundred pixels wide, and "is the tab in front one of ours?" —

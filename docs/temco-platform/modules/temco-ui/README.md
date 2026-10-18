@@ -19,6 +19,29 @@ The application's shared UI conventions, and nothing else.
 | `src/extension.ts` | activation, and the API below |
 | `src/columns.ts` | `pageColumn()` and `fileColumn()` — the one tab group our pages open in, and the same group for the files they open beside them |
 | `src/rows.ts` | `rowSlug()` — what a command argument names: a slug, a row, or a row's own command argument |
+| `src/page.ts` | `page()` — the document around a page, `escapeHtml()`, and the click-to-command script a page runs |
+| `media/page.css` | the page vocabulary: what a module draws inside a page tab |
+
+## The page vocabulary
+
+The mock site (`docs/mock`) is where this application's pages were designed, and `media/page.css` is that design
+shipped to the product: the same class names and shapes as `docs/mock/css/views.css`, so a page can be designed in
+the mock and built here without being re-designed.
+
+What changes between the two hosts is only colour. The mock owns literal colours; the product reads the theme the
+person chose. The top block of `page.css` is that whole difference — every mock colour role (`--fg`, `--border`,
+`--accent`, `--ok`…) is mapped onto a `--vscode-*` variable, and every rule after it means the same thing in both
+places. Sizes follow `--vscode-font-size`, so raising the editor font size makes a page larger rather than ignored.
+
+`page(body, { title, script })` returns a complete document: the stylesheet inlined (a webview that links a file
+needs `localResourceRoots` and a URI that survives the server case; a page needs neither), a content-security policy,
+and the body inside `.view > .view__inner`, which is the width rule the mock already uses.
+
+**A page runs a command by message, not by link.** Anything carrying `data-command` posts
+`{ type: 'command', command, args }` back to its module when clicked; `commandScript` is that script and
+`runCommand(message)` is the half that runs it. A page therefore never decides what a command means, and a module can
+audit the whole of what its pages can do in one place. It also means `enableScripts` buys exactly one behaviour
+instead of a small application per page.
 
 ## The column rule, and why it is a rule
 

@@ -17,6 +17,7 @@ A module is a real VS Code extension inside the application. Namespaces follow t
 | `temco-nettools` | devices on the wire | `temcoNettools` | reserved |
 | `temco-bacnet` | objects, points, trends | `temcoBacnet` | reserved |
 | `temco-device-manager` | fleets, firmware, health | `temcoDevices` | reserved |
+| `temco-tools` | the Tools container until those four modules exist: Devices, I/O Studio, BACnet Studio, Network and SQL Studio, as pages over a sample | `temcoTools` | **active** |
 
 ## States
 
