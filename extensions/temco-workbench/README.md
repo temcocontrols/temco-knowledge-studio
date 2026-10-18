@@ -7,24 +7,30 @@ The application's own surfaces — and the only module that is not a domain.
 | Extension id | `temcocontrols.temco-workbench` |
 | Namespace | `temcoWorkbench` |
 | State | active |
-| Views | **Library** (`temcoWorkbench.library`), in the `temco` activity bar beside the Workspace |
-| Pages | the **dashboard** (`temcoWorkbench.home`), the **needs page** (`temcoWorkbench.needs`) |
+| Views | Four containers' worth of groups: **Dashboard** (Platform), **Workspaces**, **Temco Learn** (Site, Delivery), **Settings** (Profile, Platform), **Help** (Learn, Support) |
+| Pages | the **dashboard** (`temcoWorkbench.overview`, `.activity`, `.health`), the **needs page** (`temcoWorkbench.openNeeds`), **Workspaces** (five), **Temco Learn** (five), **Settings** (five), **Help** (six) |
 | Requires | `temcocontrols.temco-store`, `temcocontrols.temco-ui`, `temcocontrols.temco-repositories`, `temcocontrols.temco-docs` |
 | Settings | `temcoWorkbench.start.open` |
 
 ## What it owns
 
 ```
-src/extension.ts   activation: the Library, the dashboard, the needs page, the startup, the sidebar sequence
-src/views.ts       the Library — one row per thing every module has, and the needs row inside it
-src/home.ts        the dashboard — what the application is, what exists now, how to start
-src/needsPage.ts   what wants a person, said in full
-src/surface.ts     the page view types
-src/docs.ts        what it reads of the documentation module — the sets, the pages, the counts, the scripts
-src/store.ts       what it reads of the store — the platform's memory
-src/ui.ts          what it reads of the UI module — where a page opens, what a command argument names
-src/repositories.ts  what it reads of the repositories module — the repository's own scripts
-src/aiModule.ts    what it knows of the AI module — whether it is installed, and nothing more
+src/extension.ts      activation: the pages, the commands, and the two layout decisions
+src/sidebar.ts        the side-bar groups and their rows — one line each, the sentence in the tooltip
+src/dashboard.ts      Overview, Recent Activity, Coverage & Health
+src/home.ts           the dashboard summary the startup falls back to
+src/needsPage.ts      what wants a person, said in full
+src/workspaces.ts     All Workspaces, one workspace, New Workspace, Templates
+src/learnPages.ts     Temco Learn: Home, T3000, an article, Downloads, Learning Paths
+src/settingsPages.ts  General, Modules, Branding, AI Models, Publishing
+src/helpPages.ts      Welcome, Help, Keyboard Shortcuts, Logs, Report an Issue, About
+src/*Sample.ts        the mock's sample rows, one file per group of pages
+src/surface.ts        the page view types
+src/docs.ts           what it reads of the documentation module — the sets, the pages, the counts, the scripts
+src/store.ts          what it reads of the store — the platform's memory
+src/ui.ts             what it reads of the UI module — where a page opens, what a command argument names
+src/repositories.ts   what it reads of the repositories module — the repository's own scripts
+src/aiModule.ts       what it knows of the AI module — whether it is installed, and nothing more
 ```
 
 ## Why it exists

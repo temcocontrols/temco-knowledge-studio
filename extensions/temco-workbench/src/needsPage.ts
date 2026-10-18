@@ -14,7 +14,7 @@ import * as vscode from 'vscode';
 import { DocsRoot, collectPages, countStale, scriptsIn } from './docs';
 import { OFFERED_SCRIPTS } from './repositories';
 import { NEEDS_VIEW_TYPE } from './surface';
-import { pageColumn } from './ui';
+import { commandScript, escapeHtml, icon, page, pageColumn, runCommand, toneMark } from './ui';
 
 /** What the last run of one of the repository's own scripts left behind. */
 interface ScriptRun {
@@ -23,15 +23,6 @@ interface ScriptRun {
   exit: number | undefined;
   at: string;
   rewritten: string[];
-}
-
-interface NeedsMessage {
-  type: 'ready' | 'action';
-  action?: 'open' | 'create' | 'owed' | 'report' | 'registry' | 'openProject' | 'script';
-  script?: string;
-  path?: string;
-  id?: string;
-  title?: string;
 }
 
 export class NeedsPage {
@@ -47,7 +38,7 @@ export class NeedsPage {
   open(): void {
     if (this.panel) {
       this.panel.reveal(pageColumn());
-      void this.seed();
+      this.seed();
       return;
     }
 
@@ -56,74 +47,29 @@ export class NeedsPage {
       localResourceRoots: [],
     });
     this.panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'docs.svg');
-    this.panel.webview.html = html(nonce());
-    this.panel.webview.onDidReceiveMessage((message: NeedsMessage) => void this.receive(message));
+    // A button on the page names a command and, when it needs one, its arguments; the same script every page of ours
+    // runs. A script run is remembered here rather than in the page, because a run is a thing that happened.
+    this.panel.webview.onDidReceiveMessage(async (message: { type?: string; command?: string; args?: unknown }) => {
+      if (message.command === 'temcoDocs.runScript' && typeof message.args === 'string') {
+        const result = await vscode.commands.executeCommand<ScriptRun | undefined>('temcoDocs.runScript', message.args);
+        if (result) {
+          this.runs.set(message.args, result);
+        }
+      } else {
+        runCommand(message);
+      }
+      this.seed();
+    });
     this.panel.onDidDispose(() => {
       this.panel = undefined;
     });
+    this.seed();
   }
 
   /** Re-renders if it is open. Called by the refresh path, so the page follows the workspace. */
   refresh(): void {
     if (this.panel) {
-      void this.seed();
-    }
-  }
-
-  private async receive(message: NeedsMessage): Promise<void> {
-    if (message.type === 'ready') {
-      await this.seed();
-      return;
-    }
-    if (message.type !== 'action') {
-      return;
-    }
-
-    switch (message.action) {
-      case 'open':
-        await vscode.commands.executeCommand('temcoRepositories.openFile', {
-          path: message.path,
-          id: message.id,
-          title: message.title,
-        });
-        return;
-      case 'create':
-        await vscode.commands.executeCommand('temcoDocs.createPage', {
-          path: message.path,
-          title: message.title,
-        });
-        await this.seed();
-        return;
-      case 'registry':
-        await vscode.commands.executeCommand('temcoDocs.openRegistry');
-        return;
-      case 'report':
-        await vscode.commands.executeCommand('temcoDocs.stalenessReport');
-        return;
-      case 'openProject':
-        await vscode.commands.executeCommand('temcoProjects.openProjects');
-        return;
-      case 'script': {
-        const id = message.script ?? '';
-        const result = await vscode.commands.executeCommand<ScriptRun | undefined>(
-          'temcoDocs.runScript',
-          id
-        );
-        if (result) {
-          this.runs.set(id, result);
-        }
-        await this.seed();
-        return;
-      }
-      case 'owed': {
-        // Kept for the old button: the same run, under the name the owed gate has everywhere else.
-        const result = await vscode.commands.executeCommand<ScriptRun | undefined>('temcoDocs.runOwed');
-        if (result) {
-          this.runs.set('docs:owed', result);
-        }
-        await this.seed();
-        return;
-      }
+      this.seed();
     }
   }
 
@@ -203,300 +149,156 @@ export class NeedsPage {
       }
     }
 
-    await this.panel.webview.postMessage({
-      type: 'needs',
-      sources,
-      faults,
-      missing,
-      stale,
-      unowned,
-      // The scripts this repository actually has, each with what its last run in this session left behind.
-      scripts: OFFERED_SCRIPTS
-        .filter((script) => scriptsPresent.has(script.id))
-        .map((script) => ({
-          id: script.id,
-          label: script.label,
-          detail: script.detail,
-          run: this.runs.get(script.id),
-        })),
-      anyLocal: sources.some((source) => source.owed),
-      totals: {
-        faults: faults.length,
-        errors: faults.filter((fault) => fault.severity === 'error').length,
-        missing: missing.length,
-        stale: stale.length,
-        unowned: unowned.length,
-      },
-    });
+    const scripts = OFFERED_SCRIPTS
+      .filter((script) => scriptsPresent.has(script.id))
+      .map((script) => ({ id: script.id, label: script.label, detail: script.detail, run: this.runs.get(script.id) }));
+    const errors = faults.filter((fault) => fault.severity === 'error').length;
+
+    const fact = (label: string, value: string): string =>
+      `<div><div class="settings-strip__label">${escapeHtml(label)}</div><div class="settings-strip__value">${escapeHtml(value)}</div></div>`;
+
+    const rule = (label: string, count: string, actions = ''): string =>
+      `<div class="group-head"><span class="group-head__label">${escapeHtml(label)}</span><span class="group-head__rule"></span><span class="group-head__count">${escapeHtml(count)}</span>${actions ? `<span class="group-head__actions">${actions}</span>` : ''}</div>`;
+
+    const sourceRow = (source: (typeof sources)[number]): string => {
+      const facts = [`${source.pages} pages`, `${source.errors} errors`, `${source.warnings} warnings`, `${source.stale} stale`, `${source.unowned} unowned`, `${source.missing} missing`];
+      return `<div class="record-row record-row--static">
+	${toneMark('folder', source.errors > 0 ? 'err' : source.warnings > 0 ? 'warn' : undefined)}
+	<div class="record-row__main">
+		<div class="record-row__title"><span class="record-row__name">${escapeHtml(source.name)}</span></div>
+		<div class="record-row__meta">${facts.map((entry, index) => `<span>${escapeHtml(entry)}${index < facts.length - 1 ? ' ·' : ''}</span>`).join(' ')}</div>
+	</div>
+	<div class="record-row__state"><span class="cell-muted">${escapeHtml(source.origin)}</span></div>
+	<span class="record-row__go"></span>
+</div>`;
+    };
+
+    const openArgs = (path: string | undefined, id: string, title: string): string =>
+      escapeHtml(JSON.stringify({ path, id, title }));
+
+    const faultRow = (fault: (typeof faults)[number]): string =>
+      `<div class="record-row record-row--static" data-command="temcoRepositories.openFile" data-args="${openArgs(fault.path, fault.id, fault.title)}">
+	${toneMark(fault.severity === 'error' ? 'error' : 'warning', fault.severity === 'error' ? 'err' : 'warn')}
+	<div class="record-row__main">
+		<div class="record-row__title"><span class="record-row__name">${escapeHtml(fault.title)}</span><span class="cell-muted cell-mono">${escapeHtml(fault.id)}</span></div>
+		<div class="record-row__meta"><span>${escapeHtml(fault.message)}</span></div>
+	</div>
+	<div class="record-row__state"><span class="cell-muted">${escapeHtml(fault.owner || 'no owner')}</span></div>
+	<span class="record-row__go">›</span>
+</div>`;
+
+    const missingRow = (entry: (typeof missing)[number]): string =>
+      `<div class="record-row record-row--static">
+	${toneMark('document', 'warn')}
+	<div class="record-row__main">
+		<div class="record-row__title"><span class="record-row__name">${escapeHtml(entry.title)}</span><span class="cell-muted cell-mono">${escapeHtml(entry.id)}</span></div>
+		<div class="record-row__meta"><span class="cell-mono">${escapeHtml(entry.path)}</span></div>
+	</div>
+	<div class="record-row__state"><button type="button" class="btn btn--sm" data-command="temcoDocs.createPage" data-args="${escapeHtml(JSON.stringify({ path: entry.path, title: entry.title }))}"><span>Create the File</span></button></div>
+	<span class="record-row__go"></span>
+</div>`;
+
+    const staleRow = (entry: (typeof stale)[number]): string =>
+      `<div class="record-row record-row--static" data-command="temcoRepositories.openFile" data-args="${openArgs(entry.path, entry.id, entry.title)}">
+	${toneMark('clock', 'warn')}
+	<div class="record-row__main">
+		<div class="record-row__title"><span class="record-row__name">${escapeHtml(entry.title)}</span></div>
+		<div class="record-row__meta"><span>${escapeHtml(entry.owner || 'no owner')}${entry.changed === undefined ? '' : ` · changed ${escapeHtml(entry.changed)}`}</span></div>
+	</div>
+	<div class="record-row__state"></div>
+	<span class="record-row__go">›</span>
+</div>`;
+
+    const unownedRow = (entry: (typeof unowned)[number]): string =>
+      `<div class="record-row record-row--static" data-command="temcoRepositories.openFile" data-args="${openArgs(entry.path, entry.id, entry.title)}">
+	${toneMark('users')}
+	<div class="record-row__main">
+		<div class="record-row__title"><span class="record-row__name">${escapeHtml(entry.title)}</span></div>
+		<div class="record-row__meta"><span class="cell-mono">${escapeHtml(entry.id)}</span></div>
+	</div>
+	<div class="record-row__state"></div>
+	<span class="record-row__go">›</span>
+</div>`;
+
+    const scriptRow = (script: (typeof scripts)[number]): string => {
+      const last = script.run === undefined
+        ? 'not run in this session'
+        : `ran ${script.run.at} · exit ${script.run.exit ?? '—'}`;
+      return `<div class="record-row record-row--static">
+	${toneMark('terminal', script.run === undefined ? undefined : script.run.exit === 0 ? 'ok' : 'err')}
+	<div class="record-row__main">
+		<div class="record-row__title"><span class="record-row__name">${escapeHtml(script.label)}</span></div>
+		<div class="record-row__meta"><span>${escapeHtml(script.detail)}</span> · <span>${escapeHtml(last)}</span></div>
+	</div>
+	<div class="record-row__state"><button type="button" class="btn btn--sm btn--ghost" data-command="temcoDocs.runScript" data-args="${escapeHtml(JSON.stringify(script.id))}"><span>Run</span></button></div>
+	<span class="record-row__go"></span>
+</div>`;
+    };
+
+    const body = `
+<div class="page-head">
+	<div class="page-head__main">
+		<h1 class="page-head__title">${icon('check')}What Needs Doing</h1>
+		<p class="page-head__desc">Everything that wants a person, from every source of the project being worked on — each row says what it is and where the fix is.</p>
+	</div>
+	<div class="page-head__actions">
+		<button type="button" class="btn btn--primary" data-command="temcoDocs.stalenessReport"><span>Documentation Owed</span></button>
+		<button type="button" class="btn" data-command="temcoDocs.section.projects.focus"><span>Projects</span></button>
+	</div>
+</div>
+
+<div class="settings-strip settings-strip--wide">
+	${fact('Errors', String(errors))}
+	${fact('Warnings', String(faults.length - errors))}
+	${fact('Missing files', String(missing.length))}
+	${fact('Stale', String(stale.length))}
+	${fact('Unowned', String(unowned.length))}
+	${fact('Sources', String(sources.length))}
+</div>
+
+<div class="mt-24">
+	${rule('Sources', sources.length === 1 ? '1 source' : `${sources.length} sources`)}
+	${sources.length === 0
+        ? '<p class="group-note">Nothing is being read yet — choose the project you are working on, and its sources will be read.</p>'
+        : `<div class="record-list">${sources.map(sourceRow).join('')}</div>`}
+</div>
+
+<div class="mt-24">
+	${rule('Faults', `${faults.length} found`)}
+	${faults.length === 0
+        ? '<p class="group-note">No structural fault: every declared page exists, and every link resolves.</p>'
+        : `<div class="record-list">${faults.map(faultRow).join('')}</div>`}
+</div>
+
+<div class="mt-24">
+	${rule('Declared, but the File Is Not There', `${missing.length} pages`)}
+	${missing.length === 0
+        ? '<p class="group-note">Every page the registry declares has a file.</p>'
+        : `<div class="record-list">${missing.map(missingRow).join('')}</div>`}
+</div>
+
+<div class="mt-24">
+	${rule('Stale', `${stale.length} pages`)}
+	${stale.length === 0
+        ? '<p class="group-note">Every page agrees with the code it claims to describe.</p>'
+        : `<div class="record-list">${stale.map(staleRow).join('')}</div>`}
+</div>
+
+<div class="mt-24">
+	${rule('No Owner', `${unowned.length} pages`)}
+	${unowned.length === 0
+        ? '<p class="group-note">Every page has someone to tell when it goes out of date.</p>'
+        : `<div class="record-list">${unowned.map(unownedRow).join('')}</div>`}
+</div>
+
+<div class="mt-24">
+	${rule("The Repository's Own Checks", `${scripts.length} scripts`)}
+	<p class="group-note">Each of these is the repository's own npm script, run as a task in the folder being read — visible in the terminal, cancellable, and its output there is the verdict. This page says where a run happened, when, and what it exited with; it never interprets one.</p>
+	${scripts.length === 0
+        ? '<p class="group-note">This repository offers no documentation script of its own.</p>'
+        : `<div class="record-list">${scripts.map(scriptRow).join('')}</div>`}
+</div>`;
+
+    this.panel.webview.html = page(body, { title: 'What needs doing', script: commandScript });
   }
-}
-
-function nonce(): string {
-  const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let text = '';
-  for (let index = 0; index < 32; index += 1) {
-    text += alphabet[Math.floor(Math.random() * alphabet.length)];
-  }
-  return text;
-}
-
-function html(script: string): string {
-  const style = `
-    :root { color-scheme: light dark; }
-    body { margin: 0; padding: 1.6em 2em 3em; font-family: var(--vscode-font-family);
-           font-size: var(--vscode-font-size); color: var(--vscode-foreground); }
-    h1 { font-size: 1.5em; font-weight: 600; margin: 0 0 .2em; }
-    h2 { font-size: 1.05em; font-weight: 600; margin: 1.8em 0 .4em; }
-    h2 .n { color: var(--vscode-descriptionForeground); font-weight: 400; padding-left: .5em; }
-    p { line-height: 1.55; margin: .3em 0; }
-    .meta { color: var(--vscode-descriptionForeground); max-width: 74em; }
-    .actions { display: flex; gap: .6em; flex-wrap: wrap; margin: .6em 0 1em; }
-    button { padding: .3em .8em; border: none; border-radius: 2px; cursor: pointer;
-             font-family: inherit; font-size: inherit;
-             color: var(--vscode-button-secondaryForeground);
-             background: var(--vscode-button-secondaryBackground); }
-    button:hover { background: var(--vscode-button-secondaryHoverBackground); }
-    button.primary { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
-    button.primary:hover { background: var(--vscode-button-hoverBackground); }
-    .scroll { overflow-x: auto; max-width: 100%; }
-    table { border-collapse: collapse; width: 100%; max-width: 84em; }
-    th, td { text-align: left; padding: .3em .8em .3em 0; vertical-align: top;
-             border-bottom: 1px solid var(--vscode-panel-border); overflow-wrap: anywhere; }
-    th { color: var(--vscode-descriptionForeground); font-weight: 500; }
-    td.id { color: var(--vscode-descriptionForeground); }
-    td.act { text-align: right; white-space: nowrap; }
-    .mark { font-weight: 600; padding-right: .4em; }
-    .mark.error { color: var(--vscode-errorForeground); }
-    .mark.warn { color: var(--vscode-editorWarning-foreground, var(--vscode-descriptionForeground)); }
-    .mark.quiet { color: var(--vscode-descriptionForeground); }
-    a.link { color: var(--vscode-textLink-foreground); cursor: pointer; text-decoration: none; }
-    a.link:hover { text-decoration: underline; }
-    .empty { color: var(--vscode-descriptionForeground); border: 1px dashed var(--vscode-panel-border);
-             border-radius: 3px; padding: 1em 1.2em; max-width: 74em; }
-    .verdict { border: 1px solid var(--vscode-panel-border); border-radius: 3px; padding: .8em 1em;
-               max-width: 74em; }
-    .verdict code { font-family: var(--vscode-editor-font-family); }
-    code { font-family: var(--vscode-editor-font-family); font-size: .95em; overflow-wrap: anywhere; }
-    .foot { color: var(--vscode-descriptionForeground); margin-top: 2.4em; max-width: 84em;
-            border-top: 1px solid var(--vscode-panel-border); padding-top: 1em; }
-  `;
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${script}';">
-<style>${style}</style>
-<title>Temco Docs</title>
-</head>
-<body>
-  <h1>What needs doing</h1>
-  <p class="meta" id="lede"></p>
-  <div class="actions">
-    <button id="report">Staleness report</button>
-    <button id="registry">Open the registry</button>
-    <button id="projects">The projects page</button>
-  </div>
-
-  <div id="sources"></div>
-  <h2>Faults <span class="n" id="faults-n"></span></h2>
-  <div id="faults"></div>
-  <h2>Declared, but the file is not there <span class="n" id="missing-n"></span></h2>
-  <div id="missing"></div>
-  <h2>Stale <span class="n" id="stale-n"></span></h2>
-  <div id="stale"></div>
-  <h2>No owner <span class="n" id="unowned-n"></span></h2>
-  <div id="unowned"></div>
-  <h2>The repository's own checks</h2>
-  <p class="meta">Each of these is the repository's own npm script, run as a task in the folder being read —
-    visible in the terminal, cancellable, and its output there is the verdict. This page says where a run
-    happened, when, and what it exited with; it never interprets one. A second opinion about what is owed, or
-    about what the media audit found, is the one thing a documentation platform must not invent.</p>
-  <div id="checks"></div>
-
-  <p class="foot" id="foot"></p>
-
-<script nonce="${script}">
-const vscode = acquireVsCodeApi();
-const $ = (id) => document.getElementById(id);
-
-$('report').addEventListener('click', () => vscode.postMessage({ type: 'action', action: 'report' }));
-$('registry').addEventListener('click', () => vscode.postMessage({ type: 'action', action: 'registry' }));
-$('projects').addEventListener('click', () => vscode.postMessage({ type: 'action', action: 'openProject' }));
-
-function empty(text) {
-  const div = document.createElement('div');
-  div.className = 'empty';
-  div.textContent = text;
-  return div;
-}
-
-function mark(kind, text) {
-  const span = document.createElement('span');
-  span.className = 'mark ' + kind;
-  span.textContent = text;
-  return span;
-}
-
-function link(row, text, done) {
-  const a = document.createElement('a');
-  a.className = 'link';
-  a.textContent = text;
-  a.addEventListener('click', done);
-  row.append(a);
-  return row;
-}
-
-function row(cells, action) {
-  const tr = document.createElement('tr');
-  for (const [text, className] of cells) {
-    const td = document.createElement('td');
-    if (className) { td.className = className; }
-    td.textContent = text;
-    tr.append(td);
-  }
-  const act = document.createElement('td');
-  act.className = 'act';
-  if (action) { link(act, action.label, action.done); }
-  tr.append(act);
-  return tr;
-}
-
-function table(headers, rows) {
-  const box = document.createElement('div');
-  box.className = 'scroll';
-  const el = document.createElement('table');
-  const head = document.createElement('tr');
-  for (const text of headers) {
-    const th = document.createElement('th');
-    th.textContent = text;
-    head.append(th);
-  }
-  el.append(head);
-  for (const r of rows) { el.append(r); }
-  box.append(el);
-  return box;
-}
-
-function openPage(row) {
-  return () => vscode.postMessage({
-    type: 'action', action: 'open', path: row.path, id: row.id, title: row.title,
-  });
-}
-
-function render(data) {
-  const t = data.totals;
-  $('lede').textContent =
-    t.faults + ' fault' + (t.faults === 1 ? '' : 's') + ' · ' +
-    t.missing + ' file' + (t.missing === 1 ? '' : 's') + ' to create · ' +
-    t.stale + ' stale · ' + t.unowned + ' without an owner. ' +
-    'Staleness is the generator\\'s verdict; the owed check is the repository\\'s own script.';
-  $('faults-n').textContent = String(t.faults);
-  $('missing-n').textContent = String(t.missing);
-  $('stale-n').textContent = String(t.stale);
-  $('unowned-n').textContent = String(t.unowned);
-
-  $('sources').replaceChildren(table(
-    ['Source', 'Where', 'Pages', 'Errors', 'Warnings', 'Never reviewed', 'Stale', 'Unowned', 'Missing'],
-    data.sources.map((source) => row([
-      [source.name], [source.origin], [String(source.pages)], [String(source.errors)],
-      [String(source.warnings)], [String(source.neverReviewed)], [String(source.stale)],
-      [String(source.unowned)], [String(source.missing)],
-    ]))
-  ));
-
-  $('faults').replaceChildren(
-    data.faults.length === 0
-      ? empty('No structural fault. Nothing here is a fault of the registry or of a page\\'s own declaration.')
-      : table(['', 'Page', 'Id', 'Owner', 'What'], data.faults.map((fault) => {
-          const r = row([
-            ['', ''], [fault.title], [fault.id, 'id'], [fault.owner || '—'], [fault.message],
-          ], fault.path ? { label: 'Open', done: openPage(fault) } : undefined);
-          r.firstChild.replaceChildren(mark(fault.severity === 'error' ? 'error' : 'warn', fault.severity === 'error' ? '⊗' : '▲'));
-          return r;
-        }))
-  );
-
-  $('missing').replaceChildren(
-    data.missing.length === 0
-      ? empty('Every declared page has its file.')
-      : table(['', 'Page', 'Id', 'File'], data.missing.map((page) => {
-          const r = row([['', ''], [page.title], [page.id, 'id'], [page.path]], {
-            label: 'Create it',
-            done: () => vscode.postMessage({
-              type: 'action', action: 'create', path: page.path, title: page.title,
-            }),
-          });
-          r.firstChild.replaceChildren(mark('error', '!'));
-          return r;
-        }))
-  );
-
-  $('stale').replaceChildren(
-    data.stale.length === 0
-      ? empty('Nothing is stale — either nothing claims code that has moved, or the generator has not judged yet (it needs the page\\'s code globs).')
-      : table(['', 'Page', 'Id', 'Owner', 'Last change'], data.stale.map((page) => {
-          const r = row([['', ''], [page.title], [page.id, 'id'], [page.owner || '—'], [page.changed || '—']],
-            page.path ? { label: 'Open', done: openPage(page) } : undefined);
-          r.firstChild.replaceChildren(mark('quiet', '↺'));
-          return r;
-        }))
-  );
-
-  $('unowned').replaceChildren(
-    data.unowned.length === 0
-      ? empty('Every page on this machine has an owner.')
-      : table(['', 'Page', 'Id', 'Where'], data.unowned.map((page) => {
-          const r = row([['', ''], [page.title], [page.id, 'id'], [page.path || '—']],
-            page.path ? { label: 'Open', done: openPage(page) } : undefined);
-          r.firstChild.replaceChildren(mark('warn', '▲'));
-          return r;
-        }))
-  );
-
-  // The repository's own checks, each with what its last run in this session left behind. A run is a fact:
-  // where, when, and the exit code. What the script *decided* is in its own output, in the terminal.
-  const checks = $('checks');
-  if (data.scripts.length === 0) {
-    checks.replaceChildren(
-      data.anyLocal
-        ? empty('The repository being read has none of these scripts. Nothing is offered that the repository does not have.')
-        : empty('Nothing on this machine is being read, so there is no repository to check. A source read over the API has no working tree to check in.')
-    );
-  } else {
-    checks.replaceChildren(table(
-      ['Script', 'What it does', 'Last run in this session', ''],
-      data.scripts.map((script) => {
-        const run = script.run;
-        const last = run
-          ? 'in ' + run.folder + ' at ' + run.at + ' · exit ' + (run.exit === undefined ? 'none' : run.exit) +
-            (run.rewritten && run.rewritten.length > 0
-              ? ' · rewrote ' + run.rewritten.join(', ')
-              : '')
-          : 'not run yet';
-        return row([[script.label], [script.detail], [last]], {
-          label: 'Run',
-          done: () => vscode.postMessage({ type: 'action', action: 'script', script: script.id }),
-        });
-      })
-    ));
-  }
-
-  $('foot').textContent =
-    'Every count on this page comes from a check that already exists somewhere else: the structural checks in ' +
-    'the registry reader, the generator’s stale verdict, and the repository’s own scripts. Nothing is ' +
-    'computed twice here, and nothing is written except the empty file for a page that is declared and missing.';
-}
-
-window.addEventListener('message', (event) => {
-  if (event.data.type === 'needs') {
-    render(event.data);
-  }
-});
-
-vscode.postMessage({ type: 'ready' });
-</script>
-</body>
-</html>`;
 }

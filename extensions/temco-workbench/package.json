@@ -29,18 +29,91 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onView:temcoWorkbench.library"
+    "onView:temcoWorkbench.workspacesView",
+    "onView:temcoWorkbench.learnView",
+    "onView:temcoWorkbench.learnDelivery",
+    "onView:temcoWorkbench.settingsProfile",
+    "onView:temcoWorkbench.settingsPlatform",
+    "onView:temcoWorkbench.helpLearn",
+    "onView:temcoWorkbench.helpSupport",
+    "onView:temcoWorkbench.platformView",
+    "onView:temcoWorkbench.needsWorkView"
   ],
   "contributes": {
     "views": {
-      "temco": [
+      "temcoDashboard": [
         {
-          "id": "temcoWorkbench.library",
-          "name": "Library"
+          "id": "temcoWorkbench.platformView",
+          "name": "Platform"
+        },
+        {
+          "id": "temcoWorkbench.needsWorkView",
+          "name": "Needs Work"
+        }
+      ],
+      "temcoWorkspaces": [
+        {
+          "id": "temcoWorkbench.workspacesView",
+          "name": "Workspaces"
+        }
+      ],
+      "temcoLearn": [
+        {
+          "id": "temcoWorkbench.learnView",
+          "name": "Site"
+        },
+        {
+          "id": "temcoWorkbench.learnDelivery",
+          "name": "Delivery"
+        }
+      ],
+      "temcoSettings": [
+        {
+          "id": "temcoWorkbench.settingsProfile",
+          "name": "Profile"
+        },
+        {
+          "id": "temcoWorkbench.settingsPlatform",
+          "name": "Platform"
+        }
+      ],
+      "temcoHelp": [
+        {
+          "id": "temcoWorkbench.helpLearn",
+          "name": "Learn"
+        },
+        {
+          "id": "temcoWorkbench.helpSupport",
+          "name": "Support"
         }
       ]
     },
     "commands": [
+      {
+        "command": "temcoWorkbench.learn.home",
+        "title": "Temco Learn",
+        "icon": "$(home)"
+      },
+      {
+        "command": "temcoWorkbench.learn.t3000",
+        "title": "T3000",
+        "icon": "$(book)"
+      },
+      {
+        "command": "temcoWorkbench.learn.article",
+        "title": "Article Preview",
+        "icon": "$(document)"
+      },
+      {
+        "command": "temcoWorkbench.learn.downloads",
+        "title": "Downloads",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "temcoWorkbench.learn.paths",
+        "title": "Learning Paths",
+        "icon": "$(mortar-board)"
+      },
       {
         "command": "temcoWorkbench.home",
         "title": "Home",
@@ -50,267 +123,222 @@
         "command": "temcoWorkbench.openNeeds",
         "title": "What Needs Doing",
         "icon": "$(checklist)"
+      },
+      {
+        "command": "temcoWorkbench.welcome",
+        "title": "Welcome",
+        "icon": "$(info)"
+      },
+      {
+        "command": "temcoWorkbench.toggleWelcomeStartup",
+        "title": "Open the Welcome Page at Startup"
+      },
+      {
+        "command": "temcoWorkbench.settings",
+        "title": "Settings",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "temcoWorkbench.settings.general",
+        "title": "General",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "temcoWorkbench.settings.modules",
+        "title": "Modules",
+        "icon": "$(package)"
+      },
+      {
+        "command": "temcoWorkbench.settings.branding",
+        "title": "Branding",
+        "icon": "$(paintcan)"
+      },
+      {
+        "command": "temcoWorkbench.settings.ai",
+        "title": "AI Models",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "temcoWorkbench.settings.publishing",
+        "title": "Publishing",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "temcoWorkbench.copyLogPath",
+        "title": "Copy Log Folder Path"
+      },
+      {
+        "command": "temcoWorkbench.copyDiagnostics",
+        "title": "Copy Diagnostics"
+      },
+      {
+        "command": "temcoWorkbench.setStartOpen",
+        "title": "Set What Opens at Startup"
+      },
+      {
+        "command": "temcoWorkbench.help",
+        "title": "Help",
+        "icon": "$(question)"
+      },
+      {
+        "command": "temcoWorkbench.help.welcome",
+        "title": "Welcome",
+        "icon": "$(home)"
+      },
+      {
+        "command": "temcoWorkbench.help.home",
+        "title": "Help",
+        "icon": "$(info)"
+      },
+      {
+        "command": "temcoWorkbench.help.keys",
+        "title": "Keyboard Shortcuts",
+        "icon": "$(keyboard)"
+      },
+      {
+        "command": "temcoWorkbench.help.logs",
+        "title": "Logs",
+        "icon": "$(output)"
+      },
+      {
+        "command": "temcoWorkbench.help.issue",
+        "title": "Report an Issue",
+        "icon": "$(report)"
+      },
+      {
+        "command": "temcoWorkbench.help.about",
+        "title": "About Temco Platform",
+        "icon": "$(info)"
+      },
+      {
+        "command": "temcoWorkbench.workspaces",
+        "title": "All Workspaces",
+        "icon": "$(layers)"
+      },
+      {
+        "command": "temcoWorkbench.newWorkspace",
+        "title": "New Workspace",
+        "icon": "$(add)"
+      },
+      {
+        "command": "temcoWorkbench.workspace",
+        "title": "Open This Folder's Workspace",
+        "icon": "$(folder)"
+      },
+      {
+        "command": "temcoWorkbench.templates",
+        "title": "Templates",
+        "icon": "$(package)"
+      },
+      {
+        "command": "temcoWorkbench.overview",
+        "title": "Overview",
+        "icon": "$(home)"
+      },
+      {
+        "command": "temcoWorkbench.activity",
+        "title": "Recent Activity",
+        "icon": "$(history)"
+      },
+      {
+        "command": "temcoWorkbench.health",
+        "title": "Coverage & Health",
+        "icon": "$(graph)"
       }
     ],
-    "menus": {
-      "view/title": [
-        {
-          "command": "temcoProjects.newProject",
-          "when": "view == temcoWorkbench.library",
-          "group": "navigation@0"
-        },
-        {
-          "command": "temcoProjects.openProjects",
-          "when": "view == temcoWorkbench.library",
-          "group": "navigation@1"
-        },
-        {
-          "command": "temcoWorkbench.openNeeds",
-          "when": "view == temcoWorkbench.library",
-          "group": "navigation@2"
-        },
-        {
-          "command": "temcoAi.openPanel",
-          "when": "view == temcoWorkbench.library && temcoDocs.aiInstalled",
-          "group": "5_ai@1"
-        },
-        {
-          "command": "temcoRepositories.page",
-          "when": "view == temcoWorkbench.library",
-          "group": "1_read@4"
-        },
-        {
-          "command": "temcoRepositories.fetchSource",
-          "when": "view == temcoWorkbench.library",
-          "group": "1_read@5"
-        },
-        {
-          "command": "temcoRepositories.pullSource",
-          "when": "view == temcoWorkbench.library",
-          "group": "1_read@6"
-        },
-        {
-          "command": "temcoRepositories.openClone",
-          "when": "view == temcoWorkbench.library",
-          "group": "1_read@7"
-        },
-        {
-          "command": "temcoDocs.analyseSource",
-          "when": "view == temcoWorkbench.library",
-          "group": "2_work@3"
-        },
-        {
-          "command": "temcoRepositories.openWorkFolder",
-          "when": "view == temcoWorkbench.library",
-          "group": "3_run@3"
-        },
-        {
-          "command": "temcoRepositories.changeWorkspaceFolder",
-          "when": "view == temcoWorkbench.library",
-          "group": "3_run@4"
-        },
-        {
-          "command": "temcoRepositories.readAllSources",
-          "when": "view == temcoWorkbench.library",
-          "group": "1_read@1"
-        },
-        {
-          "command": "temcoRepositories.readSource",
-          "when": "view == temcoWorkbench.library",
-          "group": "1_read@2"
-        },
-        {
-          "command": "temcoProjects.addSource",
-          "when": "view == temcoWorkbench.library",
-          "group": "1_read@3"
-        },
-        {
-          "command": "temcoProjects.selectProject",
-          "when": "view == temcoWorkbench.library",
-          "group": "2_work@1"
-        },
-        {
-          "command": "temcoProjects.buildProject",
-          "when": "view == temcoWorkbench.library",
-          "group": "2_work@2"
-        },
-        {
-          "command": "temcoDocs.runScript",
-          "when": "view == temcoWorkbench.library",
-          "group": "3_run@1"
-        },
-        {
-          "command": "temcoDocs.stalenessReport",
-          "when": "view == temcoWorkbench.library",
-          "group": "3_run@2"
-        },
-        {
-          "command": "temcoStore.status",
-          "when": "view == temcoWorkbench.library",
-          "group": "4_catalog@1"
-        },
-        {
-          "command": "temcoRepositories.setToken",
-          "when": "view == temcoWorkbench.library",
-          "group": "9_settings@1"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "temcoProjects.openProject",
-          "when": "view == temcoWorkbench.library && viewItem == project",
-          "group": "inline"
-        },
-        {
-          "command": "temcoRepositories.readSource",
-          "when": "view == temcoWorkbench.library && viewItem == source",
-          "group": "inline"
-        },
-        {
-          "command": "temcoRepositories.openFile",
-          "when": "view == temcoWorkbench.library && viewItem == page",
-          "group": "inline"
-        },
-        {
-          "command": "temcoProjects.selectProject",
-          "when": "view == temcoWorkbench.library && viewItem == project",
-          "group": "1_work@1"
-        },
-        {
-          "command": "temcoProjects.editProject",
-          "when": "view == temcoWorkbench.library && viewItem == project",
-          "group": "1_work@2"
-        },
-        {
-          "command": "temcoProjects.addSource",
-          "when": "view == temcoWorkbench.library && viewItem == project",
-          "group": "1_work@3"
-        },
-        {
-          "command": "temcoProjects.buildProject",
-          "when": "view == temcoWorkbench.library && viewItem == project",
-          "group": "1_work@4"
-        },
-        {
-          "command": "temcoProjects.removeProject",
-          "when": "view == temcoWorkbench.library && viewItem == project",
-          "group": "9_forget@1"
-        },
-        {
-          "command": "temcoRepositories.revealSource",
-          "when": "view == temcoWorkbench.library && viewItem == source",
-          "group": "1_open@1"
-        },
-        {
-          "command": "temcoRepositories.setSourceBranch",
-          "when": "view == temcoWorkbench.library && viewItem == source",
-          "group": "1_open@2"
-        },
-        {
-          "command": "temcoRepositories.removeSource",
-          "when": "view == temcoWorkbench.library && viewItem == source",
-          "group": "9_forget@1"
-        },
-        {
-          "command": "temcoAi.page",
-          "when": "view == temcoWorkbench.library && viewItem == ai && temcoDocs.aiInstalled",
-          "group": "1_open@1"
-        },
-        {
-          "command": "temcoAi.dockRight",
-          "when": "view == temcoWorkbench.library && viewItem == ai && temcoDocs.aiInstalled",
-          "group": "1_place@1"
-        },
-        {
-          "command": "temcoAi.status",
-          "when": "view == temcoWorkbench.library && viewItem == ai && temcoDocs.aiInstalled",
-          "group": "1_open@2"
-        },
-        {
-          "command": "temcoAi.models",
-          "when": "view == temcoWorkbench.library && viewItem == ai && temcoDocs.aiInstalled",
-          "group": "1_open@3"
-        },
-        {
-          "command": "temcoAi.openModelFolder",
-          "when": "view == temcoWorkbench.library && viewItem == ai && temcoDocs.aiInstalled",
-          "group": "1_open@4"
-        },
-        {
-          "command": "temcoAi.openPanel",
-          "when": "view == temcoWorkbench.library && viewItem == ai && temcoDocs.aiInstalled",
-          "group": "1_open@5"
-        },
-        {
-          "command": "temcoRepositories.page",
-          "when": "view == temcoWorkbench.library && viewItem == repositories",
-          "group": "1_open@1"
-        },
-        {
-          "command": "temcoRepositories.setToken",
-          "when": "view == temcoWorkbench.library && viewItem == repositories",
-          "group": "2_token@1"
-        },
-        {
-          "command": "temcoRepositories.fetchSource",
-          "when": "view == temcoWorkbench.library && viewItem == source",
-          "group": "1_local@1"
-        },
-        {
-          "command": "temcoRepositories.pullSource",
-          "when": "view == temcoWorkbench.library && viewItem == source",
-          "group": "1_local@2"
-        },
-        {
-          "command": "temcoRepositories.openClone",
-          "when": "view == temcoWorkbench.library && viewItem == source",
-          "group": "1_local@3"
-        },
-        {
-          "command": "temcoRepositories.removeClone",
-          "when": "view == temcoWorkbench.library && viewItem == source",
-          "group": "1_local@4"
-        },
-        {
-          "command": "temcoDocs.analyseSource",
-          "when": "view == temcoWorkbench.library && viewItem == source",
-          "group": "2_analyse@1"
-        },
-        {
-          "command": "temcoRepositories.openWorkFolder",
-          "when": "view == temcoWorkbench.library && viewItem == source",
-          "group": "1_local@5"
-        }
-      ]
-    },
     "configuration": {
       "title": "Temco Workbench",
       "properties": {
         "temcoWorkbench.start.open": {
           "type": "string",
           "enum": [
+            "welcome",
             "project",
             "page",
             "home",
             "none"
           ],
           "enumDescriptions": [
+            "The welcome page: what the application is for, and the five things to do first.",
             "The dashboard of the project being worked on. With no project, the page you were last on.",
             "The page you were last working on in the project being worked on. With none, that project's dashboard.",
             "The platform's home page.",
             "Nothing — no tab opens by itself."
           ],
-          "default": "project",
-          "markdownDescription": "What opens in the editor when the extension is activated. Each choice falls through to the next when it cannot be honoured: `project`, then the page you were last on, then the home page. Only `none` opens nothing."
+          "default": "welcome",
+          "markdownDescription": "What opens in the editor when the extension is activated. Each choice falls through to the next when it cannot be honoured: `welcome`, then `project`, then the page you were last on, then the home page. Only `none` opens nothing."
         }
       }
     },
-    "viewsWelcome": [
-      {
-        "view": "temcoWorkbench.library",
-        "contents": "Nothing recorded yet.\n\nA project is what you manage: name it, then give it the sources it is built from — a repository at a branch you choose, a folder on this machine, or an archive. Read a source and its pages appear in the Workspace, beside the code they document.\n\n[Create a project](command:temcoProjects.newProject) · [Add a source](command:temcoProjects.addSource)"
-      }
-    ]
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "temcoDashboard",
+          "title": "Dashboard",
+          "icon": "media/dashboard.svg"
+        },
+        {
+          "id": "temcoWorkspaces",
+          "title": "Workspaces",
+          "icon": "media/workspaces.svg"
+        },
+        {
+          "id": "temco",
+          "title": "Documentation",
+          "icon": "media/document.svg"
+        },
+        {
+          "id": "temcoDocuments",
+          "title": "Documents",
+          "icon": "media/documents.svg"
+        },
+        {
+          "id": "temcoAiHub",
+          "title": "AI Hub",
+          "icon": "media/ai.svg"
+        },
+        {
+          "id": "temcoLearn",
+          "title": "Temco Learn",
+          "icon": "media/learn.svg"
+        },
+        {
+          "id": "temcoDevices",
+          "title": "Devices",
+          "icon": "media/devices.svg"
+        },
+        {
+          "id": "temcoIo",
+          "title": "I/O Studio",
+          "icon": "media/io.svg"
+        },
+        {
+          "id": "temcoBacnet",
+          "title": "BACnet Studio",
+          "icon": "media/bacnet.svg"
+        },
+        {
+          "id": "temcoNetwork",
+          "title": "Network",
+          "icon": "media/network.svg"
+        },
+        {
+          "id": "temcoSql",
+          "title": "SQL Studio",
+          "icon": "media/sql.svg"
+        },
+        {
+          "id": "temcoSettings",
+          "title": "Settings",
+          "icon": "media/settings.svg"
+        },
+        {
+          "id": "temcoHelp",
+          "title": "Help",
+          "icon": "media/help.svg"
+        }
+      ]
+    }
   },
   "scripts": {
     "check-commands": "node --experimental-strip-types scripts/check-commands.mts"

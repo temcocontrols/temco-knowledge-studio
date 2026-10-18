@@ -12,7 +12,7 @@ import { DocsRoot, collectPages, countStale, totals } from './docs';
 
 import { Catalog, CatalogUnavailable, Selection, slugOf } from './store';
 import { HOME_VIEW_TYPE } from './surface';
-import { pageColumn } from './ui';
+import { icon, page, pageColumn, toneMark } from './ui';
 
 interface Feature {
   name: string;
@@ -91,6 +91,9 @@ export class HomePanel {
     }
     this.panel = vscode.window.createWebviewPanel(HOME_VIEW_TYPE, 'Temco Docs', pageColumn(), {
       enableScripts: false,
+      // A link is how this page runs a command: `command:` needs the host's permission, and it is the one thing
+      // the page asks for.
+      enableCommandUris: true,
       localResourceRoots: [],
     });
     this.panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'docs.svg');
@@ -120,10 +123,11 @@ export class HomePanel {
       },
       (error: unknown) => {
         if (this.panel === panel) {
-          panel.webview.html = shell(
-            `<h1>Temco Docs</h1><p class="bad">The dashboard could not be rendered: ${escapeHtml(
+          panel.webview.html = page(
+            `<h1 class="page-head__title">Temco Docs</h1><p class="bad">The dashboard could not be rendered: ${escapeHtml(
               String(error)
-            )}</p>`
+            )}</p>`,
+            { title: 'Temco Docs' }
           );
         }
       }
@@ -153,32 +157,59 @@ export class HomePanel {
 
     const settings = vscode.workspace.getConfiguration('temcoRepositories');
     const organisation = (settings.get<string>('organisation', 'temcocontrols') || 'temcocontrols').trim();
-    const manifest = this.context.extension.packageJSON as { version?: string; publisher?: string };
 
     const working = FEATURES.filter((feature) => feature.state === 'working');
 
-    const cards = (list: Feature[]): string =>
-      `<div class="grid">${list
-        .map(
-          (feature) => `
-        <article class="card">
-          <h3>${feature.name}<span class="mark">✓</span></h3>
-          <p>${feature.detail}</p>
-        </article>`
-        )
-        .join('')}</div>`;
+    /** One feature, as a card on the page's own grid. */
+    const card = (feature: Feature): string =>
+      `<div class="card">
+	<div class="card__head"><div class="card__title">${escapeHtml(feature.name)}</div><div class="card__actions"><span class="badge badge--ok">working</span></div></div>
+	<p class="card__desc">${escapeHtml(feature.detail)}</p>
+</div>`;
 
-    const openRows = roots.map((root) => {
+    /** One fact with its label, for the strip under the head. */
+    const fact = (label: string, value: string): string =>
+      `<div><div class="settings-strip__label">${escapeHtml(label)}</div><div class="settings-strip__value">${value}</div></div>`;
+
+    /** A source being read: its name, what it contributed, and the worst thing wrong with it. */
+    const sourceRow = (root: DocsRoot): string => {
       const stale = countStale(collectPages(root));
-      return [
-        escapeHtml(root.folder.name),
-        String(root.pages),
-        String(root.errors),
-        String(root.warnings),
-        String(root.neverReviewed),
-        stale > 0 ? String(stale) : '—',
+      const facts = [
+        `${root.pages} pages`,
+        `${root.errors} errors`,
+        `${root.warnings} warnings`,
+        `${root.neverReviewed} never reviewed`
       ];
-    });
+      if (stale > 0) {
+        facts.push(`${stale} stale`);
+      }
+      const state = root.errors > 0
+        ? '<span class="badge badge--err">errors</span>'
+        : root.warnings > 0
+          ? '<span class="badge badge--warn">warnings</span>'
+          : '<span class="badge badge--ok">clean</span>';
+      return `<div class="record-row record-row--static">
+	${toneMark('folder', root.errors > 0 ? 'err' : root.warnings > 0 ? 'warn' : undefined)}
+	<div class="record-row__main">
+		<div class="record-row__title"><span class="record-row__name">${escapeHtml(root.folder.name)}</span></div>
+		<div class="record-row__meta">${facts.map((entry, index) => `<span>${escapeHtml(entry)}${index < facts.length - 1 ? ' ·' : ''}</span>`).join(' ')}</div>
+	</div>
+	<div class="record-row__state">${state}</div>
+	<span class="record-row__go"></span>
+</div>`;
+    };
+
+    /** One of the four things to do first, as a row that runs it. */
+    const stepRow = (mark: string, title: string, note: string, command: string): string =>
+      `<div class="record-row" data-command="${command}">
+	${toneMark(mark, 'accent')}
+	<div class="record-row__main">
+		<div class="record-row__title"><span class="record-row__name">${escapeHtml(title)}</span></div>
+		<div class="record-row__meta"><span>${escapeHtml(note)}</span></div>
+	</div>
+	<div class="record-row__state"></div>
+	<span class="record-row__go">›</span>
+</div>`;
 
     // What is being read, and what it is read *from*: with a project selected the answer is the project's
     // sources, not the window's folders — the same one world the Workspace view shows.
@@ -195,163 +226,79 @@ export class HomePanel {
           : `${roots.length} sources`);
 
     const body = `
-      <header class="top">
-        <div class="ident">
-          <svg class="icon" viewBox="0 0 48 48" aria-hidden="true">
-            <rect x="7" y="5" width="34" height="38" rx="7" fill="none" stroke="currentColor" stroke-width="3"/>
-            <path d="M16 16h16M16 24h16M16 32h10" stroke="currentColor" stroke-width="3"
-                  stroke-linecap="round"/>
-          </svg>
-          <div class="text">
-            <h1>Temco Docs</h1>
-            <p class="meta">
-              v${escapeHtml(String(manifest.version ?? '—'))}
-              <span class="dot">·</span> ${escapeHtml(String(manifest.publisher ?? '—'))}
-              <span class="dot">·</span> ${roots.length} source${roots.length === 1 ? '' : 's'} being read
-              <span class="dot">·</span> ${sums.pages} pages
-            </p>
-            <p class="lede">Reads every project’s documentation where it already lives, keeps what it finds in one
-            local catalog, and builds the documents that ship.</p>
-          </div>
-        </div>
-        <div class="how">
-          ${STEPS.map(
-      ([label, detail]) => `<div><h4>${label}${label === 'Review' ? '' : '<i>→</i>'}</h4><span>${detail}</span></div>`
-    ).join('')}
-        </div>
-      </header>
+<div class="page-head">
+	<div class="page-head__main">
+		<h1 class="page-head__title">${icon('document')}Temco Docs</h1>
+		<p class="page-head__desc">Reads every project’s documentation where it already lives, keeps what it finds in one local catalog, and builds the documents that ship.</p>
+	</div>
+	<div class="page-head__actions">
+		<a class="btn btn--primary" href="command:temcoProjects.newProject"><span>Create a Project</span></a>
+		<a class="btn" href="command:temcoWorkbench.openNeeds"><span>What Needs Doing</span></a>
+	</div>
+</div>
 
-      <main class="main">
-        <section>
-          <h2>What we have now</h2>
-          <table class="facts">
-            <tr><th>Working on</th><td>${escapeHtml(reading)}</td><th>Pages</th><td>${sums.pages}</td></tr>
-            <tr><th>Projects</th><td>${documents.length}</td><th>Sources</th><td>${sources.length}</td></tr>
-            <tr><th>Issues</th><td>${sums.issues}</td><th>Unseen changes</th><td>${unseen}</td></tr>
-          </table>
-          ${roots.length === 0
-        ? `<p class="quiet">${escapeHtml(
+<div class="settings-strip settings-strip--wide">
+	${fact('Working on', escapeHtml(reading))}
+	${fact('Pages', String(sums.pages))}
+	${fact('Projects', String(documents.length))}
+	${fact('Sources', String(sources.length))}
+	${fact('Issues', String(sums.issues))}
+	${fact('Unseen changes', String(unseen))}
+</div>
+
+<div class="mt-24">
+	<div class="group-head">
+		<span class="group-head__label">How It Works</span>
+		<span class="group-head__rule"></span>
+		<span class="group-head__count">four steps</span>
+	</div>
+	<div class="grid grid--4 mt-16">
+		${STEPS.map(([label, detail]) => `<div class="card"><div class="card__head"><div class="card__title">${escapeHtml(label)}</div></div><p class="card__desc">${escapeHtml(detail)}</p></div>`).join('')}
+	</div>
+</div>
+
+<div class="mt-24">
+	<div class="group-head">
+		<span class="group-head__label">Sources Being Read</span>
+		<span class="group-head__rule"></span>
+		<span class="group-head__count">${roots.length === 1 ? '1 source' : `${roots.length} sources`}</span>
+	</div>
+	${roots.length === 0
+        ? `<p class="group-note">${escapeHtml(
           projectName !== undefined
             ? `${projectName} has no source that can be read yet — add one from the Library or the project's own page, then read it.`
             : 'Nothing is being read: no project is being worked on. Pick one in the Library — the Workspace view follows the project, never the folders this window happens to have open.'
         )}</p>`
-        : table(['Source', 'Pages', 'Errors', 'Warnings', 'Never reviewed', 'Stale'], openRows)
+        : `<div class="record-list">${roots.map(sourceRow).join('')}</div>`
       }
-          <p class="quiet">Kept in one SQLite database on this machine — never in a repository, never
-          committed, ${counts.length} tables at schema ${schema}${unavailable === undefined ? '' : `: ${escapeHtml(unavailable)}`
-      }.${recorded === 0 ? ' Empty so far.' : ''}
-          <code>${escapeHtml(catalogPath)}</code></p>
-        </section>
+	<p class="group-note">Kept in one SQLite database on this machine — never in a repository, never committed, ${counts.length} tables at schema ${schema}${unavailable === undefined ? '' : `: ${escapeHtml(unavailable)}`}.${recorded === 0 ? ' Empty so far.' : ''} <span class="cell-mono">${escapeHtml(catalogPath)}</span></p>
+</div>
 
-        <section>
-          <h2>How to start now <span class="count">nothing has to be built first</span></h2>
-          <ol class="steps">
-            <li><b>Create a project</b> —
-                <a href="command:temcoProjects.newProject">Create a project</a>: name it, give it a version
-                and an owner. This is the button marked <code>+</code> on the <b>Library</b> title bar, and it
-                is in the command palette as <i>Create a Project</i>.</li>
-            <li><b>Give it a source</b> —
-                <a href="command:temcoProjects.addSource">Add a source</a>: a repository at a branch you
-                choose, a folder on this machine, or an archive. The <code>+</code> beside it on the same title
-                bar.</li>
-            <li><b>Read it, then build it</b> — the Library shows each project's sources and the artifact it
-                produced, and the two remaining steps — reading a source, and building the document — are what
-                turn a project into a CHM, a PDF or a site.</li>
-          </ol>
-          <p class="quiet">Nothing has to exist first. A project can be created before its sources are settled:
-          the application records what it found and says what is still missing. Where the documentation lives is
-          <a href="https://github.com/${escapeHtml(organisation)}">github.com/${escapeHtml(organisation)}</a> —
-          next to the code, in each project's own <code>docs/</code> folder.</p>
-        </section>
+<div class="mt-24">
+	<div class="group-head">
+		<span class="group-head__label">How to Start Now</span>
+		<span class="group-head__rule"></span>
+		<span class="group-head__count">nothing has to be built first</span>
+	</div>
+	<div class="record-list">
+		${stepRow('plus', 'Create a project', 'name it, give it a version and an owner — the + on the Library title bar', 'temcoProjects.newProject')}
+		${stepRow('repo', 'Give it a source', 'a repository at a branch you choose, a folder on this machine, or an archive', 'temcoProjects.addSource')}
+		${stepRow('play', 'Read it, then build it', 'a read fills the catalog; a build leaves a CHM, a PDF or a site', 'temcoProjects.buildProject')}
+	</div>
+	<p class="group-note">Nothing has to exist first. A project can be created before its sources are settled: the application records what it found and says what is still missing. Where the documentation lives is <span class="cell-mono">github.com/${escapeHtml(organisation)}</span> — next to the code, in each project's own <span class="cell-mono">docs/</span> folder.</p>
+</div>
 
-        <section>
-          <h2>What this application can do</h2>
-          ${cards(working)}
-        </section>
-      </main>`;
+<div class="mt-24">
+	<div class="group-head">
+		<span class="group-head__label">What This Application Can Do</span>
+		<span class="group-head__rule"></span>
+		<span class="group-head__count">${working.length} features</span>
+	</div>
+	<div class="grid grid--3 mt-16">${working.map(card).join('')}</div>
+</div>`;
 
-    return shell(body);
+    return page(body, { title: 'Temco Docs' });
   }
-}
-
-/** The window's shell: a fixed top, and one region that scrolls. */
-function shell(body: string): string {
-  const style = `
-    :root { color-scheme: light dark; }
-    html, body { height: 100%; }
-    body { margin: 0; display: flex; flex-direction: column; overflow: hidden;
-           font-family: var(--vscode-font-family); font-size: var(--vscode-font-size);
-           font-weight: var(--vscode-font-weight); color: var(--vscode-foreground); }
-    h1 { font-size: 1.5em; font-weight: 600; line-height: 1.2; margin: 0 0 .15em; }
-    h2 { font-size: 1.05em; font-weight: 600; margin: 1.6em 0 .5em; }
-    h3 { font-size: 1em; font-weight: 600; margin: 0 0 .35em; }
-    h4 { font-size: 1em; font-weight: 600; margin: 0 0 .1em; }
-    section > h2:first-child { margin-top: 0; }
-    p { line-height: 1.6; margin: .45em 0; }
-    ol, ul { line-height: 1.6; padding-left: 1.2em; margin: .4em 0; }
-    li { margin: .3em 0; }
-    a { color: var(--vscode-textLink-foreground); text-decoration: none; }
-    a:hover { color: var(--vscode-textLink-activeForeground); text-decoration: underline; }
-    code { font-family: var(--vscode-editor-font-family); font-size: .95em; overflow-wrap: anywhere; }
-    .quiet { color: var(--vscode-descriptionForeground); }
-    .bad { color: var(--vscode-errorForeground); }
-    .count { font-weight: 400; font-size: .9em; color: var(--vscode-descriptionForeground); padding-left: .5em; }
-
-    .top { flex: 0 0 auto; padding: 1.2em 2em .9em; border-bottom: 1px solid var(--vscode-panel-border); }
-    .ident { display: flex; gap: 1em; align-items: flex-start; }
-    .icon { flex: 0 0 auto; width: 3.4em; height: 3.4em; color: var(--vscode-foreground); opacity: .9; }
-    .text { min-width: 0; }
-    .meta { margin: 0 0 .3em; color: var(--vscode-descriptionForeground); }
-    .meta .dot { padding: 0 .45em; opacity: .6; }
-    .lede { margin: 0; color: var(--vscode-descriptionForeground); }
-    .how { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(14em, 100%), 1fr)); gap: 1em 1.6em;
-           margin: 1em 0 0; padding-top: .8em; border-top: 1px solid var(--vscode-panel-border);
-           width: 100%; }
-    .how h4 i { font-style: normal; color: var(--vscode-descriptionForeground); padding-left: .45em; }
-    .how span { display: block; margin-top: .15em; line-height: 1.5;
-                color: var(--vscode-descriptionForeground); }
-
-    /* min-width: 0 on the scrolling region, or a long path sets its minimum width and the pane scrolls
-       sideways instead of wrapping. A flex item's default min-width: auto is the whole cause. */
-    .main { flex: 1 1 auto; min-height: 0; min-width: 0; overflow: auto; padding: 1.6em 2em 1em; }
-    /* One vertical rhythm for the whole page: every section is separated by the same margin. */
-    .main section { margin: 0 0 2.2em; }
-    .main section:last-child { margin-bottom: 0; }
-
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(20em, 100%), 1fr)); gap: .8em; }
-    .card { border: 1px solid var(--vscode-panel-border); border-radius: 4px; padding: .7em .8em; }
-    .card p { margin: .3em 0 0; color: var(--vscode-descriptionForeground); font-size: .95em; }
-    .card .mark { float: right; font-weight: 400; font-size: .85em;
-                  color: var(--vscode-descriptionForeground); }
-
-    .facts { border-collapse: collapse; width: 100%; margin: .3em 0 .6em; }
-    .facts th, .facts td { text-align: left; padding: .3em 1em .3em 0; font-weight: 400;
-                           border-bottom: 1px solid var(--vscode-panel-border); overflow-wrap: anywhere; }
-    .facts th { color: var(--vscode-descriptionForeground); white-space: nowrap; }
-    table.grid2 { border-collapse: collapse; width: 100%; }
-    table.grid2 th, table.grid2 td { text-align: left; padding: .3em .8em .3em 0;
-                                     border-bottom: 1px solid var(--vscode-panel-border);
-                                     overflow-wrap: anywhere; }
-    table.grid2 th { font-weight: 600; color: var(--vscode-descriptionForeground); }
-  `;
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
-<style>${style}</style>
-<title>Temco Docs</title>
-</head>
-<body>${body}</body>
-</html>`;
-}
-
-function table(headers: string[], rows: string[][]): string {
-  const head = headers.map((cell) => `<th>${cell}</th>`).join('');
-  const body = rows
-    .map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join('')}</tr>`)
-    .join('\n');
-  return `<table class="grid2">\n<tr>${head}</tr>\n${body}\n</table>`;
 }
 
 /** Folder names and page text come from the workspace, so everything interpolated is escaped. */

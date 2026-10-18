@@ -18,6 +18,7 @@ interface UiApi {
 	pageColumn(): vscode.ViewColumn;
 	fileColumn(): vscode.ViewColumn;
 	rowSlug(target: unknown): string | undefined;
+	page(body: string, options?: { title?: string; script?: string; extraCss?: string }): string;
 }
 
 const extension = vscode.extensions.getExtension<UiApi>(UI_EXTENSION_ID);
@@ -35,3 +36,6 @@ export const fileColumn = ui.fileColumn;
 
 /** The slug a command argument names, whether it is a slug, a row, or a row's own command argument. */
 export const rowSlug = ui.rowSlug;
+
+/** A document around `body`, carrying the application's page vocabulary. */
+export const page = ui.page;

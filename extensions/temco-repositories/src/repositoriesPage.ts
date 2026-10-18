@@ -14,7 +14,7 @@
 import * as vscode from 'vscode';
 import { Catalog, Selection, slugOf } from './store';
 import { REPOSITORIES_VIEW_TYPE } from './surface';
-import { pageColumn } from './ui';
+import { page, pageColumn } from './ui';
 import { RepositoryRow, listRepositories } from './repository';
 import { cloneSize, hasClone } from './workarea';
 
@@ -69,7 +69,7 @@ export class RepositoriesPage {
     if (!panel) {
       return;
     }
-    panel.webview.html = html(nonce());
+    panel.webview.html = html();
     await this.send();
   }
 
@@ -242,20 +242,10 @@ export class RepositoriesPage {
   }
 }
 
-function nonce(): string {
-  const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let text = '';
-  for (let index = 0; index < 32; index += 1) {
-    text += alphabet[Math.floor(Math.random() * alphabet.length)];
-  }
-  return text;
-}
-
-function html(script: string): string {
+function html(): string {
   const style = `
     :root { color-scheme: light dark; }
-    body { margin: 0; padding: 1.6em 2em 3em; font-family: var(--vscode-font-family);
-           font-size: var(--vscode-font-size); color: var(--vscode-foreground); }
+    /* The document, its padding and its type scale are the page kit's now; this block is the page itself. */
     h1 { font-size: 1.5em; font-weight: 600; margin: 0 0 .2em; }
     h2 { font-size: 1em; font-weight: 600; margin: 1.8em 0 .5em; }
     p { line-height: 1.55; margin: .3em 0; }
@@ -293,17 +283,8 @@ function html(script: string): string {
             border-top: 1px solid var(--vscode-panel-border); padding-top: 1em; }
   `;
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${script}';">
-<style>${style}</style>
-<title>Temco Repositories</title>
-</head>
-<body>
-  <h1 id="title">Repositories</h1>
+  const body = `
+  <h1 id="title" class="page-head__title">Repositories</h1>
   <p class="meta" id="lede">Reading the organisation from GitHub…</p>
 
   <div class="bar" hidden id="bar">
@@ -323,7 +304,12 @@ function html(script: string): string {
     <code>temcoRepositories.organisation</code> setting; the working area is
     <code>temcoRepositories.workspaceFolder</code>.</p>
 
-<script nonce="${script}">
+`;
+
+  return page(body, { title: 'Temco Repositories', extraCss: style, script: CLIENT });
+}
+
+const CLIENT = `
 const vscode = acquireVsCodeApi();
 const $ = (id) => document.getElementById(id);
 let repositories = [];
@@ -443,8 +429,4 @@ function draw() {
 
   $('list').replaceChildren(...nodes);
 }
-</script>
-</body>
-</html>
 `;
-}
