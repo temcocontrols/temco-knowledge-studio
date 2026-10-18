@@ -30,11 +30,6 @@
   "contributes": {
     "commands": [
       {
-        "command": "temcoProjects.openProjects",
-        "title": "Projects",
-        "icon": "$(list-flat)"
-      },
-      {
         "command": "temcoProjects.newProject",
         "title": "Create a Project",
         "icon": "$(new-folder)"

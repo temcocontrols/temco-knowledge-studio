@@ -12,7 +12,7 @@ import * as vscode from 'vscode';
 import { aiFacts } from './aiModule';
 import { Catalog, CatalogUnavailable, Selection, slugOf } from './store';
 import { HUB_VIEW_TYPE } from './surface';
-import { pageColumn } from './ui';
+import { focusLibrary, pageColumn } from './ui';
 
 /** Where a chapter stops being a chapter. A count, not a rule — it is advice the page shows, never a problem. */
 const CHAPTER_LIMIT = 25;
@@ -234,7 +234,7 @@ export class ProjectHub {
         // Opened for a project that is not there — a stale menu argument, or a removal that did not tell us.
         // Either way this is not the page to be on, so it goes and the list of what exists replaces it.
         this.panel?.dispose();
-        await vscode.commands.executeCommand('temcoProjects.openProjects');
+        await focusLibrary();
         return;
       }
 

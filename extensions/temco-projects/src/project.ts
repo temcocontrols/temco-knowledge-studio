@@ -5,11 +5,12 @@
 // there is one form to maintain instead of a wizard and an editor that drift apart.
 
 import * as vscode from 'vscode';
+import { ProjectFlowPage } from './projectFlow';
 import { ProjectPage } from './projectPage';
 import { ProjectHub } from './projectHub';
-import { ProjectsPage } from './projectsPage';
+import { AddSourcePage } from './sourceFlow';
 import { Catalog, CatalogUnavailable, Selection, slugOf } from './store';
-import { rowSlug } from './ui';
+import { focusLibrary, rowSlug } from './ui';
 
 /** A slug, or the sidebar row that stands for a project — the two things a command argument can be. */
 type ProjectArgument = string | object | undefined;
@@ -19,34 +20,34 @@ export function registerProjectCommands(
   selection: Selection,
   refresh: () => void
 ): void {
-  const projects = new ProjectsPage(context, selection);
   // The hub is built first and told what to call afterwards, because the callback it needs is the one that tells
   // the hub about a removal — a loop, unless the reference is filled in after both exist.
   let notify: (removed?: string) => void = () => void 0;
   const hub = new ProjectHub(context, selection, (removed) => notify(removed));
   const page = new ProjectPage(context, selection, (removed) => notify(removed));
+  // New Project is the mock's `flow/new-project`: a four-step wizard rather than the edit form opened empty.
+  const flow = new ProjectFlowPage(context, selection, () => notify());
+  context.subscriptions.push(flow);
+  // Add Source is the mock's `flow/add-source`: three steps, and the same store call the dialog made.
+  const source = new AddSourcePage(context);
+  context.subscriptions.push(source);
 
-  /** Anything about a project changed: the tree, the projects page, and a project's own page all say so. */
+  /** Anything about a project changed: the Library's project rows re-read, and a project's own page says so. */
   notify = (removed?: string): void => {
     if (removed !== undefined) {
       hub.notifyRemoved(removed);
     }
     refresh();
-    projects.refresh();
   };
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('temcoProjects.newProject', () => page.openNew()),
-    // The list of every project, with what each one is made of and what can be done with it.
-    vscode.commands.registerCommand('temcoProjects.openProjects', () => projects.open()),
+    vscode.commands.registerCommand('temcoProjects.newProject', () => void flow.open()),
     vscode.commands.registerCommand('temcoProjects.removeProject', (target?: ProjectArgument) =>
       removeProject(context, selection, notify, rowSlug(target))
     ),
-    // Adding a source opens the project's *own* page, on the Sources tab, rather than the edit form: a source is
-    // one decision, and asking for every field of the project again to make it would be the wrong act.
-    vscode.commands.registerCommand('temcoProjects.addSource', (target?: ProjectArgument) =>
-      withProject(context, (chosen) => hub.open(chosen, 'sources'), rowSlug(target))
-    ),
+    // Adding a source is the mock's own flow: kind, location, read. A source is recorded once and cited by any
+    // number of projects, so the flow is about the source itself rather than about the project it is added to.
+    vscode.commands.registerCommand('temcoProjects.addSource', () => source.open()),
     // Two doors on purpose: the hub is what a project *is*, the page is what it is *made of*. Opening the
     // editor for every look at a project would make reading its pages and editing its fields the same act.
     vscode.commands.registerCommand('temcoProjects.openProject', (target?: ProjectArgument) =>
@@ -59,9 +60,7 @@ export function registerProjectCommands(
     vscode.commands.registerCommand('temcoProjects.selectProject', (target?: ProjectArgument) =>
       selectProject(context, selection, rowSlug(target))
     ),
-    vscode.commands.registerCommand('temcoProjects.clearProject', () => selection.select(undefined)),
-    // Which project is being worked on is on the projects page too, so it has to hear about a change.
-    selection.onDidChange(() => projects.refresh())
+    vscode.commands.registerCommand('temcoProjects.clearProject', () => selection.select(undefined))
   );
 }
 
@@ -124,8 +123,8 @@ async function removeProject(
   notify(chosen.slug);
   void vscode.window.showInformationMessage(`Temco Projects: “${chosen.name}” is removed.`);
   // Land where the removal happened, in the one useful sense: the list of what is left. The page about the
-  // project that has just gone is not a page — it closes itself, and this takes its place.
-  await vscode.commands.executeCommand('temcoProjects.openProjects');
+  // project that has just gone is not a page — it closes itself, and the Library takes its place.
+  await focusLibrary();
 }
 
 /**

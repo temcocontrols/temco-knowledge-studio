@@ -7,7 +7,7 @@ A documentation project as a thing: its name, its version, the sources it is mad
 | Extension id | `temcocontrols.temco-projects` |
 | Namespace | `temcoProjects` |
 | State | active |
-| Pages | **Projects** (`temcoProjects.page`), the **hub** (`temcoProjects.hub`), the **edit form** (`temcoProjects.project`) — tabs in the group our pages share |
+| Pages | the **hub** (`temcoProjects.hub`), the **edit form** (`temcoProjects.project`) — tabs in the group our pages share |
 | Requires | `temcocontrols.temco-store`, `temcocontrols.temco-ui`, `temcocontrols.temco-repositories` |
 | Settings | none |
 
@@ -19,8 +19,7 @@ src/store.ts          what it reads of the store — the catalog, the selection,
 src/ui.ts             what it reads of the UI module — where a page opens, what a command argument names
 src/repositories.ts   what it reads of the repositories module — the repository's own scripts
 src/aiModule.ts       what it knows of the AI module — the facts its hub shows, and that it may be absent
-src/surface.ts        the three view types
-src/projectsPage.ts   the list: every project, what it is made of, what it produced, and its operations
+src/surface.ts        the two view types
 src/projectHub.ts     one project in depth: Overview · Pages · Sources · AI · Builds
 src/projectPage.ts    the form that names a project and its sources
 src/project.ts        the commands that act on a project: create, edit, remove, work on one, add a source
@@ -40,7 +39,6 @@ A **project** is the thing a person manages. Its row is the store's `documents` 
 
 | Command | What it does |
 |---|---|
-| `temcoProjects.page` | opens the list of projects |
 | `temcoProjects.newProject` | the form: name, version, audience, owner |
 | `temcoProjects.openProject` | opens a project's hub |
 | `temcoProjects.editProject` | opens the form on an existing project |

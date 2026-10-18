@@ -14,7 +14,7 @@
 import * as vscode from 'vscode';
 import { Catalog, CatalogUnavailable, DocumentDetail, Selection, slugOf } from './store';
 import { PROJECT_VIEW_TYPE } from './surface';
-import { pageColumn } from './ui';
+import { focusLibrary, page, pageColumn } from './ui';
 
 /** A source as the page collects it — `url` for a repository, `path` for a folder or archive. */
 interface PageSource {
@@ -38,7 +38,6 @@ interface PageMessage {
 
 export class ProjectPage {
   private panel: vscode.WebviewPanel | undefined;
-  private mode: 'new' | 'edit' = 'new';
   private slug = '';
 
   constructor(
@@ -48,16 +47,8 @@ export class ProjectPage {
     private readonly refresh: (removed?: string) => void
   ) { }
 
-  /** A new project. It can be created with no sources at all — that is the point of it being a project. */
-  openNew(): void {
-    this.mode = 'new';
-    this.slug = '';
-    this.show('New project');
-  }
-
-  /** An existing project, filled in. */
+  /** An existing project, filled in. Creating one is `flow/new-project` (`projectFlow.ts`). */
   openEdit(slug: string): void {
-    this.mode = 'edit';
     this.slug = slug;
     this.show('Project');
   }
@@ -76,7 +67,7 @@ export class ProjectPage {
       pageColumn(),
       { enableScripts: true, localResourceRoots: [] }
     );
-    this.panel.webview.html = this.html(nonce());
+    this.panel.webview.html = this.html();
     this.panel.webview.onDidReceiveMessage((message: PageMessage) => void this.receive(message));
     this.panel.onDidDispose(() => {
       this.panel = undefined;
@@ -136,10 +127,8 @@ export class ProjectPage {
     const known: { slug: string; name: string; kind: string; branch?: string; pages?: number; line: string }[] = [];
 
     await this.withCatalog((catalog) => {
-      if (this.mode === 'edit') {
-        document = catalog.document(this.slug);
-        cited = catalog.documentSourceSlugs(this.slug);
-      }
+      document = catalog.document(this.slug);
+      cited = catalog.documentSourceSlugs(this.slug);
       // What the catalog already knows, so a source is added once and cited by any number of projects.
       for (const source of catalog.sources()) {
         known.push({
@@ -161,7 +150,7 @@ export class ProjectPage {
 
     await this.panel.webview.postMessage({
       type: 'seed',
-      mode: this.mode,
+      mode: 'edit',
       document: document ?? { name: '', version: '1.0', owner: 'docs', audience: '', outputs: [], sources: [] },
       known,
       cited,
@@ -175,7 +164,7 @@ export class ProjectPage {
       return;
     }
 
-    const slug = this.mode === 'edit' && this.slug.length > 0 ? this.slug : slugOf(values.name);
+    const slug = this.slug.length > 0 ? this.slug : slugOf(values.name);
     const added = message.sources ?? [];
     const cited = message.cited ?? [];
     const outputs = message.outputs ?? [];
@@ -246,7 +235,7 @@ export class ProjectPage {
     const slug = this.slug;
     this.panel?.dispose();
     this.refresh(slug);
-    await vscode.commands.executeCommand('temcoProjects.openProjects');
+    await focusLibrary();
     void vscode.window.showInformationMessage('Temco Projects: the project is removed.');
   }
 
@@ -266,11 +255,10 @@ export class ProjectPage {
     }
   }
 
-  private html(script: string): string {
+  private html(): string {
     const style = `
       :root { color-scheme: light dark; }
-      body { margin: 0; padding: 1.6em 2em 3em; font-family: var(--vscode-font-family);
-             font-size: var(--vscode-font-size); color: var(--vscode-foreground); }
+      /* The document, its padding and its type scale are the page kit's now; this block is only the form. */
       h1 { font-size: 1.4em; font-weight: 600; margin: 0 0 1em; }
       h2 { font-size: 1em; font-weight: 600; margin: 1.6em 0 .5em; }
       p { line-height: 1.55; margin: .3em 0; }
@@ -311,16 +299,7 @@ export class ProjectPage {
       .req { color: var(--vscode-descriptionForeground); font-weight: 400; }
     `;
 
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${script}';">
-<style>${style}</style>
-<title>Temco Projects</title>
-</head>
-<body>
+    const body = `
   <h1 id="heading">New project</h1>
 
   <div class="fields">
@@ -373,13 +352,18 @@ export class ProjectPage {
   <p class="quiet">Choosing an output records the recipe. Building it comes next — this page does not run one.</p>
 
   <div class="actions">
-    <button id="submit" class="primary" type="button">Create project</button>
+    <button id="submit" class="primary" type="button">Save</button>
     <button id="cancel" type="button">Cancel</button>
     <span class="spacer"></span>
     <button id="remove" type="button" hidden>Remove…</button>
   </div>
 
-<script nonce="${script}">
+`;
+
+    return page(body, { title: 'Temco Projects', extraCss: style, script: ProjectPage.client });
+  }
+
+  private static readonly client = `
   const vscode = acquireVsCodeApi();
   const $ = (id) => document.getElementById(id);
   // Two kinds of row, one list: what the catalog knows (a tick) and what this page added (removable).
@@ -515,12 +499,5 @@ export class ProjectPage {
   });
 
   vscode.postMessage({ type: 'ready' });
-</script>
-</body>
-</html>`;
-  }
-}
-
-function nonce(): string {
-  return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+`;
 }
