@@ -22,10 +22,13 @@
   ],
   "main": "./out/extension.js",
   "extensionDependencies": [
+    "temcocontrols.temco-ui",
     "temcocontrols.temco-docs"
   ],
   "activationEvents": [
-    "onView:temcoAi.panel"
+    "onView:temcoAi.panel",
+    "onView:temcoAi.assistant",
+    "onView:temcoAi.runtime"
   ],
   "contributes": {
     "viewsContainers": {
@@ -44,9 +47,49 @@
           "id": "temcoAi.panel",
           "name": "Temco AI"
         }
+      ],
+      "temcoAiHub": [
+        {
+          "id": "temcoAi.assistant",
+          "name": "Assistant"
+        },
+        {
+          "id": "temcoAi.runtime",
+          "name": "Runtime"
+        }
       ]
     },
     "commands": [
+      {
+        "command": "temcoAi.chat",
+        "title": "Chat",
+        "icon": "$(sparkle)",
+        "category": "Temco AI"
+      },
+      {
+        "command": "temcoAi.actions",
+        "title": "Actions",
+        "icon": "$(play)",
+        "category": "Temco AI"
+      },
+      {
+        "command": "temcoAi.citations",
+        "title": "Citations",
+        "icon": "$(link)",
+        "category": "Temco AI"
+      },
+      {
+        "command": "temcoAi.localModels",
+        "title": "Local Models",
+        "icon": "$(chip)",
+        "category": "Temco AI"
+      },
+      {
+        "command": "temcoAi.knowledge",
+        "title": "Knowledge Base",
+        "icon": "$(book)",
+        "category": "Temco AI"
+      },
       {
         "command": "temcoAi.page",
         "title": "The AI Page",

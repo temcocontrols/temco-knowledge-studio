@@ -14,6 +14,7 @@ import { bestModel, describeMachine, fitsModel, machine } from './ai/machine';
 import { PROMPT_VERSION } from './ai/prompts';
 import { aiStatus, showAiLog, startAiServer, stopAiServer } from './ai/runtime';
 import { pageColumn } from './docs';
+import { page } from './ui';
 import { AI_PAGE_VIEW_TYPE } from './surface';
 
 /** Somewhere on the page a caller can ask to be put: the list of what can be downloaded. */
@@ -54,7 +55,7 @@ export class AiPage {
       pageColumn(),
       { enableScripts: true, localResourceRoots: [] }
     );
-    this.panel.webview.html = html(nonce());
+    this.panel.webview.html = html();
     this.panel.webview.onDidReceiveMessage((message: AiPageMessage) => void this.receive(message));
     this.panel.onDidDispose(() => {
       this.panel = undefined;
@@ -235,20 +236,10 @@ export class AiPage {
   }
 }
 
-function nonce(): string {
-  const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let text = '';
-  for (let index = 0; index < 32; index += 1) {
-    text += alphabet[Math.floor(Math.random() * alphabet.length)];
-  }
-  return text;
-}
-
-function html(script: string): string {
+function html(): string {
   const style = `
     :root { color-scheme: light dark; }
-    body { margin: 0; padding: 1.6em 2em 3em; font-family: var(--vscode-font-family);
-           font-size: var(--vscode-font-size); color: var(--vscode-foreground); }
+    /* The document, its padding and its type scale are the page kit's now; this block is the page itself. */
     h1 { font-size: 1.5em; font-weight: 600; margin: 0 0 .6em; }
     h2 { font-size: 1em; font-weight: 600; margin: 1.8em 0 .5em; }
     h3 { font-size: .95em; font-weight: 600; margin: 0 0 .2em; }
@@ -308,17 +299,8 @@ function html(script: string): string {
             border-top: 1px solid var(--vscode-panel-border); padding-top: 1em; }
   `;
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${script}';">
-<style>${style}</style>
-<title>Temco AI</title>
-</head>
-<body>
-  <h1>The AI</h1>
+  const body = `
+  <h1 class="page-head__title">The AI</h1>
   <p class="meta">A model on this machine, answering about your own pages. Nothing is sent anywhere: the runtime
     is a program run as a child process, on loopback only, started when it is needed and stopped when it is
     not. Nothing is downloaded until you ask for it.</p>
@@ -367,7 +349,12 @@ function html(script: string): string {
 
   <p class="foot" id="foot"></p>
 
-<script nonce="${script}">
+`;
+
+  return page(body, { title: 'Temco AI', extraCss: style, script: CLIENT });
+}
+
+const CLIENT = `
 const vscode = acquireVsCodeApi();
 const $ = (id) => document.getElementById(id);
 let selection = { runtime: '', model: '' };
@@ -581,7 +568,4 @@ window.addEventListener('message', (event) => {
 });
 
 vscode.postMessage({ type: 'ready' });
-</script>
-</body>
-</html>`;
-}
+`;

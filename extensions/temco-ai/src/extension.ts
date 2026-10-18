@@ -21,6 +21,7 @@ import { AiPanel, AI_VIEW_ID } from './ai/panel';
 import { PROMPT_VERSION, analysePrompt, newPagePrompt, systemPrompt } from './ai/prompts';
 import { AiStatus, aiStatus, complete, disposeAi } from './ai/runtime';
 import { docs } from './docs';
+import { AiPages, registerAiViews } from './aiPages';
 
 /** What one analysis needs: a source, its files, the pages it already has, and the note the person added. */
 export interface AnalyseRequest {
@@ -77,6 +78,18 @@ export function activate(context: vscode.ExtensionContext): TemcoAiApi {
 	);
 
 	registerAiCommands(context);
+
+	// The AI Hub's five surfaces and its two side-bar groups (Assistant, Runtime), rebuilt from the mock.
+	const pages = new AiPages(context);
+	registerAiViews(context);
+	context.subscriptions.push(
+		pages,
+		vscode.commands.registerCommand('temcoAi.chat', () => pages.chat()),
+		vscode.commands.registerCommand('temcoAi.actions', () => pages.actions()),
+		vscode.commands.registerCommand('temcoAi.citations', () => pages.citations()),
+		vscode.commands.registerCommand('temcoAi.localModels', () => pages.models()),
+		vscode.commands.registerCommand('temcoAi.knowledge', () => pages.knowledge())
+	);
 
 	return {
 		status: () => aiStatus(context),
