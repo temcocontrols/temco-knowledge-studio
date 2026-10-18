@@ -1,201 +1,138 @@
-// Temco Tools — the device and data surfaces, in one module until their own modules exist.
+// Temco Tools — the device and data surfaces, one container each until their own modules exist.
 //
-// The platform documents a `temcoTools` container "declared by the first tools module", and this is it: the six
-// surfaces of Devices, the five of I/O Studio, BACnet Studio, Network and SQL Studio, each as a section of a page and
-// each reachable from the side bar.
+// Five studios, each with its own side-bar groups and its own pages:
 //
-// **What is real and what is sample.** The pages, their navigation and their vocabulary are real — the same page kit
-// the documentation pages use. The rows are the mock's sample, because the modules that will own these surfaces have
-// no connection to a controller, a stack or a database yet; when one lands, it fills `src/data.ts` and nothing on the
-// page has to be redesigned. Every page says so at the top rather than pretending the numbers are live.
+//   * **Devices** — Fleet and Data, six pages;
+//   * **I/O Studio** — Engineering and Live, five pages;
+//   * **BACnet Studio** — Network and History, five pages;
+//   * **Network** — Tools and Traffic, four pages;
+//   * **SQL Studio** — Workbench and Docs Database, six pages.
+//
+// Every one of them was a folded section of a single page until the mock's side bar was taken seriously: each row has
+// its own title, its own count where the count means something, and its own actions, and a folded section cannot carry
+// any of those. Each studio owns its pages (`devices.ts`, `io.ts`, `bacnet.ts`, `network.ts`, `sql.ts`) and its sample;
+// this file is only the wiring — the activation and the views.
+//
+// **What is real and what is sample.** The pages, their navigation, their vocabulary and their buttons are real: a
+// button asks, changes the studio's register, re-renders and reports what it changed. The rows are the mock's sample,
+// because the modules that will own these surfaces have no socket to a controller, no BACnet stack, no capture device
+// and no database driver yet. Every page says so at the foot rather than pretending the numbers are live.
 
 import * as vscode from 'vscode';
-import { page, pageColumn, runCommand } from './ui';
-import {
-	BACNET_SURFACES, DEVICE_SURFACES, IO_SURFACES, NETWORK_SURFACES, SQL_SURFACES, Surface, commandButton, studioPage
-} from './pages';
+import { BACNET_PAGES, registerBacnet } from './bacnet';
+import { ALARMS, DEVICES } from './data';
+import { DEVICE_PAGES, onDidChangeDevices, registerDevices } from './devices';
+import { IO_PAGES, registerIo } from './io';
+import { NETWORK_PAGES, registerNetwork } from './network';
+import { SQL_PAGES, registerSql } from './sql';
 
-type Studio = 'devices' | 'io' | 'bacnet' | 'network' | 'sql';
-
-interface StudioDefinition {
-	id: Studio;
+/** One row of a studio's side bar: the label, the sentence behind it, and the glyph. */
+interface StudyRow {
+	label: string;
+	note: string;
 	mark: string;
-	title: string;
-	desc: string;
-	surfaces: Surface[];
-	actions: string;
-}
-
-const STUDIOS: StudioDefinition[] = [
-	{
-		id: 'devices',
-		mark: 'chip',
-		title: 'Devices',
-		desc: 'Every controller on the segment: what it runs, how many points it carries, and what it is complaining about.',
-		surfaces: DEVICE_SURFACES,
-		actions: commandButton('Firmware', 'temcoTools.open', ['devices', 'firmware'], 'ghost') + commandButton('Alarms', 'temcoTools.open', ['devices', 'health'])
-	},
-	{
-		id: 'io',
-		mark: 'plug',
-		title: 'I/O Studio',
-		desc: 'The points of one controller, where each one is mapped, and the logic that reads and writes them.',
-		surfaces: IO_SURFACES,
-		actions: commandButton('Points', 'temcoTools.open', ['io', 'points'], 'ghost') + commandButton('Mapping', 'temcoTools.open', ['io', 'mapping'])
-	},
-	{
-		id: 'bacnet',
-		mark: 'server',
-		title: 'BACnet Studio',
-		desc: 'What answers on the network, the objects each device publishes, and the alarms and histories that come with them.',
-		surfaces: BACNET_SURFACES,
-		actions: commandButton('Discovery', 'temcoTools.open', ['bacnet', 'discovery'], 'ghost') + commandButton('Objects', 'temcoTools.open', ['bacnet', 'objects'])
-	},
-	{
-		id: 'network',
-		mark: 'globe',
-		title: 'Network',
-		desc: 'Who is on the wire: ARP neighbours, Modbus units, reachability, and the captures that answered the question.',
-		surfaces: NETWORK_SURFACES,
-		actions: commandButton('Discovery', 'temcoTools.open', ['network', 'discovery'], 'ghost') + commandButton('Captures', 'temcoTools.open', ['network', 'captures'])
-	},
-	{
-		id: 'sql',
-		mark: 'database',
-		title: 'SQL Studio',
-		desc: 'The documentation registry as a database: its tables, the queries that answer questions about it, and their history.',
-		surfaces: SQL_SURFACES,
-		actions: commandButton('Query Editor', 'temcoTools.open', ['sql', 'query'], 'ghost') + commandButton('Schema', 'temcoTools.open', ['sql', 'schema'])
-	}
-];
-
-/** One page per studio, kept open so a second visit reveals the tab rather than stacking another. */
-class StudioPage {
-	private readonly panels = new Map<Studio, vscode.WebviewPanel>();
-
-	constructor(private readonly context: vscode.ExtensionContext) { }
-
-	open(studio: Studio, surface?: string): void {
-		const definition = STUDIOS.find((entry) => entry.id === studio);
-		if (!definition) {
-			return;
-		}
-		const existing = this.panels.get(studio);
-		if (existing) {
-			existing.reveal(pageColumn());
-			existing.webview.html = this.html(definition, surface);
-			return;
-		}
-		const panel = vscode.window.createWebviewPanel(`temcoTools.${studio}`, definition.title, pageColumn(), {
-			enableScripts: true,
-			localResourceRoots: []
-		});
-		panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'tools.svg');
-		panel.onDidDispose(() => this.panels.delete(studio));
-		panel.webview.onDidReceiveMessage((message: { type?: string; command?: string; args?: unknown }) => {
-			// A button on the page asks for another *section* of the same page, so the studio and the surface travel
-			// with the click; anything else is an ordinary command.
-			if (message.type === 'command' && message.command === 'temcoTools.open') {
-				const args = Array.isArray(message.args) ? message.args : [];
-				if (typeof args[0] === 'string') {
-					this.open(args[0] as Studio, typeof args[1] === 'string' ? args[1] : undefined);
-					return;
-				}
-			}
-			runCommand(message);
-		});
-		panel.webview.html = this.html(definition, surface);
-		this.panels.set(studio, panel);
-	}
-
-	dispose(): void {
-		for (const panel of this.panels.values()) {
-			panel.dispose();
-		}
-		this.panels.clear();
-	}
-
-	private html(definition: StudioDefinition, surface: string | undefined): string {
-		const open = surface ?? definition.surfaces[0].id;
-		return page(studioPage(definition.title, definition.desc, definition.surfaces, open, definition.actions, definition.mark), {
-			title: definition.title,
-			script: commandScriptFor(definition.id)
-		});
-	}
+	command: string;
 }
 
 /**
- * The shared script, with the studio and surface packed into every `temcoTools.open` click so a section button does
- * not have to know which page it is on.
+ * A studio's side-bar view: one row per page, no counts.
+ *
+ * None of these rows carries a count in the mock: a point count or a table count is already in the page head, and the
+ * side bar would only repeat what the page it opens says. The row's sentence is the tooltip, as everywhere else.
  */
-function commandScriptFor(studio: Studio): string {
-	return `
-(function () {
-	const api = acquireVsCodeApi();
-	document.addEventListener('click', (event) => {
-		const target = event.target.closest('[data-command]');
-		if (!target) { return; }
-		event.preventDefault();
-		let args;
-		if (target.dataset.args) {
-			args = JSON.parse(target.dataset.args);
-		} else if (target.dataset.command === 'temcoTools.open') {
-			args = ['${studio}'];
-		}
-		api.postMessage({ type: 'command', command: target.dataset.command, args: args });
-	});
-})();
-`;
-}
-
-/** One view per studio: its surfaces, each opening the section it names. */
-class SurfaceTree implements vscode.TreeDataProvider<vscode.TreeItem> {
-	constructor(private readonly studio: Studio) { }
+class PagesTree implements vscode.TreeDataProvider<vscode.TreeItem> {
+	constructor(private readonly rows: StudyRow[]) { }
 
 	getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
 		return element;
 	}
 
 	getChildren(): vscode.TreeItem[] {
-		const definition = STUDIOS.find((entry) => entry.id === this.studio);
-		if (!definition) {
-			return [];
-		}
-		return definition.surfaces.map((surface) => {
-			const item = new vscode.TreeItem(surface.label, vscode.TreeItemCollapsibleState.None);
-			item.description = surface.count;
-			// The mock's side bar gives every row its own glyph; a bullet down the whole panel said
-			// nothing about any of them.
-			item.iconPath = new vscode.ThemeIcon(surface.mark);
-			item.tooltip = `${surface.label} — ${surface.count}`;
-			item.command = {
-				command: 'temcoTools.open',
-				title: surface.label,
-				arguments: [this.studio, surface.id]
-			};
+		return this.rows.map((row) => {
+			const item = new vscode.TreeItem(row.label, vscode.TreeItemCollapsibleState.None);
+			item.iconPath = new vscode.ThemeIcon(row.mark);
+			item.tooltip = `${row.label} — ${row.note}`;
+			item.command = { command: row.command, title: row.label };
+			return item;
+		});
+	}
+}
+
+/**
+ * The Devices container's two views — the mock's **Fleet** and **Data**.
+ *
+ * The mock's side bar puts a count beside two of the six rows (the fleet, and the conditions that are still true),
+ * and none beside the rest: a number that is always there stops meaning anything. The row's own sentence is the
+ * tooltip, as it is on every other side bar of the application.
+ */
+class DevicesTree implements vscode.TreeDataProvider<vscode.TreeItem> {
+	private readonly emitter = new vscode.EventEmitter<void>();
+	readonly onDidChangeTreeData = this.emitter.event;
+
+	constructor(private readonly group: 'fleet' | 'data') { }
+
+	/** Re-reads the counts: a controller added or a condition acknowledged is a different panel. */
+	refresh(): void {
+		this.emitter.fire();
+	}
+
+	getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
+		return element;
+	}
+
+	getChildren(): vscode.TreeItem[] {
+		return DEVICE_PAGES.filter((entry) => entry.group === this.group).map((entry) => {
+			const item = new vscode.TreeItem(entry.label, vscode.TreeItemCollapsibleState.None);
+			item.iconPath = new vscode.ThemeIcon(entry.mark);
+			item.tooltip = `${entry.label} — ${entry.note}`;
+			if (entry.id === 'all') {
+				item.description = String(DEVICES.length);
+			}
+			if (entry.id === 'health') {
+				const active = ALARMS.filter((alarm) => alarm.state === 'Active').length;
+				item.description = active > 0 ? String(active) : undefined;
+			}
+			item.command = { command: entry.command, title: entry.label };
 			return item;
 		});
 	}
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-	const pages = new StudioPage(context);
-	context.subscriptions.push(pages);
+	const devices = registerDevices(context);
+	const io = registerIo(context);
+	const bacnet = registerBacnet(context);
+	const network = registerNetwork(context);
+	const sql = registerSql(context);
 
+	const fleet = new DevicesTree('fleet');
+	const data = new DevicesTree('data');
 	context.subscriptions.push(
-		vscode.commands.registerCommand('temcoTools.open', (studio?: unknown, surface?: unknown) => {
-			pages.open(
-				(typeof studio === 'string' ? studio : 'devices') as Studio,
-				typeof surface === 'string' ? surface : undefined
-			);
+		devices.pages,
+		...devices.disposables,
+		io.pages,
+		...io.disposables,
+		bacnet.pages,
+		...bacnet.disposables,
+		network.pages,
+		...network.disposables,
+		sql.pages,
+		...sql.disposables,
+		vscode.window.createTreeView('temcoTools.devicesFleet', { treeDataProvider: fleet }),
+		vscode.window.createTreeView('temcoTools.devicesData', { treeDataProvider: data }),
+		vscode.window.createTreeView('temcoTools.ioEngineering', { treeDataProvider: new PagesTree(IO_PAGES.filter((entry) => entry.group === 'engineering')) }),
+		vscode.window.createTreeView('temcoTools.ioLive', { treeDataProvider: new PagesTree(IO_PAGES.filter((entry) => entry.group === 'live')) }),
+		vscode.window.createTreeView('temcoTools.bacnetNetwork', { treeDataProvider: new PagesTree(BACNET_PAGES.filter((entry) => entry.group === 'network')) }),
+		vscode.window.createTreeView('temcoTools.bacnetHistory', { treeDataProvider: new PagesTree(BACNET_PAGES.filter((entry) => entry.group === 'history')) }),
+		vscode.window.createTreeView('temcoTools.networkTools', { treeDataProvider: new PagesTree(NETWORK_PAGES.filter((entry) => entry.group === 'tools')) }),
+		vscode.window.createTreeView('temcoTools.networkTraffic', { treeDataProvider: new PagesTree(NETWORK_PAGES.filter((entry) => entry.group === 'traffic')) }),
+		vscode.window.createTreeView('temcoTools.sqlWorkbench', { treeDataProvider: new PagesTree(SQL_PAGES.filter((entry) => entry.group === 'workbench')) }),
+		vscode.window.createTreeView('temcoTools.sqlDocs', { treeDataProvider: new PagesTree(SQL_PAGES.filter((entry) => entry.group === 'docs')) }),
+		onDidChangeDevices(() => {
+			fleet.refresh();
+			data.refresh();
 		})
 	);
-
-	for (const studio of STUDIOS) {
-		context.subscriptions.push(
-			vscode.window.createTreeView(`temcoTools.${studio.id}`, { treeDataProvider: new SurfaceTree(studio.id) })
-		);
-	}
 }
 
 export function deactivate(): void {

@@ -25,50 +25,426 @@
     "temcocontrols.temco-ui"
   ],
   "activationEvents": [
-    "onView:temcoTools.devices",
-    "onView:temcoTools.io",
-    "onView:temcoTools.bacnet",
-    "onView:temcoTools.network",
-    "onView:temcoTools.sql"
+    "onView:temcoTools.devicesFleet",
+    "onView:temcoTools.devicesData",
+    "onView:temcoTools.ioEngineering",
+    "onView:temcoTools.ioLive",
+    "onView:temcoTools.bacnetNetwork",
+    "onView:temcoTools.bacnetHistory",
+    "onView:temcoTools.networkTools",
+    "onView:temcoTools.networkTraffic",
+    "onView:temcoTools.sqlWorkbench",
+    "onView:temcoTools.sqlDocs"
   ],
   "contributes": {
     "views": {
       "temcoDevices": [
         {
-          "id": "temcoTools.devices",
-          "name": "Devices"
+          "id": "temcoTools.devicesFleet",
+          "name": "Fleet"
+        },
+        {
+          "id": "temcoTools.devicesData",
+          "name": "Data"
         }
       ],
       "temcoIo": [
         {
-          "id": "temcoTools.io",
-          "name": "I/O Studio"
+          "id": "temcoTools.ioEngineering",
+          "name": "Engineering"
+        },
+        {
+          "id": "temcoTools.ioLive",
+          "name": "Live"
         }
       ],
       "temcoBacnet": [
         {
-          "id": "temcoTools.bacnet",
-          "name": "BACnet Studio"
+          "id": "temcoTools.bacnetNetwork",
+          "name": "Network"
+        },
+        {
+          "id": "temcoTools.bacnetHistory",
+          "name": "History"
         }
       ],
       "temcoNetwork": [
         {
-          "id": "temcoTools.network",
-          "name": "Network"
+          "id": "temcoTools.networkTools",
+          "name": "Tools"
+        },
+        {
+          "id": "temcoTools.networkTraffic",
+          "name": "Traffic"
         }
       ],
       "temcoSql": [
         {
-          "id": "temcoTools.sql",
-          "name": "SQL Studio"
+          "id": "temcoTools.sqlWorkbench",
+          "name": "Workbench"
+        },
+        {
+          "id": "temcoTools.sqlDocs",
+          "name": "Docs Database"
         }
       ]
     },
     "commands": [
       {
-        "command": "temcoTools.open",
-        "title": "Open a Tool Page",
-        "icon": "$(tools)"
+        "command": "temcoTools.devices.all",
+        "title": "Devices",
+        "icon": "$(circuit-board)"
+      },
+      {
+        "command": "temcoTools.devices.firmware",
+        "title": "Firmware",
+        "icon": "$(package)"
+      },
+      {
+        "command": "temcoTools.devices.health",
+        "title": "Health & Alarms",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "temcoTools.devices.schedules",
+        "title": "Schedules",
+        "icon": "$(clock)"
+      },
+      {
+        "command": "temcoTools.devices.trends",
+        "title": "Trend Logs",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "temcoTools.devices.backups",
+        "title": "Backups",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "temcoTools.devices.discover",
+        "title": "Discover Controllers",
+        "icon": "$(search)"
+      },
+      {
+        "command": "temcoTools.devices.add",
+        "title": "Add a Controller by Address",
+        "icon": "$(add)"
+      },
+      {
+        "command": "temcoTools.devices.diagnose",
+        "title": "Diagnose a Controller"
+      },
+      {
+        "command": "temcoTools.devices.stage",
+        "title": "Stage a Firmware Image"
+      },
+      {
+        "command": "temcoTools.devices.checkReleases",
+        "title": "Check for Firmware Releases"
+      },
+      {
+        "command": "temcoTools.devices.ack",
+        "title": "Acknowledge an Alarm"
+      },
+      {
+        "command": "temcoTools.devices.ackAll",
+        "title": "Acknowledge Every Active Alarm"
+      },
+      {
+        "command": "temcoTools.devices.newSchedule",
+        "title": "New Schedule"
+      },
+      {
+        "command": "temcoTools.devices.editSchedule",
+        "title": "Enable or Disable a Schedule"
+      },
+      {
+        "command": "temcoTools.devices.readTrends",
+        "title": "Read Every Trend Log"
+      },
+      {
+        "command": "temcoTools.devices.readTrend",
+        "title": "Read a Trend Log"
+      },
+      {
+        "command": "temcoTools.devices.backupAll",
+        "title": "Back Up Every Controller"
+      },
+      {
+        "command": "temcoTools.devices.restore",
+        "title": "Restore a Controller from a Backup"
+      },
+      {
+        "command": "temcoTools.io.points",
+        "title": "Point Browser",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "temcoTools.io.mapping",
+        "title": "Mapping",
+        "icon": "$(link)"
+      },
+      {
+        "command": "temcoTools.io.logic",
+        "title": "Logic",
+        "icon": "$(code)"
+      },
+      {
+        "command": "temcoTools.io.live",
+        "title": "Live Values",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "temcoTools.io.trends",
+        "title": "Trends",
+        "icon": "$(graph-line)"
+      },
+      {
+        "command": "temcoTools.io.addPoint",
+        "title": "Add a Point"
+      },
+      {
+        "command": "temcoTools.io.exportPoints",
+        "title": "Export Points as CSV"
+      },
+      {
+        "command": "temcoTools.io.writePoint",
+        "title": "Write a Point Value"
+      },
+      {
+        "command": "temcoTools.io.autoMap",
+        "title": "Auto-Map the Unmapped Points"
+      },
+      {
+        "command": "temcoTools.io.applyMapping",
+        "title": "Apply the Mapping Suggestion"
+      },
+      {
+        "command": "temcoTools.io.ignoreMapping",
+        "title": "Ignore the Mapping Suggestion"
+      },
+      {
+        "command": "temcoTools.io.editMapping",
+        "title": "Edit a Mapping"
+      },
+      {
+        "command": "temcoTools.io.newProgram",
+        "title": "New Program"
+      },
+      {
+        "command": "temcoTools.io.compile",
+        "title": "Compile the Open Program"
+      },
+      {
+        "command": "temcoTools.io.openProgram",
+        "title": "Open a Program"
+      },
+      {
+        "command": "temcoTools.io.toggleLive",
+        "title": "Pause or Resume Live Values"
+      },
+      {
+        "command": "temcoTools.io.addSeries",
+        "title": "Add a Trend Series"
+      },
+      {
+        "command": "temcoTools.bacnet.discovery",
+        "title": "BACnet Discovery",
+        "icon": "$(search)"
+      },
+      {
+        "command": "temcoTools.bacnet.objects",
+        "title": "Object Browser",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "temcoTools.bacnet.alarms",
+        "title": "BACnet Alarms",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "temcoTools.bacnet.trendlogs",
+        "title": "BACnet Trend Logs",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "temcoTools.bacnet.schedules",
+        "title": "BACnet Schedules",
+        "icon": "$(clock)"
+      },
+      {
+        "command": "temcoTools.bacnet.scan",
+        "title": "Start a BACnet Scan"
+      },
+      {
+        "command": "temcoTools.bacnet.whois",
+        "title": "Set the Who-Is Range"
+      },
+      {
+        "command": "temcoTools.bacnet.openObjects",
+        "title": "Browse a Device's Objects"
+      },
+      {
+        "command": "temcoTools.bacnet.readObjects",
+        "title": "Read Every Object"
+      },
+      {
+        "command": "temcoTools.bacnet.exportObjects",
+        "title": "Export Objects as CSV"
+      },
+      {
+        "command": "temcoTools.bacnet.writeObject",
+        "title": "Write an Object Value"
+      },
+      {
+        "command": "temcoTools.bacnet.ack",
+        "title": "Acknowledge a BACnet Event"
+      },
+      {
+        "command": "temcoTools.bacnet.ackAll",
+        "title": "Acknowledge Every BACnet Event"
+      },
+      {
+        "command": "temcoTools.bacnet.readBuffer",
+        "title": "Read Every Trend Buffer"
+      },
+      {
+        "command": "temcoTools.bacnet.openTrend",
+        "title": "Open a BACnet Trend Log"
+      },
+      {
+        "command": "temcoTools.bacnet.newSchedule",
+        "title": "New BACnet Schedule"
+      },
+      {
+        "command": "temcoTools.network.discovery",
+        "title": "Network Discovery",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "temcoTools.network.modbus",
+        "title": "Modbus Scanner",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "temcoTools.network.diagnostics",
+        "title": "Network Diagnostics",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "temcoTools.network.captures",
+        "title": "Captures",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "temcoTools.network.scan",
+        "title": "Scan the Segment"
+      },
+      {
+        "command": "temcoTools.network.arpLookup",
+        "title": "ARP Lookup"
+      },
+      {
+        "command": "temcoTools.network.scanUnits",
+        "title": "Scan Modbus Units"
+      },
+      {
+        "command": "temcoTools.network.runDiagnostics",
+        "title": "Run Every Diagnostic"
+      },
+      {
+        "command": "temcoTools.network.copyReport",
+        "title": "Copy the Diagnostic Report"
+      },
+      {
+        "command": "temcoTools.network.newCapture",
+        "title": "New Capture"
+      },
+      {
+        "command": "temcoTools.network.stopCapture",
+        "title": "Stop a Capture"
+      },
+      {
+        "command": "temcoTools.network.openCapture",
+        "title": "Open a Capture"
+      },
+      {
+        "command": "temcoTools.sql.query",
+        "title": "Query Editor",
+        "icon": "$(code)"
+      },
+      {
+        "command": "temcoTools.sql.connections",
+        "title": "Connections",
+        "icon": "$(database)"
+      },
+      {
+        "command": "temcoTools.sql.history",
+        "title": "Query History",
+        "icon": "$(history)"
+      },
+      {
+        "command": "temcoTools.sql.schema",
+        "title": "Schema",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "temcoTools.sql.saved",
+        "title": "Saved Queries",
+        "icon": "$(book)"
+      },
+      {
+        "command": "temcoTools.sql.reports",
+        "title": "Reports",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "temcoTools.sql.run",
+        "title": "Run the Query"
+      },
+      {
+        "command": "temcoTools.sql.explain",
+        "title": "Explain the Query"
+      },
+      {
+        "command": "temcoTools.sql.saveQuery",
+        "title": "Save the Query"
+      },
+      {
+        "command": "temcoTools.sql.testConnection",
+        "title": "Test a Connection"
+      },
+      {
+        "command": "temcoTools.sql.newConnection",
+        "title": "New Connection"
+      },
+      {
+        "command": "temcoTools.sql.refreshSchema",
+        "title": "Refresh the Schema"
+      },
+      {
+        "command": "temcoTools.sql.newSavedQuery",
+        "title": "New Saved Query"
+      },
+      {
+        "command": "temcoTools.sql.runSaved",
+        "title": "Run a Saved Query"
+      },
+      {
+        "command": "temcoTools.sql.runHistory",
+        "title": "Re-run a Statement"
+      },
+      {
+        "command": "temcoTools.sql.clearHistory",
+        "title": "Clear the Query History"
+      },
+      {
+        "command": "temcoTools.sql.newReport",
+        "title": "New Report"
+      },
+      {
+        "command": "temcoTools.sql.runReport",
+        "title": "Run a Report"
       }
     ]
   }

@@ -71,12 +71,20 @@ export const POINTS: Point[] = [
 	{ id: 'DO1', label: 'Alarm Relay', type: 'DO', unit: '—', value: 'Off', range: 'On / Off', state: 'ok' }
 ];
 
-export const MAPPINGS = [
-	{ source: 'AI1 · Supply Air Temp', target: 'AV-101 · SAT', scale: '×1.0 + 0', state: 'Mapped', tone: 'ok' as const },
-	{ source: 'AI2 · Return Air Temp', target: 'AV-102 · RAT', scale: '×1.0 + 0', state: 'Mapped', tone: 'ok' as const },
-	{ source: 'AO1 · Valve Position', target: 'BO-11 · Heat Valve', scale: '×1.0 + 0', state: 'Mapped', tone: 'ok' as const },
-	{ source: 'DI1 · Filter Status', target: 'BV-31 · Filter Alarm', scale: '—', state: 'Needs review', tone: 'warn' as const },
-	{ source: 'AI3 · Humidity', target: '—', scale: '—', state: 'Unmapped', tone: 'neutral' as const }
+export interface Mapping {
+	source: string;
+	target: string;
+	scale: string;
+	state: 'Mapped' | 'Needs review' | 'Unmapped';
+	tone: 'ok' | 'warn' | 'neutral';
+}
+
+export const MAPPINGS: Mapping[] = [
+	{ source: 'AI1 · Supply Air Temp', target: 'AV-101 · SAT', scale: '×1.0 + 0', state: 'Mapped', tone: 'ok' },
+	{ source: 'AI2 · Return Air Temp', target: 'AV-102 · RAT', scale: '×1.0 + 0', state: 'Mapped', tone: 'ok' },
+	{ source: 'AO1 · Valve Position', target: 'BO-11 · Heat Valve', scale: '×1.0 + 0', state: 'Mapped', tone: 'ok' },
+	{ source: 'DI1 · Filter Status', target: 'BV-31 · Filter Alarm', scale: '—', state: 'Needs review', tone: 'warn' },
+	{ source: 'AI3 · Humidity', target: '—', scale: '—', state: 'Unmapped', tone: 'neutral' }
 ];
 
 export const BACNET_OBJECTS = [
@@ -110,34 +118,10 @@ export const MODBUS = [
 	{ unit: 9, name: '—', function: '03 Holding', registers: '40001 – 40010', state: 'Timeout', tone: 'err' as const }
 ];
 
-export const CAPTURES = [
-	{ name: 'bacnet-whois.pcap', packets: 118, size: '14 KB', took: '12:41', note: 'one gateway, three devices' },
-	{ name: 'modbus-timeout.pcap', packets: 46, size: '5 KB', took: '11:20', note: 'unit 9, nothing answered' },
-	{ name: 'arp-scan.pcap', packets: 92, size: '8 KB', took: '09:04', note: 'the whole /24' }
-];
-
-export const SCHEDULES = [
-	{ name: 'Weekday · 07:00 – 18:00', device: 'T3-BB · AHU-1', exceptions: 2, state: 'Running', tone: 'ok' as const },
-	{ name: 'Weekend · Off', device: 'T3-BB · AHU-1', exceptions: 0, state: 'Idle', tone: 'neutral' as const },
-	{ name: 'Lighting · Dusk to dawn', device: 'T3-LB · Lighting', exceptions: 1, state: 'Running', tone: 'ok' as const }
-];
-
-export const TRENDS = [
-	{ name: 'AHU-1 Supply Air', samples: 1882, interval: '5 min', since: '7 days', state: 'Collecting' },
-	{ name: 'AHU-1 Return Air', samples: 1882, interval: '5 min', since: '7 days', state: 'Collecting' },
-	{ name: 'Chiller Load', samples: 946, interval: '10 min', since: '7 days', state: 'Collecting' }
-];
-
-export const BACKUPS = [
-	{ name: 'nightly · 02:00', device: 'all six', size: '1.2 MB', took: 'today 02:00', state: 'Complete', tone: 'ok' as const },
-	{ name: 'before firmware 2.14.3', device: 'T3-BB · AHU-1', size: '240 KB', took: '3 days ago', state: 'Complete', tone: 'ok' as const },
-	{ name: 'manual · Lab Wing', device: 'T3-22I · Lab Wing', size: '—', took: 'never', state: 'Missing', tone: 'warn' as const }
-];
-
 export const CONNECTIONS = [
-	{ name: 'Temco Docs', kind: 'SQLite', host: '~/Temco/t3000/.temco/docs.db', database: 'temco_docs', state: 'Connected', tone: 'ok' as const, access: 'Read and write' },
-	{ name: 'Temco Docs · snapshot', kind: 'SQLite', host: '~/Temco/t3000/.temco/docs.2026-10-17.db', database: 'temco_docs', state: 'Idle', tone: 'warn' as const, access: 'Read-only' },
-	{ name: 'Build history', kind: 'PostgreSQL', host: 'reports.temco.local', database: 'builds', state: 'Idle', tone: 'warn' as const, access: 'Read-only' }
+	{ name: 'Temco Docs', kind: 'SQLite', host: '~/Temco/t3000/.temco/docs.db', database: 'temco_docs', state: 'Connected', tone: 'ok' as const, role: 'The registry this window edits', access: 'Read and write' },
+	{ name: 'Temco Docs · snapshot', kind: 'SQLite', host: '~/Temco/t3000/.temco/docs.2026-10-17.db', database: 'temco_docs', state: 'Idle', tone: 'warn' as const, role: 'What the last build read', access: 'Read-only' },
+	{ name: 'Build history', kind: 'PostgreSQL', host: 'reports.temco.local', database: 'builds', state: 'Idle', tone: 'warn' as const, role: 'Timings of every build, kept off the registry', access: 'Read-only' }
 ];
 
 export const SQL_TABLES = [

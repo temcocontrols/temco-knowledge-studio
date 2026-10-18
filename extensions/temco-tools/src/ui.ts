@@ -23,6 +23,7 @@ interface UiApi {
 	escapeHtml(text: string): string;
 	icon(name: string, cls?: string): string;
 	toneMark(name: string, tone?: 'ok' | 'warn' | 'err' | 'info' | 'accent'): string;
+	commandScript: string;
 	runCommand(message: PageMessage): void;
 }
 
@@ -42,11 +43,17 @@ export const page = ui.page;
 /** Text that came from anywhere but this module, escaped for a page. */
 export const escapeHtml = ui.escapeHtml;
 
+/** The same function, under the name the page builders use at every interpolation. */
+export const esc = ui.escapeHtml;
+
 /** One glyph from the page's sprite. */
 export const icon = ui.icon;
 
 /** One glyph in a tinted circle: a state you can see before you read it. */
 export const toneMark = ui.toneMark;
+
+/** The script a page runs so its `data-command` buttons reach this module. */
+export const commandScript = ui.commandScript;
 
 /** Runs the message a page's buttons send. */
 export const runCommand = ui.runCommand;
