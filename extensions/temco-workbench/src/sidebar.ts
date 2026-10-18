@@ -84,9 +84,7 @@ const GROUPS: Group[] = [
 		rows: [
 			{ label: 'Modules', note: 'the built-in extensions that ship with the platform', icon: 'package', command: 'temcoWorkbench.settings.modules' },
 			{ label: 'Branding', note: 'the mark, the theme and the identity', icon: 'palette', command: 'temcoWorkbench.settings.branding' },
-			{ label: 'Publishing', note: 'where a release goes and what it may overwrite', icon: 'upload', command: 'temcoWorkbench.settings.publishing' },
-			{ label: 'All Settings', note: 'the settings editor', icon: 'settings-gear', command: 'workbench.action.openSettings' },
-			{ label: 'Settings JSON', note: 'the file behind them', icon: 'json', command: 'workbench.action.openSettingsJson' }
+			{ label: 'Publishing', note: 'where a release goes and what it may overwrite', icon: 'upload', command: 'temcoWorkbench.settings.publishing' }
 		]
 	},
 	{

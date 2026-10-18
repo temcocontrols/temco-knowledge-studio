@@ -164,6 +164,40 @@
         "icon": "$(cloud-upload)"
       },
       {
+        "command": "temcoWorkbench.settings.reset",
+        "title": "Restore the General Settings to Their Defaults"
+      },
+      {
+        "command": "temcoWorkbench.settings.showOnDisk",
+        "title": "Show the Modules on Disk",
+        "icon": "$(folder)"
+      },
+      {
+        "command": "temcoWorkbench.settings.checkUpdates",
+        "title": "Check the Platform for Updates",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "temcoWorkbench.settings.themeDark",
+        "title": "Use the Dark Theme"
+      },
+      {
+        "command": "temcoWorkbench.settings.themeLight",
+        "title": "Use the Light Theme"
+      },
+      {
+        "command": "temcoWorkbench.settings.replaceIcon",
+        "title": "Replace the Application Mark"
+      },
+      {
+        "command": "temcoWorkbench.settings.resetBranding",
+        "title": "Reset the Identity"
+      },
+      {
+        "command": "temcoWorkbench.settings.testPublish",
+        "title": "Test the Publish Target"
+      },
+      {
         "command": "temcoWorkbench.copyLogPath",
         "title": "Copy Log Folder Path"
       },
@@ -209,6 +243,14 @@
         "command": "temcoWorkbench.help.about",
         "title": "About Temco Platform",
         "icon": "$(info)"
+      },
+      {
+        "command": "temcoWorkbench.help.openLog",
+        "title": "Open a Log File"
+      },
+      {
+        "command": "temcoWorkbench.help.copyReport",
+        "title": "Copy the Report and Open the Issue Reporter"
       },
       {
         "command": "temcoWorkbench.workspaces",

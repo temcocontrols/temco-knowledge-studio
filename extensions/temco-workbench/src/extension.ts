@@ -19,11 +19,12 @@ import { HelpPages } from './helpPages';
 import { HomePanel } from './home';
 import { LearnPages } from './learnPages';
 import { NeedsPage } from './needsPage';
-import { SettingsPages } from './settingsPages';
+import { registerSettings } from './settingsPages';
 import { registerSidebarViews } from './sidebar';
 import { selection } from './store';
 import { WorkspacesPages } from './workspaces';
-export function activate(context: vscode.ExtensionContext): void {	// The five group views whose containers this module declares: Workspaces, AI Hub, Temco Learn, Settings, Help.
+export function activate(context: vscode.ExtensionContext): void {
+	// The five group views whose containers this module declares: Workspaces, AI Hub, Temco Learn, Settings, Help.
 	registerSidebarViews(context);
 	// The dashboard: the application's own page, and the one surface that is not about a folder.
 	const home = new HomePanel(context, selection, () => roots());
@@ -32,9 +33,10 @@ export function activate(context: vscode.ExtensionContext): void {	// The five g
 	// The page a window with nothing better to show opens on: the application, not one project's work, and the
 	// five other pages that answer a question about the window itself. Welcome used to be its own panel and Help one
 	// page with everything on it; the mock gives six surfaces, each with one question to answer.
-	const help = new HelpPages(context);
+	const help = new HelpPages(context, selection);
 	// The five choices the application asks a profile to make — General, Modules, Branding, AI Models, Publishing.
-	const settings = new SettingsPages(context);	// The Dashboard's own pages: Overview, Recent Activity, Coverage & Health — the mock's three.
+	const settings = registerSettings(context);
+	// The Dashboard's own pages: Overview, Recent Activity, Coverage & Health — the mock's three.
 	const dashboard = new DashboardPages(context);
 	context.subscriptions.push(dashboard);
 	// The Workspaces module's three surfaces — All Workspaces, one page per open folder, and Templates — the
@@ -45,7 +47,8 @@ export function activate(context: vscode.ExtensionContext): void {	// The five g
 
 	context.subscriptions.push(
 		help,
-		settings,
+		settings.pages,
+		...settings.disposables,
 		workspaces,
 		learn,
 		vscode.commands.registerCommand('temcoWorkbench.home', () => home.open()),
@@ -54,19 +57,28 @@ export function activate(context: vscode.ExtensionContext): void {	// The five g
 		vscode.commands.registerCommand('temcoWorkbench.help', () => help.home()),
 		vscode.commands.registerCommand('temcoWorkbench.help.welcome', () => help.welcome()),
 		vscode.commands.registerCommand('temcoWorkbench.help.home', () => help.home()),
-		vscode.commands.registerCommand('temcoWorkbench.help.keys', () => help.keys()),
-		vscode.commands.registerCommand('temcoWorkbench.help.logs', () => help.logs()),
+		vscode.commands.registerCommand('temcoWorkbench.help.keys', () => void help.keys()),
+		vscode.commands.registerCommand('temcoWorkbench.help.logs', () => void help.logs()),
 		vscode.commands.registerCommand('temcoWorkbench.help.issue', () => help.issue()),
 		vscode.commands.registerCommand('temcoWorkbench.help.about', () => help.about()),
+		// The two things the Help pages do with this window's own facts: open one of its log files, and put the
+		// report a person wrote on the clipboard before the issue reporter opens.
+		vscode.commands.registerCommand('temcoWorkbench.help.openLog', (name?: unknown) =>
+			void help.openLog(typeof name === 'string' ? name : undefined)
+		),
+		vscode.commands.registerCommand(
+			'temcoWorkbench.help.copyReport',
+			(draft?: { title?: string; steps?: string; where?: string }) => void help.copyReport(draft)
+		),
 		vscode.commands.registerCommand('temcoWorkbench.overview', () => dashboard.open('overview')),
 		vscode.commands.registerCommand('temcoWorkbench.activity', () => dashboard.open('activity')),
 		vscode.commands.registerCommand('temcoWorkbench.health', () => dashboard.open('health')),
-		vscode.commands.registerCommand('temcoWorkbench.settings', () => settings.general()),
-		vscode.commands.registerCommand('temcoWorkbench.settings.general', () => settings.general()),
-		vscode.commands.registerCommand('temcoWorkbench.settings.modules', () => settings.modules()),
-		vscode.commands.registerCommand('temcoWorkbench.settings.branding', () => settings.branding()),
-		vscode.commands.registerCommand('temcoWorkbench.settings.ai', () => settings.ai()),
-		vscode.commands.registerCommand('temcoWorkbench.settings.publishing', () => settings.publishing()),
+		vscode.commands.registerCommand('temcoWorkbench.settings', () => settings.pages.general()),
+		vscode.commands.registerCommand('temcoWorkbench.settings.general', () => settings.pages.general()),
+		vscode.commands.registerCommand('temcoWorkbench.settings.modules', () => settings.pages.modules()),
+		vscode.commands.registerCommand('temcoWorkbench.settings.branding', () => settings.pages.branding()),
+		vscode.commands.registerCommand('temcoWorkbench.settings.ai', () => settings.pages.ai()),
+		vscode.commands.registerCommand('temcoWorkbench.settings.publishing', () => settings.pages.publishing()),
 		// The two facts a page cannot read from the host: where this profile's logs are written, and the block a
 		// report wants pasted into it.
 		vscode.commands.registerCommand('temcoWorkbench.copyLogPath', async () => {
@@ -96,7 +108,7 @@ export function activate(context: vscode.ExtensionContext): void {	// The five g
 				return;
 			}
 			await vscode.workspace.getConfiguration('temcoWorkbench').update('start.open', value, vscode.ConfigurationTarget.Global);
-			settings.refresh();
+			settings.pages.refresh();
 		}),
 		// The one preference the welcome page carries. It writes the setting the startup path already reads, so the
 		// checkbox and `temcoWorkbench.start.open` cannot disagree.
@@ -105,7 +117,7 @@ export function activate(context: vscode.ExtensionContext): void {	// The five g
 			const at = configuration.get<string>('start.open', 'welcome') === 'welcome';
 			await configuration.update('start.open', at ? 'project' : 'welcome', vscode.ConfigurationTarget.Global);
 			help.refresh();
-			settings.refresh();
+			settings.pages.refresh();
 		}),
 		// The three surfaces follow the documentation module's one signal: it re-read the sets, so each of them says
 		// something new.

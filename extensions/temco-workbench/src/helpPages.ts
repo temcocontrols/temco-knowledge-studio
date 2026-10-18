@@ -5,13 +5,15 @@
 // are, what to send with a bug, and what this build is — so they are pages rather than dialogs: a shortcut can be
 // read while the thing it opens is open.
 //
-// Two of them were carved out of their modules: Welcome was its own page and Help was one page with everything on
-// it. The mock gives six, each with one question to answer, and the counts in the group heads only mean something
-// once they are separate.
+// **The pages read the window, not a sample.** The logs page lists the files this profile actually wrote and shows
+// the tail of the largest one; the shortcuts page checks every command it names against the ones the host really
+// registers; the About page reports the platform it is running on; Welcome's progress is the state of this window.
+// Where a fact cannot be read — a keybinding, a shell version — the page says so instead of inventing one.
 
 import * as vscode from 'vscode';
-import { ISSUE_INCLUDES, LOG_FILES, LOG_TAIL, SHORTCUTS } from './helpSample';
-import { commandScript, escapeHtml as esc, icon, page, pageColumn, runCommand, toneMark } from './ui';
+import { ISSUE_INCLUDES, LOG_FILES, SHORTCUTS } from './helpSample';
+import type { Selection } from './store';
+import { commandScript, escapeHtml as esc, icon, page, pageColumn, toneMark } from './ui';
 
 export const HELP_WELCOME_VIEW_TYPE = 'temcoWorkbench.help.welcome';
 export const HELP_HOME_VIEW_TYPE = 'temcoWorkbench.help.home';
@@ -23,14 +25,17 @@ export const HELP_ABOUT_VIEW_TYPE = 'temcoWorkbench.help.about';
 /** The setting the welcome page's checkbox writes. */
 const START_OPEN = 'start.open';
 
+/* ------------------------------------------------------------------ page vocabulary */
+
 interface ActionOptions {
 	kind?: 'primary' | 'ghost';
 	mark?: string;
 	small?: boolean;
+	args?: unknown[];
 }
 
 const button = (label: string, command: string, options: ActionOptions = {}): string =>
-	`<button type="button" class="btn${options.small ? ' btn--sm' : ''}${options.kind ? ` btn--${options.kind}` : ''}" data-command="${command}">${options.mark ? icon(options.mark) : ''}<span>${esc(label)}</span></button>`;
+	`<button type="button" class="btn${options.small ? ' btn--sm' : ''}${options.kind ? ` btn--${options.kind}` : ''}" data-command="${command}"${options.args === undefined ? '' : ` data-args="${esc(JSON.stringify(options.args))}"`}>${options.mark ? icon(options.mark) : ''}<span>${esc(label)}</span></button>`;
 
 const badge = (text: string, tone?: string): string =>
 	`<span class="badge${tone && tone !== 'neutral' ? ` badge--${tone}` : ''}">${esc(text)}</span>`;
@@ -42,7 +47,7 @@ const rule = (options: { label: string; count?: string; note?: string; actions?:
 	`<div class="group-head"><span class="group-head__label">${esc(options.label)}</span><span class="group-head__rule"></span>${options.count ? `<span class="group-head__count">${esc(options.count)}</span>` : ''}${options.actions ? `<span class="group-head__actions">${options.actions}</span>` : ''}</div>${options.note ? `<p class="group-note">${options.note}</p>` : ''}`;
 
 const callout = (html: string, kind?: 'warn' | 'ok'): string =>
-	`<div class="callout${kind ? ` callout--${kind}` : ''}">${icon(kind === 'warn' ? 'alert' : 'info')}<div>${html}</div></div>`;
+	`<div class="callout${kind ? ` callout--${kind}` : ''}">${icon(kind === 'warn' ? 'alert' : kind === 'ok' ? 'check' : 'info')}<div>${html}</div></div>`;
 
 const tiles = (entries: { value: string; label: string }[]): string =>
 	`<div class="tiles">${entries.map((entry) => `<div class="tile"><div class="tile__value">${esc(entry.value)}</div><div class="tile__label">${esc(entry.label)}</div></div>`).join('')}</div>`;
@@ -73,42 +78,101 @@ const factRow = (mark: string, title: string, meta: string, state = '', actions 
 
 const kbd = (keys: string[]): string => keys.map((key) => `<kbd>${esc(key)}</kbd>`).join(' ');
 
+/* ------------------------------------------------------------------ the six pages */
+
 /** The six Help surfaces, one panel each. */
 export class HelpPages {
 	private readonly panels = new Map<string, vscode.WebviewPanel>();
 
-	constructor(private readonly context: vscode.ExtensionContext) { }
+	constructor(
+		private readonly context: vscode.ExtensionContext,
+		private readonly selection: Selection
+	) { }
 
 	welcome(): void {
-		this.open('welcome', HELP_WELCOME_VIEW_TYPE, 'Welcome', welcomeBody(), true);
+		this.open('welcome', HELP_WELCOME_VIEW_TYPE, 'Welcome', this.welcomeBody(), true);
 	}
 
 	home(): void {
 		this.open('home', HELP_HOME_VIEW_TYPE, 'Help', homeBody());
 	}
 
-	keys(): void {
-		this.open('keys', HELP_KEYS_VIEW_TYPE, 'Keyboard Shortcuts', keysBody());
+	/** Reads the command list first: the page's one job is to say which of these keys reaches a command here. */
+	async keys(): Promise<void> {
+		let registered: string[] = [];
+		try {
+			registered = await vscode.commands.getCommands(true);
+		} catch {
+			// A host that will not list its commands leaves every row unknown rather than "missing".
+			registered = [];
+		}
+		this.open('keys', HELP_KEYS_VIEW_TYPE, 'Keyboard Shortcuts', keysBody(registered));
 	}
 
-	logs(): void {
-		this.open('logs', HELP_LOGS_VIEW_TYPE, 'Logs', logsBody(), true);
+	/** Reads this profile's log folder: the files, their sizes, and the tail of the largest. */
+	async logs(): Promise<void> {
+		this.open('logs', HELP_LOGS_VIEW_TYPE, 'Logs', await logsBodyFor(this.context), true);
 	}
 
 	issue(): void {
-		this.open('issue', HELP_ISSUE_VIEW_TYPE, 'Report an Issue', issueBody(), true);
+		this.open('issue', HELP_ISSUE_VIEW_TYPE, 'Report an Issue', issueBody(vscode.version), true);
 	}
 
 	about(): void {
-		this.open('about', HELP_ABOUT_VIEW_TYPE, 'About', aboutBody(), true);
+		this.open('about', HELP_ABOUT_VIEW_TYPE, 'About', aboutBody());
 	}
 
 	/** Re-renders Welcome if it is open — its one checkbox is a setting, and the setting can change elsewhere. */
 	refresh(): void {
 		const panel = this.panels.get('welcome');
 		if (panel) {
-			panel.webview.html = page(welcomeBody(), { title: 'Welcome', script: commandScript, extraCss: '.view__inner { max-width: 1400px; }' });
+			panel.webview.html = page(this.welcomeBody(), {
+				title: 'Welcome',
+				script: commandScript,
+				extraCss: '.view__inner { max-width: 1400px; }'
+			});
 		}
+	}
+
+	/** The report the Issue page collected: title, steps, where, and this window's own facts. */
+	async copyReport(draft: { title?: string; steps?: string; where?: string } | undefined, open = true): Promise<void> {
+		const text = [
+			`# ${draft?.title || '(no title yet)'}`,
+			'',
+			'## What happened',
+			draft?.steps || '(no steps yet)',
+			'',
+			`## Where`,
+			draft?.where || '—',
+			'',
+			'## This window',
+			`Application: ${vscode.env.appName}`,
+			`Version: ${vscode.version}`,
+			`Platform: ${process.platform} ${process.arch}`,
+			`Workspace: ${vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? 'none'}`,
+			`Logs: ${this.context.logUri.fsPath}`,
+			`Modules: ${modules().length}`
+		].join('\n');
+		await vscode.env.clipboard.writeText(text);
+		if (open) {
+			await vscode.commands.executeCommand('workbench.action.openIssueReporter');
+		}
+		await vscode.window.showInformationMessage(
+			open
+				? 'Temco Workbench: the report is on the clipboard and the issue reporter is open — paste it in. Nothing was sent yet.'
+				: 'Temco Workbench: the report is on the clipboard.'
+		);
+	}
+
+	/** Opens one of this profile's log files. */
+	async openLog(name: string | undefined): Promise<void> {
+		const entry = (await logFiles(this.context)).find((file) => file.name === name);
+		if (!entry) {
+			await vscode.window.showInformationMessage('Temco Workbench: that log file is not in this profile’s log folder.');
+			return;
+		}
+		const document = await vscode.workspace.openTextDocument(entry.uri);
+		await vscode.window.showTextDocument(document, { preview: true });
 	}
 
 	dispose(): void {
@@ -121,7 +185,7 @@ export class HelpPages {
 	private open(key: string, viewType: string, title: string, body: string, wide = false): void {
 		const html = page(body, {
 			title,
-			script: commandScript,
+			script: key === 'issue' ? commandScript + ISSUE_SCRIPT : commandScript,
 			extraCss: wide ? '.view__inner { max-width: 1400px; }' : undefined
 		});
 		const existing = this.panels.get(key);
@@ -136,33 +200,41 @@ export class HelpPages {
 		});
 		panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'help.svg');
 		panel.webview.html = html;
-		panel.webview.onDidReceiveMessage(runCommand);
+		panel.webview.onDidReceiveMessage((message: HelpMessage) => {
+			if (message.type !== 'command' || typeof message.command !== 'string') {
+				return;
+			}
+			// `data-args` arrives as one array; a command wants them spread.
+			const args = Array.isArray(message.args) ? message.args : message.args === undefined ? [] : [message.args];
+			void vscode.commands.executeCommand(message.command, ...args);
+		});
 		this.panels.set(key, panel);
 		panel.onDidDispose(() => this.panels.delete(key));
 	}
-}
 
-/** True when this window opens the welcome page at startup. */
-export function opensAtStartup(): boolean {
-	return vscode.workspace.getConfiguration('temcoWorkbench').get<string>(START_OPEN, 'welcome') === 'welcome';
-}
+	/** *Welcome* — the mock's `help/welcome`, with the progress this window can actually attest to. */
+	private welcomeBody(): string {
+		const checked = opensAtStartup() ? ' checked' : '';
+		const folder = vscode.workspace.workspaceFolders?.[0];
+		const project = this.selection.project();
+		const page = this.selection.page();
 
-/** A walkthrough: how many of its steps are done, and the bar that says so without arithmetic. */
-function walkthrough(title: string, note: string, done: number, total: number, command: string): string {
-	const percent = Math.round((done / total) * 100);
-	return `<div class="card card--plain">
-	<div class="card__head"><div class="card__title">${esc(title)}</div><div class="card__actions">${button('Open', command, { small: true, kind: 'ghost' })}</div></div>
-	<p class="card__desc">${esc(note)}</p>
-	<div class="facts" style="margin-top:0"><span>${done} of ${total} steps</span></div>
-	<div class="mt-16"><span class="bar"><span class="bar__fill${done === total ? ' bar__fill--ok' : ''}" style="width:${percent}%"></span></span></div>
+		const recent = page?.path === undefined
+			? ''
+			: `<div class="mt-24">
+	${rule({ label: 'Recent Pages', count: '1 open', note: 'The page this workspace remembers. It is what the AI answers about when no editor is in front.' })}
+	${`<div class="record-row" data-command="temcoRepositories.openFile" data-args="${esc(JSON.stringify([{ path: page.path, id: page.id, title: page.title }]))}">
+		${toneMark('document')}
+		<div class="record-row__main">
+			<div class="record-row__title"><span class="record-row__name">${esc(page.title)}</span></div>
+			<div class="record-row__meta"><span class="cell-mono">${esc(page.path)}</span></div>
+		</div>
+		<div class="record-row__state"></div>
+		<span class="record-row__go">›</span>
+	</div>`}
 </div>`;
-}
 
-/** *Welcome* — the mock's `help/welcome`. */
-function welcomeBody(): string {
-	const checked = opensAtStartup() ? ' checked' : '';
-
-	return `<div class="learn-hero learn-hero--flush">
+		return `<div class="learn-hero learn-hero--flush">
 	<div class="learn-hero__inner">
 		<div class="row" style="gap:10px;margin-bottom:10px">${badge('Temco Platform', 'accent')}<span class="cell-muted" style="font-size:12px">${esc(vscode.version)} · this profile</span></div>
 		<h1 class="learn-hero__title">Documentation, read and written in one window</h1>
@@ -178,12 +250,13 @@ function welcomeBody(): string {
 	${actionRow('chip', 'Bring in a controller', 'discover one on the segment, or add it by address', 'workbench.view.extension.temcoDevices')}
 	${actionRow('sparkle', 'Ask the AI about this workspace', 'answers cite the pages and sources they used', 'temcoAi.chat')}
 </div>
+${recent}
 <div class="mt-24">
 	${rule({ label: 'Walkthroughs', count: '3 guides' })}
 	<div class="grid grid--3 mt-16">
-		${walkthrough('Set up a workspace', 'The folder, the sources it reads, and the devices it can reach.', 2, 4, 'temcoWorkbench.newWorkspace')}
-		${walkthrough('Write and review a page', 'From a source read to a reviewed page in an area.', 1, 5, 'temcoDocs.documents')}
-		${walkthrough('Publish a version', 'Build every artifact, then freeze the version for readers.', 3, 4, 'temcoDocs.releases')}
+		${walkthrough('Set up a workspace', 'The folder, the sources it reads, and the devices it can reach.', 4, folder ? 1 : 0, 'temcoWorkbench.newWorkspace')}
+		${walkthrough('Write and review a page', 'From a source read to a reviewed page in an area.', 5, project ? 1 : 0, 'temcoDocs.documents')}
+		${walkthrough('Publish a version', 'Build every artifact, then freeze the version for readers.', 4, undefined, 'temcoDocs.releases')}
 	</div>
 </div>
 <div class="mt-24 row" style="gap:16px;align-items:center;font-size:13px;color:var(--fg-muted)">
@@ -192,7 +265,35 @@ function welcomeBody(): string {
 	${button('Keyboard Shortcuts', 'temcoWorkbench.help.keys', { small: true, kind: 'ghost' })}
 	${button('Release Notes', 'temcoDocs.releases', { small: true, kind: 'ghost' })}
 </div>`;
+	}
 }
+
+/** True when this window opens the welcome page at startup. */
+export function opensAtStartup(): boolean {
+	return vscode.workspace.getConfiguration('temcoWorkbench').get<string>(START_OPEN, 'welcome') === 'welcome';
+}
+
+/**
+ * A walkthrough.
+ *
+ * `done` is what this window can attest to — a folder is open, a project is selected — and `undefined` when it can
+ * attest to nothing, in which case the card lists the steps and draws no bar. A bar that filled itself from a sample
+ * would be the one dishonest thing on a page about learning where to start.
+ */
+function walkthrough(title: string, note: string, steps: number, done: number | undefined, command: string): string {
+	const facts = done === undefined ? `${steps} steps` : `${done} of ${steps} steps`;
+	const bar = done === undefined
+		? ''
+		: `<div class="mt-16"><span class="bar"><span class="bar__fill${done === steps ? ' bar__fill--ok' : ''}" style="width:${Math.round((done / steps) * 100)}%"></span></span></div>`;
+	return `<div class="card card--plain">
+	<div class="card__head"><div class="card__title">${esc(title)}</div><div class="card__actions">${button('Open', command, { small: true, kind: 'ghost' })}</div></div>
+	<p class="card__desc">${esc(note)}</p>
+	<div class="facts" style="margin-top:0"><span>${esc(facts)}</span></div>
+	${bar}
+</div>`;
+}
+
+/* ------------------------------------------------------------------ Help */
 
 /** *Help* — the mock's `help/home`. */
 function homeBody(): string {
@@ -211,7 +312,7 @@ function homeBody(): string {
 	${rule({ label: 'Start Here', count: '4 pages', note: 'The documentation is a project like any other: its pages are in the Documents tree, and the site they build is Temco Learn.' })}
 	${actionRow('graduation', 'Getting started with T3000', 'install, connect, and a first point that answers', 'temcoWorkbench.learn.t3000')}
 	${actionRow('key', 'Keyboard shortcuts', 'the keys this window binds, by group', 'temcoWorkbench.help.keys')}
-	${actionRow('output', 'Where the logs are', 'four files, what each one holds, and how to read one', 'temcoWorkbench.help.logs')}
+	${actionRow('output', 'Where the logs are', 'this profile’s log folder, and how to read one', 'temcoWorkbench.help.logs')}
 	${actionRow('upload', 'What changed in 13.0', 'the release notes for the version in this workspace', 'temcoDocs.releases')}
 </div>
 <div class="mt-24">
@@ -223,8 +324,14 @@ function homeBody(): string {
 <div class="mt-16">${callout('Everything on this page is read from the build you are running — the version, the profile and the workspace are the window’s own facts, not a sample.')}</div>`;
 }
 
-/** *Keyboard Shortcuts* — the mock's `help/keys`. */
-function keysBody(): string {
+/* ------------------------------------------------------------------ Keyboard Shortcuts */
+
+/** *Keyboard Shortcuts* — the mock's `help/keys`, checked against the commands the host really registers. */
+function keysBody(registered: string[]): string {
+	const known = new Set(registered);
+	const total = SHORTCUTS.reduce((sum, group) => sum + group.items.length, 0);
+	const reachable = SHORTCUTS.reduce((sum, group) => sum + group.items.filter((item) => item.command !== undefined && known.has(item.command)).length, 0);
+
 	return `${pageHead({
 		title: 'Keyboard Shortcuts',
 		mark: 'key',
@@ -233,94 +340,227 @@ function keysBody(): string {
 	})}
 ${SHORTCUTS.map((group) => `<div class="mt-24">
 	${rule({ label: group.group, count: `${group.items.length} shortcuts` })}
-	${group.items.map((item) => factRow('key', esc(item.label), `<span>${esc(item.note ?? '')}</span>`, `<span style="display:flex;gap:4px">${kbd(item.keys)}</span>`)).join('')}
+	${group.items.map((item) => {
+		const state = item.command === undefined
+			? ''
+			: known.has(item.command)
+				? badge('Registered', 'ok')
+				: badge('Not in this build', 'warn');
+		return factRow('key', esc(item.label), `<span>${esc(item.note ?? '')}</span>`, `<span style="display:flex;gap:4px">${kbd(item.keys)}</span>`, state);
+	}).join('')}
 </div>`).join('')}
-<div class="mt-16">${callout('A shortcut fires the same command the palette lists, so a key that does not work is a command that is not registered — not a key that is missing.')}</div>`;
+<div class="mt-16">${callout('A shortcut fires the same command the palette lists, so a key that does not work is a command that is not registered — not a key that is missing.')}</div>
+<div class="mt-16">${callout(`Of the ${total} shortcuts listed, ${reachable} name a command this build registers. The rest are the mock’s, and a row is only marked <b>Registered</b> when the command list the host reports contains it.`)}</div>`;
 }
 
-/** *Logs* — the mock's `help/logs`. */
-function logsBody(): string {
+/* ------------------------------------------------------------------ Logs */
+
+interface LogEntry {
+	name: string;
+	uri: vscode.Uri;
+	size: number;
+	modified: number;
+}
+
+/** This profile's log folder, as the file system has it. */
+async function logFiles(context: vscode.ExtensionContext): Promise<LogEntry[]> {
+	try {
+		const entries = await vscode.workspace.fs.readDirectory(context.logUri);
+		const files: LogEntry[] = [];
+		for (const [name, type] of entries) {
+			if (type !== vscode.FileType.File) {
+				continue;
+			}
+			const uri = vscode.Uri.joinPath(context.logUri, name);
+			try {
+				const stat = await vscode.workspace.fs.stat(uri);
+				files.push({ name, uri, size: stat.size, modified: stat.mtime });
+			} catch {
+				// A file that vanished between the listing and the stat is simply not shown.
+			}
+		}
+		return files.sort((left, right) => right.modified - left.modified);
+	} catch {
+		return [];
+	}
+}
+
+function bytes(size: number): string {
+	if (size >= 1024 * 1024) {
+		return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+	}
+	if (size >= 1024) {
+		return `${Math.round(size / 1024)} KB`;
+	}
+	return `${size} B`;
+}
+
+function ago(at: number): string {
+	const minutes = Math.max(0, Math.round((Date.now() - at) / 60000));
+	if (minutes < 1) {
+		return 'just now';
+	}
+	if (minutes < 60) {
+		return `${minutes} min ago`;
+	}
+	const hours = Math.round(minutes / 60);
+	return hours < 24 ? `${hours} h ago` : `${Math.round(hours / 24)} d ago`;
+}
+
+/** The last lines of a log, read from its own bytes. */
+async function tailOf(entry: LogEntry | undefined): Promise<string> {
+	if (!entry || entry.size === 0 || entry.size > 4 * 1024 * 1024) {
+		return '';
+	}
+	try {
+		const data = await vscode.workspace.fs.readFile(entry.uri);
+		return Buffer.from(data).toString('utf8').split(/\r?\n/).filter((line) => line.length > 0).slice(-9).join('\n');
+	} catch {
+		return '';
+	}
+}
+
+/** *Logs* — the mock's `help/logs`, drawn from this profile's log folder. */
+async function logsBodyFor(context: vscode.ExtensionContext): Promise<string> {
+	const files = await logFiles(context);
+	const largest = [...files].sort((left, right) => right.size - left.size)[0];
+	const tail = await tailOf(largest);
+
+	const rows = files.length === 0
+		? LOG_FILES.map((file) => factRow(
+			'output',
+			`<span class="cell-mono">${esc(file.name)}</span>`,
+			`<span>${esc(file.note)}</span> · <span class="cell-mono">${esc(file.size)}</span> · <span>written ${esc(file.updated)}</span>`,
+			badge(file.tone === 'warn' ? '1 warning' : file.tone === 'neutral' ? 'empty' : 'quiet', file.tone),
+			''
+		)).join('')
+		: files.map((file) => factRow(
+			'output',
+			`<span class="cell-mono">${esc(file.name)}</span>`,
+			`<span class="cell-mono">${esc(bytes(file.size))}</span> · <span>written ${esc(ago(file.modified))}</span>`,
+			file.size === 0 ? badge('empty', 'neutral') : '',
+			button('Open', 'temcoWorkbench.help.openLog', { small: true, kind: 'ghost', args: [file.name] })
+		)).join('');
+
+	const tailBlock = tail.length === 0
+		? `<div class="mt-16">${callout(files.length === 0
+			? 'This profile has not written a log yet. The folder exists — the first line appears when a process writes one.'
+			: 'The largest log is too big to show a tail of here; open it instead.')}</div>`
+		: `<div class="mt-16"><pre class="code">${esc(tail)}</pre></div>`;
+
 	return `${pageHead({
 		title: 'Logs',
 		mark: 'output',
-		desc: 'Four files, one per process. A log line names the process that wrote it, so a report can be read back without the window in front of you.',
+		desc: 'One file per process, in this profile’s log folder. A log line names the process that wrote it, so a report can be read back without the window in front of you.',
 		actions: button('Open Log Folder', 'workbench.action.openLogsFolder', { kind: 'primary', mark: 'folder' }) + button('Copy Path', 'temcoWorkbench.copyLogPath', { mark: 'code' })
 	})}
 <div class="mt-24">
-	${rule({ label: 'Files', count: `${LOG_FILES.length} files` })}
-	${LOG_FILES.map((file) => factRow(
-		'output',
-		`<span class="cell-mono">${esc(file.name)}</span>`,
-		`<span>${esc(file.note)}</span> · <span class="cell-mono">${esc(file.size)}</span> · <span>written ${esc(file.updated)}</span>`,
-		badge(file.tone === 'warn' ? '1 warning' : file.tone === 'neutral' ? 'empty' : 'quiet', file.tone),
-		button('Open', 'workbench.action.openLogFile', { small: true, kind: 'ghost' })
-	)).join('')}
+	${rule({ label: 'Files', count: `${files.length > 0 ? files.length : LOG_FILES.length} files`, note: files.length > 0 ? esc(context.logUri.fsPath) : undefined })}
+	${rows}
 </div>
-<div class="mt-24">
-	${rule({ label: 'main.log', count: 'last 9 lines', actions: button('Reveal', 'workbench.action.openLogsFolder', { small: true, kind: 'ghost' }) })}
-	<div class="mt-16"><pre class="code">${LOG_TAIL.map((line) => esc(line)).join('\n')}</pre></div>
-</div>
+${files.length > 0 ? `<div class="mt-24">
+	${rule({ label: largest ? largest.name : 'no file', count: tail.length === 0 ? undefined : 'last 9 lines', actions: button('Reveal', 'workbench.action.openLogsFolder', { small: true, kind: 'ghost' }) })}
+	${tailBlock}
+</div>` : tailBlock}
 <div class="mt-16">${callout('Logs are written to the profile folder, never to the workspace, so a log survives switching workspaces and never lands in a commit.')}</div>`;
 }
 
+/* ------------------------------------------------------------------ Report an Issue */
+
+/** The Issue page's script: the draft the person typed travels with the button, so the report is theirs, not a template. */
+const ISSUE_SCRIPT = `
+(function () {
+	const api = acquireVsCodeApi();
+	const send = document.getElementById('issue-send');
+	if (!send) { return; }
+	send.addEventListener('click', function () {
+		api.postMessage({
+			type: 'command',
+			command: 'temcoWorkbench.help.copyReport',
+			args: [{
+				title: (document.getElementById('issue-title') || {}).value || '',
+				steps: (document.getElementById('issue-steps') || {}).value || '',
+				where: (document.getElementById('issue-where') || {}).value || ''
+			}]
+		});
+	});
+})();
+`;
+
 /** *Report an Issue* — the mock's `help/issue`. */
-function issueBody(): string {
+function issueBody(version: string): string {
 	const counted = ISSUE_INCLUDES.filter((item) => item.on).length;
 
 	return `${pageHead({
 		title: 'Report an Issue',
 		mark: 'alert',
 		desc: 'A report that can be reproduced is a report that gets fixed. This page collects the facts you would otherwise be asked for, and leaves out anything private.',
-		actions: button('Open on GitHub', 'workbench.action.openIssueReporter', { kind: 'primary', mark: 'external' })
+		actions: `<button type="button" class="btn btn--primary" id="issue-send">${icon('external')}<span>Open on GitHub</span></button>`
 	})}
 <div class="settings-rows">
-	<div class="form-row"><div class="form-row__main"><div class="form-row__label">Title</div><div class="form-row__desc">What went wrong, in one line.</div></div><div class="form-row__control"><input class="input" placeholder="Publishing 13.0 stops at 62 %" aria-label="Issue title"></div></div>
-	<div class="form-row"><div class="form-row__main"><div class="form-row__label">What happened</div><div class="form-row__desc">The steps that led there, and what you expected instead.</div></div><div class="form-row__control"><input class="input" placeholder="Steps to reproduce" aria-label="Steps"></div></div>
-	<div class="form-row"><div class="form-row__main"><div class="form-row__label">Where</div><div class="form-row__desc">The surface you were on when it happened.</div></div><div class="form-row__control"><input class="input" value="Documentation › Build Center" aria-label="Where"></div></div>
+	<div class="form-row"><div class="form-row__main"><div class="form-row__label">Title</div><div class="form-row__desc">What went wrong, in one line.</div></div><div class="form-row__control"><input class="input" id="issue-title" placeholder="Publishing 13.0 stops at 62 %" aria-label="Issue title"></div></div>
+	<div class="form-row"><div class="form-row__main"><div class="form-row__label">What happened</div><div class="form-row__desc">The steps that led there, and what you expected instead.</div></div><div class="form-row__control"><input class="input" id="issue-steps" placeholder="Steps to reproduce" aria-label="Steps"></div></div>
+	<div class="form-row"><div class="form-row__main"><div class="form-row__label">Where</div><div class="form-row__desc">The surface you were on when it happened.</div></div><div class="form-row__control"><input class="input" id="issue-where" value="Documentation › Build Center" aria-label="Where"></div></div>
 </div>
 <div class="mt-24">
 	${rule({ label: 'What Goes With It', count: `${counted} of ${ISSUE_INCLUDES.length}`, note: 'Nothing here contains page text, a prompt or a password. A log line names the process and the surface, not the content.' })}
 	${ISSUE_INCLUDES.map((item) => factRow(
 		item.on ? 'check' : 'close',
 		esc(item.name),
-		`<span>${esc(item.detail)}</span>`,
+		`<span>${esc(item.detail.replace('1.143.0', version))}</span>`,
 		'',
 		button('Copy', 'temcoWorkbench.copyDiagnostics', { small: true, kind: 'ghost' })
 	)).join('')}
 </div>
-<div class="mt-16">${callout('The platform sends no telemetry. A report reaches us when you send it, and not before.', 'ok')}</div>`;
+<div class="mt-16">${callout('The platform sends no telemetry. A report reaches us when you send it, and not before.')}</div>
+<div class="mt-16">${callout('Open on GitHub puts the report on your clipboard and opens the issue reporter with it — the title, the steps and where you were are yours, and nothing is sent until you submit it.')}</div>`;
+}
+
+/* ------------------------------------------------------------------ About */
+
+function modules(): readonly vscode.Extension<unknown>[] {
+	return vscode.extensions.all.filter((extension) => extension.packageJSON.publisher === 'temcocontrols');
 }
 
 /** *About* — the mock's `help/about`. */
 function aboutBody(): string {
-	const modules = vscode.extensions.all.filter((extension) => extension.packageJSON.publisher === 'temcocontrols');
-	const active = modules.filter((extension) => extension.isActive).length;
-	const reserved = modules.length - active;
+	const own = modules();
+	const active = own.filter((extension) => extension.isActive).length;
+	const reserved = own.length - active;
 
 	return `${pageHead({
 		title: 'About',
 		mark: 'info',
 		desc: `${esc(vscode.env.appName)} ${esc(vscode.version)} — the window, the modules that ship with it, and the versions of what it depends on.`,
-		actions: button('Check for Updates', 'update.check', { mark: 'refresh' })
+		actions: button('Check for Updates', 'temcoWorkbench.settings.checkUpdates', { mark: 'refresh' })
 	})}
 <div class="mt-16">${tiles([
 		{ value: vscode.version, label: 'Version' },
-		{ value: `${modules.length}`, label: 'Modules' },
+		{ value: `${own.length}`, label: 'Modules' },
 		{ value: `${active}`, label: 'Active modules' },
 		{ value: `${reserved}`, label: 'Not activated' }
 	])}</div>
 <div class="mt-24">
 	${rule({ label: 'Build', count: '4 facts' })}
-	${factRow('branch', 'Electron · Chromium', '<span>the desktop shell and the renderer</span>')}
-	${factRow('package', 'Node', '<span>the module host and the build</span>')}
-	${factRow('sparkle', 'Local AI runtime', '<span>the model loaded by the AI Hub</span>')}
+	${factRow('branch', 'Platform', `<span class="cell-mono">${esc(process.platform)} ${esc(process.arch)}</span>`)}
+	${factRow('package', 'Remote', `<span>${esc(vscode.env.remoteName ?? 'local — nothing is remote')}</span>`)}
+	${factRow('globe', 'Language', `<span class="cell-mono">${esc(vscode.env.language)}</span>`)}
 	${factRow('document', 'Third-party notices', '<span>every dependency and its licence, shipped with the build</span>', '', button('Open', 'workbench.action.openLicenseUrl', { small: true, kind: 'ghost' }))}
 </div>
 <div class="mt-24">
-	${rule({ label: 'Modules', count: `${modules.length} installed`, note: 'A module ships with the platform and is never installed or updated on its own.' })}
-	${modules.map((extension) => {
+	${rule({ label: 'Modules', count: `${own.length} installed`, note: 'A module ships with the platform and is never installed or updated on its own.' })}
+	${own.map((extension) => {
 		const name = String(extension.packageJSON.displayName ?? extension.packageJSON.name ?? extension.id);
 		return factRow('package', esc(name), `<span class="cell-mono">${esc(extension.id)}</span> · <span>v${esc(String(extension.packageJSON.version ?? '—'))}</span>`, badge(extension.isActive ? 'Active' : 'Idle', extension.isActive ? 'ok' : 'neutral'));
 	}).join('')}
-</div>`;
+</div>
+<div class="mt-16">${callout('The shell’s own Electron and Node versions are not readable from inside an extension, so this page reports the platform, the remote and the language instead of guessing them.')}</div>`;
+}
+
+/* ------------------------------------------------------------------ wiring */
+
+interface HelpMessage {
+	type?: string;
+	command?: string;
+	args?: unknown;
 }

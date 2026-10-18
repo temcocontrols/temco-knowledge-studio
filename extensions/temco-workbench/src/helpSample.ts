@@ -1,14 +1,16 @@
 // The sample the Help surfaces are drawn from.
 //
 // The shortcuts and the log files are the mock's (`docs/mock/js/data.js`: `shortcuts`, `logFiles`), plus the tail
-// `help/logs` prints. They are copied rather than derived: the window does know its own bindings and its own log
-// folder, but the mock fixes the shape a person reads, and a page that reshaped itself per build would be a page
-// nobody could give instructions about.
+// `help/logs` prints. The shortcuts are copied rather than derived — no extension can read a keybinding — but each one
+// names the command it stands for, so the page can check that command against the list the host really registers. The
+// log rows are the fallback for a profile whose log folder is empty; when it has files, the page lists those instead.
 
 export interface Shortcut {
 	label: string;
 	keys: string[];
 	note?: string;
+	/** The command the key fires, when this build has one to check. */
+	command?: string;
 }
 
 export interface ShortcutGroup {
@@ -19,24 +21,24 @@ export interface ShortcutGroup {
 export const SHORTCUTS: ShortcutGroup[] = [
 	{
 		group: 'Window', items: [
-			{ label: 'Command palette', keys: ['Ctrl', 'Shift', 'P'], note: 'every command, including the ones without a key' },
-			{ label: 'Go to a surface', keys: ['Ctrl', 'P'], note: 'the same list the side bar walks' },
-			{ label: 'Toggle side bar', keys: ['Ctrl', 'B'] },
-			{ label: 'Toggle panel', keys: ['Ctrl', 'J'] },
-			{ label: 'Toggle AI bar', keys: ['Ctrl', 'Alt', 'B'] }
+			{ label: 'Command palette', keys: ['Ctrl', 'Shift', 'P'], note: 'every command, including the ones without a key', command: 'workbench.action.showCommands' },
+			{ label: 'Go to a surface', keys: ['Ctrl', 'P'], note: 'the same list the side bar walks', command: 'workbench.action.quickOpen' },
+			{ label: 'Toggle side bar', keys: ['Ctrl', 'B'], command: 'workbench.action.toggleSidebarVisibility' },
+			{ label: 'Toggle panel', keys: ['Ctrl', 'J'], command: 'workbench.action.togglePanel' },
+			{ label: 'Toggle AI bar', keys: ['Ctrl', 'Alt', 'B'], command: 'workbench.action.toggleAuxiliaryBar' }
 		]
 	},
 	{
 		group: 'Documents', items: [
-			{ label: 'New page', keys: ['Ctrl', 'Alt', 'N'], note: 'opens the New Page flow' },
-			{ label: 'Read all sources', keys: ['Ctrl', 'Alt', 'R'] },
-			{ label: 'Build everything', keys: ['Ctrl', 'Shift', 'B'] }
+			{ label: 'New page', keys: ['Ctrl', 'Alt', 'N'], note: 'opens the New Page flow', command: 'temcoDocs.newPage' },
+			{ label: 'Read all sources', keys: ['Ctrl', 'Alt', 'R'], command: 'temcoRepositories.readAllSources' },
+			{ label: 'Build everything', keys: ['Ctrl', 'Shift', 'B'], command: 'temcoDocs.buildSite' }
 		]
 	},
 	{
 		group: 'Editor', items: [
-			{ label: 'Save draft', keys: ['Ctrl', 'S'], note: 'writes the registry, not a source file' },
-			{ label: 'Submit for review', keys: ['Ctrl', 'Enter'] }
+			{ label: 'Save draft', keys: ['Ctrl', 'S'], note: 'writes the registry, not a source file', command: 'workbench.action.files.save' },
+			{ label: 'Submit for review', keys: ['Ctrl', 'Enter'], command: 'temcoDocs.validate' }
 		]
 	}
 ];
