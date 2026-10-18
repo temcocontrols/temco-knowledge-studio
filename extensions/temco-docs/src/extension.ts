@@ -1,8 +1,8 @@
-// Temco Docs — activation.
+﻿// Temco Docs 鈥?activation.
 //
 // The extension is a reader, of the **project being worked on**: it finds each of that project's sources, shows
 // their pages in the Workspace view, and reports structural problems where they can be fixed. The project is the
-// front door — the Library lists what there is, choosing one loads the Workspace, and with none chosen nothing is
+// front door 鈥?the Library lists what there is, choosing one loads the Workspace, and with none chosen nothing is
 // read, so the view can never answer about a folder nobody named. Nothing is written to a page without an
 // explicit command, and nothing is published from here at all.
 
@@ -13,12 +13,15 @@ import { registerBuildCommands, registerScriptCommands, scriptsIn } from './buil
 import { publishDiagnostics } from './diagnostics';
 import { registerFeedbackCommands } from './feedback';
 import { registerFormatCommands } from './format';
+import { DocsPages } from './docsPages';
 import { NewPagePage } from './newPagePage';
+import { OverviewPage } from './overview';
 import { PageDeps, PageOperations, registerPageCommands } from './pageOps';
 import { projects } from './projects';
 import { registerReportCommands } from './report';
 import { registerRowCommands } from './rowOps';
 import { registerScaffoldCommands } from './scaffold';
+import { registerSectionViews } from './sections';
 import { Catalog, Selection, selection, slugOf } from './store';
 import { fileColumn, pageColumn } from './surface';
 import { DocsRoot, DeclaredPage, RegistryError, collectPages, countStale, folderForPath, loadDocsRoot, pageForUri, registryUriFor, rootFromDeclared, totals } from './registry';
@@ -50,8 +53,14 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   // palette, where nothing names a row, and there the row the person has selected is the one they mean.
   let selectedRow = (): DocsNode | undefined => undefined;
   // And once more for the page that creates a page: every act that makes one opens it, and the page writes
-  // through the same dependencies the tree's own commands use — so there is one write, not two.
+  // through the same dependencies the tree's own commands use 鈥?so there is one write, not two.
   let newPagePage: NewPagePage | undefined = undefined;
+  // One guide per window: opening it again reveals the tab rather than stacking a second copy of the same page.
+  const docsPages = new DocsPages(context);
+  context.subscriptions.push(docsPages);
+  // The documentation itself, as a page: counts, areas, what is behind its source, and the checks.
+  const overviewPage = new OverviewPage(context, () => roots);
+  context.subscriptions.push(overviewPage);
   const pageDeps: PageDeps = {
     roots: () => roots,
     output,
@@ -64,7 +73,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   const treeView = vscode.window.createTreeView(VIEW_ID, {
     treeDataProvider: provider,
     showCollapseAll: true,
-    // A chapter is somewhere a page can be put, and the drop is a registry write — see `src/pageOps.ts`.
+    // A chapter is somewhere a page can be put, and the drop is a registry write 鈥?see `src/pageOps.ts`.
     dragAndDropController: pageOps,
   });
   selectedRow = () => treeView.selection[0];
@@ -75,7 +84,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
 
   let roots: DocsRoot[] = [];
   /**
-   * Whether the single project has been allowed to select itself yet — once per window, at the first read.
+   * Whether the single project has been allowed to select itself yet 鈥?once per window, at the first read.
    *
    * It must not be allowed again: with one project, *Stop working on it* would be impossible, because clearing
    * the selection would re-make it on the very next refresh, and the view would never go away.
@@ -87,19 +96,23 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
 
   // The page behind the *Documentation Owed* row, and the form that creates a page.
 
+  // The side bar's groups, as the mock draws them: Projects, Sources, Pipeline, How-To 鈥?the Workspace tree is the
+  // Documents group and is registered above with the rest of the view.
+  registerSectionViews(context);
+
   const refresh = async (): Promise<void> => {
     const broken: BrokenRegistry[] = [];
     roots = [];
 
     // The catalog is read before anything else, for the two facts the rest of this depends on: **which project
-    // is being worked on** — with exactly one recorded there is nothing to choose between, so it chooses itself
-    // — and **whether there is one at all**, which is what the Workspace view's empty state has to say.
+    // is being worked on** 鈥?with exactly one recorded there is nothing to choose between, so it chooses itself
+    // 鈥?and **whether there is one at all**, which is what the Workspace view's empty state has to say.
     const projects = await chooseProject(context, selection, !picked);
     picked = true;
 
     // **One world.** The project being worked on decides what is read: each of its sources, whether or not the
     // folder is open in this window, and what a read recorded for the sources that are not here at all. With
-    // nothing selected nothing is read — the Workspace view is about the project, and a tree built from whatever
+    // nothing selected nothing is read 鈥?the Workspace view is about the project, and a tree built from whatever
     // happens to be open would be a second, unrelated answer to the same question.
     const selected = selection.project();
     const read: { folder: vscode.WorkspaceFolder; source?: ReadableSource }[] = [];
@@ -159,11 +172,11 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
             ? {
               label: 'No project is being worked on',
               detail: 'choose one in the Library',
-              command: { command: 'temcoProjects.openProjects' },
+              command: { command: 'temcoDocs.section.projects.focus' },
             }
             : {
               label: 'No project yet',
-              detail: 'a project is what you manage — create one, then give it a source',
+              detail: 'a project is what you manage 鈥?create one, then give it a source',
               command: { command: 'temcoProjects.newProject' },
             }
       );
@@ -176,7 +189,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     // The view says which project it is showing: it answers about a project, never about the window, and a view
     // that silently answers a different question is worse than an empty one.
     treeView.description = projectName
-      ? `${projectName} · ${totals(roots).pages} pages`
+      ? `${projectName} 路 ${totals(roots).pages} pages`
       : undefined;
     publishDiagnostics(diagnostics, roots);
     for (const { uri, message } of broken) {
@@ -187,6 +200,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     updateStatus(status, roots, broken);
     // The AI module's panel and the workbench's three surfaces are the surfaces this module does not own: they
     // are told, by the one signal.
+    overviewPage.refresh();
     changed.fire();
   };
 
@@ -200,8 +214,8 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     for (const root of roots) {
       const stale = countStale(collectPages(root));
       output.appendLine(
-        `  ${root.folder.name}: ${root.pages} pages · ${root.errors} errors · ${root.warnings} warnings · ` +
-        `${root.neverReviewed} never reviewed · ${root.unshipped} not shipped${stale > 0 ? ` · ${stale} stale` : ''}`
+        `  ${root.folder.name}: ${root.pages} pages 路 ${root.errors} errors 路 ${root.warnings} warnings 路 ` +
+        `${root.neverReviewed} never reviewed 路 ${root.unshipped} not shipped${stale > 0 ? ` 路 ${stale} stale` : ''}`
       );
       for (const problem of root.problems) {
         output.appendLine(`    ${problem.severity}: ${problem.message}`);
@@ -233,6 +247,22 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     vscode.commands.registerCommand('temcoDocs.showStatus', report),
     vscode.commands.registerCommand('temcoDocs.validate', report),
     vscode.commands.registerCommand('temcoDocs.refresh', refresh),
+    // The guide: five steps that run the commands the rest of the platform already owns.
+    vscode.commands.registerCommand('temcoDocs.howTo', () => docsPages.howTo()),
+    // The Documentation container's surfaces, rebuilt from the mock: projects, repositories, sources,
+    // documents, a page, a source, review, builds and releases.
+    vscode.commands.registerCommand('temcoDocs.projects', () => docsPages.projects()),
+    vscode.commands.registerCommand('temcoDocs.repositories', () => docsPages.repositories()),
+    vscode.commands.registerCommand('temcoDocs.repository', (name?: unknown) => docsPages.repository(typeof name === 'string' ? name : undefined)),
+    vscode.commands.registerCommand('temcoDocs.sources', () => docsPages.sources()),
+    vscode.commands.registerCommand('temcoDocs.documents', (area?: unknown) => docsPages.documents(typeof area === 'string' ? area : undefined)),
+    vscode.commands.registerCommand('temcoDocs.page', (title?: unknown, area?: unknown) => docsPages.pageOf(typeof title === 'string' ? title : undefined, typeof area === 'string' ? area : undefined)),
+    vscode.commands.registerCommand('temcoDocs.source', (repo?: unknown) => docsPages.source(typeof repo === 'string' ? repo : undefined)),
+    vscode.commands.registerCommand('temcoDocs.review', () => docsPages.review()),
+    vscode.commands.registerCommand('temcoDocs.builds', () => docsPages.builds()),
+    vscode.commands.registerCommand('temcoDocs.releases', () => docsPages.releases()),
+    // What is being read, in one page: the tree answers where a page is, this answers what it all is.
+    vscode.commands.registerCommand('temcoDocs.overview', () => overviewPage.open()),
 
     vscode.commands.registerCommand('temcoDocs.openRegistry', async (node?: DocsNode) => {
       const uri = rootOf(node ?? selectedRow(), roots)?.registryUri;
@@ -286,7 +316,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     vscode.workspace.onDidChangeWorkspaceFolders(() => void refresh())
   );
 
-  // Three files change what the view shows: the registry — the shape of the tree — and the two generated
+  // Three files change what the view shows: the registry 鈥?the shape of the tree 鈥?and the two generated
   // neighbours, which carry the provenance and headings the items display. Everything else, including
   // saving a page, does not refresh: the tree describes structure, not prose.
   for (const pattern of [
@@ -307,7 +337,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   // install without it never shows a door that does not open.
   void vscode.commands.executeCommand('setContext', 'temcoDocs.aiInstalled', aiInstalled());
   registerBuildCommands(context, () => roots, output);
-  // The repository's own maintenance scripts — the generator, the gates, the media audit, the owed check.
+  // The repository's own maintenance scripts 鈥?the generator, the gates, the media audit, the owed check.
   registerScriptCommands(context, () => roots, output, () => void refresh());
   registerReportCommands(context, () => roots);
   registerScaffoldCommands(context);
@@ -319,18 +349,18 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   // activation registers them, and its own page shows what came of them. This module names it in its own
   // `extensionDependencies`, so its commands are there whenever a row here points at one.
   // The Markdown toolbar: it edits the page in front, and reads the registry only to offer a link to a real
-  // page — the one write-side surface in this extension that writes nothing.
+  // page 鈥?the one write-side surface in this extension that writes nothing.
   registerFormatCommands(context, () => roots);
   // Operating on a page: creating one, naming it, moving it, retiring it. The selected row stands in for the
-  // row a command was started without — the view's toolbar and the palette are the two that do that.
+  // row a command was started without 鈥?the view's toolbar and the palette are the two that do that.
   registerPageCommands(context, pageDeps);
   // and where a row is: opening it, revealing it, a terminal at its folder, its path on the clipboard.
   registerRowCommands(context, { selected: () => selectedRow() });
-  // The page that creates a page — the other page that exists because a name is asked for in a form. The
+  // The page that creates a page 鈥?the other page that exists because a name is asked for in a form. The
   // organisation's own page is `temcoRepositories.page`, and it belongs to that module.
   newPagePage = new NewPagePage(context, () => roots, pageDeps);
   context.subscriptions.push(
-    // *Analyse the source…* from a row: the form knows the source by the name the tree shows it under, while a
+    // *Analyse the source鈥? from a row: the form knows the source by the name the tree shows it under, while a
     // row carries its slug, so the catalog is asked which name that slug is.
     vscode.commands.registerCommand('temcoDocs.analyseSource', async (target?: unknown) => {
       const slug = typeof target === 'string' ? target : (target as { slug?: string } | undefined)?.slug;
@@ -356,12 +386,12 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
 
   context.subscriptions.push(
     // The one write this extension makes to a page: the empty file for a page the registry already declares.
-    // It arrives two ways — the row in the tree that has no file behind it, and a page that names the path — and
+    // It arrives two ways 鈥?the row in the tree that has no file behind it, and a page that names the path 鈥?and
     // both end in the same single write. Handling only the second is why the row's own *Create* did nothing.
     vscode.commands.registerCommand(
       'temcoDocs.createPage',
       async (target?: DocsNode | { path?: string; title?: string }) => {
-        // Named by a webview (a path), by a row (a node) — or by neither, and then it is the selected row.
+        // Named by a webview (a path), by a row (a node) 鈥?or by neither, and then it is the selected row.
         const named = target as { path?: string; title?: string } | undefined;
         const node =
           pageFromNode(target as DocsNode | undefined) ??
@@ -378,10 +408,10 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   );
 
   // The boot: re-read once, then leave the layout alone. Which tab opens, and which sidebar section comes
-  // forward when the project changes, are the workbench's decisions — it owns the Library and the dashboard.
+  // forward when the project changes, are the workbench's decisions 鈥?it owns the Library and the dashboard.
   void refresh();
 
-  // What this module publishes — see `src/api.ts`. It is the model, published rather than lent: the AI module
+  // What this module publishes 鈥?see `src/api.ts`. It is the model, published rather than lent: the AI module
   // and the workbench read the sets, the pages and the selection through these, so no two modules can disagree
   // about what the documentation is. Nothing here writes, and nothing here activates anything.
   return {
@@ -416,7 +446,7 @@ interface ReadableSource {
  *
  * One catalog open for the whole question, then closed: the pages are read here and carried by the tree's nodes,
  * so expanding a source later never goes back to the database. A catalog that cannot be opened returns nothing
- * rather than throwing — it is reported where it is used (the Library, a read), not by an empty tree.
+ * rather than throwing 鈥?it is reported where it is used (the Library, a read), not by an empty tree.
  */
 async function projectSources(
   context: vscode.ExtensionContext,
@@ -464,7 +494,7 @@ async function projectSources(
  * The catalog's project list, read at the top of every refresh.
  *
  * It answers the two questions the rest of the refresh depends on: **whether any project exists at all**, which
- * is what the Workspace view's empty state has to say, and — allowed once, on the first read of a window —
+ * is what the Workspace view's empty state has to say, and 鈥?allowed once, on the first read of a window 鈥?
  * **which project is being worked on**: with exactly one recorded there is nothing to choose between, so it
  * selects itself and the Workspace is ready behind the Library. With two or more nothing is guessed, because
  * guessing would show a workspace about something nobody named.
@@ -472,7 +502,7 @@ async function projectSources(
  * `maySelect` is false after that first read, and it has to be: choosing on every refresh would make *Stop
  * working on it* impossible with a single project, since clearing the selection would re-make it on the next
  * read and the view would never go away. Returns how many projects there are, or `undefined` when the catalog
- * could not be opened at all — the empty state has to tell the two apart.
+ * could not be opened at all 鈥?the empty state has to tell the two apart.
  */
 async function chooseProject(
   context: vscode.ExtensionContext,
@@ -488,7 +518,7 @@ async function chooseProject(
     }
     return documents.length;
   } catch {
-    // A catalog that cannot be opened is reported where it is used — the Library, a read — and activation must
+    // A catalog that cannot be opened is reported where it is used 鈥?the Library, a read 鈥?and activation must
     // not depend on it. Selecting nothing leaves the Workspace view saying there is nothing to show.
     return undefined;
   } finally {
@@ -496,7 +526,7 @@ async function chooseProject(
   }
 }
 
-/** A new page starts as a title and nothing else — the structure lives in the registry, not in front matter. */
+/** A new page starts as a title and nothing else 鈥?the structure lives in the registry, not in front matter. */
 async function createPage(uri: vscode.Uri, title: string): Promise<void> {
   const content = Buffer.from(`# ${title}\n\n`, 'utf8');
   await vscode.workspace.fs.writeFile(uri, content);
@@ -522,9 +552,9 @@ function updateStatus(
     status.hide();
     return;
   }
-  const issuePart = sums.issues > 0 ? ` · ${sums.issues} issues` : '';
-  const brokenPart = broken.length > 0 ? ` · ${broken.length} unreadable` : '';
-  status.text = `$(book) ${sums.pages} pages${issuePart}${brokenPart} · ${sums.neverReviewed} never reviewed`;
+  const issuePart = sums.issues > 0 ? ` 路 ${sums.issues} issues` : '';
+  const brokenPart = broken.length > 0 ? ` 路 ${broken.length} unreadable` : '';
+  status.text = `$(book) ${sums.pages} pages${issuePart}${brokenPart} 路 ${sums.neverReviewed} never reviewed`;
   status.tooltip = 'Temco Docs: validate the documentation set';
   status.show();
 }
@@ -532,3 +562,4 @@ function updateStatus(
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
+

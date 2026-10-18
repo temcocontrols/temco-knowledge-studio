@@ -28,30 +28,108 @@
     "temcocontrols.temco-projects"
   ],
   "activationEvents": [
-    "onView:temcoDocs.pages"
+    "onView:temcoDocs.pages",
+    "onView:temcoDocs.section.projects",
+    "onView:temcoDocs.section.sources",
+    "onView:temcoDocs.section.documents",
+    "onView:temcoDocs.section.pipeline",
+    "onView:temcoDocs.section.howto"
   ],
   "contributes": {
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "temco",
-          "title": "Temco",
-          "icon": "media/docs.svg"
-        }
-      ]
-    },
     "views": {
       "temco": [
         {
+          "id": "temcoDocs.section.projects",
+          "name": "Projects"
+        },
+        {
+          "id": "temcoDocs.section.sources",
+          "name": "Sources"
+        },
+        {
+          "id": "temcoDocs.section.documents",
+          "name": "Documents"
+        },
+        {
+          "id": "temcoDocs.section.pipeline",
+          "name": "Pipeline"
+        },
+        {
+          "id": "temcoDocs.section.howto",
+          "name": "How-To"
+        }
+      ],
+      "temcoDocuments": [
+        {
           "id": "temcoDocs.pages",
-          "name": "Workspace"
+          "name": "Documents"
         }
       ]
     },
     "commands": [
       {
+        "command": "temcoDocs.projects",
+        "title": "Projects",
+        "icon": "$(folder)"
+      },
+      {
+        "command": "temcoDocs.repositories",
+        "title": "Repositories",
+        "icon": "$(repo)"
+      },
+      {
+        "command": "temcoDocs.repository",
+        "title": "Open a Repository",
+        "icon": "$(repo)"
+      },
+      {
+        "command": "temcoDocs.sources",
+        "title": "Sources",
+        "icon": "$(link)"
+      },
+      {
+        "command": "temcoDocs.documents",
+        "title": "Documents",
+        "icon": "$(book)"
+      },
+      {
+        "command": "temcoDocs.page",
+        "title": "Open a Page",
+        "icon": "$(document)"
+      },
+      {
+        "command": "temcoDocs.source",
+        "title": "Open a Source",
+        "icon": "$(code)"
+      },
+      {
+        "command": "temcoDocs.review",
+        "title": "Review Center",
+        "icon": "$(check)"
+      },
+      {
+        "command": "temcoDocs.builds",
+        "title": "Build Center",
+        "icon": "$(play)"
+      },
+      {
+        "command": "temcoDocs.releases",
+        "title": "Releases",
+        "icon": "$(cloud-upload)"
+      },
+      {
         "command": "temcoDocs.showStatus",
         "title": "Temco Docs: Show Status"
+      },
+      {
+        "command": "temcoDocs.howTo",
+        "title": "How To Use Temco Docs",
+        "icon": "$(question)"
+      },
+      {
+        "command": "temcoDocs.overview",
+        "title": "Documentation Overview",
+        "icon": "$(book)"
       },
       {
         "command": "temcoDocs.validate",
@@ -458,6 +536,16 @@
           "command": "temcoDocs.retirePage",
           "when": "view == temcoDocs.pages",
           "group": "4_retire@1"
+        },
+        {
+          "command": "temcoDocs.howTo",
+          "when": "view == temcoDocs.pages",
+          "group": "5_view@0"
+        },
+        {
+          "command": "temcoDocs.overview",
+          "when": "view == temcoDocs.pages",
+          "group": "5_view@1"
         },
         {
           "command": "temcoWorkbench.home",

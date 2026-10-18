@@ -30,6 +30,7 @@ import {
 } from './pageOps';
 import { RepositorySource, codeFiles, readMaterials } from './repositories';
 import { NEW_PAGE_VIEW_TYPE, pageColumn } from './surface';
+import { page } from './ui';
 
 /** How much of another page may be given to the model, so one huge page cannot fill the window. */
 const MATERIAL_CHARS = 12_000;
@@ -91,7 +92,7 @@ export class NewPagePage {
     const panel = this.panel;
     if (!panel) {
       return;
-    } panel.webview.html = html(nonce());
+    } panel.webview.html = html();
     await panel.webview.postMessage({
       type: 'form',
       seed: this.seed,
@@ -420,20 +421,10 @@ function fileOf(roots: readonly DocsRoot[], spec: NewPageSpec): string {
   return root === undefined ? '' : `${root.folder.name}/docs/${area}/${chapter}${spec.slug ?? ''}.md`;
 }
 
-function nonce(): string {
-  const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let text = '';
-  for (let index = 0; index < 32; index += 1) {
-    text += alphabet[Math.floor(Math.random() * alphabet.length)];
-  }
-  return text;
-}
-
-function html(script: string): string {
+function html(): string {
   const style = `
     :root { color-scheme: light dark; }
-    body { margin: 0; padding: 1.6em 2em 3em; font-family: var(--vscode-font-family);
-           font-size: var(--vscode-font-size); color: var(--vscode-foreground); }
+    /* The document, its padding and its type scale are the page kit's now; this block is only the form. */
     h1 { font-size: 1.5em; font-weight: 600; margin: 0 0 .2em; }
     h2 { font-size: .95em; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
          color: var(--vscode-descriptionForeground); margin: 1.9em 0 .5em; }
@@ -489,17 +480,8 @@ function html(script: string): string {
             border-top: 1px solid var(--vscode-panel-border); padding-top: 1em; }
   `;
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${script}';">
-<style>${style}</style>
-<title>Temco Docs</title>
-</head>
-<body>
-  <h1>New page</h1>
+  const body = `
+  <h1 class="page-head__title">New page</h1>
   <p class="meta" id="lede">Everything about the page in one place. Nothing is written until you press
     <em>Write the page</em>, and that confirmation names the file.</p>
 
@@ -580,7 +562,12 @@ function html(script: string): string {
     repository's generator reads a new page's title from that heading. The registry entry comes from the
     repository's own generator afterwards, which is offered as soon as the file is written.</p>
 
-<script nonce="${script}">
+`;
+
+  return page(body, { title: 'New page', extraCss: style, script: CLIENT });
+}
+
+const CLIENT = `
 const vscode = acquireVsCodeApi();
 const $ = (id) => document.getElementById(id);
 let sources = [];
@@ -968,8 +955,4 @@ function escape(text) {
   return String(text).replace(/[&<>"]/g, (character) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[character]);
 }
-</script>
-</body>
-</html>
 `;
-}

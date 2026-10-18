@@ -14,7 +14,7 @@ The module is a built-in extension of the platform: it is compiled with all the 
 | Folder | `extensions/temco-docs` |
 | Extension id | `temcocontrols.temco-docs` |
 | Command namespace | `temcoDocs.*` |
-| Activity bar | **Temco** (`temco`) — *Workspace* (`temcoDocs.pages`, this module's), *Library* (`temcoWorkbench.library`, the workbench's) |
+| Activity bar | **Temco** (`temco`) — the Documentation module's own five sections (*Projects*, *Sources*, *Documents*, *Pipeline*, *How-To*) + the Workspace tree (`temcoDocs.pages`) in *Documents* |
 | Settings | none |
 | Reads | [`temco-ai`](../temco-ai/README.md) for a draft or an analysis — optional, by command; and it needs nothing else |
 | Read by | [`temco-workbench`](../temco-workbench/README.md) (the Library and the dashboard) and [`temco-ai`](../temco-ai/README.md) — this module publishes its model (`src/api.ts`) rather than lending it |
