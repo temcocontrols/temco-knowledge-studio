@@ -204,8 +204,8 @@ ${group({
 	</div>
 	<div class="record-row__state">${badge(capture.state, capture.tone)}</div>
 	${capture.state === 'Recording'
-			? button('Stop', 'temcoTools.network.stopCapture', { small: true, args: [index] })
-			: button('Open', 'temcoTools.network.openCapture', { small: true, kind: 'ghost', args: [index] })}
+				? button('Stop', 'temcoTools.network.stopCapture', { small: true, args: [index] })
+				: button('Open', 'temcoTools.network.openCapture', { small: true, kind: 'ghost', args: [index] })}
 </div>`).join('')
 	})}
 <div class="mt-16">${callout('A capture is written to the workspace folder and is never committed. Deleting the row deletes the file.')}</div>

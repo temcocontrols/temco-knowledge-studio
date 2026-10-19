@@ -49,7 +49,7 @@ const GROUPS: Group[] = [
 		title: 'Workspaces',
 		rows: [
 			{ label: 'All Workspaces', note: 'the folders this window has open', icon: 'layers', command: 'temcoWorkbench.workspaces' },
-			{ label: 'T3000', note: 'the workspace this window is on', icon: 'building', command: 'temcoWorkbench.workspace', args: ['t3000'] },
+			{ label: 'T3000', note: 'the workspace this window is on', icon: 'server', command: 'temcoWorkbench.workspace', args: ['t3000'] },
 			{ label: 'Templates', note: 'the shape a project starts with', icon: 'package', command: 'temcoWorkbench.templates' }
 		]
 	},
@@ -59,7 +59,7 @@ const GROUPS: Group[] = [
 		rows: [
 			{ label: 'Home', note: 'the published site, as a reader sees it', icon: 'home', command: 'temcoWorkbench.learn.home' },
 			{ label: 'T3000', note: 'one product, area by area', icon: 'book', command: 'temcoWorkbench.learn.t3000' },
-			{ label: 'Article Preview', note: 'a page as the site renders it', icon: 'document', command: 'temcoWorkbench.learn.article' }
+			{ label: 'Article Preview', note: 'a page as the site renders it', icon: 'preview', command: 'temcoWorkbench.learn.article' }
 		]
 	},
 	{
@@ -67,7 +67,7 @@ const GROUPS: Group[] = [
 		title: 'Delivery',
 		rows: [
 			{ label: 'Downloads', note: 'the offline artifacts of a published version', icon: 'download', command: 'temcoWorkbench.learn.downloads' },
-			{ label: 'Learning Paths', note: 'ordered reading for a job', icon: 'graduation', command: 'temcoWorkbench.learn.paths' }
+			{ label: 'Learning Paths', note: 'ordered reading for a job', icon: 'mortar-board', command: 'temcoWorkbench.learn.paths' }
 		]
 	},
 	{
@@ -83,8 +83,8 @@ const GROUPS: Group[] = [
 		title: 'Platform',
 		rows: [
 			{ label: 'Modules', note: 'the built-in extensions that ship with the platform', icon: 'package', command: 'temcoWorkbench.settings.modules' },
-			{ label: 'Branding', note: 'the mark, the theme and the identity', icon: 'palette', command: 'temcoWorkbench.settings.branding' },
-			{ label: 'Publishing', note: 'where a release goes and what it may overwrite', icon: 'upload', command: 'temcoWorkbench.settings.publishing' }
+			{ label: 'Branding', note: 'the mark, the theme and the identity', icon: 'paintcan', command: 'temcoWorkbench.settings.branding' },
+			{ label: 'Publishing', note: 'where a release goes and what it may overwrite', icon: 'cloud-upload', command: 'temcoWorkbench.settings.publishing' }
 		]
 	},
 	{
@@ -102,8 +102,7 @@ const GROUPS: Group[] = [
 		rows: [
 			{ label: 'Logs', note: 'four files, and how to read one', icon: 'output', command: 'temcoWorkbench.help.logs' },
 			{ label: 'Report an Issue', note: 'the facts a report needs, collected', icon: 'report', command: 'temcoWorkbench.help.issue' },
-			{ label: 'About Temco Platform', note: 'the version in front of you', icon: 'info', command: 'temcoWorkbench.help.about' },
-			{ label: 'Documentation', note: 'what is being read', icon: 'book', command: 'temcoDocs.overview' },
+			{ label: 'About Temco Platform', note: 'the version in front of you', icon: 'info', command: 'temcoWorkbench.help.about' }, { label: 'Documentation', note: 'what is being read', icon: 'book', command: 'temcoDocs.overview' },
 			{ label: 'How To Use', note: 'five steps, start here', icon: 'mortar-board', command: 'temcoDocs.howTo' }
 		]
 	}

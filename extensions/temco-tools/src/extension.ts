@@ -35,6 +35,26 @@ interface StudyRow {
 }
 
 /**
+ * The glyph a side-bar row shows for a page mark.
+ *
+ * A mark is the name of a glyph in the page sprite (`temco-ui/media/icons.svg`) because a page head draws the
+ * same one. A few sprite names are not codicons, and a side-bar row can only be drawn with a codicon — so the
+ * handful that differ are named here once. Anything not listed is already a codicon id and is used as it is.
+ */
+const CODICON_FOR: Record<string, string> = {
+	list: 'list-unordered',
+	activity: 'pulse',
+	chart: 'graph',
+	document: 'file',
+	building: 'window',
+	graduation: 'mortar-board',
+	palette: 'paintcan',
+	upload: 'cloud-upload',
+};
+
+const codicon = (mark: string): string => CODICON_FOR[mark] ?? mark;
+
+/**
  * A studio's side-bar view: one row per page, no counts.
  *
  * None of these rows carries a count in the mock: a point count or a table count is already in the page head, and the
@@ -50,7 +70,7 @@ class PagesTree implements vscode.TreeDataProvider<vscode.TreeItem> {
 	getChildren(): vscode.TreeItem[] {
 		return this.rows.map((row) => {
 			const item = new vscode.TreeItem(row.label, vscode.TreeItemCollapsibleState.None);
-			item.iconPath = new vscode.ThemeIcon(row.mark);
+			item.iconPath = new vscode.ThemeIcon(codicon(row.mark));
 			item.tooltip = `${row.label} — ${row.note}`;
 			item.command = { command: row.command, title: row.label };
 			return item;
@@ -83,7 +103,7 @@ class DevicesTree implements vscode.TreeDataProvider<vscode.TreeItem> {
 	getChildren(): vscode.TreeItem[] {
 		return DEVICE_PAGES.filter((entry) => entry.group === this.group).map((entry) => {
 			const item = new vscode.TreeItem(entry.label, vscode.TreeItemCollapsibleState.None);
-			item.iconPath = new vscode.ThemeIcon(entry.mark);
+			item.iconPath = new vscode.ThemeIcon(codicon(entry.mark));
 			item.tooltip = `${entry.label} — ${entry.note}`;
 			if (entry.id === 'all') {
 				item.description = String(DEVICES.length);

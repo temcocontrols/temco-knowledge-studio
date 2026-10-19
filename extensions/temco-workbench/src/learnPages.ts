@@ -6,7 +6,7 @@
 
 import * as vscode from 'vscode';
 import { AREAS, BUILDING, DOWNLOADS, Download, LIVE, PATHS, PRODUCTS } from './learnSample';
-import { escapeHtml as esc, icon, page, pageColumn } from './ui';
+import { commandScript, escapeHtml as esc, icon, page, pageColumn, runCommand } from './ui';
 
 export const LEARN_HOME_VIEW_TYPE = 'temcoWorkbench.learn.home';
 export const LEARN_PRODUCT_VIEW_TYPE = 'temcoWorkbench.learn.t3000';
@@ -75,7 +75,7 @@ export class LearnPages {
 	}
 
 	private open(key: string, viewType: string, title: string, body: string): void {
-		const html = page(body, { title });
+		const html = page(body, { title, script: commandScript });
 		const existing = this.panels.get(key);
 		if (existing) {
 			existing.reveal(pageColumn());
@@ -87,6 +87,7 @@ export class LearnPages {
 			localResourceRoots: []
 		});
 		panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'learn.svg');
+		panel.webview.onDidReceiveMessage(runCommand);
 		panel.webview.html = html;
 		this.panels.set(key, panel);
 		panel.onDidDispose(() => this.panels.delete(key));

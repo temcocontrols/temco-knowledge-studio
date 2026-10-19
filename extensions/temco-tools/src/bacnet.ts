@@ -100,8 +100,8 @@ function discoveryBody(): string {
 	</div>
 	<div class="record-row__state">${badge(host.state, host.tone)}</div>
 	${host.protocol === 'BACnet/IP'
-			? button('Objects', 'temcoTools.bacnet.openObjects', { small: true, kind: 'ghost', args: [host.name] })
-			: '<span class="cell-muted">no objects</span>'}
+				? button('Objects', 'temcoTools.bacnet.openObjects', { small: true, kind: 'ghost', args: [host.name] })
+				: '<span class="cell-muted">no objects</span>'}
 </div>`).join('')
 	})}</div>
 <div class="mt-16">${callout('1,204 objects were read across the answering devices, 88 of them writable. Reading an object does not keep a copy: the value is asked for again the next time a page needs it.')}</div>

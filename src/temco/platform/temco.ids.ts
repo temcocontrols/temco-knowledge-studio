@@ -55,6 +55,12 @@ export const TEMCO_WELCOME_COMMAND_ID = 'temco.platform.welcome';
  */
 export const TEMCO_WORKBENCH_WELCOME_COMMAND_ID = 'temcoWorkbench.welcome';
 
+/**
+ * The About page's command, owned by the workbench module. Help ▸ About opens a page rather than a dialog, because
+ * the page is what can list the modules this build actually loaded; the shell only knows the id.
+ */
+export const TEMCO_WORKBENCH_ABOUT_COMMAND_ID = 'temcoWorkbench.help.about';
+
 /** The pages the modules publish and the Temco menu names. */
 export const TEMCO_DOCS_HOWTO_COMMAND_ID = 'temcoDocs.howTo';
 export const TEMCO_SETTINGS_COMMAND_ID = 'temcoWorkbench.settings';

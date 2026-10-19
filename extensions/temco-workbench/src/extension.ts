@@ -1,6 +1,6 @@
 // The workbench module's entry point — the application's own surfaces.
 //
-// Three of them, and none of them is about one module's work:
+// Two of them, and neither is about one module's work:
 //
 //   * **the dashboard** — the application itself, what it is made of and what to do first;
 //   * **the needs page** — everything one list that wants a person, from every module.
@@ -16,7 +16,6 @@ import * as vscode from 'vscode';
 import { roots, onDidChange, refresh as reread } from './docs';
 import { DashboardPages } from './dashboard';
 import { HelpPages } from './helpPages';
-import { HomePanel } from './home';
 import { LearnPages } from './learnPages';
 import { NeedsPage } from './needsPage';
 import { registerSettings } from './settingsPages';
@@ -26,8 +25,6 @@ import { WorkspacesPages } from './workspaces';
 export function activate(context: vscode.ExtensionContext): void {
 	// The five group views whose containers this module declares: Workspaces, AI Hub, Temco Learn, Settings, Help.
 	registerSidebarViews(context);
-	// The dashboard: the application's own page, and the one surface that is not about a folder.
-	const home = new HomePanel(context, selection, () => roots());
 	// The page behind the Library's *Needs attention* row: what wants a person, said in full.
 	const needs = new NeedsPage(context, () => roots());
 	// The page a window with nothing better to show opens on: the application, not one project's work, and the
@@ -51,7 +48,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		...settings.disposables,
 		workspaces,
 		learn,
-		vscode.commands.registerCommand('temcoWorkbench.home', () => home.open()),
+		vscode.commands.registerCommand('temcoWorkbench.home', () => dashboard.open('overview')),
 		vscode.commands.registerCommand('temcoWorkbench.openNeeds', () => needs.open()),
 		vscode.commands.registerCommand('temcoWorkbench.welcome', () => help.welcome()),
 		vscode.commands.registerCommand('temcoWorkbench.help', () => help.home()),
@@ -119,10 +116,9 @@ export function activate(context: vscode.ExtensionContext): void {
 			help.refresh();
 			settings.pages.refresh();
 		}),
-		// The three surfaces follow the documentation module's one signal: it re-read the sets, so each of them says
-		// something new.
+		// The two surfaces below the Library follow the documentation module's one signal: it re-read the sets, so
+		// the needs page says something new.
 		onDidChange(() => {
-			home.refresh();
 			needs.refresh();
 		})
 	);
@@ -144,7 +140,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	// Then the tab: what `temcoWorkbench.start.open` names, falling through rather than opening an empty editor.
 	void reread().then(() => {
 		started = true;
-		return openStart(home, help);
+		return openStart(dashboard, help);
 	});
 }
 
@@ -163,7 +159,7 @@ export function deactivate(): void {
  * project opens the page you left, and `page` whose file is gone opens the project's dashboard. Only `none` opens
  * no tab at all.
  */
-async function openStart(home: HomePanel, help: HelpPages): Promise<void> {
+async function openStart(dashboard: DashboardPages, help: HelpPages): Promise<void> {
 	const mode = vscode.workspace.getConfiguration('temcoWorkbench').get<string>('start.open', 'welcome');
 	if (mode === 'none') {
 		return;
@@ -185,7 +181,7 @@ async function openStart(home: HomePanel, help: HelpPages): Promise<void> {
 		await vscode.commands.executeCommand('temcoProjects.openProject', project);
 		return;
 	}
-	home.open();
+	dashboard.open('overview');
 }
 
 /**

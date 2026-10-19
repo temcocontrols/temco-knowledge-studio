@@ -112,6 +112,96 @@ select {
 	color: inherit;
 }
 
+/* ---------------------------------------------------------------- element defaults */
+
+/* A page may be written with the classes below, or with plain markup. These are the defaults a bare
+   heading, paragraph, button or field gets, so a page written before this vocabulary existed reads in
+   the same voice: one type scale, one control, one rhythm. Each rule is element-only, so a class always
+   wins — `.learn-card` stays a card, `.input` stays a field. */
+h1 {
+	margin: 0 0 6px;
+	font-size: 22px;
+	line-height: 1.3;
+	font-weight: 600;
+	color: var(--fg-strong);
+}
+
+h2 {
+	margin: 24px 0 8px;
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--fg-strong);
+}
+
+h3 {
+	margin: 16px 0 6px;
+	font-size: var(--fs-ui);
+	font-weight: 600;
+	color: var(--fg-strong);
+}
+
+p {
+	margin: 0 0 8px;
+}
+
+/* The same control as `.btn`, for a page that writes `<button>` with no class. */
+button:not([class]) {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 28px;
+	padding: 0 12px;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius);
+	background: var(--bg-card);
+	color: var(--fg);
+	cursor: pointer;
+	font-size: var(--fs-ui);
+	white-space: nowrap;
+}
+
+button:not([class]):hover {
+	background: var(--bg-card-hover);
+	border-color: var(--fg-subtle);
+}
+
+button:not([class])[disabled] {
+	opacity: 0.5;
+	cursor: default;
+}
+
+button.primary {
+	background: var(--accent-bg);
+	border-color: var(--accent-bg);
+	color: var(--accent-fg);
+}
+
+button.primary:hover {
+	background: color-mix(in srgb, var(--accent-bg) 86%, #fff);
+	border-color: color-mix(in srgb, var(--accent-bg) 86%, #fff);
+}
+
+/* The same field as `.input`, for a page that writes `<input>` with no class. A checkbox keeps its
+   own size, so the rule is narrower than it looks. */
+input:not([class]):not([type="checkbox"]):not([type="radio"]),
+select:not([class]),
+textarea:not([class]) {
+	height: 28px;
+	padding: 0 9px;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius);
+	background: var(--bg-inset);
+	color: var(--fg);
+	outline: none;
+	font-size: var(--fs-ui);
+}
+
+input:not([class]):not([type="checkbox"]):not([type="radio"]):focus,
+select:not([class]):focus,
+textarea:not([class]):focus {
+	border-color: var(--accent);
+}
+
 a {
 	color: var(--link);
 	text-decoration: none;
@@ -130,12 +220,6 @@ a {
 	max-width: none;
 	margin: 0;
 	padding: 14px 20px 40px;
-}
-
-/* The one page that reads better narrow: a form, or a single column of prose. */
-.view__inner--narrow {
-	max-width: 860px;
-	margin: 0 auto;
 }
 
 /* A link in a page is a button that runs a command, so it keeps the link colour and loses the
@@ -1513,48 +1597,6 @@ button.link:hover {
 	.feed__module {
 		display: block;
 	}
-}
-
-/* ---------------------------------------------------------------- studio */
-
-/* A studio page is a stack of folded surfaces: the side bar names one, the page opens it, and the
-   rest of the studio stays one click away on the same page rather than five pages apart. */
-.studio {
-	padding: 2px 0 16px;
-	border-bottom: 1px solid var(--border);
-}
-
-.studio > summary {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	list-style: none;
-	cursor: pointer;
-}
-
-.studio > summary::-webkit-details-marker {
-	display: none;
-}
-
-.studio > summary::before {
-	content: "▸";
-	flex: none;
-	font-size: 10px;
-	color: var(--fg-subtle);
-	transition: transform 0.12s ease;
-}
-
-.studio[open] > summary::before {
-	transform: rotate(90deg);
-}
-
-.studio > summary > .group-head {
-	flex: 1;
-	min-width: 0;
-}
-
-.studio > :not(summary) {
-	margin-top: 12px;
 }
 
 /* ---------------------------------------------------------------- how-to */

@@ -278,8 +278,8 @@ ${group({
 	</div>
 	<div class="record-row__state"></div>
 	${REPORT_COMMANDS[report.name]
-			? button('Open page', REPORT_COMMANDS[report.name], { small: true, kind: 'ghost' })
-			: button('Run', 'temcoTools.sql.runReport', { small: true, kind: 'ghost', args: [report.name] })}
+				? button('Open page', REPORT_COMMANDS[report.name], { small: true, kind: 'ghost' })
+				: button('Run', 'temcoTools.sql.runReport', { small: true, kind: 'ghost', args: [report.name] })}
 </div>`).join('')
 	})}
 <div class="mt-16">${callout('Reports point at the page that owns the number. A report that disagreed with its page would be a second answer to the same question.')}</div>`;

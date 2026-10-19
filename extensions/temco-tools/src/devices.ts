@@ -221,8 +221,8 @@ function healthBody(): string {
 	</div>
 	<div class="record-row__state">${badge(alarm.state, alarm.state === 'Active' ? 'err' : alarm.state === 'Acknowledged' ? 'warn' : 'ok')}</div>
 	${alarm.state === 'Active'
-			? button('Acknowledge', 'temcoTools.devices.ack', { small: true, args: [alarm.time, alarm.device] })
-			: `<span class="cell-muted">${alarm.state === 'Acknowledged' ? 'seen by a person' : 'cleared on the device'}</span>`}
+				? button('Acknowledge', 'temcoTools.devices.ack', { small: true, args: [alarm.time, alarm.device] })
+				: `<span class="cell-muted">${alarm.state === 'Acknowledged' ? 'seen by a person' : 'cleared on the device'}</span>`}
 </div>`;
 	};
 
