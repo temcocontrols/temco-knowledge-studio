@@ -73,6 +73,11 @@ export function registerWorkareaCommands(
     vscode.commands.registerCommand('temcoRepositories.fetchSource', (target?: unknown) =>
       fetchSource(context, selection, output, refresh, slugOfTarget(target))
     ),
+    // The same clone, asked for by something that needs the *files* rather than the person: a draft, an analysis. It
+    // returns the folder instead of reporting, and still asks before it writes anything to the machine.
+    vscode.commands.registerCommand('temcoRepositories.ensureClone', (target?: unknown) =>
+      ensureClone(context, selection, output, refresh, slugOfTarget(target))
+    ),
     vscode.commands.registerCommand('temcoRepositories.pullSource', (target?: unknown) =>
       pullSource(context, selection, output, refresh, slugOfTarget(target))
     ),
@@ -175,8 +180,73 @@ async function fetchSource(
   });
 }
 
-/** Pull a source's local copy, and read it again: the counts a list shows are about a revision. */
-async function pullSource(
+/**
+ * The folder to read a source's **files** from, cloning it if there is no copy yet.
+ *
+ * A person asking for a draft or an analysis is asking for code to be read; a source read over the API has no
+ * working tree, so the answer is a clone in the working area. The person is still asked first — the platform
+ * never writes a repository to the disk without a yes — but the dialog is the one question in the middle of the
+ * act they started, not a detour to another page.
+ */
+async function ensureClone(
+  context: vscode.ExtensionContext,
+  selection: Selection,
+  output: vscode.OutputChannel,
+  refresh: () => void,
+  wanted?: string
+): Promise<{ path?: string; error?: string }> {
+  const project = selection.project();
+  const source = await sourceOf(context, wanted);
+  if (source === undefined) {
+    return { error: 'That source is not in the catalog.' };
+  }
+  if (project === undefined) {
+    return { error: 'No project is being worked on, so there is no working area to clone into.' };
+  }
+  if (source.path !== undefined && source.remoteUrl === undefined) {
+    // A folder on this machine is already the code.
+    return { path: source.path };
+  }
+  if (source.remoteUrl === undefined || source.remoteUrl.length === 0) {
+    return { error: `${source.name} has no repository URL and no folder, so there is no code to read.` };
+  }
+
+  const folder = cloneFolder(project, source.name);
+  if (await hasClone(project, source.name)) {
+    return { path: folder };
+  }
+
+  const answer = await vscode.window.showWarningMessage(
+    `Clone ${source.name} into ${folder}?`,
+    {
+      modal: true,
+      detail:
+        'The code is read from the local copy: one branch, full history, and nothing is ever pushed back. ' +
+        'Without it there are no files to draft from.',
+    },
+    'Clone it'
+  );
+  if (answer !== 'Clone it') {
+    return { error: 'No local copy, so there are no files to read.' };
+  }
+
+  await fs.mkdir(path.dirname(folder), { recursive: true });
+  const args = ['clone', '--single-branch', ...(source.branch ? ['--branch', source.branch] : []), source.remoteUrl, folder];
+  const result = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: `Temco Repositories: cloning ${source.name}` },
+    () => git(args, undefined, output)
+  );
+  if (!result.ok) {
+    return { error: `${source.name} could not be cloned. ${firstLine(result.output)}` };
+  }
+
+  await withCatalog(context, (catalog) => catalog.setSourcePath(source.slug, folder));
+  output.appendLine(`[work] ${source.name} cloned into ${folder}`);
+  refresh();
+  return { path: folder };
+}
+
+/** Pull a source's local copy, and read it again: the counts a list shows are about a revision. */async function pullSource(
   context: vscode.ExtensionContext,
   selection: Selection,
   output: vscode.OutputChannel,
@@ -293,7 +363,7 @@ async function openProjectFolder(selection: Selection): Promise<void> {
 async function sourceOf(
   context: vscode.ExtensionContext,
   wanted?: string
-): Promise<{ slug: string; name: string; remoteUrl?: string; branch?: string; defaultBranch?: string } | undefined> {
+): Promise<{ slug: string; name: string; remoteUrl?: string; branch?: string; defaultBranch?: string; path?: string } | undefined> {
   let catalog: Catalog | undefined;
   try {
     catalog = await Catalog.open(context);
@@ -312,6 +382,7 @@ async function sourceOf(
           remoteUrl: detail.remoteUrl,
           branch: detail.branch,
           defaultBranch: detail.defaultBranch,
+          path: detail.path,
         };
   } catch (error) {
     void vscode.window.showErrorMessage(

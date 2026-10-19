@@ -509,7 +509,7 @@ function repositoriesBody(repositories: readonly RepositoryFact[]): string {
 		title: 'Repositories',
 		mark: 'repo',
 		desc: 'The repository sources this platform reads, and whether their local copy is here. Reading one records the pages it declares; a draft reads its code. Nothing is ever written back.',
-		actions: button('Add Repository', 'temcoRepositories.page', { kind: 'primary', mark: 'plus' }) + (missing > 0 ? button(`Read ${missing} Missing`, 'temcoRepositories.readAllSources', { mark: 'download' }) : '')
+		actions: button('Add Repository', 'temcoProjects.addSource', { kind: 'primary', mark: 'plus' }) + (missing > 0 ? button(`Read ${missing} Missing`, 'temcoRepositories.readAllSources', { mark: 'download' }) : '')
 	})}
 ${tiles([
 			{ value: String(repositories.length), label: repositories.length === 1 ? 'Repository' : 'Repositories' },
@@ -518,7 +518,7 @@ ${tiles([
 			{ value: String(reads), label: 'Reads recorded' }
 		])}
 ${repositories.length === 0
-			? `<div class="mt-16">${callout('<b>No repository yet.</b> A repository is added as a source, then read: reading clones it into the working area and records the pages it declares.')}</div>`
+			? `<div class="mt-16">${callout('<b>No repository yet.</b> <b>Add Repository</b> opens the three steps the mock site draws — kind, location, read — and the read is what clones it into the working area and records the pages it declares.')}</div>`
 			: partition('Temco', 'Published under <b class="cell-mono">github.com/temcocontrols</b>. Their pages carry product names, register maps and firmware behaviour that Temco stands behind.', repositories.filter((fact) => origin(fact) === 'temco'))
 				+ partition('Third-party', 'Read exactly like a Temco repository — same clone, same read, same pages — but nothing in one is Temco&#39;s word. Useful for protocol references; never for product behaviour.', repositories.filter((fact) => origin(fact) === 'other'))}
 <div class="mt-24">${callout('A repository is cloned into the working area (<code>~/Temco</code>) with its history, so a draft can name the commit it read. Nothing is ever pushed back.')}</div>`;
@@ -536,7 +536,7 @@ function repositoryBody(fact: RepositoryFact | undefined): string {
 			title: 'Repository',
 			mark: 'repo',
 			desc: 'No repository with that name is recorded in the platform database.',
-			actions: button('All Repositories', 'temcoDocs.repositories', { kind: 'primary', mark: 'repo' })
+			actions: button('All Repositories', 'temcoDocs.repositories', { kind: 'primary', mark: 'repo' }) + button('Add a Repository', 'temcoProjects.addSource', { mark: 'plus' })
 		})}
 <div class="mt-16">${callout('A repository is a source the catalog holds. If it was removed, its row is gone with it — the clone in the working area is not touched.')}</div>`;
 	}

@@ -5,18 +5,23 @@
 // store call, and it records exactly what the old dialog recorded: kind, name, where it lives, and the branch a
 // repository is pinned to.
 
+import * as https from 'https';
 import * as vscode from 'vscode';
 import { Catalog, CatalogUnavailable, slugOf } from './store';
 import { escapeHtml as esc, icon, page, pageColumn } from './ui';
 
 export const ADD_SOURCE_VIEW_TYPE = 'temcoProjects.addSource';
 
-/** What the wizard opens with. The mock's defaults. */
+/**
+ * What the wizard opens with.
+ *
+ * The enterprise and the repository are prefilled with the one Temco ships its documentation from, so the common case
+ * is Next → Next → Add; either field can be replaced with anything, and neither lookup is required to finish.
+ */
 const DEFAULTS = {
 	kind: 'repo',
+	enterprise: 'temcocontrols',
 	location: 'https://github.com/temcocontrols/t3000webview',
-	branch: 'main',
-	shallow: false,
 	readNow: true
 };
 
@@ -39,8 +44,86 @@ interface Values {
 	kind: string;
 	location: string;
 	branch: string;
-	shallow: boolean;
 	readNow: boolean;
+}
+
+/** What a page asks the module for, beyond the finished values. */
+interface FlowMessage {
+	type?: string;
+	values?: Values;
+	/** The enterprise whose repositories are wanted — an owner, or a URL that contains one. */
+	owner?: string;
+}
+
+/**
+ * The repositories an enterprise publishes, asked of the GitHub API.
+ *
+ * Best-effort by design: a machine behind a proxy, or offline, gets a sentence and keeps the typed field — loading a
+ * list is a convenience, and a form that cannot be completed without a network call would be worse than one that can.
+ */
+function listRepositories(owner: string): Promise<{ items: string[]; error?: string }> {
+	const clean = owner.trim()
+		.replace(/^https?:\/\//i, '')
+		.replace(/^www\./i, '')
+		.replace(/^github\.com\//i, '')
+		.replace(/[\/]+$/, '');
+	if (clean.length === 0) {
+		return Promise.resolve({ items: [], error: 'Type an enterprise name first, for example github.com/temcocontrols.' });
+	}
+
+	const ask = (path: string): Promise<{ items: string[]; error?: string }> =>
+		new Promise((resolve) => {
+			const request = https.get(
+				{
+					host: 'api.github.com',
+					path,
+					headers: { 'user-agent': 'temco-platform', accept: 'application/vnd.github+json' },
+					timeout: 7000,
+				},
+				(response) => {
+					let body = '';
+					response.setEncoding('utf8');
+					response.on('data', (chunk: string) => {
+						body += chunk;
+					});
+					response.on('end', () => {
+						if (response.statusCode === 404) {
+							resolve({ items: [], error: `notfound:${clean}` });
+							return;
+						}
+						if (response.statusCode !== 200) {
+							resolve({ items: [], error: `GitHub answered ${response.statusCode}. Type the repository address instead.` });
+							return;
+						}
+						try {
+							const parsed = JSON.parse(body) as { full_name?: unknown }[];
+							resolve({ items: parsed.map((entry) => String(entry.full_name ?? '')).filter((name) => name.length > 0) });
+						} catch {
+							resolve({ items: [], error: 'GitHub answered something that is not a repository list.' });
+						}
+					});
+				}
+			);
+			request.on('timeout', () => {
+				request.destroy();
+				resolve({ items: [], error: 'GitHub did not answer in time. Type the repository address instead.' });
+			});
+			request.on('error', () =>
+				resolve({ items: [], error: 'GitHub could not be reached from this machine. Type the repository address instead.' })
+			);
+		});
+
+	// An organisation first: an enterprise is usually one. A personal account is the fallback, not the default.
+	return ask(`/orgs/${encodeURIComponent(clean)}/repos?per_page=100&sort=updated`).then((first) => {
+		if (first.error === `notfound:${clean}`) {
+			return ask(`/users/${encodeURIComponent(clean)}/repos?per_page=100&sort=updated`).then((second) =>
+				second.error === `notfound:${clean}`
+					? { items: [], error: `GitHub has no organisation or user called “${clean}”.` }
+					: second
+			);
+		}
+		return first;
+	});
 }
 
 export class AddSourcePage {
@@ -52,7 +135,7 @@ export class AddSourcePage {
 		const body = html();
 		if (this.panel) {
 			this.panel.reveal(pageColumn());
-			this.panel.webview.html = page(body, { title: 'Add Source', script: SCRIPT });
+			this.panel.webview.html = page(body, { title: 'Add Source', script: SCRIPT, extraCss: LOCAL_CSS });
 			return;
 		}
 		const panel = vscode.window.createWebviewPanel(ADD_SOURCE_VIEW_TYPE, 'Add Source', pageColumn(), {
@@ -61,7 +144,7 @@ export class AddSourcePage {
 		});
 		this.panel = panel;
 		panel.webview.onDidReceiveMessage((message: { type?: string; values?: Values }) => void this.receive(message));
-		panel.webview.html = page(body, { title: 'Add Source', script: SCRIPT });
+		panel.webview.html = page(body, { title: 'Add Source', script: SCRIPT, extraCss: LOCAL_CSS });
 		panel.onDidDispose(() => {
 			this.panel = undefined;
 		});
@@ -71,13 +154,20 @@ export class AddSourcePage {
 		this.panel?.dispose();
 	}
 
-	private async receive(message: { type?: string; values?: Values }): Promise<void> {
+	private async receive(message: FlowMessage): Promise<void> {
 		if (message.type === 'cancel') {
 			this.panel?.dispose();
 			return;
 		}
 		if (message.type === 'add' && message.values) {
 			await this.add(message.values);
+			return;
+		}
+		// The one lookup the location step can ask for. It is a convenience: a failure is a sentence, and the
+		// address stays typed-in.
+		if (message.type === 'repositories') {
+			const answer = await listRepositories(String(message.owner ?? ''));
+			await this.panel?.webview.postMessage({ type: 'repositories', items: answer.items, error: answer.error });
 		}
 	}
 
@@ -98,8 +188,8 @@ export class AddSourcePage {
 				slug: slugOf(name),
 				remoteUrl: kind === 'git' ? location : undefined,
 				path: kind === 'git' ? undefined : location,
-				branch: kind === 'git' ? values.branch : undefined,
-				defaultBranch: kind === 'git' ? values.branch : undefined
+				branch: kind === 'git' && values.branch ? values.branch : undefined,
+				defaultBranch: kind === 'git' && values.branch ? values.branch : undefined
 			});
 		} catch (error) {
 			const message = error instanceof CatalogUnavailable ? error.message : String(error);
@@ -109,7 +199,14 @@ export class AddSourcePage {
 			catalog?.close();
 		}
 		this.panel?.dispose();
-		void vscode.window.showInformationMessage(`${name} added${values.readNow ? ' — read it from Sources when you are ready.' : '.'}`);
+		// The mock's third step is a promise: "read the source now, after it is added". Adding writes a row; the read
+		// is what clones a repository and records the pages, so it is the read that makes the source useful.
+		if (values.readNow) {
+			void vscode.window.showInformationMessage(`${name} added — reading it now.`);
+			await vscode.commands.executeCommand('temcoRepositories.readSource', slugOf(name));
+		} else {
+			void vscode.window.showInformationMessage(`${name} added. Read it from Sources when you are ready.`);
+		}
 		await vscode.commands.executeCommand('temcoDocs.sources');
 	}
 }
@@ -117,13 +214,20 @@ export class AddSourcePage {
 const field = (label: string, control: string, hint?: string): string =>
 	`<div class="field"><label>${esc(label)}</label>${control}${hint ? `<div class="field__hint">${esc(hint)}</div>` : ''}</div>`;
 
-const options = (values: string[], selected: string): string =>
-	values.map((value) => `<option${value === selected ? ' selected' : ''}>${esc(value)}</option>`).join('');
-
 const choice = (kind: { value: string; label: string; desc: string }): string =>
 	`<label class="choice"><input type="radio" name="kind" value="${esc(kind.value)}"${kind.value === DEFAULTS.kind ? ' checked' : ''}><span class="choice__text"><span class="choice__label">${esc(kind.label)}</span><span class="choice__desc">${esc(kind.desc)}</span></span></label>`;
 
 const steps = ['Kind', 'Location', 'Read'];
+
+/** The wizard's own layout: air around the note, and the repository list as a bounded, scrollable area. */
+const LOCAL_CSS = `
+.wizard__body .source-note { margin: 22px 0 24px; }
+.repo-list { max-height: 240px; overflow-y: auto; }
+.repo-list .checklist__row { cursor: pointer; }
+.repo-list .checklist__row:has(input:checked) { background: color-mix(in srgb, var(--accent) 10%, var(--bg-inset)); }
+.repo-list .checklist__row:has(input:checked) .checklist__title { color: var(--fg-strong); font-weight: 500; }
+.field > label.check { font-weight: 400; color: var(--fg); }
+`;
 
 function html(): string {
 	const rail = steps.map((label, index) =>
@@ -153,10 +257,12 @@ function html(): string {
 		<div data-step-body="1" hidden>
 			<div class="wizard__title">Where is it?</div>
 			<p class="wizard__hint" id="location-hint">The repository is cloned into the working area; nothing is pushed back.</p>
+			<div class="source-note" data-when="repo"><div class="callout">${icon('info')}<div><b>An enterprise, then a repository.</b> Type <code>github.com/temcocontrols</code> and press <b>Load Repositories</b> to see what that enterprise publishes — choose one from the list and its address is filled in for you. Asking GitHub is optional: the address can also be typed by hand.</div></div></div>
 			<div class="form">
-				${field('Location', `<input class="input" data-field="location" value="${esc(DEFAULTS.location)}" aria-label="Location">`)}
-				<div data-when="repo">${field('Branch', `<select class="select" data-field="branch" aria-label="Branch">${options(['main', 't3000', 'release/13.0'], DEFAULTS.branch)}</select>`)}</div>
-				<label class="check" data-when="repo"><input type="checkbox" data-field="shallow"><span>Shallow copy — faster, but the history is not there for drafts</span></label>
+				<div data-when="repo">${field('Enterprise', `<div class="row" style="gap:8px;align-items:center"><input class="input" data-field="enterprise" value="${esc(DEFAULTS.enterprise)}" aria-label="Enterprise"><button type="button" class="btn" id="load-repos">${icon('download')}<span>Load Repositories</span></button></div>`, 'The owner on GitHub — an enterprise, an organisation, or a personal account. A name such as temcocontrols works, or the full address github.com/temcocontrols.')}</div>
+				<div data-when="repo" id="repo-pick-wrap" hidden>${field('Repository', `<div class="checklist repo-list" id="repo-list" role="radiogroup" aria-label="Repositories"></div>`, 'Choose one of the repositories this enterprise publishes; the address is filled from it.')}</div>
+				${field('Location', `<input class="input" data-field="location" value="${esc(DEFAULTS.location)}" aria-label="Location">`, 'A repository address, another Git URL, or a path to a folder or archive.')}
+				<div data-when="repo"><div class="field"><label>Branch</label><label class="check"><input type="checkbox" data-field="useMain" checked><span>Read from <code>main</code> — the branch almost every repository publishes its documentation from.</span></label><div class="field__hint">Untick it to let the repository decide which branch it reads.</div></div></div>
 			</div>
 		</div>
 		<div data-step-body="2" hidden>
@@ -178,7 +284,7 @@ function html(): string {
 </div>`;
 }
 
-/** Three steps, one validation rule, and the values the module writes. */
+/** Three steps, one validation rule, one lookup, and the values the module writes. */
 const SCRIPT = `
 (function () {
 	const api = acquireVsCodeApi();
@@ -191,6 +297,9 @@ const SCRIPT = `
 	const finish = document.getElementById('wizard-finish');
 	const review = document.getElementById('review');
 	const hint = document.getElementById('location-hint');
+	const pickWrap = document.getElementById('repo-pick-wrap');
+	const pickList = document.getElementById('repo-list');
+	const loadRepos = document.getElementById('load-repos');
 	const labels = { repo: 'Repository', document: 'Document', folder: 'Folder', sharepoint: 'SharePoint' };
 	let at = 0;
 
@@ -200,19 +309,23 @@ const SCRIPT = `
 		return {
 			kind: kind(),
 			location: element('location').value,
-			branch: element('branch').value,
-			shallow: element('shallow').checked,
+			branch: element('useMain').checked ? 'main' : '',
 			readNow: element('readNow').checked
 		};
 	}
 	function followKind() {
 		const isRepo = kind() === 'repo';
-		Array.prototype.forEach.call(document.querySelectorAll('[data-when="repo"]'), function (node) { node.hidden = !isRepo; });
+		Array.prototype.forEach.call(document.querySelectorAll('[data-when="repo"]'), function (node) {
+			node.hidden = !isRepo;
+		});
+		// The picker only exists once an enterprise has answered; until then it stays out of the way.
+		if (pickWrap && pickWrap.getAttribute('data-loaded') !== 'yes') { pickWrap.hidden = true; }
 		hint.textContent = isRepo
 			? 'The repository is cloned into the working area; nothing is pushed back.'
 			: 'A path or a URL the platform can read.';
 	}
 	function fail(message) { error.textContent = message; error.hidden = false; }
+	function clear() { error.hidden = true; }
 	function show() {
 		steps.forEach(function (step, index) {
 			step.classList.toggle('is-active', index === at);
@@ -230,11 +343,11 @@ const SCRIPT = `
 			review.innerHTML = [
 				['Kind', labels[v.kind] || v.kind],
 				['Location', '<span class="cell-mono">' + v.location + '</span>'],
-				['Branch', v.kind === 'repo' ? '<span class="cell-mono">' + v.branch + (v.shallow ? ' · shallow' : '') + '</span>' : '—']
+				['Branch', v.kind === 'repo' ? '<span class="cell-mono">' + (v.branch || 'repository default') + '</span>' : '—']
 			].map(function (pair) { return '<dt>' + pair[0] + '</dt><dd>' + pair[1] + '</dd>'; }).join('');
 		}
 	}
-	function go(to) { error.hidden = true; at = to; show(); }
+	function go(to) { clear(); at = to; show(); }
 
 	steps.forEach(function (step) { step.addEventListener('click', function () { go(Number(step.dataset.step)); }); });
 	back.addEventListener('click', function () { go(Math.max(0, at - 1)); });
@@ -250,6 +363,71 @@ const SCRIPT = `
 	document.addEventListener('change', function (event) {
 		if (event.target && event.target.name === 'kind') { followKind(); }
 	});
+
+	function askRepositories() {
+		const owner = (element('enterprise').value || '').trim();
+		if (!owner) { fail('An enterprise is needed to load its repositories.'); return; }
+		clear();
+		loadRepos.disabled = true;
+		loadRepos.querySelector('span').textContent = 'Loading…';
+		api.postMessage({ type: 'repositories', owner: owner });
+	}
+
+	if (loadRepos) { loadRepos.addEventListener('click', askRepositories); }
+	if (pickList) {
+		pickList.addEventListener('change', function (event) {
+			if (event.target && event.target.name === 'repoPick') { choose(event.target.value); }
+		});
+	}
+
+	function choose(name) {
+		if (!name) { return; }
+		element('location').value = 'https://github.com/' + name;
+		clear();
+	}
+
+	window.addEventListener('message', function (event) {
+		const message = event.data || {};
+		if (message.type === 'repositories') {
+			if (loadRepos) {
+				loadRepos.disabled = false;
+				loadRepos.querySelector('span').textContent = 'Load Repositories';
+			}
+			if (message.error) { fail(message.error); return; }
+			const items = message.items || [];
+			if (!items.length) { fail('That enterprise returned no repositories.'); return; }
+			const picked = document.querySelector('input[name="repoPick"]:checked');
+			const previous = picked ? picked.value : '';
+			pickList.innerHTML = '';
+			items.forEach(function (name, index) {
+				const row = document.createElement('label');
+				row.className = 'checklist__row';
+				const radio = document.createElement('input');
+				radio.type = 'radio';
+				radio.name = 'repoPick';
+				radio.value = name;
+				radio.checked = previous ? name === previous : index === 0;
+				const text = document.createElement('span');
+				text.className = 'checklist__text';
+				const title = document.createElement('span');
+				title.className = 'checklist__title';
+				title.textContent = name;
+				const sub = document.createElement('span');
+				sub.className = 'checklist__sub';
+				sub.textContent = 'github.com/' + name;
+				text.appendChild(title);
+				text.appendChild(sub);
+				row.appendChild(radio);
+				row.appendChild(text);
+				pickList.appendChild(row);
+			});
+			pickWrap.setAttribute('data-loaded', 'yes');
+			pickWrap.hidden = kind() !== 'repo';
+			choose(items.indexOf(previous) >= 0 ? previous : items[0]);
+			return;
+		}
+	});
+
 	show();
 })();
 `;
