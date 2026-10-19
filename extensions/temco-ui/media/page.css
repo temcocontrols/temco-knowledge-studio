@@ -117,28 +117,25 @@ a {
 	text-decoration: none;
 }
 
-/* The mock's page head starts the content 26px in; a webview tab has no tab strip above it. */
+/* A page fills its tab. The mock centred its content in a 1180px column because it was a window inside a window;
+   a webview tab already is one, and a column it does not need costs a row four facts of width. The side margin is
+   the smallest that still separates content from the scrollbar, and the top margin is the smallest that does not
+   put the page head against the tab strip. */
 .view {
 	min-height: 100%;
 	background: var(--editor-bg);
 }
 
 .view__inner {
-	max-width: 1180px;
-	margin: 0 auto;
-	padding: 22px 34px 56px;
+	max-width: none;
+	margin: 0;
+	padding: 14px 20px 40px;
 }
 
-.view__inner--wide {
-	max-width: 1400px;
-}
-
+/* The one page that reads better narrow: a form, or a single column of prose. */
 .view__inner--narrow {
 	max-width: 860px;
-}
-
-.view__inner--full {
-	max-width: none;
+	margin: 0 auto;
 }
 
 /* A link in a page is a button that runs a command, so it keeps the link colour and loses the
@@ -2096,11 +2093,10 @@ button.link:hover {
 /* ---------------------------------------------------------------- Learn reader */
 
 .learn-hero {
-	/* A banner on the page, not a band across the window: it keeps the same column as the content
-	   under it, so the top of the page has edges like everything below it. */
-	width: min(1332px, 100% - 68px);
-	margin: 24px auto 0;
-	padding: 28px 30px 26px;
+	/* A banner on the page, not a band across the window: it takes the width of the page so its
+	   edges line up with everything under it. */
+	margin: 0 0 4px;
+	padding: 22px 24px 20px;
 	border: 1px solid var(--border);
 	border-radius: var(--radius-lg);
 	background:
@@ -2110,13 +2106,6 @@ button.link:hover {
 
 .learn-hero__inner {
 	min-width: 0;
-}
-
-/* On a launcher page the hero is the page's first band, so it takes the editor's full width and
-   starts where the content starts instead of sitting in the reading column. */
-.learn-hero--flush {
-	width: auto;
-	margin: 0;
 }
 
 .learn-hero__title {
@@ -2150,15 +2139,12 @@ button.link:hover {
    cannot restyle the container itself. */
 .learn-reader {
 	container-type: inline-size;
-	max-width: 1400px;
-	margin: 0 auto;
 }
 
 .learn-grid {
 	display: grid;
 	grid-template-columns: 240px minmax(0, 1fr) 220px;
 	gap: 28px;
-	padding: 26px 34px 56px;
 	align-items: start;
 }
 
@@ -2778,7 +2764,6 @@ button.link:hover {
 @container (max-width: 860px) {
 	.learn-grid {
 		grid-template-columns: minmax(0, 1fr);
-		padding: 22px 26px 48px;
 	}
 
 	.learn-nav {

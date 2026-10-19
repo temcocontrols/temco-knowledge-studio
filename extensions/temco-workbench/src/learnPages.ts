@@ -48,15 +48,15 @@ export class LearnPages {
 	constructor(private readonly context: vscode.ExtensionContext) { }
 
 	home(): void {
-		this.open('home', LEARN_HOME_VIEW_TYPE, 'Temco Learn', homeBody(), true);
+		this.open('home', LEARN_HOME_VIEW_TYPE, 'Temco Learn', homeBody());
 	}
 
 	product(): void {
-		this.open('t3000', LEARN_PRODUCT_VIEW_TYPE, 'T3000', productBody(), true);
+		this.open('t3000', LEARN_PRODUCT_VIEW_TYPE, 'T3000', productBody());
 	}
 
 	article(): void {
-		this.open('article', LEARN_ARTICLE_VIEW_TYPE, 'Data Points API', articleBody(), true);
+		this.open('article', LEARN_ARTICLE_VIEW_TYPE, 'Data Points API', articleBody());
 	}
 
 	downloads(): void {
@@ -74,11 +74,8 @@ export class LearnPages {
 		this.panels.clear();
 	}
 
-	private open(key: string, viewType: string, title: string, body: string, wide = false): void {
-		const html = page(body, {
-			title,
-			extraCss: wide ? '.view__inner { max-width: 1400px; }' : undefined
-		});
+	private open(key: string, viewType: string, title: string, body: string): void {
+		const html = page(body, { title });
 		const existing = this.panels.get(key);
 		if (existing) {
 			existing.reveal(pageColumn());

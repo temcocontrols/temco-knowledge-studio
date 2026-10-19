@@ -90,7 +90,7 @@ export class HelpPages {
 	) { }
 
 	welcome(): void {
-		this.open('welcome', HELP_WELCOME_VIEW_TYPE, 'Welcome', this.welcomeBody(), true);
+		this.open('welcome', HELP_WELCOME_VIEW_TYPE, 'Welcome', this.welcomeBody());
 	}
 
 	home(): void {
@@ -111,11 +111,11 @@ export class HelpPages {
 
 	/** Reads this profile's log folder: the files, their sizes, and the tail of the largest. */
 	async logs(): Promise<void> {
-		this.open('logs', HELP_LOGS_VIEW_TYPE, 'Logs', await logsBodyFor(this.context), true);
+		this.open('logs', HELP_LOGS_VIEW_TYPE, 'Logs', await logsBodyFor(this.context));
 	}
 
 	issue(): void {
-		this.open('issue', HELP_ISSUE_VIEW_TYPE, 'Report an Issue', issueBody(vscode.version), true);
+		this.open('issue', HELP_ISSUE_VIEW_TYPE, 'Report an Issue', issueBody(vscode.version));
 	}
 
 	about(): void {
@@ -126,11 +126,7 @@ export class HelpPages {
 	refresh(): void {
 		const panel = this.panels.get('welcome');
 		if (panel) {
-			panel.webview.html = page(this.welcomeBody(), {
-				title: 'Welcome',
-				script: commandScript,
-				extraCss: '.view__inner { max-width: 1400px; }'
-			});
+			panel.webview.html = page(this.welcomeBody(), { title: 'Welcome', script: commandScript });
 		}
 	}
 
@@ -182,11 +178,10 @@ export class HelpPages {
 		this.panels.clear();
 	}
 
-	private open(key: string, viewType: string, title: string, body: string, wide = false): void {
+	private open(key: string, viewType: string, title: string, body: string): void {
 		const html = page(body, {
 			title,
-			script: key === 'issue' ? commandScript + ISSUE_SCRIPT : commandScript,
-			extraCss: wide ? '.view__inner { max-width: 1400px; }' : undefined
+			script: key === 'issue' ? commandScript + ISSUE_SCRIPT : commandScript
 		});
 		const existing = this.panels.get(key);
 		if (existing) {
@@ -234,7 +229,7 @@ export class HelpPages {
 	</div>`}
 </div>`;
 
-		return `<div class="learn-hero learn-hero--flush">
+		return `<div class="learn-hero">
 	<div class="learn-hero__inner">
 		<div class="row" style="gap:10px;margin-bottom:10px">${badge('Temco Platform', 'accent')}<span class="cell-muted" style="font-size:12px">${esc(vscode.version)} · this profile</span></div>
 		<h1 class="learn-hero__title">Documentation, read and written in one window</h1>

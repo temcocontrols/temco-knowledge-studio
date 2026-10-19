@@ -454,7 +454,7 @@ function nonce(): string {
 function html(script: string): string {
   const style = `
     :root { color-scheme: light dark; }
-    body { margin: 0; padding: 1.6em 2em 3em; font-family: var(--vscode-font-family);
+    body { margin: 0; padding: 14px 20px 40px; font-family: var(--vscode-font-family);
            font-size: var(--vscode-font-size); color: var(--vscode-foreground); }
     h1 { font-size: 1.5em; font-weight: 600; margin: 0 0 .2em; }
     h2 { font-size: 1em; font-weight: 600; margin: 1.6em 0 .5em; }
