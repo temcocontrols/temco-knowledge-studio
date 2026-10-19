@@ -6,7 +6,7 @@
 // One table per idea — see `docs/platform-design.md`, "The catalog". Nothing here is derived at read time from
 // the network: a row is written by a scan and read by a view.
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 3;
 
 /**
  * Every statement is `IF NOT EXISTS`, so applying the schema is idempotent — it is how an older database is
@@ -145,6 +145,39 @@ CREATE TABLE IF NOT EXISTS events (
   detail       TEXT,
   seen_at      TEXT
 );
+
+-- A body that was drafted but not written. The text lives here, not in a file, because a draft is a proposal:
+-- accepting it writes the page and marks the row accepted, rejecting it marks it discarded, and neither is undo-able
+-- in the documentation itself. page_id is the id the page will have (area/chapter/slug); it is what makes two
+-- drafts for one page recognisable.
+CREATE TABLE IF NOT EXISTS drafts (
+  id            INTEGER PRIMARY KEY,
+  document_slug TEXT NOT NULL,
+  source        TEXT,
+  page_id       TEXT NOT NULL,
+  title         TEXT NOT NULL,
+  kind          TEXT,
+  body          TEXT NOT NULL,
+  created_at    TEXT NOT NULL,
+  state         TEXT NOT NULL DEFAULT 'draft'
+);
+
+CREATE INDEX IF NOT EXISTS drafts_by_document ON drafts (document_slug, state, created_at DESC);
+
+-- A release is a build that was handed to a reader: the artifacts it carries, where they were put, and when.
+-- The files are not copied into the database — a release row is the decision plus the destination it points at,
+-- which is what makes republishing a new version a new row rather than an edit of an old one.
+CREATE TABLE IF NOT EXISTS releases (
+  id           INTEGER PRIMARY KEY,
+  document_id  INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  build_id     INTEGER REFERENCES builds(id) ON DELETE SET NULL,
+  version      TEXT NOT NULL,
+  destination  TEXT NOT NULL,
+  files        INTEGER NOT NULL DEFAULT 0,
+  published_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS releases_by_document ON releases (document_id, published_at DESC);
 
 CREATE INDEX IF NOT EXISTS events_unseen ON events (seen_at, at DESC);
 CREATE INDEX IF NOT EXISTS commits_by_source ON commits (source_id, at DESC);

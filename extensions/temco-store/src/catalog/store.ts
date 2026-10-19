@@ -7,6 +7,18 @@
 
 import * as vscode from 'vscode';
 import type { DatabaseSync } from 'node:sqlite';
+import {
+  DEFAULT_LIMIT,
+  QueryResult,
+  TableFact,
+  TableRows,
+  integrityOf,
+  maintain,
+  rowsOf,
+  runQuery,
+  sizeOf,
+  tablesOf,
+} from './manage';
 import { SCHEMA, SCHEMA_VERSION } from './schema';
 
 export const CATALOG_FILE = 'catalog.db';
@@ -107,13 +119,54 @@ export class Catalog {
   }
 
   /**
+   * One statement, for a person looking at the database rather than for the platform.
+   *
+   * Read-only unless `write` is set: a query box should not be able to empty the platform's memory by accident.
+   */
+  query(sql: string, options: { write?: boolean; limit?: number } = {}): QueryResult {
+    return runQuery(this.db, sql, options);
+  }
+
+  /** Every table with its columns, its indexes and how many rows it holds. */
+  tables(): TableFact[] {
+    return tablesOf(this.db);
+  }
+
+  /** One page of one table. */
+  rows(table: string, limit = DEFAULT_LIMIT, offset = 0): TableRows {
+    return rowsOf(this.db, table, limit, offset);
+  }
+
+  /** Vacuum, checkpoint, empty every table, or drop the schema and write it again. */
+  maintain(action: 'vacuum' | 'checkpoint' | 'clear' | 'reset'): string {
+    const detail = maintain(this.db, action);
+    this.recordEvent('maintenance', detail);
+    return detail;
+  }
+
+  /** The schema version *this build* expects — what a stored version is compared against. */
+  expectedSchemaVersion(): number {
+    return SCHEMA_VERSION;
+  }
+
+  /** SQLite's own verdict on the file, from `quick_check`. */
+  integrity(): string {
+    return integrityOf(this.db);
+  }
+
+  /** Bytes each part of the database takes: the file, and the write-ahead log beside it. */
+  sizes(): { file?: number; wal?: number } {
+    return { file: sizeOf(this.file.fsPath), wal: sizeOf(`${this.file.fsPath}-wal`) };
+  }
+
+  /**
    * The documents, with the two facts a list needs: how many sources cite it, and when anything of it was
    * last built. Both are subqueries rather than joins, so a document with neither still appears.
    */
   documents(): DocumentRow[] {
     const rows = this.db
       .prepare(
-        `SELECT d.name AS name, d.version AS version,
+        `SELECT d.slug AS slug, d.name AS name, d.version AS version,
                 (SELECT COUNT(*) FROM doc_sources ds WHERE ds.document_id = d.id) AS sources,
                 (SELECT MAX(a.built_at) FROM artifacts a WHERE a.document_id = d.id) AS builtAt
            FROM documents d
@@ -122,10 +175,55 @@ export class Catalog {
       .all() as Record<string, unknown>[];
 
     return rows.map((row) => ({
+      slug: String(row.slug ?? ''),
       name: String(row.name ?? ''),
       version: row.version === null || row.version === undefined ? undefined : String(row.version),
       sources: Number(row.sources ?? 0),
       builtAt: row.builtAt === null || row.builtAt === undefined ? undefined : String(row.builtAt),
+    }));
+  }
+
+  /**
+   * The reads of one source, newest first.
+   *
+   * A read is keyed by the commit it read, which is why the revision is here: it is what explains a page later.
+   */
+  scans(slug: string): ScanRow[] {
+    const rows = this.db
+      .prepare(
+        `SELECT s.id AS id, s.at AS at, s.mode AS mode, s.revision AS revision, s.counts AS counts
+           FROM scans s JOIN sources so ON so.id = s.source_id
+          WHERE so.slug = ? ORDER BY s.at DESC, s.id DESC`
+      )
+      .all(slug) as Record<string, unknown>[];
+    return rows.map((row) => ({
+      id: Number(row.id ?? 0),
+      at: String(row.at ?? ''),
+      mode: String(row.mode ?? ''),
+      revision: row.revision === null || row.revision === undefined ? undefined : String(row.revision),
+      counts: row.counts === null || row.counts === undefined ? undefined : String(row.counts),
+    }));
+  }
+
+  /**
+   * What the platform noticed, newest first — the feed a dashboard shows.
+   *
+   * A row is written by whichever module did the thing (a draft saved, a release published), so the feed is the
+   * platform's own account of itself rather than a second, derived history.
+   */
+  events(limit = 50): EventRow[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, at, kind, subject_kind AS subjectKind, subject_id AS subjectId, detail, seen_at AS seenAt
+           FROM events ORDER BY at DESC, id DESC LIMIT ?`
+      )
+      .all(limit) as Record<string, unknown>[];
+    return rows.map((row) => ({
+      id: Number(row.id ?? 0),
+      at: String(row.at ?? ''),
+      kind: String(row.kind ?? ''),
+      detail: row.detail === null || row.detail === undefined ? undefined : String(row.detail),
+      seenAt: row.seenAt === null || row.seenAt === undefined ? undefined : String(row.seenAt),
     }));
   }
 
@@ -324,6 +422,29 @@ export class Catalog {
     }));
   }
 
+  /**
+   * The builds of one project, newest first.
+   *
+   * A build row is the attempt, not the outcome: `status` is what the caller judged after looking at the files.
+   */
+  builds(documentSlug: string): BuildRow[] {
+    const rows = this.db
+      .prepare(
+        `SELECT b.id AS id, b.started_at AS startedAt, b.finished_at AS finishedAt, b.status AS status,
+                b.revision AS revision
+           FROM builds b JOIN documents d ON d.id = b.document_id
+          WHERE d.slug = ? ORDER BY b.started_at DESC, b.id DESC`
+      )
+      .all(documentSlug) as Record<string, unknown>[];
+    return rows.map((row) => ({
+      id: Number(row.id ?? 0),
+      startedAt: String(row.startedAt ?? ''),
+      finishedAt: row.finishedAt === null || row.finishedAt === undefined ? undefined : String(row.finishedAt),
+      status: String(row.status ?? ''),
+      revision: row.revision === null || row.revision === undefined ? undefined : String(row.revision),
+    }));
+  }
+
   /** What a document has produced, newest first — the artifacts, by file. */
   documentArtifacts(documentSlug: string): { kind: string; path: string; builtAt: string }[] {
     const rows = this.db
@@ -394,6 +515,52 @@ export class Catalog {
         )
         .run(artifact.buildId ?? null, id, artifact.kind, artifact.path, artifact.bytes ?? null, now);
     }
+  }
+
+  /**
+   * A build that was handed to a reader.
+   *
+   * A release is a decision plus a destination: the files are the build's artifacts, copied where a reader can
+   * reach them, and this row is what makes "13.0 was published here, on this day" a fact rather than a memory.
+   * Publishing again is a new row, never an edit of an old one.
+   */
+  publishRelease(
+    documentSlug: string,
+    release: { version: string; destination: string; files: number; buildId?: number }
+  ): number {
+    const id = this.documentId(documentSlug);
+    if (id === 0) {
+      throw new Error(`there is no document called ${documentSlug}`);
+    }
+    const at = new Date().toISOString();
+    const run = this.db
+      .prepare(
+        `INSERT INTO releases (document_id, build_id, version, destination, files, published_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(id, release.buildId ?? null, release.version, release.destination, release.files, at);
+    this.recordEvent('release', `${release.version} was published — ${release.files} file(s) to ${release.destination}`);
+    return Number(run.lastInsertRowid);
+  }
+
+  /** The releases of one project, newest first — published versions stay listed forever. */
+  releases(documentSlug: string): ReleaseRow[] {
+    const rows = this.db
+      .prepare(
+        `SELECT r.id AS id, r.build_id AS buildId, r.version AS version, r.destination AS destination,
+                r.files AS files, r.published_at AS publishedAt
+           FROM releases r JOIN documents d ON d.id = r.document_id
+          WHERE d.slug = ? ORDER BY r.published_at DESC, r.id DESC`
+      )
+      .all(documentSlug) as Record<string, unknown>[];
+    return rows.map((row) => ({
+      id: Number(row.id ?? 0),
+      buildId: row.buildId === null || row.buildId === undefined ? undefined : Number(row.buildId),
+      version: String(row.version ?? ''),
+      destination: String(row.destination ?? ''),
+      files: Number(row.files ?? 0),
+      publishedAt: String(row.publishedAt ?? ''),
+    }));
   }
 
   /** One document, with everything the edit page needs to fill itself in. */
@@ -584,6 +751,74 @@ export class Catalog {
     return Number(row?.id ?? 0);
   }
 
+  /**
+   * A drafted body, waiting for a person.
+   *
+   * The text is kept here rather than in a file because a draft is a proposal: accepting it writes the page and
+   * settles the row, discarding it settles the row and writes nothing. The page keeps the id it *will* have
+   * (`area/chapter/slug`), so two drafts for one page are recognisable before either exists on disk.
+   */
+  saveDraft(input: DraftInput): number {
+    const at = new Date().toISOString();
+    const run = this.db
+      .prepare(
+        `INSERT INTO drafts (document_slug, source, page_id, title, kind, body, created_at, state)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'draft')`
+      )
+      .run(input.documentSlug, input.source ?? null, input.pageId, input.title, input.kind ?? null, input.body, at);
+    this.recordEvent('draft', `Draft “${input.title}” is waiting for review`);
+    return Number(run.lastInsertRowid);
+  }
+
+  /** The drafts of one project — `waiting` by default, which is what the Review Center lists. */
+  drafts(documentSlug: string, state: 'draft' | 'accepted' | 'discarded' = 'draft'): DraftRow[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, document_slug, source, page_id, title, kind, body, created_at, state
+           FROM drafts WHERE document_slug = ? AND state = ? ORDER BY created_at DESC, id DESC`
+      )
+      .all(documentSlug, state) as Record<string, unknown>[];
+    return rows.map(draftRow);
+  }
+
+  /** One draft, by id: what accepting it needs. */
+  draft(id: number): DraftRow | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT id, document_slug, source, page_id, title, kind, body, created_at, state FROM drafts WHERE id = ?`
+      )
+      .get(id) as Record<string, unknown> | undefined;
+    return row === undefined ? undefined : draftRow(row);
+  }
+
+  /** Settled: accepted when the page was written, discarded when a person said no. */
+  setDraftState(id: number, state: 'accepted' | 'discarded'): void {
+    this.db.prepare('UPDATE drafts SET state = ? WHERE id = ?').run(state, id);
+  }
+
+  /** Every waiting draft that proposed one page, settled at once — writing the page settles all of them. */
+  settleDrafts(documentSlug: string, pageId: string, state: 'accepted' | 'discarded'): void {
+    this.db
+      .prepare("UPDATE drafts SET state = ? WHERE document_slug = ? AND page_id = ? AND state = 'draft'")
+      .run(state, documentSlug, pageId);
+  }
+
+  /**
+   * One row in `events`: what the platform noticed.
+   *
+   * Never allowed to fail a write — an event is a notification, and losing one is better than losing the thing it
+   * was about.
+   */
+  private recordEvent(kind: string, detail: string): void {
+    try {
+      this.db
+        .prepare('INSERT INTO events (at, kind, subject_kind, detail) VALUES (?, ?, ?, ?)')
+        .run(new Date().toISOString(), kind, 'draft', detail);
+    } catch {
+      // Nothing to do: the event is a courtesy.
+    }
+  }
+
   close(): void {
     this.db.close();
   }
@@ -596,6 +831,83 @@ export interface DocumentInput {
   version?: string;
   audience?: string;
   owner?: string;
+}
+
+/** A body that was drafted but not written. */
+export interface DraftInput {
+  documentSlug: string;
+  /** The page id the page will have: `area/chapter/slug`. */
+  pageId: string;
+  title: string;
+  kind?: string;
+  body: string;
+  /** The source the draft read, when it read one. */
+  source?: string;
+}
+
+/** One thing the platform noticed. */
+export interface EventRow {
+  id: number;
+  at: string;
+  kind: string;
+  detail?: string;
+  seenAt?: string;
+}
+
+/** A release: what was published, where it went, and when. */
+export interface ReleaseRow {
+  id: number;
+  buildId?: number;
+  version: string;
+  destination: string;
+  files: number;
+  publishedAt: string;
+}
+
+/** One read of one source, as the repository page lists it. */
+export interface ScanRow {
+  id: number;
+  at: string;
+  mode: string;
+  revision?: string;
+  /** The counts the read reported, as JSON — left as it was written rather than reinterpreted here. */
+  counts?: string;
+}
+
+/** A build as the Build Center reads it. */
+export interface BuildRow {
+  id: number;
+  startedAt: string;
+  finishedAt?: string;
+  status: string;
+  revision?: string;
+}
+
+/** A draft as the Review Center reads it. */
+export interface DraftRow {
+  id: number;
+  documentSlug: string;
+  source?: string;
+  pageId: string;
+  title: string;
+  kind: string;
+  body: string;
+  createdAt: string;
+  state: 'draft' | 'accepted' | 'discarded';
+}
+
+function draftRow(row: Record<string, unknown>): DraftRow {
+  return {
+    id: Number(row.id ?? 0),
+    documentSlug: String(row.document_slug ?? ''),
+    source: row.source === null || row.source === undefined ? undefined : String(row.source),
+    pageId: String(row.page_id ?? ''),
+    title: String(row.title ?? ''),
+    kind: String(row.kind ?? ''),
+    body: String(row.body ?? ''),
+    createdAt: String(row.created_at ?? ''),
+    state: (String(row.state ?? 'draft') as DraftRow['state']),
+  };
 }
 
 /** A document as the edit page sees it. */
@@ -653,8 +965,8 @@ export interface SourceInput {
 }
 
 /** A row of the Documents page. */
-export interface DocumentRow {
-  name: string;
+export interface DocumentRow {  /** The name the database keys it by — what a selection, a draft and a build all point at. */
+  slug: string;  name: string;
   version?: string;
   sources: number;
   builtAt?: string;
