@@ -133,10 +133,65 @@ export interface SourceInput {
 
 /** A row of the projects list. */
 export interface DocumentRow {
+	/** The name the database keys it by — what a selection, a draft and a build all point at. */
+	slug: string;
 	name: string;
 	version?: string;
 	sources: number;
 	builtAt?: string;
+}
+
+/** A body that was drafted but not written. */
+export interface DraftInput {
+	documentSlug: string;
+	/** The page id the page will have: `area/chapter/slug`. */
+	pageId: string;
+	title: string;
+	kind?: string;
+	body: string;
+	source?: string;
+}
+
+/** A release: what was published, where it went, and when. */
+export interface ReleaseRow {
+	id: number;
+	buildId?: number;
+	version: string;
+	destination: string;
+	files: number;
+	publishedAt: string;
+}
+
+/** One read of one source, as the repository page lists it. */
+export interface ScanRow {
+	id: number;
+	at: string;
+	mode: string;
+	revision?: string;
+	/** The counts the read reported, as JSON — left as it was written rather than reinterpreted here. */
+	counts?: string;
+}
+
+/** A build as the Build Center reads it. */
+export interface BuildRow {
+	id: number;
+	startedAt: string;
+	finishedAt?: string;
+	status: string;
+	revision?: string;
+}
+
+/** A draft as the Review Center reads it. */
+export interface DraftRow {
+	id: number;
+	documentSlug: string;
+	source?: string;
+	pageId: string;
+	title: string;
+	kind: string;
+	body: string;
+	createdAt: string;
+	state: 'draft' | 'accepted' | 'discarded';
 }
 
 /** A row of the sources list. */
@@ -160,6 +215,8 @@ export interface Catalog {
 	schemaVersion(): number;
 	documents(): DocumentRow[];
 	sources(): SourceRow[];
+	/** The reads of one source, newest first. */
+	scans(slug: string): ScanRow[];
 	unseenEvents(): number;
 	addSource(source: SourceInput): number;
 	removeSource(slug: string): void;
@@ -173,6 +230,15 @@ export interface Catalog {
 	documentPages(documentSlug: string): (PageRow & { source: string })[];
 	startBuild(documentSlug: string, revision?: string): number;
 	finishBuild(buildId: number, status: string): void;
+	/** The builds of one project, newest first — what the Build Center lists. */
+	builds(documentSlug: string): BuildRow[];
+	/** A build handed to a reader: recorded with its destination and the number of files it carried. */
+	publishRelease(
+		documentSlug: string,
+		release: { version: string; destination: string; files: number; buildId?: number }
+	): number;
+	/** The releases of one project, newest first. */
+	releases(documentSlug: string): ReleaseRow[];
 	recordArtifact(
 		documentSlug: string,
 		artifact: { kind: string; path: string; bytes?: number; buildId?: number }
@@ -189,5 +255,12 @@ export interface Catalog {
 	): void;
 	replacePages(sourceId: number, pages: PageInput[]): void;
 	pagesFor(sourceId: number): PageRow[];
+	/** A drafted body, waiting for a person. */
+	saveDraft(input: DraftInput): number;
+	/** The drafts of one project — waiting by default, which is what the Review Center lists. */
+	drafts(documentSlug: string, state?: 'draft' | 'accepted' | 'discarded'): DraftRow[];
+	draft(id: number): DraftRow | undefined;
+	setDraftState(id: number, state: 'accepted' | 'discarded'): void;
+	settleDrafts(documentSlug: string, pageId: string, state: 'accepted' | 'discarded'): void;
 	close(): void;
 }

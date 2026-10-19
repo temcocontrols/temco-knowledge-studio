@@ -54,6 +54,8 @@ export const AREA_CHAPTER = ROOT_CHAPTER;
 export interface PageDeps {
   roots: () => readonly DocsRoot[];
   output: vscode.OutputChannel;
+  /** The project being worked on: a draft belongs to it, and the Review Center lists it by that name. */
+  project: () => string | undefined;
   /** Re-read the views: every act here changes either a file the view lists or a value it shows. */
   redraw: () => void;
   /**

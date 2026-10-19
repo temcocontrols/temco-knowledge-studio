@@ -250,6 +250,14 @@ export class AiPanel implements vscode.WebviewViewProvider {
         `Draft from ${PROMPT_VERSION}${range ? ` · ${range.label}` : ''}. ` +
         'Read the diff: Apply replaces the whole page, and one Ctrl+Z takes it back.',
     });
+    // Kept in the catalog as well as on screen: a diff tab is closed by accident, and the Review Center is where
+    // a draft is meant to wait until somebody settles it.
+    void vscode.commands.executeCommand('temcoDocs.recordDraft', {
+      pageId: entry.id,
+      title: entry.title,
+      body: text,
+      kind: 'Draft',
+    });
   }
 
   private async apply(): Promise<void> {
@@ -274,6 +282,8 @@ export class AiPanel implements vscode.WebviewViewProvider {
     edit.replace(draft.page.uri, new vscode.Range(new vscode.Position(0, 0), last), text);
     if (await vscode.workspace.applyEdit(edit)) {
       this.draft = undefined;
+      // The page is written, so the copy of this draft in the queue is settled: one decision, one row.
+      void vscode.commands.executeCommand('temcoDocs.settlePage', draft.page.id);
       this.post({ type: 'note', text: 'The draft was applied. Ctrl+Z takes it back.' });
       this.refresh();
     } else {

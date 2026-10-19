@@ -14,6 +14,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { DocsRoot } from './registry';
 import { OFFERED_SCRIPTS } from './repositories';
+import { Catalog, selection } from './store';
 
 /** Folders never worth walking: build caches and clones, not artifacts. */
 const SKIP = new Set(['node_modules', '.git', '.vs', 'out', 'target', '.venv', 'dist_cache']);
@@ -34,8 +35,9 @@ export function registerBuildCommands(
       if (!root) {
         return;
       }
-      await build(root, output, {
+      await build(context, root, output, {
         label: 'the site build',
+        kind: 'site',
         scripts: SITE_SCRIPTS,
         missing: 'This repository has no `docs:site` (or `docs:build`) script, so nothing was run.',
         // docfx.json writes here: the generated project names its destination `../dist/docs`.
@@ -60,8 +62,9 @@ export function registerBuildCommands(
         );
         return;
       }
-      await build(root, output, {
+      await build(context, root, output, {
         label: 'the offline help build',
+        kind: 'chm',
         scripts: HELP_SCRIPTS,
         missing: 'This repository has no `build:help:dry` script, so nothing was run.',
         // The CHM lands inside the repository or in a `HelpDocs` folder beside it — the build's own
@@ -76,6 +79,8 @@ export function registerBuildCommands(
 
 interface Recipe {
   label: string;
+  /** What the artifact is, as the catalog files it: `site`, `chm`, `pdf`. */
+  kind: string;
   scripts: readonly string[];
   missing: string;
   /** Where the build writes, searched deeply. */
@@ -86,12 +91,64 @@ interface Recipe {
 }
 
 /**
+ * The build, as the catalog remembers it.
+ *
+ * Opened before the script runs, so a build that crashes the editor still leaves the attempt behind; closed with
+ * the verdict this module judges — whether a file appeared — rather than the exit code it was handed.
+ */
+interface BuildWatch {
+  artifact(kind: string, file: string): void;
+  finish(status: string): void;
+}
+
+/** Nothing to record when no project is selected: a build without a project is a build about nothing. */
+async function openWatch(context: vscode.ExtensionContext): Promise<BuildWatch | undefined> {
+  const project = selection.project();
+  if (project === undefined) {
+    return undefined;
+  }
+  let catalog: Catalog | undefined;
+  try {
+    catalog = await Catalog.open(context);
+    const buildId = catalog.startBuild(project);
+    return {
+      artifact: (kind, file) => {
+        try {
+          catalog?.recordArtifact(project, { kind, path: file, bytes: bytesOf(file), buildId });
+        } catch {
+          // An artifact that cannot be recorded is still a file on disk; the log above says where it is.
+        }
+      },
+      finish: (status) => {
+        try {
+          catalog?.finishBuild(buildId, status);
+        } catch {
+          // The row stays open, which reads as a build that never said how it went.
+        }
+        catalog?.close();
+      },
+    };
+  } catch {
+    catalog?.close();
+    return undefined;
+  }
+}
+
+function bytesOf(file: string): number | undefined {
+  try {
+    return fs.statSync(file).size;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Runs one build and reports what it produced.
  *
  * The exit code is printed but never used as the verdict: what counts is a file that did not exist before and
  * does now.
  */
-async function build(root: DocsRoot, output: vscode.OutputChannel, recipe: Recipe): Promise<void> {
+async function build(context: vscode.ExtensionContext, root: DocsRoot, output: vscode.OutputChannel, recipe: Recipe): Promise<void> {
   const scripts = scriptsOf(root);
   if (!scripts) {
     void vscode.window.showWarningMessage(
@@ -108,6 +165,8 @@ async function build(root: DocsRoot, output: vscode.OutputChannel, recipe: Recip
   const started = Date.now();
   output.appendLine('');
   output.appendLine(`Building ${recipe.label} in ${root.folder.name}: npm run ${script}`);
+  // Opened before the script runs: the attempt is a fact whether or not anything comes of it.
+  const watch = await openWatch(context);
   const exit = await runTask(root, script);
   output.appendLine(`npm run ${script} exited with ${exit === undefined ? 'no code' : exit}`);
 
@@ -119,6 +178,11 @@ async function build(root: DocsRoot, output: vscode.OutputChannel, recipe: Recip
     output.appendLine(`  ${file} · ${describe(file)}`);
   }
   output.show(true);
+
+  for (const file of files) {
+    watch?.artifact(recipe.kind, file);
+  }
+  watch?.finish(files.length > 0 ? 'succeeded' : 'no artifact');
 
   const answer =
     files.length > 0

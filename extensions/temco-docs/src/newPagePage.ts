@@ -26,7 +26,8 @@ import {
   PageDeps,
   writePage,
 } from './pageOps';
-import { RepositorySource, codeFiles, readMaterials } from './repositories';
+import { codeFiles, readMaterials } from './repositories';
+import { Catalog, slugOf } from './store';
 import { NEW_PAGE_VIEW_TYPE, pageColumn } from './surface';
 import { icon, page } from './ui';
 
@@ -117,13 +118,11 @@ export class NewPagePage {
     this.panel?.dispose();
   }
 
-  /** The sources a page can be written into: a folder on this machine, never one read over the API. */
+  /** The sources a page can be written into: a folder on this machine, or a repository with a local copy. */
   private sources(): SourceForm[] {
-    return this.roots()
-      .filter((root) => root.origin !== 'catalog')
-      .map((root) => ({
+    return this.roots().map((root) => ({
         name: root.folder.name,
-        where: root.rootUri.fsPath,
+        where: root.origin === 'catalog' ? 'read over the API — a draft asks for a local copy first' : root.rootUri.fsPath,
         areas: root.areas.map((area) => ({
           area: area.area,
           title: area.title,
@@ -171,6 +170,25 @@ export class NewPagePage {
   }
 
   /**
+   * The folder to read a source's code from, cloning it when the source was read over the API.
+   *
+   * A draft or an analysis is a request for code; a source with no working tree has none to give, so the
+   * repositories module is asked for the local copy — it asks the person, clones, and hands back the folder.
+   */
+  private async materialPath(root: DocsRoot): Promise<{ path: string } | { error: string }> {
+    if (root.origin !== 'catalog') {
+      return { path: root.rootUri.fsPath };
+    }
+    const answer = await vscode.commands.executeCommand<{ path?: string; error?: string } | undefined>(
+      'temcoRepositories.ensureClone',
+      root.folder.name
+    );
+    return answer?.path !== undefined
+      ? { path: answer.path }
+      : { error: answer?.error ?? 'There is no local copy of this source to read.' };
+  }
+
+  /**
    * What documentation this source is missing, from its file list and the pages that already exist.
    *
    * The model is given paths, never contents — a proposal to write a page, not a page. Each suggestion the flow
@@ -193,7 +211,13 @@ export class NewPagePage {
       return;
     }
 
-    const listed = await codeFiles(repositorySource(root));
+    const resolved = await this.materialPath(root);
+    if ('error' in resolved) {
+      await panel.webview.postMessage({ type: 'analyseError', message: resolved.error });
+      return;
+    }
+
+    const listed = await codeFiles({ name: root.folder.name, path: resolved.path });
     if (listed.files.length === 0) {
       await panel.webview.postMessage({
         type: 'analyseError',
@@ -236,7 +260,12 @@ export class NewPagePage {
     if (!panel || root === undefined) {
       return;
     }
-    const result = await codeFiles(repositorySource(root));
+    const resolved = await this.materialPath(root);
+    if ('error' in resolved) {
+      await panel.webview.postMessage({ type: 'files', source, files: [], note: resolved.error });
+      return;
+    }
+    const result = await codeFiles({ name: root.folder.name, path: resolved.path });
     await panel.webview.postMessage({ type: 'files', source, ...result });
   }
 
@@ -278,6 +307,7 @@ export class NewPagePage {
     }
 
     await panel.webview.postMessage({ type: 'draftStart' });
+    let written = '';
     try {
       await assistant.draft({
         title: spec.title,
@@ -288,7 +318,10 @@ export class NewPagePage {
         material: material.text,
         // The answer streams into the page as it is written, and nothing is kept: a draft that is not accepted
         // is gone with the page.
-        onToken: (text) => void panel.webview.postMessage({ type: 'draftToken', text }),
+        onToken: (text) => {
+          written += text;
+          void panel.webview.postMessage({ type: 'draftToken', text });
+        },
       });
       await panel.webview.postMessage({ type: 'draftDone' });
     } catch (error) {
@@ -296,7 +329,71 @@ export class NewPagePage {
         type: 'draftError',
         message: error instanceof Error ? error.message : String(error),
       });
+      return;
     }
+
+    // The draft is kept: closing the tab used to lose it, and the Review Center has nothing to list if a draft
+    // only exists on screen. The page it proposes keeps the id it will have, so accepting it later is exact.
+    await this.keepDraft(spec, written);
+  }
+
+  /** One draft, in the catalog, against the project being worked on. */
+  private async keepDraft(spec: NewPageSpec, body: string): Promise<void> {
+    if (body.trim().length === 0) {
+      return;
+    }
+    let catalog: Catalog | undefined;
+    try {
+      catalog = await Catalog.open(this.context);
+      const project = await this.projectOf(catalog);
+      if (project === undefined) {
+        return;
+      }
+      catalog.saveDraft({
+        documentSlug: project,
+        pageId: pageIdOf(spec),
+        title: spec.title,
+        kind: spec.kind,
+        body,
+        source: spec.source,
+      });
+    } catch {
+      // A catalog that cannot be written leaves the draft on screen, which is where it was before.
+    } finally {
+      catalog?.close();
+    }
+  }
+
+  /** The page was written: every draft that proposed it is accepted. */
+  private async settleDrafts(spec: NewPageSpec): Promise<void> {
+    let catalog: Catalog | undefined;
+    try {
+      catalog = await Catalog.open(this.context);
+      const project = await this.projectOf(catalog);
+      if (project === undefined) {
+        return;
+      }
+      catalog.settleDrafts(project, pageIdOf(spec), 'accepted');
+    } catch {
+      // Nothing to settle.
+    } finally {
+      catalog?.close();
+    }
+  }
+
+  /**
+   * Which project a draft belongs to.
+   *
+   * The selected one, and when nothing is selected the only one there is: a window with a single project is what
+   * a person working alone has, and asking them to select it first would lose the draft for no reason.
+   */
+  private async projectOf(catalog: Catalog): Promise<string | undefined> {
+    const selected = this.deps.project();
+    if (selected !== undefined) {
+      return selected;
+    }
+    const all = catalog.documents();
+    return all.length === 1 ? slugOf(all[0].name) : undefined;
   }
 
   /** The material for one draft, and the line saying what is already in the area. */
@@ -320,7 +417,11 @@ export class NewPagePage {
       if (chosen.length === 0) {
         return { error: 'No file was chosen to draft from.' };
       }
-      const materials = await readMaterials(repositorySource(root), chosen);
+      const resolved = await this.materialPath(root);
+      if ('error' in resolved) {
+        return { error: resolved.error };
+      }
+      const materials = await readMaterials({ name: root.folder.name, path: resolved.path }, chosen);
       if (materials.included.length === 0) {
         return { error: 'None of the chosen files could be read.' };
       }
@@ -346,6 +447,7 @@ export class NewPagePage {
     const panel = this.panel;
     const written = await writePage(this.deps, spec);
     if (written !== undefined) {
+      await this.settleDrafts(spec);
       await panel?.webview.postMessage({ type: 'written', relative: written.relative });
     }
   }
@@ -421,9 +523,10 @@ function pageBody(page: PageEntry): string {
   }
 }
 
-/** The source, as `src/repository.ts` needs it. Only a folder reaches this: an API source is not offered. */
-function repositorySource(root: DocsRoot): RepositorySource {
-  return { name: root.folder.name, path: root.rootUri.fsPath };
+/** The id the page will have: `area/[chapter/]slug`. The draft carries it, and the Review Center accepts by it. */
+function pageIdOf(spec: NewPageSpec): string {
+  const chapter = spec.chapter === undefined || spec.chapter === AREA_CHAPTER ? '' : `${spec.chapter}/`;
+  return `${spec.area ?? ''}/${chapter}${spec.slug ?? ''}`;
 }
 
 /** The file a spec would produce, for the prompt's own line — the confirmation names it again before writing. */

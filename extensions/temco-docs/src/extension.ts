@@ -6,8 +6,9 @@
 // read, so the view can never answer about a folder nobody named. Nothing is written to a page without an
 // explicit command, and nothing is published from here at all.
 
+import * as path from 'path';
 import * as vscode from 'vscode';
-import { aiInstalled } from './aiModule';
+import { ai, aiInstalled } from './aiModule';
 import { TemcoDocsApi } from './api';
 import { registerBuildCommands, registerScriptCommands, scriptsIn } from './builds';
 import { publishDiagnostics } from './diagnostics';
@@ -16,19 +17,82 @@ import { registerFormatCommands } from './format';
 import { DocsPages } from './docsPages';
 import { NewPagePage } from './newPagePage';
 import { OverviewPage } from './overview';
-import { PageDeps, PageOperations, registerPageCommands } from './pageOps';
+import { AREA_CHAPTER, KINDS, PageDeps, PageOperations, registerPageCommands, writePage } from './pageOps';
 import { projects } from './projects';
 import { registerReportCommands } from './report';
 import { registerRowCommands } from './rowOps';
 import { registerScaffoldCommands } from './scaffold';
 import { registerSectionViews, SidebarModel, WorkingEntry } from './sections';
-import { Catalog, Selection, selection, slugOf } from './store';
+import { PublishedSite } from './siteServer';
+import { Catalog, DraftRow, Selection, selection, slugOf } from './store';
 import { fileColumn, pageColumn } from './surface';
-import { DocsRoot, DeclaredPage, RegistryError, collectPages, countStale, folderForPath, loadDocsRoot, pageForUri, registryUriFor, rootFromDeclared, totals } from './registry';
+import { DocsRoot, DeclaredPage, RegistryError, collectPages, countStale, fileExists, folderForPath, loadDocsRoot, pageForUri, registryUriFor, rootFromDeclared, totals } from './registry';
 import { DocsNode, DocsTreeProvider, TreeNote, pageFromNode } from './tree';
 
 const OUTPUT_NAME = 'Temco Docs';
 const VIEW_ID = 'temcoDocs.pages';
+
+/**
+ * Copy a build's files into the publish folder, keeping each path as it was under the folder they share.
+ *
+ * The shared folder is what makes a site a site: `dist/docs/a/b.html` lands as `<destination>/a/b.html`, so the
+ * links the generator wrote between pages still resolve.
+ */
+async function copyArtifacts(files: readonly string[], destination: string): Promise<number> {
+  const root = sharedFolder(files);
+  let copied = 0;
+  for (const file of files) {
+    const target = path.join(destination, path.relative(root, file));
+    try {
+      await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(target)));
+      await vscode.workspace.fs.copy(vscode.Uri.file(file), vscode.Uri.file(target), { overwrite: true });
+      copied += 1;
+    } catch {
+      // A file that cannot be copied is left out; the count says how many made it, and what did is on disk.
+    }
+  }
+  return copied;
+}
+
+/** The deepest folder every one of these files sits under, by path segment. */
+function sharedFolder(files: readonly string[]): string {
+  const folders = files.map((file) => path.dirname(file).split(/[\\/]/));
+  const first = folders[0];
+  let length = first.length;
+  for (const parts of folders.slice(1)) {
+    let index = 0;
+    while (index < length && index < parts.length && parts[index].toLowerCase() === first[index].toLowerCase()) {
+      index += 1;
+    }
+    length = index;
+  }
+  return first.slice(0, length).join(path.sep);
+}
+
+/** A published folder: the site if it has an index, the folder otherwise. */
+async function openPublished(destination: string): Promise<void> {
+  const index = path.join(destination, 'index.html');
+  if (await fileExists(vscode.Uri.file(index))) {
+    await vscode.env.openExternal(vscode.Uri.file(index));
+    return;
+  }
+  await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(destination));
+}
+
+/** The newest published version of the project the window is on — what "the site" means without a name. */
+async function newestPublished(context: vscode.ExtensionContext): Promise<string | undefined> {
+  let catalog: Catalog | undefined;
+  try {
+    catalog = await Catalog.open(context);
+    const documents = catalog.documents();
+    const project = selection.project() ?? (documents.length === 1 ? documents[0].slug : undefined);
+    return project === undefined ? undefined : catalog.releases(project)[0]?.destination;
+  } catch {
+    return undefined;
+  } finally {
+    catalog?.close();
+  }
+}
 
 interface BrokenRegistry {
   uri: vscode.Uri;
@@ -56,14 +120,19 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   // through the same dependencies the tree's own commands use 鈥?so there is one write, not two.
   let newPagePage: NewPagePage | undefined = undefined;
   // One guide per window: opening it again reveals the tab rather than stacking a second copy of the same page.
-  const docsPages = new DocsPages(context);
+  // It reads the registries this window is reading, so a page it lists is the file a build would read.
+  const docsPages = new DocsPages(context, () => roots);
   context.subscriptions.push(docsPages);
+  // A published release, served on loopback while somebody looks at it. One per window: one address in the bar.
+  const site = new PublishedSite();
+  context.subscriptions.push(site);
   // The documentation itself, as a page: counts, areas, what is behind its source, and the checks.
   const overviewPage = new OverviewPage(context, () => roots);
   context.subscriptions.push(overviewPage);
   const pageDeps: PageDeps = {
     roots: () => roots,
     output,
+    project: () => selection.project(),
     redraw: () => redraw(),
     selected: () => selectedRow(),
     newPagePage: (seed) => newPagePage?.open(seed),
@@ -320,6 +389,202 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     }
   };
 
+  /** One draft, read fresh: settling is an act on the database, never on a page that showed a stale copy. */
+  const draftById = async (id: unknown): Promise<DraftRow | undefined> => {
+    const draftId = typeof id === 'number' ? id : Number(id);
+    if (!Number.isFinite(draftId)) {
+      return undefined;
+    }
+    let catalog: Catalog | undefined;
+    try {
+      catalog = await Catalog.open(context);
+      return catalog.draft(draftId);
+    } catch {
+      return undefined;
+    } finally {
+      catalog?.close();
+    }
+  };
+
+  /** Settling one draft: accepted when its page was written, discarded when a person said no. */
+  const settleDraft = async (draft: DraftRow, state: 'accepted' | 'discarded'): Promise<void> => {
+    let catalog: Catalog | undefined;
+    try {
+      catalog = await Catalog.open(context);
+      catalog.setDraftState(draft.id, state);
+    } catch {
+      // A catalog that cannot be written leaves the draft waiting, which is where it was.
+    } finally {
+      catalog?.close();
+    }
+  };
+
+  /**
+   * Revise a page that already exists.
+   *
+   * The wizard creates pages and refuses a title that is already taken — correctly, because it would write a
+   * second file. A revision is the other act: the same id, the page as it stands for material, and the answer kept
+   * as a draft the Review Center settles. Accepting it overwrites the page, which is exactly what a revision is.
+   */
+  const revisePage = async (target?: { id?: unknown; title?: unknown }): Promise<void> => {
+    // The root matters as well as the page: accepting the draft writes a file, and a file belongs to the source
+    // the page is read from. Without that name `writePage` would have to guess, and guessing writes to the wrong
+    // repository.
+    const owned = roots
+      .map((root) => ({
+        root,
+        page: collectPages(root).find(
+          (entry) =>
+            entry.id === target?.id ||
+            (typeof target?.title === 'string' && entry.title === target.title)
+        ),
+      }))
+      .find((candidate) => candidate.page !== undefined);
+    const page = owned?.page;
+    if (page === undefined) {
+      void vscode.window.showWarningMessage(
+        'Temco Docs: no page with that name is in a registry this window is reading.'
+      );
+      return;
+    }
+    if (!page.exists) {
+      void vscode.window.showWarningMessage(
+        `Temco Docs: “${page.title}” has no file yet, so there is nothing to revise — create it instead.`
+      );
+      return;
+    }
+    const assistant = await ai();
+    if (assistant === undefined || assistant.modelLabel() === undefined) {
+      void vscode.window.showWarningMessage(
+        'Temco Docs: no local model is chosen, so there is nothing to draft with. Choose one on the AI page.'
+      );
+      return;
+    }
+    const note = await vscode.window.showInputBox({
+      prompt: `What changed in “${page.title}”?`,
+      placeHolder: 'the code moved on · firmware 2.14 changed the scale factor · a step is missing',
+    });
+    if (note === undefined) {
+      return;
+    }
+
+    const current = new TextDecoder().decode(await vscode.workspace.fs.readFile(page.uri));
+    const kind = KINDS.find((candidate) => candidate.label === 'Article') ?? KINDS[0];
+    let written = '';
+    try {
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: `Drafting a change to ${page.title}` },
+        () =>
+          assistant.draft({
+            title: page.title,
+            kind: kind.label,
+            headings: kind.headings,
+            path: page.uri.fsPath,
+            area: page.area,
+            material: `# ${page.title}\n\nWhat has changed: ${note}\n\n${current}`,
+            onToken: (text) => {
+              written += text;
+            },
+          })
+      );
+    } catch (error) {
+      void vscode.window.showErrorMessage(
+        `Temco Docs: the draft failed — ${error instanceof Error ? error.message : String(error)}`
+      );
+      return;
+    }
+    if (written.trim().length === 0) {
+      void vscode.window.showWarningMessage('Temco Docs: the model returned nothing, so no draft was kept.');
+      return;
+    }
+
+    let catalog: Catalog | undefined;
+    let kept = false;
+    try {
+      catalog = await Catalog.open(context);
+      const documents = catalog.documents();
+      const project = selection.project() ?? (documents.length === 1 ? documents[0].slug : undefined);
+      if (project !== undefined) {
+        catalog.saveDraft({
+          documentSlug: project,
+          pageId: page.id,
+          title: page.title,
+          kind: 'Revision',
+          body: written,
+          source: owned?.root.folder.name,
+        });
+        kept = true;
+      }
+    } catch {
+      kept = false;
+    } finally {
+      catalog?.close();
+    }
+    if (kept) {
+      docsPages.review();
+    } else {
+      void vscode.window.showWarningMessage(
+        'Temco Docs: the draft was written but could not be kept — no project is selected.'
+      );
+    }
+  };
+
+  /**
+   * Publish what the last build produced.
+   *
+   * The files are copied, never moved and never uploaded: a Learn site here is a folder of static files plus the
+   * destination recorded in the catalog, which is what "published" can honestly mean without an account to
+   * publish to. The CHM and the PDF need nothing more than this — they are already files a reader can have.
+   */
+  const publishRelease = async (): Promise<void> => {
+    let catalog: Catalog | undefined;
+    try {
+      catalog = await Catalog.open(context);
+      const documents = catalog.documents();
+      const project = selection.project() ?? (documents.length === 1 ? documents[0].slug : undefined);
+      if (project === undefined) {
+        void vscode.window.showWarningMessage('Temco Docs: no project is selected, so there is nothing to publish.');
+        return;
+      }
+      const artifacts = catalog.documentArtifacts(project);
+      const site = artifacts.filter((artifact) => artifact.kind === 'site');
+      const chosen = site.length > 0 ? site : artifacts;
+      if (chosen.length === 0) {
+        void vscode.window.showWarningMessage('Temco Docs: nothing has been built yet. Build the site, then publish it.');
+        return;
+      }
+      const version = catalog.document(project)?.version ?? 'unversioned';
+      const destination = vscode.Uri.joinPath(context.globalStorageUri, 'published', project, version);
+      const copied = await copyArtifacts(chosen.map((artifact) => artifact.path), destination.fsPath);
+      if (copied === 0) {
+        void vscode.window.showWarningMessage('Temco Docs: the artifacts could not be copied, so nothing was published.');
+        return;
+      }
+      catalog.publishRelease(project, {
+        version,
+        destination: destination.fsPath,
+        files: copied,
+        buildId: catalog.builds(project)[0]?.id,
+      });
+      const answer = await vscode.window.showInformationMessage(
+        `Temco Docs: ${version} published — ${copied} file(s) in ${vscode.workspace.asRelativePath(destination)}.`,
+        'Open the Site',
+        'Show the Folder'
+      );
+      if (answer === 'Open the Site') {
+        await openPublished(destination.fsPath);
+      } else if (answer === 'Show the Folder') {
+        await vscode.commands.executeCommand('revealFileInOS', destination);
+      }
+    } catch (error) {
+      void vscode.window.showErrorMessage(
+        `Temco Docs: publishing failed — ${error instanceof Error ? error.message : String(error)}`
+      );
+    } finally {
+      catalog?.close();
+    }
+  };
+
   context.subscriptions.push(
     vscode.commands.registerCommand('temcoDocs.showStatus', report),
     vscode.commands.registerCommand('temcoDocs.validate', report),
@@ -350,8 +615,164 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     vscode.commands.registerCommand('temcoDocs.page', (title?: unknown, area?: unknown) => docsPages.pageOf(typeof title === 'string' ? title : undefined, typeof area === 'string' ? area : undefined)),
     vscode.commands.registerCommand('temcoDocs.source', (repo?: unknown) => docsPages.source(typeof repo === 'string' ? repo : undefined)),
     vscode.commands.registerCommand('temcoDocs.review', () => docsPages.review()),
+    // Settling a draft: accepting writes the page it proposed, discarding wastes the text. Both act on one row and
+    // both redraw the queue, because what is left is what a person needs to see.
+    vscode.commands.registerCommand('temcoDocs.acceptDraft', async (id?: unknown) => {
+      const draft = await draftById(id);
+      if (draft === undefined) {
+        void vscode.window.showInformationMessage('Temco Docs: that draft is no longer waiting.');
+        docsPages.review();
+        return;
+      }
+      // The draft is the whole proposal — id, title and body — so accepting needs nothing else, and the page is
+      // written exactly as the reviewer read it. `writePage` is what asks before replacing an existing file.
+      const parts = draft.pageId.split('/').filter((part) => part.length > 0);
+      const written = await writePage(pageDeps, {
+        source: draft.source,
+        area: parts[0],
+        chapter: parts.length > 2 ? parts[1] : AREA_CHAPTER,
+        slug: parts[parts.length - 1],
+        title: draft.title,
+        kind: draft.kind,
+        body: draft.body,
+      });
+      if (written !== undefined) {
+        await settleDraft(draft, 'accepted');
+        // A page that now exists is a page the tree, the counts and every list have to know about. Without this the
+        // queue empties and the workspace still shows the page as missing.
+        await refresh();
+      }
+      docsPages.review();
+    }),
+    vscode.commands.registerCommand('temcoDocs.discardDraft', async (id?: unknown) => {
+      const draft = await draftById(id);
+      if (draft === undefined) {
+        void vscode.window.showInformationMessage('Temco Docs: that draft is no longer waiting.');
+        docsPages.review();
+        return;
+      }
+      const answer = await vscode.window.showWarningMessage(
+        `Discard the draft “${draft.title}”? The text is not kept.`,
+        { modal: true },
+        'Discard'
+      );
+      if (answer !== 'Discard') {
+        return;
+      }
+      await settleDraft(draft, 'discarded');
+      docsPages.review();
+    }),
+    // A draft written elsewhere — the AI panel drafts against the open page — is recorded here, because this
+    // module owns the queue: one place decides what is waiting, and one place settles it.
+    vscode.commands.registerCommand('temcoDocs.recordDraft', async (draft?: unknown) => {
+      const input = draft as
+        | { pageId?: unknown; title?: unknown; body?: unknown; source?: unknown; kind?: unknown }
+        | undefined;
+      if (input === undefined || typeof input.body !== 'string' || input.body.trim().length === 0) {
+        return;
+      }
+      let catalog: Catalog | undefined;
+      try {
+        catalog = await Catalog.open(context);
+        const documents = catalog.documents();
+        const project = selection.project() ?? (documents.length === 1 ? documents[0].slug : undefined);
+        if (project === undefined) {
+          return;
+        }
+        catalog.saveDraft({
+          documentSlug: project,
+          pageId: typeof input.pageId === 'string' && input.pageId.length > 0 ? input.pageId : 'unplaced',
+          title: typeof input.title === 'string' && input.title.length > 0 ? input.title : 'Untitled draft',
+          kind: typeof input.kind === 'string' ? input.kind : 'Draft',
+          body: input.body,
+          source: typeof input.source === 'string' ? input.source : undefined,
+        });
+        vscode.window.setStatusBarMessage('Temco Docs: the draft is waiting in the Review Center.', 5000);
+        // Redrawn only if it is already on screen: recording a draft must never open a page nobody asked for.
+        if (docsPages.isOpen('review')) {
+          docsPages.review();
+        }
+      } catch {
+        // A catalog that cannot be written leaves the draft where it was: in the editor, in front of a person.
+      } finally {
+        catalog?.close();
+      }
+    }),
+    // The page was written by somebody else — the AI panel applies its own diff — so only the queue is settled.
+    vscode.commands.registerCommand('temcoDocs.settlePage', async (pageId?: unknown) => {
+      if (typeof pageId !== 'string' || pageId.length === 0) {
+        return;
+      }
+      let catalog: Catalog | undefined;
+      try {
+        catalog = await Catalog.open(context);
+        const documents = catalog.documents();
+        const project = selection.project() ?? (documents.length === 1 ? documents[0].slug : undefined);
+        if (project !== undefined) {
+          catalog.settleDrafts(project, pageId, 'accepted');
+        }
+      } catch {
+        // Nothing to settle: the draft stays waiting, which is what a queue is for.
+      } finally {
+        catalog?.close();
+      }
+    }),
     vscode.commands.registerCommand('temcoDocs.builds', () => docsPages.builds()),
     vscode.commands.registerCommand('temcoDocs.releases', () => docsPages.releases()),
+    // Publishing hands files to a reader: copied into a folder the platform owns, recorded, then opened.
+    vscode.commands.registerCommand('temcoDocs.publishRelease', () => publishRelease()),
+    vscode.commands.registerCommand('temcoDocs.revisePage', (target?: unknown) =>
+      revisePage(target as { id?: unknown; title?: unknown } | undefined)
+    ),
+    vscode.commands.registerCommand('temcoDocs.openPublished', async (destination?: unknown) => {
+      if (typeof destination === 'string' && destination.length > 0) {
+        await openPublished(destination);
+      }
+    }),
+    // Serving, rather than opening a file: a generator's links and directory indexes only resolve over a host.
+    vscode.commands.registerCommand('temcoDocs.servePublished', async (destination?: unknown) => {
+      const where = typeof destination === 'string' && destination.length > 0
+        ? destination
+        : await newestPublished(context);
+      if (where === undefined) {
+        void vscode.window.showWarningMessage(
+          'Temco Docs: nothing has been published yet, so there is no site to serve. Build and publish one first.'
+        );
+        return;
+      }
+      try {
+        const url = await site.serve(where);
+        const answer = await vscode.window.showInformationMessage(
+          `Temco Docs: serving ${where} at ${url}`,
+          'Open in Browser',
+          'Stop Serving'
+        );
+        if (answer === 'Open in Browser') {
+          await vscode.env.openExternal(vscode.Uri.parse(url));
+        } else if (answer === 'Stop Serving') {
+          site.stop();
+        }
+      } catch (error) {
+        void vscode.window.showErrorMessage(
+          `Temco Docs: the site could not be served — ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }),
+    vscode.commands.registerCommand('temcoDocs.stopServing', () => site.stop()),
+    // An artifact is a file the build wrote, so opening one is opening a file — not a copy the platform keeps.
+    vscode.commands.registerCommand('temcoDocs.openArtifact', async (file?: unknown) => {
+      if (typeof file !== 'string' || file.length === 0) {
+        return;
+      }
+      await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file));
+    }),
+    // A page is a file too: the page view shows it read-only, and this is the way into editing it.
+    vscode.commands.registerCommand('temcoDocs.openFile', async (file?: unknown) => {
+      if (typeof file !== 'string' || file.length === 0) {
+        return;
+      }
+      await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file), fileColumn());
+    }),
     // What is being read, in one page: the tree answers where a page is, this answers what it all is.
     vscode.commands.registerCommand('temcoDocs.overview', () => overviewPage.open()),
 

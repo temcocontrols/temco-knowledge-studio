@@ -187,6 +187,61 @@
         "icon": "$(book)"
       },
       {
+        "command": "temcoDocs.acceptDraft",
+        "title": "Accept the Draft",
+        "icon": "$(check)"
+      },
+      {
+        "command": "temcoDocs.revisePage",
+        "title": "Draft a Change to the Page",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "temcoDocs.discardDraft",
+        "title": "Discard the Draft",
+        "icon": "$(close)"
+      },
+      {
+        "command": "temcoDocs.recordDraft",
+        "title": "Record the Draft in the Review Center",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "temcoDocs.settlePage",
+        "title": "Settle Every Draft for This Page",
+        "icon": "$(check)"
+      },
+      {
+        "command": "temcoDocs.openArtifact",
+        "title": "Open the Artifact",
+        "icon": "$(file)"
+      },
+      {
+        "command": "temcoDocs.openFile",
+        "title": "Open the File",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "temcoDocs.publishRelease",
+        "title": "Publish the Release",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "temcoDocs.openPublished",
+        "title": "Open the Published Site",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "temcoDocs.servePublished",
+        "title": "Serve the Published Site",
+        "icon": "$(radio-tower)"
+      },
+      {
+        "command": "temcoDocs.stopServing",
+        "title": "Stop Serving the Site",
+        "icon": "$(debug-stop)"
+      },
+      {
         "command": "temcoDocs.stalenessReport",
         "title": "Documentation Owed",
         "icon": "$(report)"
