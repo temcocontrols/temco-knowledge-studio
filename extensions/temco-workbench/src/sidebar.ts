@@ -19,6 +19,11 @@ interface Row {
 	icon: string;
 	command: string;
 	args?: unknown[];
+	/**
+	 * The number at the end of the row, as the mock puts one on some rows. A key rather than a value: the count is
+	 * read when the row is drawn, so a module installed or a page reviewed changes it without a rebuild.
+	 */
+	countKey?: 'modules' | 'needs';
 }
 
 interface Group {
@@ -41,7 +46,7 @@ const GROUPS: Group[] = [
 		id: 'temcoWorkbench.needsWorkView',
 		title: 'Needs Work',
 		rows: [
-			{ label: 'Needs Review', note: '17 waiting · what wants a person, said in full', icon: 'warning', command: 'temcoWorkbench.openNeeds' }
+			{ label: 'Needs Review', note: 'what wants a person, said in full', icon: 'warning', command: 'temcoWorkbench.openNeeds', countKey: 'needs' }
 		]
 	},
 	{
@@ -82,7 +87,7 @@ const GROUPS: Group[] = [
 		id: 'temcoWorkbench.settingsPlatform',
 		title: 'Platform',
 		rows: [
-			{ label: 'Modules', note: 'the built-in extensions that ship with the platform', icon: 'package', command: 'temcoWorkbench.settings.modules' },
+			{ label: 'Modules', note: 'the built-in extensions that ship with the platform', icon: 'package', command: 'temcoWorkbench.settings.modules', countKey: 'modules' },
 			{ label: 'Branding', note: 'the mark, the theme and the identity', icon: 'paintcan', command: 'temcoWorkbench.settings.branding' },
 			{ label: 'Publishing', note: 'where a release goes and what it may overwrite', icon: 'cloud-upload', command: 'temcoWorkbench.settings.publishing' }
 		]
@@ -108,20 +113,40 @@ const GROUPS: Group[] = [
 	}
 ];
 
+/** The scheme a counted row's number travels in: the decoration slot is the only one at the row's right edge. */
+const COUNT_SCHEME = 'temco-wb-count';
+
+/** What the rows count, read when they are drawn. */
+export interface SidebarCounts {
+	modules: number;
+	needs: number;
+}
+
 class RowsProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
-	constructor(private readonly rows: readonly Row[]) { }
+	private readonly changed = new vscode.EventEmitter<void>();
+	readonly onDidChangeTreeData = this.changed.event;
+
+	constructor(private readonly rows: readonly Row[], private readonly counts: () => SidebarCounts) { }
+
+	refresh(): void {
+		this.changed.fire();
+	}
 
 	getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
 		return element;
 	}
 
 	getChildren(): vscode.TreeItem[] {
+		const counts = this.counts();
 		return this.rows.map((row) => {
 			const item = new vscode.TreeItem(row.label, vscode.TreeItemCollapsibleState.None);
 			// The mock's side bar is one line per row: the glyph says what kind of thing it is, and the
 			// sentence that used to sit beside the label is in the tooltip, where it does not repeat
-			// down the panel.
+			// down the panel. The number, when a row has one, sits at the end of the row.
 			item.iconPath = new vscode.ThemeIcon(row.icon);
+			if (row.countKey !== undefined) {
+				item.resourceUri = vscode.Uri.parse(`${COUNT_SCHEME}:/${counts[row.countKey]}/${encodeURIComponent(row.label)}`);
+			}
 			item.tooltip = `${row.label} — ${row.note}`;
 			item.command = { command: row.command, title: row.label, arguments: row.args };
 			return item;
@@ -129,11 +154,35 @@ class RowsProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
 	}
 }
 
+/** The side bar after it is registered: the one call a new count needs. */
+export interface SidebarViews {
+	refresh(): void;
+}
+
 /** Registers the group views the workbench's containers declare. */
-export function registerSidebarViews(context: vscode.ExtensionContext): void {
+export function registerSidebarViews(context: vscode.ExtensionContext, counts: () => SidebarCounts): SidebarViews {
+	context.subscriptions.push(
+		vscode.window.registerFileDecorationProvider({
+			provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
+				if (uri.scheme !== COUNT_SCHEME) {
+					return undefined;
+				}
+				const count = uri.path.split('/')[1];
+				return count === undefined || count.length === 0 ? undefined : { badge: count, tooltip: count };
+			},
+		})
+	);
+	const providers: RowsProvider[] = [];
 	for (const group of GROUPS) {
-		context.subscriptions.push(
-			vscode.window.createTreeView(group.id, { treeDataProvider: new RowsProvider(group.rows) })
-		);
+		const provider = new RowsProvider(group.rows, counts);
+		providers.push(provider);
+		context.subscriptions.push(vscode.window.createTreeView(group.id, { treeDataProvider: provider }));
 	}
+	return {
+		refresh(): void {
+			for (const provider of providers) {
+				provider.refresh();
+			}
+		},
+	};
 }

@@ -21,7 +21,7 @@ import { projects } from './projects';
 import { registerReportCommands } from './report';
 import { registerRowCommands } from './rowOps';
 import { registerScaffoldCommands } from './scaffold';
-import { registerSectionViews } from './sections';
+import { registerSectionViews, SidebarModel, WorkingEntry } from './sections';
 import { Catalog, Selection, selection, slugOf } from './store';
 import { fileColumn, pageColumn } from './surface';
 import { DocsRoot, DeclaredPage, RegistryError, collectPages, countStale, folderForPath, loadDocsRoot, pageForUri, registryUriFor, rootFromDeclared, totals } from './registry';
@@ -96,9 +96,83 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
 
   // The page behind the *Documentation Owed* row, and the form that creates a page.
 
-  // The side bar's groups, as the mock draws them: Projects, Sources, Areas, Pipeline, How-To — the Docs Explorer
-  // is the tree of pages, and is registered above with the rest of the view.
-  registerSectionViews(context);
+  // The side bar's groups, as the mock draws them: Projects, Sources, Areas, Pipeline, How-To and the Working Set
+  // of the pages opened in this window. The Docs Explorer is the tree of pages, registered above.
+  //
+  // The groups read the module rather than a copy of it: the projects the catalog holds, the areas of the project
+  // being worked on, and the pages this window has shown. `sidebar` is filled in below, before the first read.
+  const working: WorkingEntry[] = [];
+  let projectRows: { name: string; current: boolean }[] = [];
+  let sidebar: { refresh(): void } | undefined;
+  const sidebarModel: SidebarModel = {
+    projects: () => projectRows,
+    areas: () => {
+      // One row per area across the project's sources, the area of the open page first. A page names its area in
+      // the first segment of its id, which is the same key the registry uses.
+      const open = selection.page()?.id.split('/')[0];
+      const seen = new Map<string, { area: string; title: string; pages: number; current: boolean }>();
+      for (const root of roots) {
+        for (const area of root.areas) {
+          const row = seen.get(area.area);
+          if (row) {
+            row.pages += area.pages;
+          } else {
+            seen.set(area.area, { area: area.area, title: area.title, pages: area.pages, current: area.area === open });
+          }
+        }
+      }
+      return [...seen.values()].sort(
+        (one, other) => Number(other.current) - Number(one.current) || one.title.localeCompare(other.title)
+      );
+    },
+    working: () => working,
+    counts: () => ({
+      // A source that is a folder here is a repository with a working tree; the rest are what a read recorded.
+      repositories: roots.filter((root) => root.origin !== 'catalog').length,
+      sources: roots.length,
+      review: roots.reduce((total, root) => total + root.neverReviewed, 0),
+    }),
+  };
+  sidebar = registerSectionViews(context, sidebarModel);
+
+  // The Working Set, the mock's `M.state.working`: the pages this window has shown, newest first, six at most.
+  //
+  // It follows the *editor* rather than one command, because a page can be opened from the tree, from the
+  // Documents list, from the working set itself or from a file in the Explorer — the mock lists all of those, and
+  // a list that filled only from one of them would be a different feature.
+  const rememberWorking = (uri: vscode.Uri): void => {
+    if (uri.scheme !== 'file') {
+      return;
+    }
+    const page = pageForUri(roots, uri);
+    if (page === undefined) {
+      return;
+    }
+    const entry: WorkingEntry = { area: page.id.split('/')[0], title: page.title, id: page.id, path: uri.fsPath };
+    const at = working.findIndex((item) => item.id === entry.id);
+    if (at >= 0) {
+      working.splice(at, 1);
+    }
+    working.unshift(entry);
+    working.splice(6);
+    sidebar?.refresh();
+  };
+
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor((editor) => {
+      if (editor !== undefined) {
+        rememberWorking(editor.document.uri);
+      }
+    }),
+    // Closing a page takes it off the list, which is what the mock does when its tab is closed.
+    vscode.workspace.onDidCloseTextDocument((document) => {
+      const at = working.findIndex((item) => item.path === document.uri.fsPath);
+      if (at >= 0) {
+        working.splice(at, 1);
+        sidebar?.refresh();
+      }
+    })
+  );
 
   const refresh = async (): Promise<void> => {
     const broken: BrokenRegistry[] = [];
@@ -186,6 +260,9 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     }
 
     provider.setRoots(roots, notes);
+    // The projects the side bar lists, the one being worked on first.
+    projectRows = await readProjects(context, selection.project());
+    sidebar?.refresh();
     // The view says which project it is showing: it answers about a project, never about the window, and a view
     // that silently answers a different question is worse than an empty one.
     treeView.description = projectName
@@ -256,6 +333,20 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     vscode.commands.registerCommand('temcoDocs.repository', (name?: unknown) => docsPages.repository(typeof name === 'string' ? name : undefined)),
     vscode.commands.registerCommand('temcoDocs.sources', () => docsPages.sources()),
     vscode.commands.registerCommand('temcoDocs.documents', (area?: unknown) => docsPages.documents(typeof area === 'string' ? area : undefined)),
+    // The side bar's project row, which is the mock's `tree-project`: *become* that project, then show the
+    // projects page. It does not open a project's own editor — the side bar says where you are, the page says
+    // what is there. A selection that fails (a project removed between the draw and the click) still opens the
+    // page, because the page is where the list of what exists lives.
+    vscode.commands.registerCommand('temcoDocs.selectProject', async (slug?: unknown) => {
+      if (typeof slug === 'string') {
+        try {
+          await vscode.commands.executeCommand('temcoProjects.selectProject', slug);
+        } catch {
+          // The projects module is not installed in this window; the page still opens.
+        }
+      }
+      docsPages.projects();
+    }),
     vscode.commands.registerCommand('temcoDocs.page', (title?: unknown, area?: unknown) => docsPages.pageOf(typeof title === 'string' ? title : undefined, typeof area === 'string' ? area : undefined)),
     vscode.commands.registerCommand('temcoDocs.source', (repo?: unknown) => docsPages.source(typeof repo === 'string' ? repo : undefined)),
     vscode.commands.registerCommand('temcoDocs.review', () => docsPages.review()),
@@ -521,6 +612,31 @@ async function chooseProject(
     // A catalog that cannot be opened is reported where it is used 鈥?the Library, a read 鈥?and activation must
     // not depend on it. Selecting nothing leaves the Workspace view saying there is nothing to show.
     return undefined;
+  } finally {
+    catalog?.close();
+  }
+}
+
+/**
+ * The projects the side bar lists, the one being worked on first.
+ *
+ * The mock's Projects group shows the current project and hides the rest behind "… N more"; this is the list it
+ * counts. A catalog that cannot be opened yields an empty list rather than an error: the side bar is a way in, not
+ * the record of what exists.
+ */
+async function readProjects(
+  context: vscode.ExtensionContext,
+  current: string | undefined
+): Promise<{ name: string; current: boolean }[]> {
+  let catalog: Catalog | undefined;
+  try {
+    catalog = await Catalog.open(context);
+    return catalog
+      .documents()
+      .map((row) => ({ name: row.name, current: slugOf(row.name) === current }))
+      .sort((one, other) => Number(other.current) - Number(one.current) || one.name.localeCompare(other.name));
+  } catch {
+    return [];
   } finally {
     catalog?.close();
   }

@@ -20,7 +20,7 @@
 
 import * as vscode from 'vscode';
 import { BACNET_PAGES, registerBacnet } from './bacnet';
-import { ALARMS, DEVICES } from './data';
+import { ALARMS, DEVICES, REPORTS } from './data';
 import { DEVICE_PAGES, onDidChangeDevices, registerDevices } from './devices';
 import { IO_PAGES, registerIo } from './io';
 import { NETWORK_PAGES, registerNetwork } from './network';
@@ -32,6 +32,8 @@ interface StudyRow {
 	note: string;
 	mark: string;
 	command: string;
+	/** The page id, where a row's count is keyed by it. */
+	id?: string;
 }
 
 /**
@@ -55,13 +57,29 @@ const CODICON_FOR: Record<string, string> = {
 const codicon = (mark: string): string => CODICON_FOR[mark] ?? mark;
 
 /**
- * A studio's side-bar view: one row per page, no counts.
+ * A row's number, as a decoration rather than as text beside the label.
  *
- * None of these rows carries a count in the mock: a point count or a table count is already in the page head, and the
- * side bar would only repeat what the page it opens says. The row's sentence is the tooltip, as everywhere else.
+ * The description slot sits *after* the label, not at the end of the row; the one slot a row pushes to the right
+ * edge is its decoration — the same one the Explorer fills with "M"/"U" and Source Control with its counts. So the
+ * number travels in the URI and one provider turns it into a badge.
+ */
+const COUNT_SCHEME = 'temco-tool-count';
+
+const counted = (count: number, key: string): vscode.Uri =>
+	vscode.Uri.parse(`${COUNT_SCHEME}:/${count}/${encodeURIComponent(key)}`);
+
+/**
+ * A studio's side-bar view: one row per page.
+ *
+ * Most rows carry no count in the mock — a point count or a table count is already in the page head, and the side bar
+ * would only repeat what the page it opens says. The two that do (the alarms still active, the reports worth running)
+ * are named in `counts`, so the number is read when the row is drawn rather than baked into the row.
  */
 class PagesTree implements vscode.TreeDataProvider<vscode.TreeItem> {
-	constructor(private readonly rows: StudyRow[]) { }
+	constructor(
+		private readonly rows: StudyRow[],
+		private readonly counts: Record<string, () => number> = {}
+	) { }
 
 	getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
 		return element;
@@ -71,6 +89,10 @@ class PagesTree implements vscode.TreeDataProvider<vscode.TreeItem> {
 		return this.rows.map((row) => {
 			const item = new vscode.TreeItem(row.label, vscode.TreeItemCollapsibleState.None);
 			item.iconPath = new vscode.ThemeIcon(codicon(row.mark));
+			const count = row.id === undefined ? undefined : this.counts[row.id]?.();
+			if (count !== undefined) {
+				item.resourceUri = counted(count, row.label);
+			}
 			item.tooltip = `${row.label} — ${row.note}`;
 			item.command = { command: row.command, title: row.label };
 			return item;
@@ -106,11 +128,13 @@ class DevicesTree implements vscode.TreeDataProvider<vscode.TreeItem> {
 			item.iconPath = new vscode.ThemeIcon(codicon(entry.mark));
 			item.tooltip = `${entry.label} — ${entry.note}`;
 			if (entry.id === 'all') {
-				item.description = String(DEVICES.length);
+				item.resourceUri = counted(DEVICES.length, entry.label);
 			}
 			if (entry.id === 'health') {
 				const active = ALARMS.filter((alarm) => alarm.state === 'Active').length;
-				item.description = active > 0 ? String(active) : undefined;
+				if (active > 0) {
+					item.resourceUri = counted(active, entry.label);
+				}
 			}
 			item.command = { command: entry.command, title: entry.label };
 			return item;
@@ -119,6 +143,18 @@ class DevicesTree implements vscode.TreeDataProvider<vscode.TreeItem> {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+	// The numbers at the right edge of a row: a decoration, because that is the slot the host pushes to the end.
+	context.subscriptions.push(
+		vscode.window.registerFileDecorationProvider({
+			provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
+				if (uri.scheme !== COUNT_SCHEME) {
+					return undefined;
+				}
+				const count = uri.path.split('/')[1];
+				return count === undefined || count.length === 0 ? undefined : { badge: count, tooltip: count };
+			},
+		})
+	);
 	const devices = registerDevices(context);
 	const io = registerIo(context);
 	const bacnet = registerBacnet(context);
@@ -142,12 +178,12 @@ export function activate(context: vscode.ExtensionContext): void {
 		vscode.window.createTreeView('temcoTools.devicesData', { treeDataProvider: data }),
 		vscode.window.createTreeView('temcoTools.ioEngineering', { treeDataProvider: new PagesTree(IO_PAGES.filter((entry) => entry.group === 'engineering')) }),
 		vscode.window.createTreeView('temcoTools.ioLive', { treeDataProvider: new PagesTree(IO_PAGES.filter((entry) => entry.group === 'live')) }),
-		vscode.window.createTreeView('temcoTools.bacnetNetwork', { treeDataProvider: new PagesTree(BACNET_PAGES.filter((entry) => entry.group === 'network')) }),
+		vscode.window.createTreeView('temcoTools.bacnetNetwork', { treeDataProvider: new PagesTree(BACNET_PAGES.filter((entry) => entry.group === 'network'), { alarms: () => ALARMS.filter((alarm) => alarm.state === 'Active').length }) }),
 		vscode.window.createTreeView('temcoTools.bacnetHistory', { treeDataProvider: new PagesTree(BACNET_PAGES.filter((entry) => entry.group === 'history')) }),
 		vscode.window.createTreeView('temcoTools.networkTools', { treeDataProvider: new PagesTree(NETWORK_PAGES.filter((entry) => entry.group === 'tools')) }),
 		vscode.window.createTreeView('temcoTools.networkTraffic', { treeDataProvider: new PagesTree(NETWORK_PAGES.filter((entry) => entry.group === 'traffic')) }),
 		vscode.window.createTreeView('temcoTools.sqlWorkbench', { treeDataProvider: new PagesTree(SQL_PAGES.filter((entry) => entry.group === 'workbench')) }),
-		vscode.window.createTreeView('temcoTools.sqlDocs', { treeDataProvider: new PagesTree(SQL_PAGES.filter((entry) => entry.group === 'docs')) }),
+		vscode.window.createTreeView('temcoTools.sqlDocs', { treeDataProvider: new PagesTree(SQL_PAGES.filter((entry) => entry.group === 'docs'), { reports: () => REPORTS.length }) }),
 		onDidChangeDevices(() => {
 			fleet.refresh();
 			data.refresh();

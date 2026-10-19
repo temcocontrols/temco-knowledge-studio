@@ -13,7 +13,7 @@
 // and every action on one is that module's own command.
 
 import * as vscode from 'vscode';
-import { roots, onDidChange, refresh as reread } from './docs';
+import { roots, onDidChange, refresh as reread, totals } from './docs';
 import { DashboardPages } from './dashboard';
 import { HelpPages } from './helpPages';
 import { LearnPages } from './learnPages';
@@ -24,7 +24,12 @@ import { selection } from './store';
 import { WorkspacesPages } from './workspaces';
 export function activate(context: vscode.ExtensionContext): void {
 	// The five group views whose containers this module declares: Workspaces, AI Hub, Temco Learn, Settings, Help.
-	registerSidebarViews(context);
+	// The two rows that carry a number — Modules and Needs Review — read it when they are drawn, so installing a
+	// module or reviewing a page changes the panel without a reload.
+	const sidebars = registerSidebarViews(context, () => ({
+		modules: vscode.extensions.all.filter((extension) => extension.packageJSON.publisher === 'temcocontrols').length,
+		needs: totals(roots()).neverReviewed,
+	}));
 	// The page behind the Library's *Needs attention* row: what wants a person, said in full.
 	const needs = new NeedsPage(context, () => roots());
 	// The page a window with nothing better to show opens on: the application, not one project's work, and the
@@ -119,6 +124,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		// The two surfaces below the Library follow the documentation module's one signal: it re-read the sets, so
 		// the needs page says something new.
 		onDidChange(() => {
+			sidebars.refresh();
 			needs.refresh();
 		})
 	);
