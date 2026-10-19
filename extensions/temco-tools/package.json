@@ -22,7 +22,8 @@
   ],
   "main": "./out/extension.js",
   "extensionDependencies": [
-    "temcocontrols.temco-ui"
+    "temcocontrols.temco-ui",
+    "temcocontrols.temco-store"
   ],
   "activationEvents": [
     "onView:temcoTools.devicesFleet",
@@ -81,11 +82,11 @@
       "temcoSql": [
         {
           "id": "temcoTools.sqlWorkbench",
-          "name": "Workbench"
+          "name": "Query & Browse"
         },
         {
           "id": "temcoTools.sqlDocs",
-          "name": "Docs Database"
+          "name": "Schema & Maintenance"
         }
       ]
     },
@@ -374,8 +375,22 @@
         "icon": "$(code)"
       },
       {
+        "command": "temcoTools.sql.data",
+        "title": "Data",
+        "icon": "$(table)"
+      },
+      {
+        "command": "temcoTools.sql.browse",
+        "title": "Browse a Table",
+        "icon": "$(table)"
+      },
+      {
+        "command": "temcoTools.sql.page",
+        "title": "Turn the Page"
+      },
+      {
         "command": "temcoTools.sql.connections",
-        "title": "Connections",
+        "title": "Database",
         "icon": "$(database)"
       },
       {
@@ -395,56 +410,94 @@
       },
       {
         "command": "temcoTools.sql.reports",
-        "title": "Reports",
+        "title": "Query Presets",
         "icon": "$(graph)"
       },
       {
         "command": "temcoTools.sql.run",
-        "title": "Run the Query"
+        "title": "Run the Query (Read Only)"
       },
       {
-        "command": "temcoTools.sql.explain",
-        "title": "Explain the Query"
+        "command": "temcoTools.sql.runWrite",
+        "title": "Run the Query (Allow Writes)"
       },
       {
         "command": "temcoTools.sql.saveQuery",
         "title": "Save the Query"
       },
       {
-        "command": "temcoTools.sql.testConnection",
-        "title": "Test a Connection"
+        "command": "temcoTools.sql.export",
+        "title": "Export the Result as CSV",
+        "icon": "$(download)"
       },
       {
-        "command": "temcoTools.sql.newConnection",
-        "title": "New Connection"
+        "command": "temcoTools.sql.recall",
+        "title": "Load a Statement Back into the Editor"
+      },
+      {
+        "command": "temcoTools.sql.queryTable",
+        "title": "Query This Table"
+      },
+      {
+        "command": "temcoTools.sql.loadSaved",
+        "title": "Load a Saved Query"
+      },
+      {
+        "command": "temcoTools.sql.deleteSaved",
+        "title": "Delete a Saved Query"
+      },
+      {
+        "command": "temcoTools.sql.loadPreset",
+        "title": "Load a Preset"
       },
       {
         "command": "temcoTools.sql.refreshSchema",
         "title": "Refresh the Schema"
       },
       {
-        "command": "temcoTools.sql.newSavedQuery",
-        "title": "New Saved Query"
+        "command": "temcoTools.sql.selectTable",
+        "title": "Open a Table's Schema"
       },
       {
-        "command": "temcoTools.sql.runSaved",
-        "title": "Run a Saved Query"
+        "command": "temcoTools.sql.copyDdl",
+        "title": "Copy a Table's Statement"
       },
       {
-        "command": "temcoTools.sql.runHistory",
-        "title": "Re-run a Statement"
+        "command": "temcoTools.sql.integrity",
+        "title": "Check the Database's Integrity",
+        "icon": "$(check)"
       },
       {
         "command": "temcoTools.sql.clearHistory",
         "title": "Clear the Query History"
       },
       {
-        "command": "temcoTools.sql.newReport",
-        "title": "New Report"
+        "command": "temcoTools.sql.openFolder",
+        "title": "Show the Database File"
       },
       {
-        "command": "temcoTools.sql.runReport",
-        "title": "Run a Report"
+        "command": "temcoTools.sql.copyPath",
+        "title": "Copy the Database Path"
+      },
+      {
+        "command": "temcoTools.sql.vacuum",
+        "title": "Vacuum the Database"
+      },
+      {
+        "command": "temcoTools.sql.checkpoint",
+        "title": "Checkpoint the Write-Ahead Log"
+      },
+      {
+        "command": "temcoTools.sql.backup",
+        "title": "Back Up the Database"
+      },
+      {
+        "command": "temcoTools.sql.clear",
+        "title": "Empty Every Table"
+      },
+      {
+        "command": "temcoTools.sql.reset",
+        "title": "Reset the Database"
       }
     ]
   }

@@ -10,21 +10,22 @@
 //
 // Every one of them was a folded section of a single page until the mock's side bar was taken seriously: each row has
 // its own title, its own count where the count means something, and its own actions, and a folded section cannot carry
-// any of those. Each studio owns its pages (`devices.ts`, `io.ts`, `bacnet.ts`, `network.ts`, `sql.ts`) and its sample;
-// this file is only the wiring — the activation and the views.
+// any of those. Each studio owns its pages (`devices.ts`, `io.ts`, `bacnet.ts`, `network.ts`, `sqlStudio.ts`) and its
+// sample; this file is only the wiring — the activation and the views.
 //
 // **What is real and what is sample.** The pages, their navigation, their vocabulary and their buttons are real: a
-// button asks, changes the studio's register, re-renders and reports what it changed. The rows are the mock's sample,
-// because the modules that will own these surfaces have no socket to a controller, no BACnet stack, no capture device
-// and no database driver yet. Every page says so at the foot rather than pretending the numbers are live.
+// button asks, changes the studio's register, re-renders and reports what it changed. The rows are the mock's sample
+// for the four device studios, because those have no socket to a controller, no BACnet stack and no capture device
+// yet. **SQL Studio is not a sample**: it runs statements against the platform's own database, reads its schema back
+// and can clear or reset it — see `sqlStudio.ts`.
 
 import * as vscode from 'vscode';
 import { BACNET_PAGES, registerBacnet } from './bacnet';
-import { ALARMS, DEVICES, REPORTS } from './data';
+import { ALARMS, DEVICES } from './data';
 import { DEVICE_PAGES, onDidChangeDevices, registerDevices } from './devices';
 import { IO_PAGES, registerIo } from './io';
 import { NETWORK_PAGES, registerNetwork } from './network';
-import { SQL_PAGES, registerSql } from './sql';
+import { SQL_PAGES, registerSql } from './sqlStudio';
 
 /** One row of a studio's side bar: the label, the sentence behind it, and the glyph. */
 interface StudyRow {
@@ -182,8 +183,8 @@ export function activate(context: vscode.ExtensionContext): void {
 		vscode.window.createTreeView('temcoTools.bacnetHistory', { treeDataProvider: new PagesTree(BACNET_PAGES.filter((entry) => entry.group === 'history')) }),
 		vscode.window.createTreeView('temcoTools.networkTools', { treeDataProvider: new PagesTree(NETWORK_PAGES.filter((entry) => entry.group === 'tools')) }),
 		vscode.window.createTreeView('temcoTools.networkTraffic', { treeDataProvider: new PagesTree(NETWORK_PAGES.filter((entry) => entry.group === 'traffic')) }),
-		vscode.window.createTreeView('temcoTools.sqlWorkbench', { treeDataProvider: new PagesTree(SQL_PAGES.filter((entry) => entry.group === 'workbench')) }),
-		vscode.window.createTreeView('temcoTools.sqlDocs', { treeDataProvider: new PagesTree(SQL_PAGES.filter((entry) => entry.group === 'docs'), { reports: () => REPORTS.length }) }),
+		vscode.window.createTreeView('temcoTools.sqlWorkbench', { treeDataProvider: new PagesTree(SQL_PAGES.filter((entry) => entry.group === 'rows')) }),
+		vscode.window.createTreeView('temcoTools.sqlDocs', { treeDataProvider: new PagesTree(SQL_PAGES.filter((entry) => entry.group === 'file')) }),
 		onDidChangeDevices(() => {
 			fleet.refresh();
 			data.refresh();

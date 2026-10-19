@@ -14,6 +14,10 @@ export interface PageMessage {
 	type?: string;
 	command?: string;
 	args?: unknown;
+	/** The statement a page's editor holds, when it sends one back. */
+	sql?: string;
+	/** Whether the person allowed a writing statement. */
+	write?: boolean;
 }
 
 /** The UI module's exports. */
