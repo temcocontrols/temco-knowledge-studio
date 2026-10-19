@@ -239,11 +239,7 @@ export class AiPage {
 function html(): string {
   const style = `
     :root { color-scheme: light dark; }
-    /* The document, its padding and its type scale are the page kit's now; this block is the page itself. */
-    h1 { font-size: 1.5em; font-weight: 600; margin: 0 0 .6em; }
-    h2 { font-size: 1em; font-weight: 600; margin: 1.8em 0 .5em; }
-    h3 { font-size: .95em; font-weight: 600; margin: 0 0 .2em; }
-    p { line-height: 1.55; margin: .3em 0; }
+    /* The type scale and the controls are the page kit's; this block is this page's own layout. */
     .meta { color: var(--vscode-descriptionForeground); }
     .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(16em, 100%), 1fr)); gap: .8em 2em;
              max-width: 70em; }
@@ -267,14 +263,6 @@ function html(): string {
     .info h3 { margin: 0 0 .15em; }
     .info p { margin: 0; color: var(--vscode-descriptionForeground); }
     .info em { color: var(--vscode-charts-green, var(--vscode-descriptionForeground)); font-style: normal; }
-    button { padding: .3em .8em; border: none; border-radius: 2px; cursor: pointer;
-             font-family: inherit; font-size: inherit;
-             color: var(--vscode-button-secondaryForeground);
-             background: var(--vscode-button-secondaryBackground); }
-    button:hover { background: var(--vscode-button-secondaryHoverBackground); }
-    button.primary { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
-    button.primary:hover { background: var(--vscode-button-hoverBackground); }
-    button:disabled { opacity: .5; cursor: default; }
     .actions { display: flex; gap: .6em; flex-wrap: wrap; margin: .8em 0 0; }
     .place { display: flex; gap: .6em; flex-wrap: wrap; margin: .8em 0 0; align-items: center; }
     .place p { margin: 0; color: var(--vscode-descriptionForeground); flex: 1 1 20em; min-width: 0; }
@@ -288,9 +276,6 @@ function html(): string {
     .empty { color: var(--vscode-descriptionForeground); border: 1px dashed var(--vscode-panel-border);
              border-radius: 3px; padding: 1em 1.2em; max-width: 70em; }
     code { font-family: var(--vscode-editor-font-family); font-size: .95em; overflow-wrap: anywhere; }
-    select { font-family: inherit; font-size: inherit; padding: .25em .4em;
-             color: var(--vscode-dropdown-foreground); background: var(--vscode-dropdown-background);
-             border: 1px solid var(--vscode-dropdown-border); }
     .pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(18em, 100%), 1fr)); gap: 1em 2em;
             max-width: 70em; }
     .pick label { display: block; color: var(--vscode-descriptionForeground); margin-bottom: .2em; }

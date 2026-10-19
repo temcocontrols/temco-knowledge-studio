@@ -89,10 +89,10 @@ function explained(row: DocsNode | undefined): void {
     );
     return;
   }
-  if (row.kind === 'gaps' || row.kind === 'note') {
-    // A summary row and an empty-state row stand for nothing on disk, so there is nowhere to point at.
+  if (row.kind === 'note') {
+    // An empty-state row stands for nothing on disk, so there is nowhere to point at.
     void vscode.window.showInformationMessage(
-      'Temco Docs: this row is a summary rather than a folder, so it has no place to show.'
+      'Temco Docs: this row is a note rather than a folder, so it has no place to show.'
     );
     return;
   }
@@ -110,7 +110,7 @@ function fileOf(row: DocsNode): vscode.Uri | undefined {
 
 /** The folder a row stands for — `docs/<area>[/<chapter>]`, and never a folder outside `docs/`. */
 function folderOf(row: DocsNode): vscode.Uri | undefined {
-  if (row.kind === 'gaps' || row.kind === 'note' || row.root.origin === 'catalog') {
+  if (row.kind === 'note' || row.root.origin === 'catalog') {
     return undefined;
   }
   const rootUri = row.root.rootUri;
@@ -146,7 +146,5 @@ function rowName(row: DocsNode): string {
       return row.root.folder.name;
     case 'note':
       return row.note.label;
-    case 'gaps':
-      return 'this summary';
   }
 }

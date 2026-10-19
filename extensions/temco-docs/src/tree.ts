@@ -1,8 +1,13 @@
-// The Content view.
+// The Docs Explorer — the pages the registry holds, arranged the way a reader walks them.
 //
-// Areas, then chapters, then pages — the same shape the registry describes, so the tree never has to be
-// explained. Counts sit on the parents because the question a maintainer actually asks is "which area
-// needs attention", not "show me page 217". A page with a problem gets its reasons as children.
+// Rebuilt to the mock's content tree (`docs/mock/js/shell.js`, `renderDocTree`): an area is a folder, a chapter is
+// a folder inside it, and a page is a leaf with its title and nothing else. A folder carries one number — how many
+// pages are under it — because that is the only thing the panel adds to the names.
+//
+// What the mock does not have, and this panel keeps, is the state: a page's tooltip still says its id, owner,
+// audience, provenance and last change, its icon is still tinted when the page has a problem, and a page with
+// structural problems still folds out those problems as children. The difference is that a clean tree is now what
+// a person sees first.
 
 import * as vscode from 'vscode';
 import {
@@ -13,12 +18,11 @@ import {
   Provenance,
   collectPages,
   countStale,
-  totals,
 } from './registry';
 
 class FolderNode {
   readonly kind = 'folder';
-  constructor(readonly root: DocsRoot) {}
+  constructor(readonly root: DocsRoot) { }
 }
 
 class AreaNode {
@@ -27,28 +31,22 @@ class AreaNode {
    * True when this area is the view's own top level — with one repository open its areas are, and they open by
    * themselves so the pages are one click away instead of three. Anything deeper waits to be asked.
    */
-  constructor(readonly root: DocsRoot, readonly area: AreaGroup, readonly top = false) {}
+  constructor(readonly root: DocsRoot, readonly area: AreaGroup, readonly top = false) { }
 }
 
 class ChapterNode {
   readonly kind = 'chapter';
-  constructor(readonly root: DocsRoot, readonly area: AreaGroup, readonly chapter: ChapterGroup) {}
+  constructor(readonly root: DocsRoot, readonly area: AreaGroup, readonly chapter: ChapterGroup) { }
 }
 
 class PageNode {
   readonly kind = 'page';
-  constructor(readonly root: DocsRoot, readonly page: PageEntry) {}
+  constructor(readonly root: DocsRoot, readonly page: PageEntry) { }
 }
 
 class IssueNode {
   readonly kind = 'issue';
-  constructor(readonly root: DocsRoot, readonly page: PageEntry, readonly index: number) {}
-}
-
-/** Stands in for the list of every page with a problem, across all open repositories. */
-class GapsNode {
-  readonly kind = 'gaps';
-  constructor(readonly count: number) {}
+  constructor(readonly root: DocsRoot, readonly page: PageEntry, readonly index: number) { }
 }
 
 /**
@@ -66,7 +64,7 @@ export interface TreeNote {
 
 class NoteNode {
   readonly kind = 'note';
-  constructor(readonly note: TreeNote) {}
+  constructor(readonly note: TreeNote) { }
 }
 
 export type DocsNode =
@@ -75,7 +73,6 @@ export type DocsNode =
   | ChapterNode
   | PageNode
   | IssueNode
-  | GapsNode
   | NoteNode;
 
 export function pageFromNode(node: DocsNode | undefined): PageNode | undefined {
@@ -111,12 +108,6 @@ export class DocsTreeProvider implements vscode.TreeDataProvider<DocsNode> {
         return pageItem(node);
       case 'issue':
         return issueItem(node);
-      case 'gaps': {
-        const item = new vscode.TreeItem(`Gaps (${node.count})`, vscode.TreeItemCollapsibleState.Collapsed);
-        item.iconPath = new vscode.ThemeIcon('warning', new vscode.ThemeColor('problemsWarningIcon.foreground'));
-        item.tooltip = 'Every page with a structural problem, across all open repositories.';
-        return item;
-      }
       case 'note': {
         const item = new vscode.TreeItem(node.note.label, vscode.TreeItemCollapsibleState.None);
         item.description = node.note.detail;
@@ -141,21 +132,14 @@ export class DocsTreeProvider implements vscode.TreeDataProvider<DocsNode> {
         // Nothing read is not nothing to say: the rows carry the reason and the way out of it.
         return this.notes.map((note) => new NoteNode(note));
       }
-      const gaps = totals(roots).issues;
-      const entry =
-        roots.length === 1
-          ? roots[0].areas.map((area) => new AreaNode(roots[0], area, true))
-          : roots.map((root) => new FolderNode(root));
-      return gaps > 0 ? [new GapsNode(gaps), ...entry] : entry;
+      // One source puts its areas at the top, the way the mock's tree starts at the areas. More than one keeps a
+      // row per source: with two repositories open, a page named "Install" belongs to one of them.
+      return roots.length === 1
+        ? roots[0].areas.map((area) => new AreaNode(roots[0], area, true))
+        : roots.map((root) => new FolderNode(root));
     }
 
     switch (node.kind) {
-      case 'gaps':
-        return this.roots.flatMap((root) =>
-          collectPages(root)
-            .filter((page) => page.issues.length > 0)
-            .map((page) => new PageNode(root, page))
-        );
       case 'folder':
         return node.root.areas.map((area) => new AreaNode(node.root, area));
       case 'area':
@@ -177,7 +161,7 @@ function folderItem(node: FolderNode): vscode.TreeItem {
   );
   const { root } = node;
   const recorded = root.origin === 'catalog';
-  item.description = recorded ? `${root.pages} pages · read from the source` : `${root.pages} pages`;
+  item.description = String(root.pages);
   const stale = countStale(collectPages(root));
   item.tooltip = new vscode.MarkdownString(
     [
@@ -185,12 +169,12 @@ function folderItem(node: FolderNode): vscode.TreeItem {
       '',
       recorded
         ? `${root.pages} pages as the read recorded them. The checks need a folder on this machine, so none ` +
-          'has been run on this source.'
+        'has been run on this source.'
         : `${root.pages} pages · ${root.issues} issues · ${root.neverReviewed} never reviewed` +
-          (stale > 0 ? ` · ${stale} stale` : ''),
+        (stale > 0 ? ` · ${stale} stale` : ''),
     ].join('\n')
   );
-  item.iconPath = new vscode.ThemeIcon(recorded ? 'cloud' : 'folder-opened');
+  item.iconPath = new vscode.ThemeIcon('folder');
   item.contextValue = recorded ? 'source' : 'folder';
   return item;
 }
@@ -205,7 +189,7 @@ function areaItem(node: AreaNode): vscode.TreeItem {
         : vscode.TreeItemCollapsibleState.Collapsed
       : vscode.TreeItemCollapsibleState.None
   );
-  item.description = `${area.pages} pages${describeIssues(area)}`;
+  item.description = String(area.pages);
   const stale = countStale(node.area.chapters.flatMap((chapter) => chapter.pages));
   item.tooltip = new vscode.MarkdownString(
     [
@@ -235,8 +219,8 @@ function chapterItem(node: ChapterNode): vscode.TreeItem {
       ? vscode.TreeItemCollapsibleState.Collapsed
       : vscode.TreeItemCollapsibleState.None
   );
-  item.description = `${node.chapter.pages.length}`;
-  item.iconPath = new vscode.ThemeIcon('files');
+  item.description = String(node.chapter.pages.length);
+  item.iconPath = new vscode.ThemeIcon('folder');
   item.contextValue = 'chapter';
   return item;
 }
@@ -253,7 +237,6 @@ function pageItem(node: PageNode): vscode.TreeItem {
 
   if (recorded) {
     // Nothing was checked and nothing was reviewed, so the row says what it is: a page a read told us about.
-    item.description = `${page.owner || 'no owner'} · read from the source`;
     item.tooltip = new vscode.MarkdownString(
       [
         `**${page.title}**`,
@@ -262,8 +245,8 @@ function pageItem(node: PageNode): vscode.TreeItem {
         `owner: ${page.owner || '—'}`,
         '',
         `Read from ${node.root.folder.name}, which is not a folder on this machine — so the page's file, its ` +
-          'headings, its staleness and its structural checks are all unknown. Reading a clone of the source is ' +
-          'what makes them known.',
+        'headings, its staleness and its structural checks are all unknown. Reading a clone of the source is ' +
+        'what makes them known.',
       ].join('\n')
     );
     item.iconPath = new vscode.ThemeIcon('cloud', new vscode.ThemeColor('descriptionForeground'));
@@ -271,7 +254,6 @@ function pageItem(node: PageNode): vscode.TreeItem {
     return item;
   }
 
-  item.description = `${stale ? 'stale · ' : ''}${page.owner}${page.ship ? '' : ' · not shipped'}${page.reviewed ? '' : ' · never reviewed'}`;
   item.tooltip = new vscode.MarkdownString(
     [
       `**${page.title}**`,
@@ -299,8 +281,8 @@ function pageItem(node: PageNode): vscode.TreeItem {
     : stale
       ? new vscode.ThemeIcon('history', new vscode.ThemeColor('descriptionForeground'))
       : colour !== undefined
-        ? new vscode.ThemeIcon('markdown', new vscode.ThemeColor(colour))
-        : new vscode.ThemeIcon('markdown');
+        ? new vscode.ThemeIcon('file', new vscode.ThemeColor(colour))
+        : new vscode.ThemeIcon('file');
   item.contextValue = page.exists ? 'page' : 'missingPage';
   item.command = {
     command: 'temcoDocs.openPage',
@@ -344,18 +326,4 @@ function issueItem(node: IssueNode): vscode.TreeItem {
   );
   item.contextValue = 'issue';
   return item;
-}
-
-function describeIssues(counts: { errors: number; warnings: number }): string {
-  if (counts.errors === 0 && counts.warnings === 0) {
-    return '';
-  }
-  const parts: string[] = [];
-  if (counts.errors > 0) {
-    parts.push(`${counts.errors} errors`);
-  }
-  if (counts.warnings > 0) {
-    parts.push(`${counts.warnings} warnings`);
-  }
-  return ` · ${parts.join(', ')}`;
 }

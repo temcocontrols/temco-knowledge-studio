@@ -8,7 +8,7 @@
 
 import * as vscode from 'vscode';
 import { ACTIONS, AiModel, CITATIONS, MODELS } from './aiSample';
-import { escapeHtml as esc, icon, page, pageColumn } from './ui';
+import { commandScript, escapeHtml as esc, icon, page, pageColumn, runCommand } from './ui';
 
 export const CHAT_VIEW_TYPE = 'temcoAi.chat';
 export const ACTIONS_VIEW_TYPE = 'temcoAi.actions';
@@ -84,10 +84,11 @@ export class AiPages {
 	}
 
 	private open(key: string, viewType: string, title: string, body: string): void {
+		const html = page(body, { title, script: commandScript });
 		const existing = this.panels.get(key);
 		if (existing) {
 			existing.reveal(pageColumn());
-			existing.webview.html = page(body, { title });
+			existing.webview.html = html;
 			return;
 		}
 		const panel = vscode.window.createWebviewPanel(viewType, title, pageColumn(), {
@@ -95,7 +96,8 @@ export class AiPages {
 			localResourceRoots: []
 		});
 		panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'ai.svg');
-		panel.webview.html = page(body, { title });
+		panel.webview.onDidReceiveMessage(runCommand);
+		panel.webview.html = html;
 		this.panels.set(key, panel);
 		panel.onDidDispose(() => this.panels.delete(key));
 	}

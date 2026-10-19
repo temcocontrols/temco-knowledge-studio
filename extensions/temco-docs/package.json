@@ -48,7 +48,7 @@
         },
         {
           "id": "temcoDocs.section.documents",
-          "name": "Documents"
+          "name": "Areas"
         },
         {
           "id": "temcoDocs.section.pipeline",
@@ -62,7 +62,7 @@
       "temcoDocuments": [
         {
           "id": "temcoDocs.pages",
-          "name": "Documents"
+          "name": "Pages"
         }
       ]
     },
@@ -89,7 +89,7 @@
       },
       {
         "command": "temcoDocs.documents",
-        "title": "Documents",
+        "title": "Areas",
         "icon": "$(book)"
       },
       {

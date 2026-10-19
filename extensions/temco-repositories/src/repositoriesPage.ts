@@ -245,25 +245,11 @@ export class RepositoriesPage {
 function html(): string {
   const style = `
     :root { color-scheme: light dark; }
-    /* The document, its padding and its type scale are the page kit's now; this block is the page itself. */
-    h1 { font-size: 1.5em; font-weight: 600; margin: 0 0 .2em; }
-    h2 { font-size: 1em; font-weight: 600; margin: 1.8em 0 .5em; }
-    p { line-height: 1.55; margin: .3em 0; }
+    /* The type scale and the controls are the page kit's; this block is this page's own layout. */
     .meta { color: var(--vscode-descriptionForeground); }
-    .bar { display: flex; gap: .6em; align-items: center; flex-wrap: wrap; margin: 1.2em 0 .8em;
+    .toolbar { display: flex; gap: .6em; align-items: center; flex-wrap: wrap; margin: 1.2em 0 .8em;
            max-width: 78em; }
-    input[type=search] { flex: 1 1 16em; min-width: 8em; padding: .35em .6em; font-family: inherit;
-           font-size: inherit; color: var(--vscode-input-foreground);
-           background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, transparent);
-           border-radius: 2px; }
-    input[type=search]:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
-    button { padding: .3em .8em; border: none; border-radius: 2px; cursor: pointer; font-family: inherit;
-             font-size: inherit; color: var(--vscode-button-secondaryForeground);
-             background: var(--vscode-button-secondaryBackground); }
-    button:hover { background: var(--vscode-button-secondaryHoverBackground); }
-    button.primary { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
-    button.primary:hover { background: var(--vscode-button-hoverBackground); }
-    button:disabled { opacity: .5; cursor: default; }
+    .toolbar input { flex: 1 1 16em; min-width: 8em; }
     .card { border: 1px solid var(--vscode-panel-border); border-radius: 4px; padding: .8em 1em;
             margin: 0 0 .6em; max-width: 78em; }
     .card.cited { border-color: var(--vscode-focusBorder); }
@@ -287,7 +273,7 @@ function html(): string {
   <h1 id="title" class="page-head__title">Repositories</h1>
   <p class="meta" id="lede">Reading the organisation from GitHub…</p>
 
-  <div class="bar" hidden id="bar">
+  <div class="toolbar" hidden id="bar">
     <input type="search" id="filter" placeholder="Filter by name, description or language" aria-label="Filter">
     <button id="reload">Read GitHub again</button>
   </div>

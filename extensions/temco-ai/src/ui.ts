@@ -8,12 +8,21 @@ import * as vscode from 'vscode';
 /** The UI module, by the id its manifest declares. */
 const UI_EXTENSION_ID = 'temcocontrols.temco-ui';
 
+/** One message a page sends back to its module. */
+export interface PageMessage {
+	type?: string;
+	command?: string;
+	args?: unknown;
+}
+
 /** The UI module's exports. */
 interface UiApi {
 	pageColumn(): vscode.ViewColumn;
 	page(body: string, options?: { title?: string; script?: string; extraCss?: string }): string;
 	escapeHtml(text: string): string;
 	icon(name: string, cls?: string): string;
+	commandScript: string;
+	runCommand(message: PageMessage): void;
 }
 
 const extension = vscode.extensions.getExtension<UiApi>(UI_EXTENSION_ID);
@@ -34,3 +43,9 @@ export const escapeHtml = ui.escapeHtml;
 
 /** One glyph from the page's sprite. */
 export const icon = ui.icon;
+
+/** The script that turns a `data-command` button into a message to the module. */
+export const commandScript = ui.commandScript;
+
+/** What the module does with that message: run the command it names. */
+export const runCommand = ui.runCommand;

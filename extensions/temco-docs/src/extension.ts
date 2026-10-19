@@ -96,8 +96,8 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
 
   // The page behind the *Documentation Owed* row, and the form that creates a page.
 
-  // The side bar's groups, as the mock draws them: Projects, Sources, Pipeline, How-To 鈥?the Workspace tree is the
-  // Documents group and is registered above with the rest of the view.
+  // The side bar's groups, as the mock draws them: Projects, Sources, Areas, Pipeline, How-To — the Docs Explorer
+  // is the tree of pages, and is registered above with the rest of the view.
   registerSectionViews(context);
 
   const refresh = async (): Promise<void> => {

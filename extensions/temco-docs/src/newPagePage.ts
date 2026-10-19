@@ -1,18 +1,16 @@
-// New page — the form that creates a page, and the drafts that make writing one smaller.
+// New page — the flow the mock draws as `flow/new-page`: three steps, and one write at the end.
 //
-// Why a page and not three questions: VS Code's input box lives at the top of the window, one question at a
-// time, and cannot show what the answer will produce. A page can show every field at once, the exact file the
-// answers will make, the kind's headings beside each other, and a draft of the body — so a person decides once
-// instead of four times. Both *New page…* and *New chapter…* and the kind entries open this, and it writes
-// through `writePage` in `src/pageOps.ts`, which is the only thing here that touches the disk.
+// Why a page and not an input box: VS Code asks one question at a time at the top of the window and cannot show
+// what the answer will produce. A flow can say where the page lands, which sections its kind starts with, and the
+// exact file the answers make — so a person decides once instead of four times.
 //
-// **Nothing is written until *Write the page* is pressed**, and the confirmation names the file. That is the
-// rule the whole extension is built on, and it is what keeps a model-written draft inside
-// `12-ai-features.md`'s bargain: the model makes the human's edit small, a person approves, nothing publishes
-// itself.
+// **Nothing is written until *Create Page* is pressed**, and the confirmation names the file. It writes through
+// `writePage` in `src/pageOps.ts`, which is the only thing here that touches the disk. The three steps are the
+// mock's: **Location** (source, area, chapter — and the pages it will land between), **Template** (the kind, whose
+// headings are the outline), **Draft** (title, slug, where the body starts).
 //
 // Two kinds of material can be drafted from, and they are different on purpose:
-//   * **the pages already in this area** — the same material the AI panel already works from;
+//   * **the pages already in this area** — ids, titles and headings, the same material the AI panel works from;
 //   * **one file of the source** — a class, a header, a script. This is the one prompt that may see code
 //     (`prompts/newpage.md`), because the page being written is *about* that file, and a person chose it.
 
@@ -30,7 +28,7 @@ import {
 } from './pageOps';
 import { RepositorySource, codeFiles, readMaterials } from './repositories';
 import { NEW_PAGE_VIEW_TYPE, pageColumn } from './surface';
-import { page } from './ui';
+import { icon, page } from './ui';
 
 /** How much of another page may be given to the model, so one huge page cannot fill the window. */
 const MATERIAL_CHARS = 12_000;
@@ -45,7 +43,7 @@ interface FormMessage {
   note?: string;
 }
 
-/** What the form is told about one writable source. */
+/** What the flow is told about one writable source. */
 interface SourceForm {
   name: string;
   /** The folder, for the line under the name. */
@@ -54,7 +52,7 @@ interface SourceForm {
     area: string;
     title: string;
     chapters: string[];
-    pages: { id: string; title: string; headings: string[] }[];
+    pages: { id: string; title: string; chapter: string; order: number; owner: string }[];
   }[];
 }
 
@@ -68,7 +66,7 @@ export class NewPagePage {
     private readonly deps: PageDeps
   ) { }
 
-  /** Opens the page for one act: a new page, a new chapter, or a kind already chosen. */
+  /** Opens the flow for one act: a new page, a new chapter, or a kind already chosen. */
   open(seed: NewPageSeed = {}): void {
     this.seed = seed;
     if (this.panel) {
@@ -92,7 +90,17 @@ export class NewPagePage {
     const panel = this.panel;
     if (!panel) {
       return;
-    } panel.webview.html = html();
+    }
+    panel.webview.html = html();
+    await this.sendForm();
+  }
+
+  /** Everything the flow draws from: the sources, their areas and pages, the kinds, and the model in use. */
+  private async sendForm(): Promise<void> {
+    const panel = this.panel;
+    if (!panel) {
+      return;
+    }
     await panel.webview.postMessage({
       type: 'form',
       seed: this.seed,
@@ -104,7 +112,7 @@ export class NewPagePage {
     });
   }
 
-  /** Closes the page: cancel, or the extension going away. */
+  /** Closes the flow: cancel, or the extension going away. */
   dispose(): void {
     this.panel?.dispose();
   }
@@ -120,13 +128,15 @@ export class NewPagePage {
           area: area.area,
           title: area.title,
           chapters: area.chapters.map((chapter) => chapter.chapter),
-          // The pages as the material line shows them: what the model may read about this area, and what
-          // *another page* can be picked from. Sent once with the form rather than asked for again.
+          // The pages as the Location step shows them: what the new page will land between, and who owns
+          // the neighbours. Sent once with the form rather than asked for again.
           pages: area.chapters.flatMap((chapter) =>
             chapter.pages.map((page) => ({
               id: page.id,
               title: page.title,
-              headings: page.provenance?.headings ?? [],
+              chapter: chapter.chapter,
+              order: page.order,
+              owner: page.owner,
             }))
           ),
         })),
@@ -135,6 +145,9 @@ export class NewPagePage {
 
   private async receive(message: FormMessage): Promise<void> {
     switch (message.type) {
+      case 'ready':
+        await this.sendForm();
+        return;
       case 'files':
         await this.files(message.source ?? '');
         return;
@@ -160,8 +173,9 @@ export class NewPagePage {
   /**
    * What documentation this source is missing, from its file list and the pages that already exist.
    *
-   * The model is given paths, never contents — a proposal to write a page, not a page. Each suggestion the form
-   * shows fills the fields when it is clicked, and the ordinary draft-and-write path takes it from there.
+   * The model is given paths, never contents — a proposal to write a page, not a page. Each suggestion the flow
+   * shows fills the title and the kind when it is clicked, and the ordinary draft-and-write path takes it from
+   * there.
    */
   private async analyse(source: string, note: string): Promise<void> {
     const panel = this.panel;
@@ -311,8 +325,7 @@ export class NewPagePage {
         return { error: 'None of the chosen files could be read.' };
       }
       return {
-        text: `${materials.text}\n\n… ${materials.included.length} file(s), ${materials.characters} characters${materials.skipped.length > 0 ? `, ${materials.skipped.length} left out to stay within the budget` : ''
-          } …`,
+        text: `${materials.text}\n\n… ${materials.included.length} file(s), ${materials.characters} characters${materials.skipped.length > 0 ? `, ${materials.skipped.length} left out to stay within the budget` : ''} …`,
         area: listed,
       };
     }
@@ -344,7 +357,7 @@ export class NewPagePage {
  * A small local model writes roughly what it was asked for and sometimes not: a line that is not
  * `title | kind | files` is dropped, a kind that does not exist becomes *Article*, and a file that is not in the
  * list the model was given is dropped too — so a suggestion can only ever name files that are really there. The
- * form shows the result, and the person clicks one.
+ * flow shows the result, and the person clicks one.
  */
 function suggestions(
   answer: string,
@@ -384,7 +397,7 @@ function suggestions(
 }
 
 /**
- * The model in use as a person would name it, or nothing — what the form needs before it offers to draft.
+ * The model in use as a person would name it, or nothing — what the flow needs before it offers to draft.
  *
  * Asked of the AI module rather than read from a setting: which model is *installed* is that module's answer.
  */
@@ -421,538 +434,604 @@ function fileOf(roots: readonly DocsRoot[], spec: NewPageSpec): string {
   return root === undefined ? '' : `${root.folder.name}/docs/${area}/${chapter}${spec.slug ?? ''}.md`;
 }
 
+/* ------------------------------------------------------------------ the three steps */
+
+const STEPS = ['Location', 'Template', 'Draft'];
+
 function html(): string {
-  const style = `
-    :root { color-scheme: light dark; }
-    /* The document, its padding and its type scale are the page kit's now; this block is only the form. */
-    h1 { font-size: 1.5em; font-weight: 600; margin: 0 0 .2em; }
-    h2 { font-size: .95em; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
-         color: var(--vscode-descriptionForeground); margin: 1.9em 0 .5em; }
-    p { line-height: 1.55; margin: .3em 0; }
-    .meta { color: var(--vscode-descriptionForeground); }
-    .fields { display: flex; gap: 1.6em; flex-wrap: wrap; }
-    label.field { display: flex; flex-direction: column; gap: .25em; min-width: 0; flex: 0 1 22em; }
-    label.field span { color: var(--vscode-descriptionForeground); }
-    label.field.wide { flex: 1 1 100%; }
-    .ticks { max-height: 14em; overflow: auto; border: 1px solid var(--vscode-panel-border); border-radius: 2px;
-             padding: .3em .5em; background: var(--vscode-input-background); }
-    .ticks label { display: flex; gap: .5em; align-items: baseline; padding: .1em 0; cursor: pointer; }
-    .ticks .size { color: var(--vscode-descriptionForeground); margin-left: auto; }
-    .card { border: 1px solid var(--vscode-panel-border); border-radius: 4px; padding: .7em .9em;
-            margin: .5em 0; max-width: 78em; }
-    .card .top { display: flex; gap: .8em; align-items: baseline; flex-wrap: wrap; }
-    .card .name { font-weight: 600; }
-    .card .tags { color: var(--vscode-descriptionForeground); flex: 1 1 auto; }
-    .card .do { margin: .5em 0 0; }
-    select, input[type=text] { padding: .35em .55em; font-family: inherit; font-size: inherit;
-           color: var(--vscode-input-foreground); background: var(--vscode-input-background);
-           border: 1px solid var(--vscode-input-border, transparent); border-radius: 2px; min-width: 0; }
-    select:focus, input[type=text]:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
-    .choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(20em, 100%), 1fr));
-               gap: .4em 1.2em; max-width: 78em; }
-    .choice { display: flex; gap: .55em; align-items: baseline; padding: .45em .7em;
-              border: 1px solid var(--vscode-panel-border); border-radius: 3px; cursor: pointer; }
-    .choice.here { border-color: var(--vscode-focusBorder); }
-    .choice input { margin: 0; }
-    .choice .what { font-weight: 600; }
-    .choice .detail { color: var(--vscode-descriptionForeground); display: block; }
-    .path { font-family: var(--vscode-editor-font-family); font-size: .95em; overflow-wrap: anywhere; }
-    button { padding: .35em .9em; border: none; border-radius: 2px; cursor: pointer; font-family: inherit;
-             font-size: inherit; color: var(--vscode-button-secondaryForeground);
-             background: var(--vscode-button-secondaryBackground); }
-    button:hover { background: var(--vscode-button-secondaryHoverBackground); }
-    button.primary { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
-    button.primary:hover { background: var(--vscode-button-hoverBackground); }
-    button:disabled { opacity: .5; cursor: default; }
-    .do { display: flex; gap: .6em; flex-wrap: wrap; margin: 1.4em 0 0; align-items: center; }
-    pre { font-family: var(--vscode-editor-font-family); font-size: .92em; line-height: 1.5;
-          background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
-          border: 1px solid var(--vscode-panel-border); border-radius: 3px; padding: .9em 1.1em;
-          max-width: 78em; max-height: 34em; overflow: auto; white-space: pre-wrap; margin: .4em 0 0; }
-    .note { color: var(--vscode-descriptionForeground); margin: .5em 0 0; max-width: 78em; }
-    .warn { color: var(--vscode-errorForeground); border: 1px solid var(--vscode-inputValidation-errorBorder);
-            background: var(--vscode-inputValidation-errorBackground); border-radius: 3px; padding: .8em 1em;
-            max-width: 78em; margin: .8em 0; }
-    .empty { color: var(--vscode-descriptionForeground); border: 1px dashed var(--vscode-panel-border);
-             border-radius: 3px; padding: 1.2em 1.4em; max-width: 78em; }
-    .ok { color: var(--vscode-charts-green); }
-    .foot { color: var(--vscode-descriptionForeground); margin-top: 2.4em; max-width: 78em;
-            border-top: 1px solid var(--vscode-panel-border); padding-top: 1em; }
-  `;
+  const rail = STEPS.map((label, index) =>
+    `${index > 0 ? '<span class="step__arrow" aria-hidden="true">→</span>' : ''}<button type="button" class="step${index === 0 ? ' is-active' : ''}" data-step="${index}" role="tab" aria-selected="${index === 0}"><span class="step__n">${index + 1}.</span><span class="step__label">${label}</span></button>`
+  ).join('');
 
-  const body = `
-  <h1 class="page-head__title">New page</h1>
-  <p class="meta" id="lede">Everything about the page in one place. Nothing is written until you press
-    <em>Write the page</em>, and that confirmation names the file.</p>
+  const body = `<div class="page-head">
+	<div class="page-head__main">
+		<div class="eyebrow">Documentation</div>
+		<h1 class="page-head__title">${icon('document')}New Page</h1>
+		<p class="page-head__desc">A page belongs to a chapter in an area. Its place in that chapter is what the site and the PDF use.</p>
+	</div>
+	<div class="page-head__actions"><button type="button" class="btn btn--ghost" id="wizard-cancel">${icon('close')}<span>Cancel</span></button></div>
+</div>
 
-  <div id="empty" hidden></div>
-  <div id="form">
-    <h2>Where</h2>
-    <div class="fields">
-      <label class="field"><span>Source</span><select id="source"></select></label>
-      <label class="field"><span>Area</span><select id="area"></select></label>
-      <label class="field"><span>Chapter</span><select id="chapter"></select></label>
-    </div>
+<div id="nothing" hidden></div>
 
-    <h2>What</h2>
-    <div class="choices" id="mode">
-      <label class="choice" id="mode-page"><input type="radio" name="mode" value="page"> <span><span class="what">A
-        page</span><span class="detail">one Markdown file, named below</span></span></label>
-      <label class="choice" id="mode-chapter"><input type="radio" name="mode" value="chapter">
-        <span><span class="what">A chapter</span><span class="detail">a folder and its first page — an empty
-        folder is not a chapter in the registry</span></span></label>
-    </div>
+<div class="wizard">
+	<div class="wizard__steps" role="tablist">${rail}</div>
+	<div class="wizard__body">
+		<div data-step-body="0">
+			<div class="wizard__title">Where does it go?</div>
+			<p class="wizard__hint">The area decides who is asked to review it; the chapter is the folder the file lands in.</p>
+			<div class="settings-rows" id="place"></div>
+			<div class="mt-16" id="lands"></div>
+		</div>
+		<div data-step-body="1" hidden>
+			<div class="wizard__title">Start from what?</div>
+			<p class="wizard__hint">A kind is a page outline, not a copy of someone else’s content.</p>
+			<div class="choice-grid" id="kinds"></div>
+			<div class="mt-16" id="template"></div>
+		</div>
+		<div data-step-body="2" hidden>
+			<div class="wizard__title">Name it</div>
+			<p class="wizard__hint">The slug comes from the title and never changes afterwards — links and help ids point at it.</p>
+			<div class="settings-rows" id="name"></div>
+			<div class="mt-16" id="pickers"></div>
+			<div class="mt-16" id="address"></div>
+			<div class="mt-16" id="tools"></div>
+			<div class="mt-16" id="note"></div>
+		</div>
+		<div class="wizard__error" id="wizard-error" hidden></div>
+	</div>
+	<div class="wizard__foot">
+		<span class="cell-muted" id="wizard-count">Step 1 of ${STEPS.length}</span>
+		<span class="wizard__spacer"></span>
+		<button type="button" class="btn" id="wizard-back" hidden>${icon('chevron-left')}<span>Back</span></button>
+		<button type="button" class="btn btn--primary" id="wizard-next"><span>Next</span></button>
+		<button type="button" class="btn btn--primary" id="wizard-finish" hidden>${icon('check')}<span>Create Page</span></button>
+	</div>
+</div>`;
 
-    <h2>Kind</h2>
-    <div class="choices" id="kinds"></div>
-
-    <h2>Its name</h2>
-    <div class="fields">
-      <label class="field"><span id="titleLabel">Title</span>
-        <input type="text" id="title" placeholder="Trend Logs"></label>
-      <label class="field"><span id="slugLabel">File name (without .md)</span>
-        <input type="text" id="slug" placeholder="trend-logs"></label>
-    </div>
-    <p class="note">It will be written to <span class="path" id="path">…</span> — the page id is that path, so the
-      file name matters more than the title does.</p>
-
-    <h2>Start the body from</h2>
-    <div class="choices" id="from">
-      <label class="choice"><input type="radio" name="from" value="empty"> <span><span class="what">Nothing</span>
-        <span class="detail">the kind's headings, and no prose</span></span></label>
-      <label class="choice"><input type="radio" name="from" value="area"> <span><span class="what">The pages
-        already in this area</span><span class="detail">the model sees their ids, titles and headings</span></span></label>
-      <label class="choice"><input type="radio" name="from" value="file"> <span><span class="what">A file of the
-        source</span><span class="detail">a class, a header, a script — the page is about that file</span></span></label>
-      <label class="choice"><input type="radio" name="from" value="page"> <span><span class="what">Another page</span>
-        <span class="detail">adapt a page that already says something close</span></span></label>
-    </div>
-    <div class="fields" id="pickers" hidden>
-      <label class="field wide" id="filesField" hidden><span>Tick every file this page should be written from</span>
-        <input type="text" id="fileFilter" placeholder="Filter files…">
-        <div class="ticks" id="fileList"></div>
-        <span class="note" id="filesNote"></span>
-        <span class="note" id="fileCount"></span></label>
-      <label class="field" id="pagesField" hidden><span>Page</span><select id="page" size="8"></select>
-        <span class="note" id="pagesNote"></span></label>
-    </div>
-
-    <h2>What is missing</h2>
-    <div class="do">
-      <button id="analyse">Analyse the source</button>
-      <span class="note">The model is given the file list and the pages that already exist, and proposes the
-        pages this source is missing. Clicking one fills this form.</span>
-    </div>
-    <div id="suggestions"></div>
-
-    <div class="do">
-      <button id="draft">Draft it with the AI</button>
-      <span class="note" id="model"></span>
-    </div>
-    <div id="draftBox"></div>
-
-    <div class="do">
-      <button class="primary" id="write">Write the page</button>
-      <button id="cancel">Cancel</button>
-      <span class="note" id="result"></span>
-    </div>
-  </div>
-
-  <p class="foot">The file is written with what you read above, and its first line is <code># title</code> — the
-    repository's generator reads a new page's title from that heading. The registry entry comes from the
-    repository's own generator afterwards, which is offered as soon as the file is written.</p>
-
-`;
-
-  return page(body, { title: 'New page', extraCss: style, script: CLIENT });
+  return page(body, { title: 'New page', script: CLIENT });
 }
 
+/**
+ * The flow's behaviour: three steps, the mock's three checks, and one message at the end.
+ *
+ * Everything the answer depends on — the areas of a source, the chapters of an area, the pages a new page lands
+ * between — is drawn here rather than sent again, so a change of area costs nothing.
+ */
 const CLIENT = `
-const vscode = acquireVsCodeApi();
-const $ = (id) => document.getElementById(id);
-let sources = [];
-let kinds = [];
-let areaChapter = '(root)';
-let seed = {};
-let files = [];
-let ticked = new Set();
-let listed = [];
-let draft = '';
+(function () {
+	const api = acquireVsCodeApi();
+	const NEW_CHAPTER = '__new';
+	const $ = (id) => document.getElementById(id);
+	const steps = Array.prototype.slice.call(document.querySelectorAll('.wizard__steps .step'));
+	const bodies = Array.prototype.slice.call(document.querySelectorAll('[data-step-body]'));
+	const error = $('wizard-error');
+	const count = $('wizard-count');
+	const back = $('wizard-back');
+	const next = $('wizard-next');
+	const finish = $('wizard-finish');
 
-window.addEventListener('message', (event) => {
-  const message = event.data;
-  if (message.type === 'form') {
-    sources = message.sources || [];
-    kinds = message.kinds || [];
-    areaChapter = message.areaChapter || '(root)';
-    seed = message.seed || {};
-    accept(message);
-    return;
-  }
-  if (message.type === 'files') {
-    files = message.files || [];
-    $('filesNote').textContent = files.length === 0
-      ? (message.note || 'No code files were found in this source.')
-      : files.length + ' file' + (files.length === 1 ? '' : 's') + (message.note ? ' · ' + message.note : '');
-    drawFiles();
-    return;
-  }
-  if (message.type === 'analyseStart') {
-    $('suggestions').replaceChildren(tell('Reading the file list…'));
-    return;
-  }
-  if (message.type === 'suggestions') {
-    drawSuggestions(message.items || []);
-    return;
-  }
-  if (message.type === 'analyseError') {
-    $('suggestions').replaceChildren(warn(message.message));
-    return;
-  }
-  if (message.type === 'draftStart') {
-    draft = '';
-    $('draftBox').replaceChildren(box('Drafting…'));
-    return;
-  }
-  if (message.type === 'draftToken') {
-    draft += message.text || '';
-    $('draftBox').replaceChildren(pre(draft));
-    return;
-  }
-  if (message.type === 'draftDone') {
-    $('draftBox').replaceChildren(pre(draft), tell('Read it. Edit anything you like after it is written — or draft again.'));
-    return;
-  }
-  if (message.type === 'draftError') {
-    draft = '';
-    $('draftBox').replaceChildren(warn(message.message));
-    return;
-  }
-  if (message.type === 'written') {
-    $('result').textContent = 'Written to ' + message.relative + ' — the editor has it.';
-    $('result').className = 'note ok';
-    $('write').disabled = true;
-    return;
-  }
-});
+	let sources = [];
+	let kinds = [];
+	let areaChapter = '(root)';
+	let seed = {};
+	let model;
+	let at = 0;
+	let files = [];
+	let ticked = new Set();
+	let suggestions = [];
+	let draft = '';
+	let values = { source: '', area: '', chapter: '', chapterName: '', kind: '', title: '', slug: '', from: 'empty', pageId: '' };
 
-function accept(message) {
-  const model = message.model;
-  $('model').textContent = model ? 'Local model: ' + model : 'No local model is chosen — the AI drafts are off.';
-  $('draft').disabled = !model;
+	function esc(text) {
+		return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+	}
 
-  if (sources.length === 0) {
-    $('form').hidden = true;
-    const box = document.createElement('div');
-    box.className = 'empty';
-    box.textContent = 'No source on this machine is being read, so there is nowhere to write a page. ' +
-      'A source read over the API has no working tree; work on a project whose sources are folders.';
-    $('empty').replaceChildren(box);
-    $('empty').hidden = false;
-    return;
-  }
+	function slugify(text) {
+		return String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+	}
 
-  $('source').replaceChildren(...sources.map((source) =>
-    withValue(option(source.name), source.name + '  —  ' + source.where)));
-  const wanted = sources.find((source) => source.name === seed.source) ? seed.source : sources[0].name;
-  $('source').value = wanted;
-  drawAreas();
+	/* The page's own glyphs: the sprite is in the document, so a row can be drawn from here without
+	   asking the host for markup. */
+	function tone(name, tint) {
+		return '<span class="tone-mark' + (tint ? ' tone-mark--' + tint : '') + '"><svg viewBox="0 0 24 24" class="icon icon--sm" aria-hidden="true"><use href="#i-' + name + '"></use></svg></span>';
+	}
 
-  const kind = kinds.find((candidate) => candidate.label === seed.kind);
-  drawKinds(kind ? kind.label : 'Article');
+	function group(label, countText, note, rows) {
+		return '<div class="group-head"><span class="group-head__label">' + esc(label) + '</span><span class="group-head__rule"></span><span class="group-head__count">' + esc(countText) + '</span></div>' +
+			(note ? '<p class="group-note">' + esc(note) + '</p>' : '') + rows;
+	}
 
-  const chapterMode = seed.chapterMode === true;
-  document.querySelector('input[name=mode][value=' + (chapterMode ? 'chapter' : 'page') + ']').checked = true;
-  drawMode();
+	function row(glyph, tint, title, meta, state) {
+		return '<div class="record-row record-row--static">' + tone(glyph, tint) +
+			'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">' + esc(title) + '</span></div>' +
+			'<div class="record-row__meta"><span>' + esc(meta) + '</span></div></div>' +
+			'<div class="record-row__state">' + (state || '') + '</div><div class="record-row__state"></div></div>';
+	}
 
-  const from = 'empty';
-  const radio = document.querySelector('input[name=from][value=' + from + ']');
-  if (radio) { radio.checked = true; }
-  drawFrom();
-  drawPath();
+	function formRow(label, desc, control) {
+		return '<div class="form-row"><div class="form-row__main"><div class="form-row__label">' + esc(label) + '</div>' +
+			'<div class="form-row__desc">' + esc(desc) + '</div></div>' +
+			'<div class="form-row__control">' + control + '</div></div>';
+	}
 
-  // Asked for by an entry in the tree: the analysis runs as soon as the form can show its answer.
-  if (message.analyse) {
-    $('analyse').click();
-  }
-}
+	function chosenSource() {
+		return sources.filter(function (source) { return source.name === values.source; })[0] || sources[0];
+	}
 
-function drawAreas() {
-  const source = sources.find((candidate) => candidate.name === $('source').value) || sources[0];
-  $('area').replaceChildren(...source.areas.map((area) => withValue(option(area.title + '  (' + area.area + ')'), area.area)));
-  if (seed.area && source.areas.some((area) => area.area === seed.area)) {
-    $('area').value = seed.area;
-  }
-  drawChapters();
-}
+	function chosenArea() {
+		const source = chosenSource();
+		if (!source) { return undefined; }
+		return source.areas.filter(function (area) { return area.area === values.area; })[0] || source.areas[0];
+	}
 
-function drawChapters() {
-  const source = sources.find((candidate) => candidate.name === $('source').value) || sources[0];
-  const area = source.areas.find((candidate) => candidate.area === $('area').value) || source.areas[0];
-  const names = (area ? area.chapters : []).filter((chapter) => chapter !== areaChapter);
-  const options = [withValue(option('directly in the area'), areaChapter)].concat(
-    names.map((chapter) => withValue(option(chapter), chapter)));
-  $('chapter').replaceChildren(...options);
-  if (seed.chapter && (seed.chapter === areaChapter || names.includes(seed.chapter))) {
-    $('chapter').value = seed.chapter;
-  }
-}
+	function pagesOfArea() {
+		const area = chosenArea();
+		if (!area) { return []; }
+		return area.pages.slice().sort(function (a, b) { return a.order - b.order || a.title.localeCompare(b.title); });
+	}
 
-function drawKinds(selected) {
-  $('kinds').replaceChildren(...kinds.map((kind) => {
-    const label = document.createElement('label');
-    label.className = 'choice' + (kind.label === selected ? ' here' : '');
-    const input = document.createElement('input');
-    input.type = 'radio';
-    input.name = 'kind';
-    input.value = kind.label;
-    input.checked = kind.label === selected;
-    input.addEventListener('change', () => { drawKinds(kind.label); drawPath(); });
-    const text = document.createElement('span');
-    text.innerHTML = '<span class="what">' + escape(kind.label) + '</span>' +
-      '<span class="detail">' + escape(kind.headings.join(' · ')) + '</span>';
-    label.append(input, text);
-    return label;
-  }));
-}
+	/* ------------------------------------------------------------------ step 1: where */
 
-function drawMode() {
-  const chapter = document.querySelector('input[name=mode]:checked').value === 'chapter';
-  $('mode-page').className = 'choice' + (chapter ? '' : ' here');
-  $('mode-chapter').className = 'choice' + (chapter ? ' here' : '');
-  // A chapter needs two names, because an empty folder is not a chapter: the chapter itself, and the first page
-  // inside it — which is where the folder comes from. The chapter's name is typed naturally and becomes that
-  // first page's own # heading; its folder is the slug of the same words. One field fewer to explain than a
-  // separately named folder.
-  $('titleLabel').textContent = chapter ? 'The chapter' : 'Title';
-  $('slugLabel').textContent = chapter ? 'The first page’s file name (without .md)' : 'File name (without .md)';
-  if (chapter && $('slug').dataset.touched !== 'yes') {
-    $('slug').value = 'index';
-  }
-  if (!chapter && $('slug').value === 'index') {
-    $('slug').value = slugify($('title').value);
-  }
-  $('chapter').disabled = chapter;
-  drawPath();
-}
+	function drawPlace() {
+		const controls = [];
+		if (sources.length > 1) {
+			controls.push(formRow('Source', 'A page is written into a folder on this machine, never one read over the API.',
+				'<select class="select" data-field="source" aria-label="Source">' + sources.map(function (source) {
+					return '<option value="' + esc(source.name) + '"' + (source.name === values.source ? ' selected' : '') + '>' + esc(source.name) + '</option>';
+				}).join('') + '</select>'));
+		}
+		controls.push(formRow('Area', 'Each area has its own pages and its own reading order.',
+			'<select class="select" data-field="area" aria-label="Area">' + (chosenSource() ? chosenSource().areas.map(function (area) {
+				return '<option value="' + esc(area.area) + '"' + (area.area === values.area ? ' selected' : '') + '>' + esc(area.title || area.area) + '</option>';
+			}).join('') : '') + '</select>'));
+		controls.push(formRow('Chapter', 'A folder inside the area. Directly in the area means no folder of its own.',
+			'<select class="select" data-field="chapter" aria-label="Chapter">' + chapterOptions() + '</select>' +
+			'<input class="input" data-field="chapterName" value="' + esc(values.chapterName) + '" placeholder="chapter-folder" aria-label="New chapter"' +
+			(values.chapter === NEW_CHAPTER ? '' : ' hidden') + '>'));
 
-function togglePath() { drawPath(); }
+		const here = pagesOfArea().filter(function (page) { return page.chapter === values.chapter; });
+		const last = here.length > 0 ? here[here.length - 1] : undefined;
+		controls.push(formRow('Position', last
+			? 'The generator adds it after “' + last.title + '”, at the end of this chapter.'
+			: 'This chapter has no pages yet, so it is the first.', '<span class="cell-muted">' + (last ? 'after order ' + last.order : 'first') + '</span>'));
 
-function slugify(text) {
-  const slug = text.toLowerCase().normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
-  return slug.length > 0 ? slug : 'page';
-}
+		$('place').innerHTML = controls.join('');
+		drawLands();
+	}
 
-/** The path the answers make, exactly as the extension computes it: the chapter that *is* the area has none. */
-function pathNow() {
-  const chapterMode = document.querySelector('input[name=mode]:checked').value === 'chapter';
-  const folder = chapterMode
-    ? slugify($('title').value) + '/'
-    : ($('chapter').value === areaChapter ? '' : $('chapter').value + '/');
-  const name = ($('slug').value.trim() || (chapterMode ? 'index' : slugify($('title').value))) + '.md';
-  return $('source').value + '/docs/' + $('area').value + '/' + folder + name;
-}
+	function chapterOptions() {
+		const area = chosenArea();
+		const names = area ? area.chapters.filter(function (chapter) { return chapter !== areaChapter; }) : [];
+		const all = [{ value: areaChapter, label: 'Directly in the area' }].concat(names.map(function (name) {
+			return { value: name, label: name };
+		})).concat([{ value: NEW_CHAPTER, label: 'A new chapter…' }]);
+		if (!all.some(function (one) { return one.value === values.chapter; })) {
+			values.chapter = areaChapter;
+		}
+		return all.map(function (one) {
+			return '<option value="' + esc(one.value) + '"' + (one.value === values.chapter ? ' selected' : '') + '>' + esc(one.label) + '</option>';
+		}).join('');
+	}
 
-function drawPath() {
-  $('path').textContent = pathNow();
-}
+	/** The chapter folder a write would use: the one chosen, or the new one being named. */
+	function finalChapter() {
+		return values.chapter === NEW_CHAPTER ? slugify(values.chapterName) : values.chapter;
+	}
 
-/** The pages of the chosen area, as the form was told them — no second round trip for a list we already have. */
-function areaPages() {
-  const source = sources.find((candidate) => candidate.name === $('source').value) || sources[0];
-  const area = source.areas.find((candidate) => candidate.area === $('area').value) || source.areas[0];
-  return area ? area.pages : [];
-}
+	/** Where it lands: what the new page will sit between, read from the area's own pages. */
+	function drawLands() {
+		const area = chosenArea();
+		if (!area) {
+			$('lands').innerHTML = '';
+			return;
+		}
+		const here = pagesOfArea().filter(function (page) { return page.chapter === finalChapter(); });
+		const owners = [];
+		for (const page of here) {
+			if (page.owner && owners.indexOf(page.owner) < 0) { owners.push(page.owner); }
+		}
+		const neighbours = here.slice(-2).map(function (page) {
+			return row('document', undefined, 'Order ' + page.order + ' · ' + page.title,
+				(page.owner || 'no owner') + ' · ' + (page.chapter === areaChapter ? 'directly in the area' : page.chapter), '');
+		}).join('');
+		const created = '<div class="record-row record-row--current">' + tone('plus', 'accent') +
+			'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">' +
+			esc(values.title || 'untitled page') + '</span></div>' +
+			'<div class="record-row__meta"><span>the page this flow creates</span></div></div>' +
+			'<div class="record-row__state"><span class="badge badge--info">Draft</span></div>' +
+			'<div class="record-row__state"></div></div>';
+		const note = owners.length > 0
+			? 'Pages here are owned by ' + owners.join(', ') + ', who will be asked to review this one.'
+			: 'Nothing here has an owner yet, so nobody is asked to review this one.';
+		$('lands').innerHTML = group('Where It Lands', here.length + (here.length === 1 ? ' page in ' : ' pages in ') + (area.title || area.area), note, neighbours + created);
+	}
 
-function drawFrom() {
-  const from = document.querySelector('input[name=from]:checked').value;
-  $('pickers').hidden = from !== 'file' && from !== 'page';
-  $('filesField').hidden = from !== 'file';
-  $('pagesField').hidden = from !== 'page';
-  if (from === 'file' && files.length === 0) {
-    $('filesNote').textContent = 'Reading the source’s file list…';
-    vscode.postMessage({ type: 'files', source: $('source').value });
-  }
-  if (from === 'page') {
-    const listed_ = areaPages();
-    $('page').replaceChildren(...listed_.map((page) => withValue(option(page.title + '  (' + page.id + ')'), page.id)));
-    $('pagesNote').textContent = listed_.length === 0
-      ? 'This area has no pages yet, so there is nothing to adapt.'
-      : listed_.length + ' page' + (listed_.length === 1 ? '' : 's') + ' in this area.';
-  }
-}
+	/* ------------------------------------------------------------------ step 2: template */
 
-/** The tick list: every code file the source has, filtered as the person types, with what the ticks cost. */
-function drawFiles() {
-  const needle = $('fileFilter').value.trim().toLowerCase();
-  const shown = files.filter((file) => needle.length === 0 || file.path.toLowerCase().includes(needle));
-  const rows = shown.slice(0, 400).map((file) => {
-    const label = document.createElement('label');
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.checked = ticked.has(file.path);
-    input.addEventListener('change', () => {
-      if (input.checked) { ticked.add(file.path); } else { ticked.delete(file.path); }
-      drawCount();
-    });
-    const text = document.createElement('span');
-    text.textContent = file.path;
-    const size = document.createElement('span');
-    size.className = 'size';
-    size.textContent = file.size >= 1024 ? Math.round(file.size / 1024) + ' KB' : file.size + ' B';
-    label.append(input, text, size);
-    return label;
-  });
-  $('fileList').replaceChildren(...rows);
-  if (shown.length > rows.length) {
-    $('fileList').append(tell('… and ' + (shown.length - rows.length) + ' more in this source.'));
-  }
-  drawCount();
-}
+	function drawKinds() {
+		$('kinds').innerHTML = kinds.map(function (kind) {
+			return '<label class="choice"><input type="radio" name="kind" data-field="kind" value="' + esc(kind.label) + '"' +
+				(kind.label === values.kind ? ' checked' : '') + '>' +
+				'<span class="choice__text"><span class="choice__label">' + esc(kind.label) + '</span>' +
+				'<span class="choice__desc">' + esc(kind.detail) + '</span></span></label>';
+		}).join('');
+		drawTemplate();
+	}
 
-/** What the ticks amount to: the model is given a budget, and a tick list is what chooses inside it. */
-function drawCount() {
-  const chosen = files.filter((file) => ticked.has(file.path));
-  const bytes = chosen.reduce((total, file) => total + file.size, 0);
-  $('fileCount').textContent = chosen.length + ' ticked · about ' + bytes.toLocaleString() +
-    ' bytes of text, and the model is given at most 12 000 characters — the rest are left out and named.';
-}
+	/** What the chosen kind produces: its headings, and nothing invented. */
+	function drawTemplate() {
+		const kind = kinds.filter(function (candidate) { return candidate.label === values.kind; })[0];
+		const headings = kind ? kind.headings : [];
+		const rows = headings.length > 0
+			? headings.map(function (heading, index) {
+				return row('list', undefined, heading, 'section ' + (index + 1) + ' · a heading with an empty body', '');
+			}).join('')
+			: row('document', undefined, 'Title only', 'the body is yours to write', '');
+		const note = headings.length > 0
+			? 'The page starts with these headings and no prose; anything you write later fills them.'
+			: 'A page with no kind has a title and an empty body; nothing is stubbed out for you.';
+		$('template').innerHTML = group('This Kind', headings.length > 0 ? headings.length + ' sections' : 'no sections', note, rows);
+	}
 
-/** The proposed pages: clicking one fills the form, so a suggestion ends in the ordinary write. */
-function drawSuggestions(items) {
-  if (items.length === 0) {
-    $('suggestions').replaceChildren(tell('Nothing was proposed — the file list may be too thin to go on, or ' +
-      'everything it holds is already documented.'));
-    return;
-  }
-  const cards = items.map((item) => {
-    const card = document.createElement('div');
-    card.className = 'card';
-    const top = document.createElement('div');
-    top.className = 'top';
-    const name = document.createElement('span');
-    name.className = 'name';
-    name.textContent = item.title;
-    const tags = document.createElement('span');
-    tags.className = 'tags';
-    tags.textContent = item.kind + (item.files.length > 0 ? ' · ' + item.files.length + ' file(s)' : '');
-    top.append(name, tags);
-    const filesLine = document.createElement('p');
-    filesLine.className = 'note';
-    filesLine.textContent = item.files.length > 0 ? item.files.join(', ') : 'no file was chosen';
-    const do_ = document.createElement('div');
-    do_.className = 'do';
-    const use = document.createElement('button');
-    use.className = 'primary';
-    use.textContent = 'Use this';
-    use.addEventListener('click', () => fillFrom(item));
-    do_.append(use);
-    card.append(top, filesLine, do_);
-    return card;
-  });
-  $('suggestions').replaceChildren(...cards);
-}
+	/* ------------------------------------------------------------------ step 3: draft */
 
-/** A suggestion, in the form: the title, the kind, the files ticked, and *from a file* chosen. */
-function fillFrom(item) {
-  $('title').value = item.title;
-  $('slug').value = slugify(item.title);
-  $('slug').dataset.touched = 'yes';
-  drawKinds(item.kind);
-  const radio = document.querySelector('input[name=from][value=file]');
-  if (radio) { radio.checked = true; }
-  drawFrom();
-  drawPath();
-  // The files the model named are the ones it read the list from, so tick exactly those.
-  ticked = new Set(files.filter((file) => item.files.includes(file.path)).map((file) => file.path));
-  drawFiles();
-  $('draft').scrollIntoView({ block: 'center' });
-}
+	function drawName() {
+		values.slug = slugify(values.title);
+		$('name').innerHTML =
+			formRow('Title', 'What a reader sees in the list and in the PDF.',
+				'<input class="input" data-field="title" value="' + esc(values.title) + '" placeholder="Point Scaling" aria-label="Page title">') +
+			formRow('File name', 'The slug comes from the title; two pages cannot share one inside a chapter.',
+				'<input class="input" data-field="slug" value="' + esc(values.slug) + '" aria-label="File name" readonly>') +
+			formRow('Start the body from', 'Where the first draft comes from — the file is written either way.',
+				'<select class="select" data-field="from" aria-label="Start the body from">' +
+				'<option value="empty"' + (values.from === 'empty' ? ' selected' : '') + '>Nothing — the kind’s headings</option>' +
+				'<option value="area"' + (values.from === 'area' ? ' selected' : '') + '>The pages already in this area</option>' +
+				'<option value="file"' + (values.from === 'file' ? ' selected' : '') + '>A file of the source</option>' +
+				'<option value="page"' + (values.from === 'page' ? ' selected' : '') + '>Another page</option>' +
+				'</select>');
+		drawPickers();
+		drawAddress();
+		drawTools();
+	}
 
-/** Exactly what the extension will write, from the same fields. */
-function spec() {
-  const chapterMode = document.querySelector('input[name=mode]:checked').value === 'chapter';
-  const kind = document.querySelector('input[name=kind]:checked');
-  const title = $('title').value.trim();
-  return {
-    source: $('source').value,
-    area: $('area').value,
-    chapter: chapterMode ? slugify(title) : $('chapter').value,
-    kind: kind ? kind.value : 'Article',
-    title,
-    slug: $('slug').value.trim() || (chapterMode ? 'index' : slugify(title)),
-  };
-}
+	function drawPickers() {
+		if (values.from === 'file') {
+			const list = files.length > 0
+				? '<div class="checklist">' + files.map(function (file) {
+					return '<label class="checklist__row"><input type="checkbox" data-file="' + esc(file.path) + '"' +
+						(ticked.has(file.path) ? ' checked' : '') + '><span class="checklist__text"><span class="checklist__title cell-mono">' +
+						esc(file.path) + '</span></span></label>';
+				}).join('') + '</div>'
+				: '<p class="group-note">Reading the file list…</p>';
+			$('pickers').innerHTML = group('The Files', files.length + (files.length === 1 ? ' file' : ' files'),
+				'A page about a file is written from that file alone.', list);
+			return;
+		}
+		if (values.from === 'page') {
+			const options = pagesOfArea().map(function (page) {
+				return '<option value="' + esc(page.id) + '"' + (page.id === values.pageId ? ' selected' : '') + '>' + esc(page.title) + '</option>';
+			}).join('');
+			$('pickers').innerHTML = group('The Page', pagesOfArea().length + ' in this area',
+				'Adapting a page that already says something close is what a person does with a pen; here it is one choice.',
+				'<select class="select" data-field="page" aria-label="Page">' + options + '</select>');
+			return;
+		}
+		$('pickers').innerHTML = '';
+	}
 
-$('source').addEventListener('change', () => { files = []; drawAreas(); drawPath(); });
-$('area').addEventListener('change', () => { drawChapters(); drawPath(); });
-$('chapter').addEventListener('change', drawPath);
-$('title').addEventListener('input', () => {
-  if ($('slug').dataset.touched !== 'yes') {
-    $('slug').value = slugify($('title').value);
-  }
-  drawPath();
-});$('slug').addEventListener('input', () => { $('slug').dataset.touched = 'yes'; drawPath(); });
-$('fileFilter').addEventListener('input', drawFiles);
-document.querySelectorAll('input[name=mode]').forEach((input) => input.addEventListener('change', drawMode));
-document.querySelectorAll('input[name=from]').forEach((input) => input.addEventListener('change', drawFrom));
-$('analyse').addEventListener('click', () => vscode.postMessage({ type: 'analyse', source: $('source').value }));
+	/** The address the site and the search index will list it at. */
+	function drawAddress() {
+		const source = chosenSource();
+		const area = chosenArea();
+		const where = (source ? source.name : 'source') + '/docs/' + (area ? area.area : 'area') + '/' +
+			(finalChapter() && finalChapter() !== areaChapter ? finalChapter() + '/' : '') + (values.slug || '…') + '.md';
+		const lines = group('Address', 'draft', 'Where the site and the search index will list it.',
+			'<div class="record-row record-row--static">' + tone('link') +
+			'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name cell-mono">' + esc(where) + '</span></div>' +
+			'<div class="record-row__meta"><span>' + esc(values.kind || 'no kind yet') + ' · ' + esc(values.title || 'untitled page') + '</span></div></div>' +
+			'<div class="record-row__state"></div><div class="record-row__state"></div></div>');
+		const notes = '<div class="callout"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><use href="#i-info"></use></svg>' +
+			'<div>The page is created as a file. It reaches the site only through a build and a release.</div></div>';
+		$('address').innerHTML = lines + notes;
+	}
 
-$('draft').addEventListener('click', () => {
-  const from = document.querySelector('input[name=from]:checked').value;
-  if (from === 'empty') {
-    $('draftBox').replaceChildren(tell('Choose what to start from — the pages of the area, a file, or another page — and the draft has something to read.'));
-    return;
-  }
-  const chosen = spec();
-  vscode.postMessage({
-    type: 'draft',
-    from,
-    files: [...ticked],
-    pageId: $('page').value,
-    spec: chosen,
-  });
-});
+	function drawTools() {
+		const analysis = suggestions.length > 0
+			? suggestions.map(function (item, index) {
+				return '<div class="record-row" data-suggestion="' + index + '">' + tone('sparkle', 'accent') +
+					'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">' + esc(item.title) + '</span></div>' +
+					'<div class="record-row__meta"><span>' + esc(item.kind) + (item.files.length > 0 ? ' · ' + esc(item.files.join(', ')) : '') + '</span></div></div>' +
+					'<div class="record-row__state"></div><span class="record-row__go">›</span></div>';
+			}).join('')
+			: '';
+		$('tools').innerHTML = '<div class="row">' +
+			'<button type="button" class="btn" id="draft"' + (model ? '' : ' disabled') + '>' + '<span>Draft it with the AI</span></button>' +
+			'<button type="button" class="btn btn--ghost" id="analyse"><span>What is missing</span></button>' +
+			'<span class="cell-muted" id="model"></span></div>' +
+			'<div class="mt-16" id="draftBox"></div>' +
+			'<div class="mt-16" id="suggestions">' + analysis + '</div>';
+		$('model').textContent = model ? 'Local model: ' + model : 'No local model is chosen — the AI drafts are off.';
+		redrawDraft();
+	}
 
-$('write').addEventListener('click', () => {
-  const chosen = spec();
-  if (chosen.title.length === 0) {
-    $('result').textContent = 'A page needs a title (or, for a chapter, a name).';
-    return;
-  }
-  const from = document.querySelector('input[name=from]:checked').value;
-  vscode.postMessage({ type: 'write', spec: Object.assign({}, chosen, { body: from === 'empty' ? '' : draft }) });
-});
-$('cancel').addEventListener('click', () => vscode.postMessage({ type: 'cancel' }));
+	function redrawDraft() {
+		const box = $('draftBox');
+		if (!box) { return; }
+		if (!draft) {
+			box.innerHTML = '';
+			return;
+		}
+		box.innerHTML = '<pre class="code">' + esc(draft) + '</pre>' +
+			'<p class="group-note">Read it. Edit anything you like after it is written — or draft again.</p>';
+	}
 
-function option(text) {
-  const node = document.createElement('option');
-  node.textContent = text;
-  return node;
-}
-function withValue(node, value) { node.value = value; return node; }
-function pre(text) {
-  const node = document.createElement('pre');
-  node.textContent = text;
-  return node;
-}
-function box(text) { return tell(text); }
-function tell(text) {
-  const node = document.createElement('p');
-  node.className = 'note';
-  node.textContent = text;
-  return node;
-}
-function warn(text) {
-  const node = document.createElement('div');
-  node.className = 'warn';
-  node.textContent = text;
-  return node;
-}
-function note(parent, text) { parent.textContent = text; }
-function escape(text) {
-  return String(text).replace(/[&<>"]/g, (character) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[character]);
-}
+	/* ------------------------------------------------------------------ the steps */
+
+	function show(index) {
+		at = Math.max(0, Math.min(index, steps.length - 1));
+		steps.forEach(function (step, number) {
+			step.classList.toggle('is-active', number === at);
+			step.classList.toggle('is-done', number < at);
+			step.setAttribute('aria-selected', String(number === at));
+		});
+		bodies.forEach(function (body, number) { body.hidden = number !== at; });
+		count.textContent = 'Step ' + (at + 1) + ' of ' + steps.length;
+		back.hidden = at === 0;
+		next.hidden = at === steps.length - 1;
+		finish.hidden = at !== steps.length - 1;
+		error.hidden = true;
+		if (at === 0) { drawPlace(); }
+		if (at === 1) { drawKinds(); }
+		if (at === 2) { drawName(); }
+	}
+
+	function fail(message) {
+		error.textContent = message;
+		error.hidden = false;
+		return false;
+	}
+
+	function check() {
+		if (at === 0) {
+			if (!chosenSource()) { return fail('There is no source on this machine to write a page into.'); }
+			if (!chosenArea()) { return fail('A page belongs in an area, and this source has none.'); }
+			if (values.chapter === NEW_CHAPTER && slugify(values.chapterName).length === 0) {
+				return fail('A new chapter needs a folder name.');
+			}
+		}
+		if (at === 1 && !values.kind) { return fail('Choose the kind of page this is.'); }
+		if (at === 2) {
+			if (values.title.trim().length === 0) { return fail('A page needs a title.'); }
+			const clash = pagesOfArea().filter(function (page) {
+				return page.title.toLowerCase() === values.title.trim().toLowerCase() && page.chapter === finalChapter();
+			})[0];
+			if (clash) { return fail('A page called “' + clash.title + '” already exists in this chapter.'); }
+			if (values.from === 'file' && ticked.size === 0) { return fail('Tick at least one file to draft from.'); }
+			if (values.from === 'page' && !values.pageId) { return fail('Choose the page to draft from.'); }
+		}
+		return true;
+	}
+
+	/* ------------------------------------------------------------------ messages */
+
+	window.addEventListener('message', function (event) {
+		const message = event.data;
+		if (message.type === 'form') {
+			sources = message.sources || [];
+			kinds = message.kinds || [];
+			areaChapter = message.areaChapter || '(root)';
+			seed = message.seed || {};
+			model = message.model;
+			accept();
+			return;
+		}
+		if (message.type === 'files') {
+			files = message.files || [];
+			if (values.from === 'file') { drawPickers(); }
+			return;
+		}
+		if (message.type === 'analyseStart') {
+			suggestions = [];
+			drawTools();
+			return;
+		}
+		if (message.type === 'suggestions') {
+			suggestions = message.items || [];
+			drawTools();
+			return;
+		}
+		if (message.type === 'analyseError' || message.type === 'draftError') {
+			fail(message.message || 'That did not work.');
+			return;
+		}
+		if (message.type === 'draftStart') {
+			draft = '';
+			redrawDraft();
+			return;
+		}
+		if (message.type === 'draftToken') {
+			draft += message.text || '';
+			redrawDraft();
+			return;
+		}
+		if (message.type === 'draftDone') {
+			redrawDraft();
+			return;
+		}
+		if (message.type === 'written') {
+			finish.disabled = true;
+			next.disabled = true;
+			finish.outerHTML = '<span class="cell-muted">Written to ' + esc(message.relative) + ' — the editor has it.</span>';
+			return;
+		}
+	});
+
+	function accept() {
+		if (sources.length === 0) {
+			document.querySelector('.wizard').hidden = true;
+			const box = $('nothing');
+			box.hidden = false;
+			box.innerHTML = '<div class="callout callout--warn"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><use href="#i-alert"></use></svg>' +
+				'<div>No source on this machine is being read, so there is nowhere to write a page. A source read over the API has no working tree; work on a project whose sources are folders.</div></div>';
+			return;
+		}
+
+		const source = sources.filter(function (candidate) { return candidate.name === seed.source; })[0] || sources[0];
+		values.source = source.name;
+		values.area = (seed.area && source.areas.some(function (area) { return area.area === seed.area; }) ? seed.area : (source.areas[0] ? source.areas[0].area : ''));
+		values.chapter = seed.chapter || areaChapter;
+		values.kind = (seed.kind && kinds.some(function (kind) { return kind.label === seed.kind; }) ? seed.kind : (kinds[0] ? kinds[0].label : ''));
+		values.title = '';
+		values.from = 'empty';
+
+		show(0);
+		if (seed.analyse === true) {
+			show(2);
+			analyse();
+		}
+	}
+
+	function analyse() {
+		if (sources.length === 0) { return; }
+		api.postMessage({ type: 'analyse', source: values.source });
+	}
+
+	function draftIt() {
+		if (!model) { return; }
+		api.postMessage({
+			type: 'draft',
+			from: values.from,
+			files: Array.from(ticked),
+			pageId: values.pageId,
+			spec: {
+				source: values.source,
+				area: values.area,
+				chapter: finalChapter(),
+				kind: values.kind,
+				title: values.title,
+				slug: values.slug,
+				body: draft
+			}
+		});
+	}
+
+	/* ------------------------------------------------------------------ wiring */
+
+	$('wizard-cancel').addEventListener('click', function () { api.postMessage({ type: 'cancel' }); });
+	back.addEventListener('click', function () { if (check()) { show(at - 1); } });
+	next.addEventListener('click', function () { if (check()) { show(at + 1); } });
+	finish.addEventListener('click', function () {
+		if (!check()) { return; }
+		api.postMessage({
+			type: 'write',
+			spec: {
+				source: values.source,
+				area: values.area,
+				chapter: finalChapter(),
+				kind: values.kind,
+				title: values.title,
+				slug: values.slug,
+				body: draft
+			}
+		});
+	});
+	steps.forEach(function (step) {
+		step.addEventListener('click', function () {
+			const wanted = Number(step.dataset.step);
+			if (wanted > at && !check()) { return; }
+			show(wanted);
+		});
+	});
+
+	/* A change anywhere is read from the document, so a redraw can replace the control that changed. */
+	document.addEventListener('change', function (event) {
+		const field = event.target;
+		const name = field.dataset ? field.dataset.field : undefined;
+		if (name === 'source') {
+			values.source = field.value;
+			values.area = chosenArea() ? chosenArea().area : '';
+			values.chapter = areaChapter;
+			files = [];
+			ticked = new Set();
+			drawPlace();
+			return;
+		}
+		if (name === 'area') {
+			values.area = field.value;
+			values.chapter = areaChapter;
+			files = [];
+			ticked = new Set();
+			drawPlace();
+			return;
+		}
+		if (name === 'chapter') {
+			values.chapter = field.value;
+			drawPlace();
+			if (values.chapter === NEW_CHAPTER) {
+				const input = document.querySelector('[data-field=chapterName]');
+				if (input) { input.focus(); }
+			}
+			return;
+		}
+		if (name === 'kind') {
+			values.kind = field.value;
+			drawTemplate();
+			drawAddress();
+			return;
+		}
+		if (name === 'from') {
+			values.from = field.value;
+			if (values.from === 'file' && files.length === 0) {
+				api.postMessage({ type: 'files', source: values.source });
+			}
+			drawPickers();
+			return;
+		}
+		if (name === 'page') {
+			values.pageId = field.value;
+			return;
+		}
+		if (field.dataset && field.dataset.file !== undefined) {
+			if (field.checked) { ticked.add(field.dataset.file); } else { ticked.delete(field.dataset.file); }
+			return;
+		}
+	});
+
+	document.addEventListener('input', function (event) {
+		if (event.target.dataset && event.target.dataset.field === 'title') {
+			values.title = event.target.value;
+			values.slug = slugify(values.title);
+			const slug = document.querySelector('[data-field=slug]');
+			if (slug) { slug.value = values.slug; }
+			drawAddress();
+		}
+		if (event.target.dataset && event.target.dataset.field === 'chapterName') {
+			values.chapterName = event.target.value;
+		}
+	});
+
+	document.addEventListener('click', function (event) {
+		const suggestion = event.target.closest ? event.target.closest('[data-suggestion]') : null;
+		if (suggestion) {
+			const item = suggestions[Number(suggestion.dataset.suggestion)];
+			if (item) {
+				values.title = item.title;
+				values.kind = item.kind;
+				show(2);
+			}
+			return;
+		}
+		if (event.target.id === 'draft' || (event.target.closest && event.target.closest('#draft'))) {
+			draftIt();
+			return;
+		}
+		if (event.target.id === 'analyse' || (event.target.closest && event.target.closest('#analyse'))) {
+			analyse();
+			return;
+		}
+	});
+
+	api.postMessage({ type: 'ready' });
+})();
 `;

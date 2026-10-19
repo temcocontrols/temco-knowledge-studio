@@ -12,7 +12,7 @@ import * as vscode from 'vscode';
 import { aiFacts } from './aiModule';
 import { Catalog, CatalogUnavailable, Selection, slugOf } from './store';
 import { HUB_VIEW_TYPE } from './surface';
-import { focusLibrary, pageColumn } from './ui';
+import { focusLibrary, page, pageColumn } from './ui';
 
 /** Where a chapter stops being a chapter. A count, not a rule — it is advice the page shows, never a problem. */
 const CHAPTER_LIMIT = 25;
@@ -85,7 +85,7 @@ export class ProjectHub {
       enableScripts: true,
       localResourceRoots: [],
     });
-    this.panel.webview.html = html(nonce());
+    this.panel.webview.html = html();
     this.panel.webview.onDidReceiveMessage((message: HubMessage) => void this.receive(message));
     this.panel.onDidDispose(() => {
       this.panel = undefined;
@@ -442,34 +442,16 @@ function repeatedTitles(pages: readonly { title?: string }[]): Map<string, numbe
   return new Map([...counts].filter(([, count]) => count > 1));
 }
 
-function nonce(): string {
-  const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let text = '';
-  for (let index = 0; index < 32; index += 1) {
-    text += alphabet[Math.floor(Math.random() * alphabet.length)];
-  }
-  return text;
-}
-
-function html(script: string): string {
+function html(): string {
   const style = `
     :root { color-scheme: light dark; }
-    body { margin: 0; padding: 14px 20px 40px; font-family: var(--vscode-font-family);
-           font-size: var(--vscode-font-size); color: var(--vscode-foreground); }
-    h1 { font-size: 1.5em; font-weight: 600; margin: 0 0 .2em; }
-    h2 { font-size: 1em; font-weight: 600; margin: 1.6em 0 .5em; }
-    h3 { font-size: .95em; font-weight: 600; margin: 1.2em 0 .4em; }
-    p { line-height: 1.55; margin: .3em 0; }
+    /* The document, its margins and its controls are the page kit's; this block is this page's own layout. */
     .meta { color: var(--vscode-descriptionForeground); margin: 0 0 1em; }
     .addform { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(16em, 100%), 1fr));
                gap: .8em 1.4em; max-width: 70em; align-items: end; }
     .addform > div { min-width: 0; }
     .addform label { display: block; color: var(--vscode-descriptionForeground); margin-bottom: .2em; }
-    .addform input { width: 100%; min-width: 0; padding: .3em .5em; box-sizing: border-box;
-                     color: var(--vscode-input-foreground); background: var(--vscode-input-background);
-                     border: 1px solid var(--vscode-input-border, transparent); border-radius: 2px;
-                     font-family: inherit; font-size: inherit; }
-    .addform input:focus { outline: 1px solid var(--vscode-focusBorder); }
+    .addform input { width: 100%; min-width: 0; }
     .addform .do { display: flex; gap: .5em; flex-wrap: wrap; }
     .tabs { display: flex; gap: .2em; border-bottom: 1px solid var(--vscode-panel-border); margin: 0 0 1.2em;
             flex-wrap: wrap; }
@@ -495,13 +477,6 @@ function html(script: string): string {
     td.act { text-align: right; white-space: nowrap; }
     a.link { color: var(--vscode-textLink-foreground); cursor: pointer; text-decoration: none; }
     a.link:hover { text-decoration: underline; }
-    button { padding: .3em .8em; border: none; border-radius: 2px; cursor: pointer;
-             font-family: inherit; font-size: inherit;
-             color: var(--vscode-button-secondaryForeground);
-             background: var(--vscode-button-secondaryBackground); }
-    button:hover { background: var(--vscode-button-secondaryHoverBackground); }
-    button.primary { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
-    button.primary:hover { background: var(--vscode-button-hoverBackground); }
     .actions { display: flex; gap: .6em; flex-wrap: wrap; margin: 0 0 1.4em; }
     .card { border: 1px solid var(--vscode-panel-border); border-radius: 3px; padding: .7em 1em; margin: 0 0 .6em;
             max-width: 70em; }
@@ -515,16 +490,7 @@ function html(script: string): string {
             border-top: 1px solid var(--vscode-panel-border); padding-top: 1em; }
   `;
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${script}';">
-<style>${style}</style>
-<title>Temco Projects</title>
-</head>
-<body>
+  const body = `
   <h1 id="name">Project</h1>
   <p class="meta" id="meta"></p>
 
@@ -599,8 +565,12 @@ function html(script: string): string {
   </section>
 
   <p class="foot" id="foot"></p>
+`;
 
-<script nonce="${script}">
+  return page(body, { title: 'Project', script: HUB_CLIENT, extraCss: style });
+}
+
+const HUB_CLIENT = `
 const vscode = acquireVsCodeApi();
 const $ = (id) => document.getElementById(id);
 let picture = null;
@@ -904,7 +874,5 @@ window.addEventListener('message', (event) => {
 });
 
 vscode.postMessage({ type: 'ready' });
-</script>
-</body>
-</html>`;
-}
+`;
+

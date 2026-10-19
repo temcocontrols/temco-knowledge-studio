@@ -258,15 +258,9 @@ export class ProjectPage {
   private html(): string {
     const style = `
       :root { color-scheme: light dark; }
-      /* The document, its padding and its type scale are the page kit's now; this block is only the form. */
-      h1 { font-size: 1.4em; font-weight: 600; margin: 0 0 1em; }
-      h2 { font-size: 1em; font-weight: 600; margin: 1.6em 0 .5em; }
-      p { line-height: 1.55; margin: .3em 0; }
+      /* The type scale and the controls are the page kit's; this block is the form's own layout. */
       label { display: block; color: var(--vscode-descriptionForeground); margin-bottom: .15em; }
-      input[type=text] { width: 100%; max-width: 34em; min-width: 0; padding: .3em .5em; box-sizing: border-box;
-                         color: var(--vscode-input-foreground); background: var(--vscode-input-background);
-                         border: 1px solid var(--vscode-input-border, transparent); border-radius: 2px; }
-      input:focus { outline: 1px solid var(--vscode-focusBorder); }
+      .fields input { width: 100%; max-width: 34em; min-width: 0; }
       /* min(14em, 100%), not a bare 14em: a track's minimum is a hard floor, so in a narrow column two of them
          push the right-hand field out of the pane and the page scrolls sideways. With min(), one column
          becomes one column at any width. */
@@ -285,13 +279,6 @@ export class ProjectPage {
       .outputs { display: flex; gap: 1.6em; flex-wrap: wrap; align-items: center; }
       .outputs label { display: inline-flex; gap: .4em; align-items: center; margin: 0;
                        color: var(--vscode-foreground); }
-      button { padding: .3em .8em; border: none; border-radius: 2px; cursor: pointer;
-               font-family: inherit; font-size: inherit;
-               color: var(--vscode-button-secondaryForeground);
-               background: var(--vscode-button-secondaryBackground); }
-      button:hover { background: var(--vscode-button-secondaryHoverBackground); }
-      button.primary { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
-      button.primary:hover { background: var(--vscode-button-hoverBackground); }
       .actions { display: flex; gap: .6em; align-items: center; margin-top: 2em;
                  border-top: 1px solid var(--vscode-panel-border); padding-top: 1em; }
       .actions .spacer { flex: 1 1 auto; }

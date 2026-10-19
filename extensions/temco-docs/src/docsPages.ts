@@ -125,7 +125,7 @@ export class DocsPages {
 	}
 
 	documents(area?: string): void {
-		this.open('documents', DOCUMENTS_VIEW_TYPE, 'Documents', documentsBody(area));
+		this.open('documents', DOCUMENTS_VIEW_TYPE, 'Areas', documentsBody(area));
 	}
 
 	pageOf(title?: string, area?: string): void {
@@ -313,11 +313,11 @@ ${branches ? `<div class="mt-24">${branches}</div>` : ''}
 ${readRows ? `<div class="mt-24">${readRows}</div>` : ''}
 ${scripts ? `<div class="mt-24">${scripts}</div>` : ''}
 <div class="mt-24">${rule({ label: 'Where It Lives' })}${settingsStrip([
-		{ label: 'Remote', value: repo.remote, mono: true },
-		{ label: 'Working copy', value: cloned ? `~/Temco/${repo.name}` : '—', mono: true },
-		{ label: 'Pages folder', value: `${repo.docs}/`, mono: true },
-		{ label: 'Owner', value: `${repo.owner} · last read ${repo.read}` }
-	])}</div>`;
+				{ label: 'Remote', value: repo.remote, mono: true },
+				{ label: 'Working copy', value: cloned ? `~/Temco/${repo.name}` : '—', mono: true },
+				{ label: 'Pages folder', value: `${repo.docs}/`, mono: true },
+				{ label: 'Owner', value: `${repo.owner} · last read ${repo.read}` }
+			])}</div>`;
 }
 
 /** *Sources* — the mock's `docs/sources`. */
@@ -385,7 +385,7 @@ function documentsBody(areaName?: string): string {
 
 	return `${pageHead({
 		eyebrow: 'T3000 Documentation · 13.0',
-		title: 'Documents',
+		title: 'Areas',
 		mark: 'book',
 		desc: `${totalPages.toLocaleString('en-US')} pages in ${AREAS.length} areas, ${totalReviewed.toLocaleString('en-US')} of them read by a person. The registry order is the order the documentation ships in, not the order the files sit on disk.`,
 		actions: button('New Page', 'temcoDocs.newPage', { kind: 'primary', mark: 'plus' }) + button('Generate from Sources', 'temcoDocs.createPage', { mark: 'sparkle' }) + button('Open Tree', 'temcoDocs.pages.focus', { mark: 'sidebar', title: 'Show this content as a folder tree in the side bar' })
@@ -768,7 +768,7 @@ function howToBody(): string {
 		title: 'How To Use',
 		mark: 'graduation',
 		desc: 'From a repository to a page a reader can open, in five steps.',
-		actions: button('Open Documents', 'temcoDocs.documents', { kind: 'primary', mark: 'book' }) + button('Ask the AI', 'temcoAi.openPanel', { mark: 'sparkle' })
+		actions: button('Open Areas', 'temcoDocs.documents', { kind: 'primary', mark: 'book' }) + button('Ask the AI', 'temcoAi.openPanel', { mark: 'sparkle' })
 	})}
 <div class="howto-rail">
 ${railStep('01', 'Pick a project', '13.0 is current', 'temcoDocs.projects')}
@@ -782,7 +782,7 @@ ${rule({ label: 'Each Step, In Full', count: 'about 10 minutes' })}
 ${step(1, 'Choose the project', 'A project is one version of a product’s documentation — <strong>13.0</strong> is the current one. Everything below happens inside it.', '<p>The text stays in the repositories you already own. The project keeps only the choices around it: version, audience, owner and where it publishes. Two versions of the same repository therefore share files but never share pages.</p>', 'Projects', 'temcoDocs.projects')}
 ${step(2, 'Say where the text comes from', 'A repository you have cloned, or a connected library. Adding a source records <code>where to read</code>; it copies nothing.', '<p>A repository is read at a commit, a connected library at a version. The commit is kept with every read, so a page can always name the exact file and revision it came from.</p>', 'Sources', 'temcoDocs.sources')}
 ${step(3, 'Read it', 'Reading turns files into pages. A file becomes a page, its heading becomes the name, its folder becomes the <strong>area</strong>, and its order in the file becomes the reading order.', '<p>A read writes <code>docs/help/registry.json</code> inside a repository, and <code>docs/index.json</code> for a connected library. Files that did not change are skipped, so a second read is quick, and a page written by hand in the window is never overwritten by a read.</p>', 'Read Now', 'temcoRepositories.readAllSources')}
-${step(4, 'Open, edit and review', 'Open a page from the Documents tree or the Documents list, edit it in the page editor and save. The change waits in Review Center until someone approves it.', '<p>Every page carries an area, an order, an owner and the source it came from. Two pages cannot share an order inside one area — the build reports it as an error — and <strong>17</strong> pages are waiting for review right now.</p>', 'Documents', 'temcoDocs.documents')}
+${step(4, 'Open, edit and review', 'Open a page from the Docs Explorer tree or the Areas list, edit it in the page editor and save. The change waits in Review Center until someone approves it.', '<p>Every page carries an area, an order, an owner and the source it came from. Two pages cannot share an order inside one area — the build reports it as an error — and <strong>17</strong> pages are waiting for review right now.</p>', 'Areas', 'temcoDocs.documents')}
 ${step(5, 'Build, then publish', 'A build turns approved pages into the artifacts readers get: the website, the PDF, the offline CHM, the search index and the AI index. Publishing points Temco Learn at one build.', '<p>The AI index never blocks a build: a slow embedding pass delays answers, not readers. A published version is frozen, so a correction after release starts the next version rather than rewriting a link someone already sent.</p>', 'Build Center', 'temcoDocs.builds')}
 </div>
 <div class="mt-24">

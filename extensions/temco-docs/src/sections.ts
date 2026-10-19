@@ -1,6 +1,6 @@
 // The module's side bar, grouped the way the mock groups it.
 //
-// The mock's Documentation side bar is five headings — Projects, Sources, Documents, Pipeline, How-To — each with the
+// The mock's Documentation side bar is five headings — Projects, Sources, Areas, Pipeline, How-To — each with the
 // surfaces that belong to it. VS Code draws a heading as a view, so each of those becomes one: a short list of rows,
 // each row running the command that owns the thing.
 //
@@ -41,7 +41,7 @@ const GROUPS: Group[] = [
 	{
 		id: 'documents',
 		rows: [
-			{ label: 'Documents', note: 'the registry, area by area', command: 'temcoDocs.documents', icon: 'book' }
+			{ label: 'Areas', note: 'the registry, area by area', command: 'temcoDocs.documents', icon: 'book' }
 		]
 	},
 	{
@@ -49,13 +49,13 @@ const GROUPS: Group[] = [
 		rows: [
 			{ label: 'Review Center', note: 'drafts and edits waiting for a person', command: 'temcoDocs.review', icon: 'check' },
 			{ label: 'Build Center', note: 'the targets and the errors that block them', command: 'temcoDocs.builds', icon: 'play' },
-			{ label: 'Releases', note: 'published versions, and the one in flight', command: 'temcoDocs.releases', icon: 'upload' }
+			{ label: 'Releases', note: 'published versions, and the one in flight', command: 'temcoDocs.releases', icon: 'cloud-upload' }
 		]
 	},
 	{
 		id: 'howto',
 		rows: [
-			{ label: 'How To Use', note: 'five steps, start here', command: 'temcoDocs.howTo', icon: 'graduation' }
+			{ label: 'How To Use', note: 'five steps, start here', command: 'temcoDocs.howTo', icon: 'mortar-board' }
 		]
 	}
 ];
