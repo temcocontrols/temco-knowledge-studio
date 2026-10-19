@@ -1,12 +1,77 @@
 // Temco Learn — the published site, as a reader sees it.
 //
 // Rebuilt from the mock (`docs/mock/js/views.platform.js`: `learn/home`, `learn/t3000`, `learn/article`,
-// `learn/downloads`, `learn/paths`). The markup, the wording and the order are the mock's; the rows are its sample
-// (`learnSample.ts`), because the site is a build artifact and nothing on these pages is written from here.
+// `learn/downloads`, `learn/paths`). The markup and the wording are the mock's; the rows are now the platform's
+// own: the areas this window is reading, the artifacts its builds left, and the versions it published. A Learn page
+// that cannot read any of that says so instead of showing a sample.
 
 import * as vscode from 'vscode';
-import { AREAS, BUILDING, DOWNLOADS, Download, LIVE, PATHS, PRODUCTS } from './learnSample';
+import { roots as readRoots, totals } from './docs';
+import { Catalog, ReleaseRow, selection } from './store';
 import { commandScript, escapeHtml as esc, icon, page, pageColumn, runCommand } from './ui';
+
+/** What the Learn pages read: the registries on this machine, and what the catalog has published. */
+interface LearnFacts {
+	project?: string;
+	projects: number;
+	pages: number;
+	areas: { name: string; pages: number; neverReviewed: number; stale: number }[];
+	artifacts: { kind: string; path: string; builtAt: string }[];
+	releases: ReleaseRow[];
+}
+
+async function readLearnFacts(context: vscode.ExtensionContext): Promise<LearnFacts> {
+	const list = readRoots();
+	const areas = new Map<string, { name: string; pages: number; neverReviewed: number; stale: number }>();
+	for (const root of list) {
+		for (const area of root.areas) {
+			const stale = area.chapters.reduce(
+				(total, chapter) => total + chapter.pages.filter((entry) => entry.provenance?.stale === true).length,
+				0
+			);
+			const found = areas.get(area.area);
+			if (found === undefined) {
+				areas.set(area.area, { name: area.area, pages: area.pages, neverReviewed: area.neverReviewed, stale });
+				continue;
+			}
+			found.pages += area.pages;
+			found.neverReviewed += area.neverReviewed;
+			found.stale += stale;
+		}
+	}
+
+	const facts: LearnFacts = {
+		projects: 0,
+		pages: totals(list).pages,
+		areas: [...areas.values()].sort((one, other) => one.name.localeCompare(other.name)),
+		artifacts: [],
+		releases: []
+	};
+
+	try {
+		const catalog = await Catalog.open(context);
+		try {
+			const documents = catalog.documents();
+			facts.projects = documents.length;
+			const project = selection.project() ?? (documents.length === 1 ? documents[0].slug : undefined);
+			facts.project = project;
+			facts.artifacts = project === undefined ? [] : catalog.documentArtifacts(project);
+			facts.releases = project === undefined ? [] : catalog.releases(project);
+		} finally {
+			catalog.close();
+		}
+	} catch {
+		// Nothing published is a state, not an error: the pages say so and offer the build.
+	}
+	return facts;
+}
+
+/** The mark that says what an artifact is. */
+const ARTIFACT_MARK: { [kind: string]: string } = { chm: 'package', pdf: 'document', site: 'globe', search: 'search' };
+
+/** The words for an artifact's kind. */
+const artifactName = (kind: string): string =>
+	kind === 'chm' ? 'Offline help (CHM)' : kind === 'pdf' ? 'PDF' : kind === 'site' ? 'Website' : kind === 'search' ? 'Search index' : kind;
 
 export const LEARN_HOME_VIEW_TYPE = 'temcoWorkbench.learn.home';
 export const LEARN_PRODUCT_VIEW_TYPE = 'temcoWorkbench.learn.t3000';
@@ -18,10 +83,11 @@ interface ActionOptions {
 	kind?: 'primary' | 'ghost';
 	mark?: string;
 	small?: boolean;
+	args?: unknown;
 }
 
 const button = (label: string, command: string, options: ActionOptions = {}): string =>
-	`<button type="button" class="btn${options.small ? ' btn--sm' : ''}${options.kind ? ` btn--${options.kind}` : ''}" data-command="${command}">${options.mark ? icon(options.mark) : ''}<span>${esc(label)}</span></button>`;
+	`<button type="button" class="btn${options.small ? ' btn--sm' : ''}${options.kind ? ` btn--${options.kind}` : ''}" data-command="${command}"${options.args === undefined ? '' : ` data-args="${esc(JSON.stringify(options.args))}"`}>${options.mark ? icon(options.mark) : ''}<span>${esc(label)}</span></button>`;
 
 const badge = (text: string, tone?: string): string =>
 	`<span class="badge${tone && tone !== 'neutral' ? ` badge--${tone}` : ''}">${esc(text)}</span>`;
@@ -47,20 +113,37 @@ export class LearnPages {
 
 	constructor(private readonly context: vscode.ExtensionContext) { }
 
-	home(): void {
-		this.open('home', LEARN_HOME_VIEW_TYPE, 'Temco Learn', homeBody());
+	async home(): Promise<void> {
+		this.open('home', LEARN_HOME_VIEW_TYPE, 'Temco Learn', homeBody(await readLearnFacts(this.context)));
 	}
 
-	product(): void {
-		this.open('t3000', LEARN_PRODUCT_VIEW_TYPE, 'T3000', productBody());
+	async product(): Promise<void> {
+		this.open('t3000', LEARN_PRODUCT_VIEW_TYPE, 'T3000', productBody(await readLearnFacts(this.context)));
 	}
 
-	article(): void {
-		this.open('article', LEARN_ARTICLE_VIEW_TYPE, 'Data Points API', articleBody());
+	/**
+	 * *An article* — the published site itself.
+	 *
+	 * A reader's page is the file a release put on disk, so this opens that rather than drawing a second copy of it:
+	 * a preview that can disagree with the shipped page is worse than no preview.
+	 */
+	async article(): Promise<void> {
+		const facts = await readLearnFacts(this.context);
+		const newest = facts.releases[0];
+		if (newest === undefined) {
+			this.open('article', LEARN_ARTICLE_VIEW_TYPE, 'Article', `${pageHead({
+				title: 'Nothing is published yet',
+				mark: 'document',
+				desc: 'A reader\u2019s page is a file a release put on disk. Build the site and publish it, and this opens the site itself.',
+				actions: button('Build the Site', 'temcoDocs.buildSite', { kind: 'primary', mark: 'play' }) + button('Publish', 'temcoDocs.publishRelease', { mark: 'upload' })
+			})}${hero({ tone: 'warn', title: 'No published version', desc: 'The build writes the site; publishing copies it to a folder a reader can open. Until both have happened there is no page to read.', actions: button('Open Build Center', 'temcoDocs.builds', { kind: 'primary', mark: 'play' }) })}`);
+			return;
+		}
+		await vscode.commands.executeCommand('temcoDocs.openPublished', newest.destination);
 	}
 
-	downloads(): void {
-		this.open('downloads', LEARN_DOWNLOADS_VIEW_TYPE, 'Downloads', downloadsBody());
+	async downloads(): Promise<void> {
+		this.open('downloads', LEARN_DOWNLOADS_VIEW_TYPE, 'Downloads', downloadsBody(await readLearnFacts(this.context)));
 	}
 
 	paths(): void {
@@ -94,168 +177,148 @@ export class LearnPages {
 	}
 }
 
-/** *Home* — the mock's `learn/home`. */
-function homeBody(): string {
-	const pages = PRODUCTS.reduce((total, product) => total + product.pages, 0);
+/** How long ago something was published, in words a reader reads at a glance. */
+function since(iso: string): string {
+	const at = new Date(iso).getTime();
+	if (Number.isNaN(at)) {
+		return 'just now';
+	}
+	const minutes = Math.floor((Date.now() - at) / 60_000);
+	if (minutes < 1) {
+		return 'just now';
+	}
+	if (minutes < 60) {
+		return `${minutes} min ago`;
+	}
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) {
+		return `${hours} h ago`;
+	}
+	const days = Math.floor(hours / 24);
+	return `${days} day${days === 1 ? '' : 's'} ago`;
+}
 
-	const cards = PRODUCTS.map((product) =>
-		`<button type="button" class="learn-card" data-command="temcoWorkbench.learn.t3000"><span class="learn-card__title">${esc(product.name)}</span><span class="learn-card__desc">${esc(product.desc)}</span><span class="row" style="gap:10px;font-size:11px;color:var(--fg-subtle)"><span class="tag">v${esc(product.version)}</span><span>${product.pages.toLocaleString('en-US')} pages</span></span></button>`
+/** *Home* — what is published, and what the documentation is made of. */
+function homeBody(facts: LearnFacts): string {
+	const newest = facts.releases[0];
+	const areas = facts.areas.map((area) =>
+		`<button type="button" class="learn-card" data-command="temcoWorkbench.learn.t3000"><span class="learn-card__title">${esc(area.name)}</span><span class="learn-card__desc">${area.pages} ${area.pages === 1 ? 'page' : 'pages'}${area.stale > 0 ? ` · ${area.stale} behind their source` : ''}</span><span class="row" style="gap:10px;font-size:11px;color:var(--fg-subtle)"><span>${area.neverReviewed} never reviewed</span></span></button>`
 	).join('');
+
+	const downloads = facts.artifacts.slice(0, 3).map((artifact) => ({
+		mark: ARTIFACT_MARK[artifact.kind] ?? 'download',
+		title: artifact.path.split(/[\\/]/).pop() ?? artifact.path,
+		sub: `<span class="cell-muted">${esc(artifactName(artifact.kind))}</span>`,
+		meta: button('Open', 'temcoDocs.openArtifact', { small: true, kind: 'ghost', args: [artifact.path] })
+	}));
 
 	return `<div class="learn-hero">
 	<div class="learn-hero__inner">
 		<div class="row" style="gap:10px;margin-bottom:10px">${badge('Temco Learn', 'accent')}<span class="cell-muted" style="font-size:12px">the published site, as a reader sees it</span></div>
 		<h1 class="learn-hero__title">Documentation for Temco Controls products</h1>
-		<p class="learn-hero__desc">Versioned, searchable, and available offline. This preview renders the same template the site ships, so a layout change here is a layout change there.</p>
-		<div class="learn-hero__search">${icon('search')}<span>Search T3000, BACnet, devices, SDK…</span><span style="margin-left:auto" class="cell-mono">Ctrl+K</span></div>
+		<p class="learn-hero__desc">Versioned, searchable, and available offline. This window reads the same pages a build ships, so what is listed here is what a reader gets.</p>
+		<div class="learn-hero__search">${icon('search')}<span>Search ${facts.areas.length === 0 ? 'the documentation' : facts.areas.slice(0, 3).map((area) => esc(area.name)).join(', ')}…</span><span style="margin-left:auto" class="cell-mono">Ctrl+K</span></div>
 	</div>
 </div>
-${rule('Products', `${PRODUCTS.length} products · ${pages.toLocaleString('en-US')} pages`, `<b>${esc(LIVE.version)}</b> is live, <b>${esc(BUILDING.version)}</b> is still building. Every product is versioned and searchable, and the offline artifacts are on Downloads.`)}
-<div class="grid grid--4">${cards}</div>
+${rule('Published', `${facts.releases.length} ${facts.releases.length === 1 ? 'version' : 'versions'} · ${facts.artifacts.length} ${facts.artifacts.length === 1 ? 'file' : 'files'}`, newest === undefined
+		? '<b>Nothing is published yet.</b> A build writes the site; publishing copies it to a folder a reader can open. Until both have happened there is no version to point at.'
+		: `<b>${esc(newest.version)}</b> is live, published ${esc(since(newest.publishedAt))} with ${newest.files} file(s).`)}
+${facts.areas.length === 0
+			? '<p class="group-note">Nothing is being read yet, so there is no product to show. Choose the project you are working on and its areas appear here.</p>'
+			: `<div class="grid grid--4">${areas}</div>`}
 <div class="mt-24 grid grid--2">
 ${card({
 		title: 'Learning Paths',
 		mark: 'graduation',
 		actions: button('All Paths', 'temcoWorkbench.learn.paths', { small: true, kind: 'ghost' }),
 		desc: 'Ordered reading for a job rather than for a product.',
-		body: list(PATHS.map((path) => ({ mark: 'graduation', title: path.name, sub: `<span class="cell-muted">${esc(path.level)} · ${path.steps} steps · ${path.minutes} min</span>`, meta: button('Start', 'temcoWorkbench.learn.paths', { small: true, kind: 'ghost' }) })))
+		body: '<p class="group-note">No path has been written yet. A path is a reading order over existing pages, and nothing stores one today — when the site defines them, they will be listed here.</p>'
 	})}
 ${card({
 		title: 'Downloads',
 		mark: 'download',
 		actions: button('All', 'temcoWorkbench.learn.downloads', { small: true, kind: 'ghost' }),
-		desc: 'The offline artifacts of the versions that are published.',
-		body: list(DOWNLOADS.slice(0, 3).map((item) => ({ mark: item.format === 'PDF' ? 'document' : item.format === 'CHM' ? 'package' : 'download', title: `${item.name} ${item.version}`, sub: `<span class="cell-muted">${esc(item.format)} · ${esc(item.size)} · ${esc(item.date)}</span>`, meta: badge(item.state, item.tone) })))
+		desc: 'The offline artifacts the builds left.',
+		body: downloads.length === 0
+			? '<p class="group-note">Nothing has been built yet. The CHM and the PDF are files a build writes; this list is those files.</p>'
+			: list(downloads)
 	})}
 </div>
-<div class="mt-24"><div class="callout">${icon('info')}<div>The preview and the shipped site share one template. A layout decision made in this window is the layout the reader gets — there is no second design to keep in sync.</div></div></div>`;
+<div class="mt-24"><div class="callout">${icon('info')}<div>These pages read the platform, not a copy of it. A reader\u2019s page is the file a release put on disk, and the artifact list is what the build wrote — so a layout decision made here is not a second design to keep in sync.</div></div></div>`;
 }
 
-/** *The T3000 product page* — the mock's `learn/t3000`. */
-function productBody(): string {
-	const pages = AREAS.reduce((total, area) => total + area.pages, 0);
+/** *The T3000 product page* — the areas the registries declare. */
+function productBody(facts: LearnFacts): string {
+	const newest = facts.releases[0];
 
-	const areas = AREAS.map((area) =>
-		`<button type="button" class="learn-card" data-command="temcoWorkbench.learn.article"><span class="learn-card__title">${esc(area.area)}</span><span class="learn-card__desc">${esc(area.desc)}</span><span class="row" style="gap:8px;font-size:11px;color:var(--fg-subtle)"><span>${area.pages} pages</span>${area.stale ? `<span>·</span><span>${area.stale} behind their source</span>` : ''}</span></button>`
+	const areas = facts.areas.map((area) =>
+		`<button type="button" class="learn-card" data-command="temcoWorkbench.learn.t3000"><span class="learn-card__title">${esc(area.name)}</span><span class="learn-card__desc">${area.pages} ${area.pages === 1 ? 'page' : 'pages'}</span><span class="row" style="gap:8px;font-size:11px;color:var(--fg-subtle)"><span>${area.neverReviewed} never reviewed</span>${area.stale ? `<span>·</span><span>${area.stale} behind their source</span>` : ''}</span></button>`
 	).join('');
 
 	return `<div class="learn-hero">
 	<div class="learn-hero__inner">
 		<div class="eyebrow">Product documentation</div>
-		<h1 class="learn-hero__title">T3000</h1>
-		<p class="learn-hero__desc">The controller platform: hardware, points, programs, schedules and the web UI. ${pages.toLocaleString('en-US')} pages across ${AREAS.length} areas.</p>
-		<div class="row" style="margin-top:14px">${badge(`${BUILDING.version} · building`, 'info')}${badge(`${LIVE.version} · live`, 'ok')}<span class="cell-muted" style="font-size:12px">last published ${esc(LIVE.date)}</span></div>
+		<h1 class="learn-hero__title">${esc(facts.areas.length === 0 ? 'Nothing is being read' : 'T3000')}</h1>
+		<p class="learn-hero__desc">${facts.pages.toLocaleString('en-US')} pages across ${facts.areas.length} ${facts.areas.length === 1 ? 'area' : 'areas'}, as this window is reading them.</p>
+		<div class="row" style="margin-top:14px">${newest === undefined ? badge('not published', 'info') : badge(`${newest.version} · live`, 'ok')}<span class="cell-muted" style="font-size:12px">${newest === undefined ? 'no version has been published' : `last published ${esc(since(newest.publishedAt))}`}</span></div>
 	</div>
 </div>
 <div style="margin-bottom:20px">
 ${hero({
-		tone: 'warn',
+		tone: newest === undefined ? 'warn' : undefined,
 		eyebrow: 'Release state',
-		title: '13.0 is building — readers still get 12.9',
-		desc: 'The build center is compiling the offline help. Until it publishes, the site keeps serving the last complete version and the version selector stays on 12.9.',
-		actions: button('Open Build Center', 'temcoDocs.builds', { kind: 'primary', mark: 'play' }) + button('Preview 13.0', 'temcoWorkbench.learn.article', { mark: 'document' })
+		title: newest === undefined ? 'Nothing has been published yet' : `${newest.version} is live`,
+		desc: newest === undefined
+			? 'The build writes the site and the offline help; publishing copies them where a reader can open them. Until then a reader has nothing to read.'
+			: `Published ${esc(since(newest.publishedAt))} — ${newest.files} file(s). The CHM and the PDF are on Downloads, and the site opens from the release itself.`,
+		actions: newest === undefined
+			? button('Open Build Center', 'temcoDocs.builds', { kind: 'primary', mark: 'play' }) + button('Publish', 'temcoDocs.publishRelease', { mark: 'upload' })
+			: button('Open the Site', 'temcoDocs.openPublished', { kind: 'primary', mark: 'globe', args: [newest.destination] }) + button('Downloads', 'temcoWorkbench.learn.downloads', { mark: 'download' })
 	})}
 </div>
-${rule('Areas', `${AREAS.length} areas · ${pages.toLocaleString('en-US')} pages`, 'The site is organised the way the documentation is written, so a reader and an author see the same eight areas.')}
-<div class="grid grid--3">${areas}</div>`;
+${rule('Areas', `${facts.areas.length} ${facts.areas.length === 1 ? 'area' : 'areas'} · ${facts.pages.toLocaleString('en-US')} pages`, 'The site is organised the way the documentation is written, so a reader and an author see the same areas.')}
+${facts.areas.length === 0
+			? '<p class="group-note">Nothing is being read yet: choose the project you are working on, and its areas will be listed here.</p>'
+			: `<div class="grid grid--3">${areas}</div>`}`;
 }
 
-/** *One article* — the mock's `learn/article`. */
-function articleBody(): string {
-	const nav = ['Overview', 'Getting Started', 'Architecture', 'API Reference', 'Hardware', 'Protocols', 'Troubleshooting', 'Release Notes'];
-	const toc = ['Endpoints', 'Reading a point', 'Writing a point', 'Point types', 'Scaling', 'Errors'];
+/** *Downloads* — the files the builds left, which is what a reader can have offline. */
+function downloadsBody(facts: LearnFacts): string {
+	const kinds = [...new Set(facts.artifacts.map((artifact) => artifact.kind))];
 
-	const article = `<div class="article__body">
-	<div class="eyebrow">T3000 · API Reference</div>
-	<h1>Data Points API</h1>
-	<div class="article__meta">${badge('13.0', 'accent')}<span>Updated 3 hours ago · 14 min read · Owner: Derek</span><span style="margin-left:auto">${badge('In review', 'warn')}</span></div>
-	<p>Read and write the data points of a controller. Every point has a type, a unit and a scale factor; the scale factor is what turns the integer a controller stores into the value a person reads.</p>
-	<h2 id="endpoints">Endpoints</h2>
-	<table><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody>
-		<tr><td><code>GET</code></td><td><code>/api/points</code></td><td>List every point on a device</td></tr>
-		<tr><td><code>GET</code></td><td><code>/api/points/{id}</code></td><td>One point, with its metadata</td></tr>
-		<tr><td><code>PUT</code></td><td><code>/api/points/{id}</code></td><td>Write a value at a priority</td></tr>
-	</tbody></table>
-	<h2 id="reading">Reading a point</h2>
-	<p>A read returns the raw integer, the scale factor and the engineering value. The engineering value is derived, never stored:</p>
-	<pre class="code">${esc('{\n  "id": "AI1",\n  "type": "analog-input",\n  "raw": 1840,\n  "scale": 0.01,\n  "offset": 0,\n  "unit": "°C",\n  "value": 18.4\n}')}</pre>
-	<h2 id="writing">Writing a point</h2>
-	<p>Writes carry a priority. A lower number wins; writing at priority 8 is an operator override and is undone by the schedule at the next event.</p>
-	<h2 id="types">Point types</h2>
-	<ul><li><b>AI</b> — analog input, read-only</li><li><b>AO</b> — analog output, writable</li><li><b>DI</b> — digital input, read-only</li><li><b>DO</b> — digital output, writable</li><li><b>AV</b>, <b>BV</b> — values with no physical channel</li></ul>
-	<h2 id="scaling">Scaling</h2>
-	<p>Points are stored as 32-bit floats, except AI and AO values on controllers running firmware 2.14 or later, which store a scaled integer and apply the factor in <code>point.scale</code>.</p>
-	<div style="margin:16px 0"><div class="callout">${icon('sparkle')}<div><b>AI note.</b> This paragraph was rewritten by a draft that is still in review. The published 12.9 page still says every point is a float.</div></div></div>
-	<h2 id="errors">Errors</h2>
-	<p>A write to a read-only point returns <code>409</code>. A write while the device is offline returns <code>503</code> with the last known contact time.</p>
-</div>`;
+	const fileRow = (artifact: { kind: string; path: string; builtAt: string }): string =>
+		`<div class="record-row">${toneMarkOf(ARTIFACT_MARK[artifact.kind] ?? 'download', 'accent')}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name cell-mono">${esc(artifact.path.split(/[\\/]/).pop() ?? artifact.path)}</span><span class="tag">${esc(artifactName(artifact.kind))}</span></div><div class="record-row__meta"><span class="cell-mono">${esc(artifact.path)}</span> · <span>built ${esc(since(artifact.builtAt))}</span></div></div><div class="record-row__state">${badge('Ready', 'ok')}</div>${button('Open', 'temcoDocs.openArtifact', { small: true, kind: 'primary', mark: 'download', args: [artifact.path] })}</div>`;
 
-	const navItems = nav.map((item) => `<button type="button" class="learn-nav__item${item === 'API Reference' ? ' is-active' : ''}" data-command="temcoWorkbench.learn.article">${esc(item)}</button>`).join('');
-	const sectionItems = ['Points and Properties', 'Reading a Point', 'Data Points API', 'Writing a Point', 'Point Types', 'Errors'].map((item) => `<button type="button" class="learn-nav__item${item === 'Data Points API' ? ' is-active' : ''}" data-command="temcoWorkbench.learn.article">${esc(item)}</button>`).join('');
-
-	return `<div class="learn-reader"><div class="learn-grid">
-	<div class="learn-nav"><div class="learn-nav__title">T3000</div>${navItems}<div class="learn-nav__title" style="margin-top:16px">API Reference</div>${sectionItems}</div>
-	<div class="stack">${article}<div class="row" style="gap:10px;border-top:1px solid var(--border);padding-top:16px">${button('Previous', 'temcoWorkbench.learn.article', { mark: 'chevron-left' })}${button('Next', 'temcoWorkbench.learn.article', { mark: 'chevron-right' })}<span style="margin-left:auto" class="cell-muted">${icon('clock')} 13.0 · preview</span></div></div>
-	<div class="stack learn-rail">
-		<div><div class="learn-nav__title">On this page</div>${toc.map((item, index) => `<button type="button" class="toc__item${index === 0 ? ' is-active' : ''}" data-command="temcoWorkbench.learn.article">${esc(item)}</button>`).join('')}</div>
-		<div class="side-note"><div class="learn-nav__title">This page</div><dl class="kv"><dt>Owner</dt><dd>Derek</dd><dt>Reviewed</dt><dd>never</dd><dt>Source</dt><dd>t3000webview</dd><dt>Help id</dt><dd class="cell-mono">dp-api</dd></dl></div>
-		<div class="side-note"><div class="learn-nav__title">Feedback</div>Was this page helpful?<br><div class="row" style="margin-top:6px">${button('Yes', 'temcoDocs.feedback', { small: true, mark: 'check' })}${button('No', 'temcoDocs.feedback', { small: true, mark: 'close' })}</div></div>
-	</div>
-</div></div>`;
-}
-
-/** *Downloads* — the mock's `learn/downloads`. */
-function downloadsBody(): string {
-	const groups: { key: string; name: string; version: string; date: string; items: Download[] }[] = [];
-	for (const item of DOWNLOADS) {
-		const key = `${item.name} · ${item.version}`;
-		let group = groups.find((candidate) => candidate.key === key);
-		if (!group) {
-			group = { key, name: item.name, version: item.version, date: item.date, items: [] };
-			groups.push(group);
-		}
-		group.items.push(item);
-	}
-
-	const markFor = (format: string): string => format === 'PDF' ? 'document' : format === 'CHM' ? 'package' : 'download';
-	const row = (item: Download): string =>
-		`<div class="record-row${item.state === 'Ready' ? '' : ' record-row--static'}">${toneMarkOf(markFor(item.format), item.state === 'Ready' ? undefined : 'accent')}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">${esc(item.format)}</span></div><div class="record-row__meta"><span>${esc(item.size === '—' ? 'size not known until the build finishes' : item.size)}</span></div></div><div class="record-row__state">${badge(item.state, item.tone)}</div>${item.state === 'Ready' ? button('Download', 'temcoWorkbench.learn.downloads', { small: true, kind: 'primary', mark: 'download' }) : ''}</div>`;
-
-	const sections = groups.map((group) => {
-		const pending = group.items.filter((item) => item.state !== 'Ready');
-		const note = pending.length > 0 ? `The ${pending.map((item) => esc(item.format)).join(' and ')} build is still running — there is nothing to fetch for it yet.` : undefined;
-		return `<div class="mt-24">${rule(`${group.name} · ${group.version}`, `${group.items.length} ${group.items.length === 1 ? 'artifact' : 'artifacts'} · published ${group.date}`, note)}<div class="record-list">${group.items.map(row).join('')}</div></div>`;
+	const sections = kinds.map((kind) => {
+		const files = facts.artifacts.filter((artifact) => artifact.kind === kind);
+		return `<div class="mt-24">${rule(artifactName(kind), `${files.length} ${files.length === 1 ? 'file' : 'files'}`, 'The file stays where the build wrote it. A downloadable CHM or PDF needs nothing else.')}<div class="record-list">${files.map(fileRow).join('')}</div></div>`;
 	}).join('');
+
+	const versions = facts.releases.length === 0
+		? ''
+		: `<div class="mt-24">${rule('Published Versions', `${facts.releases.length} ${facts.releases.length === 1 ? 'version' : 'versions'}`, 'A published version is a copy of a build in a folder the platform owns. The newest is what a reader gets.')}<div class="record-list">${facts.releases.map((release) =>
+			`<div class="record-row">${toneMarkOf('upload', 'ok')}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name cell-mono">${esc(release.version)}</span>${release.buildId === undefined ? '' : `<span class="tag">build #${release.buildId}</span>`}</div><div class="record-row__meta"><span>published ${esc(since(release.publishedAt))}</span> · <span>${release.files} file(s)</span> · <span class="cell-mono">${esc(release.destination)}</span></div></div><div class="record-row__state">${badge('Published', 'ok')}</div>${button('Open the Site', 'temcoDocs.openPublished', { small: true, kind: 'ghost', mark: 'globe', args: [release.destination] })}</div>`).join('')}</div></div>`;
 
 	return `${pageHead({
 		title: 'Downloads',
 		mark: 'download',
-		desc: 'The offline artifacts of each published version. A version stays downloadable after a newer one ships.',
-		actions: button('Build Missing', 'temcoDocs.buildSite', { mark: 'play' })
-	})}${sections}`;
+		desc: 'The offline artifacts the builds left, and the versions that were published from them. A version stays downloadable after a newer one ships.',
+		actions: button('Build the Site', 'temcoDocs.buildSite', { kind: 'primary', mark: 'play' }) + button('Build the Offline Help', 'temcoDocs.buildHelp', { mark: 'package' }) + button('Publish', 'temcoDocs.publishRelease', { mark: 'upload' })
+	})}
+${facts.artifacts.length === 0
+			? `<div class="mt-16"><div class="callout">${icon('info')}<div><b>Nothing has been built yet.</b> The CHM and the PDF are files a build writes — the build runs the repository\u2019s own script and then looks for the file it should have left. Build one, and it is listed here.</div></div></div>`
+			: `${sections}${versions}`}`;
 }
 
-/** *Learning Paths* — the mock's `learn/paths`. */
+/** *Learning Paths* — a reading order over pages; nothing stores one yet, and this says so. */
 function pathsBody(): string {
-	const steps = PATHS.reduce((total, path) => total + path.steps, 0);
-	const minutes = PATHS.reduce((total, path) => total + path.minutes, 0);
-
-	const cards = PATHS.map((path) => card({
-		title: path.name,
-		mark: 'graduation',
-		desc: esc(path.desc),
-		body: `<div class="facts"><span class="tag">${esc(path.level)}</span><span>${path.steps} steps · ${path.minutes} min</span></div><ol class="path-steps">${path.outline.map((step) => `<li>${esc(step)}</li>`).join('')}<li class="cell-muted">and ${path.steps - path.outline.length} more</li></ol>`,
-		foot: button('Start', 'temcoWorkbench.learn.article', { small: true, kind: 'primary' }) + button('Preview', 'temcoWorkbench.learn.article', { small: true, kind: 'ghost' })
-	})).join('');
-
 	return `${pageHead({
 		title: 'Learning Paths',
 		mark: 'graduation',
 		desc: 'Ordered reading for a job, not for a product. Each step names the page and what it assumes you already know.',
-		actions: button('New Path', 'temcoWorkbench.learn.paths', { mark: 'plus' })
+		actions: button('Open the Documents', 'temcoDocs.documents', { kind: 'primary', mark: 'book' })
 	})}
-${rule('Paths', `${PATHS.length} paths · ${steps} steps · ${Math.floor(minutes / 60)} h ${minutes % 60} min of reading`, 'A path is a reading order, not a course: every step is an existing page with an owner and a review date, so a stale step shows up here as a stale page.')}
-<div class="grid grid--3">${cards}</div>`;
+<div class="mt-16"><div class="callout">${icon('info')}<div><b>No path has been written yet.</b> A path is a reading order over existing pages — every step an existing page with an owner and a review date, so a stale step shows up as a stale page. Nothing stores one today; these pages read the platform, and the platform has no paths in it yet.</div></div></div>`;
 }
 
 /** A tone mark, since this module's UI copy does not export one. */

@@ -251,27 +251,50 @@ ${settingsStrip([
 
 /* ------------------------------------------------------------------ Modules */
 
-/** Every module the window really has, with the sample's description of what it owns. */
+/**
+ * Every module this window really has.
+ *
+ * The rows come from the extension host, not from a table: a module is present because it is loaded, and its state
+ * is whether it has activated yet. What the sample's table adds is only what a manifest cannot say — the sentence
+ * naming what the module owns, and the surface it opens.
+ */
 function moduleRows(): { active: ModuleRow[]; reserved: ModuleRow[] } {
-	const installed = MODULES.some((row) => vscode.extensions.getExtension(row.id) !== undefined);
-	const rows = MODULES.map((row) => {
-		if (!installed) {
-			return row;
-		}
-		return { ...row, state: vscode.extensions.getExtension(row.id) ? 'Active' : 'Reserved' };
-	});
+	const described = new Map(MODULES.map((row) => [row.id, row]));
+	const loaded = vscode.extensions.all.filter(
+		(extension) => extension.packageJSON.publisher === 'temcocontrols'
+	);
+	const rows: ModuleRow[] = loaded
+		.map((extension) => {
+			const known = described.get(extension.id);
+			const manifest = extension.packageJSON as { description?: unknown; displayName?: unknown };
+			const name = known?.name
+				?? (typeof manifest.displayName === 'string' ? manifest.displayName : extension.id.replace('temcocontrols.', ''));
+			const owns = known?.owns
+				?? (typeof manifest.description === 'string' ? manifest.description : 'its manifest says nothing about what it owns');
+			return {
+				id: extension.id,
+				name,
+				namespace: known?.namespace ?? '',
+				owns,
+				surface: known?.surface,
+				state: extension.isActive ? 'Active' : 'Loaded',
+			};
+		})
+		.sort((one, other) => one.name.localeCompare(other.name));
+
+	const present = new Set(rows.map((row) => row.id));
 	return {
-		active: rows.filter((row) => row.state === 'Active'),
-		reserved: rows.filter((row) => row.state !== 'Active')
+		active: rows,
+		reserved: MODULES.filter((row) => !present.has(row.id)),
 	};
 }
 
-/** *Modules* — the mock's `settings/modules`. */
+/** *Modules* — what this window loads, and what is only reserved. */
 function modulesBody(): string {
 	const { active, reserved } = moduleRows();
 
 	const table = (rows: ModuleRow[]): string =>
-		`<div class="table-wrap table-wrap--plain"><table class="table table--compact"><thead><tr><th>Module</th><th>Namespace</th><th>What It Owns</th><th></th></tr></thead><tbody>${rows.map((module) => `<tr><td><span class="cell-strong" style="white-space:nowrap">${esc(module.name)}</span><div class="cell-muted cell-mono" style="font-size:11px;white-space:nowrap">${esc(module.id.replace('temcocontrols.', ''))}</div></td><td><span class="cell-mono cell-muted">${esc(module.namespace)}</span></td><td>${esc(module.owns)}</td><td style="text-align:right">${module.surface && SURFACE_COMMANDS[module.surface] ? button('Open', SURFACE_COMMANDS[module.surface], { small: true, kind: 'ghost' }) : '<span class="cell-muted" style="white-space:nowrap">No surface</span>'}</td></tr>`).join('')}</tbody></table></div>`;
+		`<div class="table-wrap table-wrap--plain"><table class="table table--compact"><thead><tr><th>Module</th><th>Namespace</th><th>What It Owns</th><th></th></tr></thead><tbody>${rows.map((module) => `<tr><td><span class="cell-strong" style="white-space:nowrap">${esc(module.name)}</span><div class="cell-muted cell-mono" style="font-size:11px;white-space:nowrap">${esc(module.id.replace('temcocontrols.', ''))}</div></td><td><span class="cell-mono cell-muted">${esc(module.namespace === '' ? '—' : module.namespace)}</span></td><td>${esc(module.owns)}</td><td style="text-align:right">${module.surface && SURFACE_COMMANDS[module.surface] ? button('Open', SURFACE_COMMANDS[module.surface], { small: true, kind: 'ghost' }) : '<span class="cell-muted" style="white-space:nowrap">No surface</span>'}</td></tr>`).join('')}</tbody></table></div>`;
 
 	return `${pageHead({
 		title: 'Modules',
@@ -280,15 +303,14 @@ function modulesBody(): string {
 		actions: button('Show on Disk', 'temcoWorkbench.settings.showOnDisk', { mark: 'folder' })
 	})}
 ${callout('<b>There is no marketplace.</b> The build refuses a <code>product.json</code> that configures an extension gallery, so this window loads the modules in <code>extensions/</code> and nothing else — there is nothing to install and nothing to update on its own.', 'warn')}
-${rule('Active', `${active.length} modules`, 'Ids all live under the <code>temcocontrols.</code> scope, so the table drops the prefix and shows the part that differs.')}
+${rule('Loaded', `${active.length} modules`, 'Read from the extension host: a module is here because it is loaded, and <b>Active</b> means it has activated. Ids all live under the <code>temcocontrols.</code> scope, so the table drops the prefix.')}
 <div class="mt-16">${table(active)}</div>
-${rule('Reserved', `${reserved.length} modules`, 'A folder with a README and a surface drawn in this mock. The build ships nothing for them until each has a first real feature.')}
-<div class="mt-16">${table(reserved)}</div>
+${rule('Reserved', `${reserved.length} modules`, 'A folder with a README and a surface drawn in the mock, but not loaded in this window. The build ships nothing for them until each has a first real feature.')}
+<div class="mt-16">${reserved.length === 0 ? '<p class="group-note">Every reserved module is loaded in this window.</p>' : table(reserved)}</div>
 ${rule('Platform Updates', `${vscode.version} · stable`, 'A module updates with the platform, never on its own — there is no optional module to add or remove.', button('Check for Updates', 'temcoWorkbench.settings.checkUpdates', { small: true, mark: 'refresh' }))}
 ${settingsStrip([
 		['Version', vscode.version, true],
 		['Channel', 'Stable'],
-		['Last checked', '2 hours ago'],
 		['Optional modules', 'none']
 	])}`;
 }

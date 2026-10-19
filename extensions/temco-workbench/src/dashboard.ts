@@ -1,14 +1,13 @@
 // The Dashboard's pages: Overview, Recent Activity, Coverage & Health.
 //
-// Rebuilt from the mock (`docs/mock/js/views.overview.js`) on the shared page kit. The mock is the design; the only
-// thing this module adds is the way a page runs a command — a `data-command` button, which the kit's script turns
-// into a message and `runCommand` executes.
-//
-// The numbers are the mock's sample (`dashboardSample.ts`), because the platform does not yet have one query that
-// returns them. The pages say what they are for in their own words; none of them pretends the numbers are live.
+// Rebuilt from the mock (`docs/mock/js/views.overview.js`) on the shared page kit. What changed is where the
+// numbers come from: the registries this window is reading, and the catalog's own record of what the platform did
+// — drafts waiting, releases published, events. Both are read once per open, so a page cannot show a figure that
+// nobody maintains.
 
 import * as vscode from 'vscode';
-import { ACTIVITY_TODAY, ACTIVITY_WEEK, ACTIVITY_YESTERDAY, CHECKS, COVERAGE, Event, KPIS, NEEDS, PIPELINE } from './dashboardSample';
+import { collectPages, countStale, roots as readRoots, totals } from './docs';
+import { Catalog, DraftRow, EventRow, selection } from './store';
 import { commandScript, escapeHtml, icon, page, pageColumn, runCommand, toneMark } from './ui';
 
 /** The view types the dashboard opens under. */
@@ -16,35 +15,189 @@ export const OVERVIEW_VIEW_TYPE = 'temcoWorkbench.overview';
 export const ACTIVITY_VIEW_TYPE = 'temcoWorkbench.activity';
 export const HEALTH_VIEW_TYPE = 'temcoWorkbench.health';
 
+/** One area across every source being read, which is how the health page draws it. */
+interface AreaFact {
+	name: string;
+	pages: number;
+	neverReviewed: number;
+	stale: number;
+	issues: number;
+}
+
+/** What every dashboard page reads: the registries on this machine, and the catalog's account of itself. */
+interface DashboardFacts {
+	/** The project the catalog's figures are about. */
+	project?: string;
+	projects: number;
+	sources: number;
+	areas: AreaFact[];
+	pages: number;
+	neverReviewed: number;
+	stale: number;
+	unowned: number;
+	faults: number;
+	drafts: DraftRow[];
+	releases: number;
+	events: EventRow[];
+}
+
+/**
+ * Read the two places a number can honestly come from.
+ *
+ * The registries answer what the documentation is; the catalog answers what the platform did. Nothing here is
+ * derived a second time — staleness stays the generator's verdict, and a count stays the count of rows.
+ */
+async function readFacts(context: vscode.ExtensionContext): Promise<DashboardFacts> {
+	const list = readRoots();
+	const pages = list.flatMap((root) => collectPages(root));
+	const areas = new Map<string, AreaFact>();
+	for (const root of list) {
+		for (const area of root.areas) {
+			const stale = area.chapters.reduce(
+				(total, chapter) => total + chapter.pages.filter((entry) => entry.provenance?.stale === true).length,
+				0
+			);
+			const found = areas.get(area.area);
+			if (found === undefined) {
+				areas.set(area.area, {
+					name: area.area,
+					pages: area.pages,
+					neverReviewed: area.neverReviewed,
+					stale,
+					issues: area.issues
+				});
+				continue;
+			}
+			found.pages += area.pages;
+			found.neverReviewed += area.neverReviewed;
+			found.stale += stale;
+			found.issues += area.issues;
+		}
+	}
+
+	const counted = totals(list);
+	const facts: DashboardFacts = {
+		projects: 0,
+		sources: list.length,
+		areas: [...areas.values()].sort((one, other) => one.name.localeCompare(other.name)),
+		pages: counted.pages,
+		neverReviewed: counted.neverReviewed,
+		stale: countStale(pages),
+		unowned: pages.filter((entry) => entry.owner.length === 0).length,
+		faults: counted.issues,
+		drafts: [],
+		releases: 0,
+		events: []
+	};
+
+	try {
+		const catalog = await Catalog.open(context);
+		try {
+			const documents = catalog.documents();
+			facts.projects = documents.length;
+			const project = selection.project() ?? (documents.length === 1 ? documents[0].slug : undefined);
+			facts.project = project;
+			facts.drafts = project === undefined ? [] : catalog.drafts(project);
+			facts.releases = project === undefined ? 0 : catalog.releases(project).length;
+			facts.events = catalog.events(20);
+		} finally {
+			catalog.close();
+		}
+	} catch {
+		// No catalog, no record: the pages then show what the folders say and nothing about the platform's history.
+	}
+	return facts;
+}
+
+/** How long ago something happened, in words a person reads at a glance. */
+function age(iso: string): string {
+	const at = new Date(iso).getTime();
+	if (Number.isNaN(at)) {
+		return 'just now';
+	}
+	const minutes = Math.floor((Date.now() - at) / 60_000);
+	if (minutes < 1) {
+		return 'just now';
+	}
+	if (minutes < 60) {
+		return `${minutes} min ago`;
+	}
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) {
+		return `${hours} h ago`;
+	}
+	const days = Math.floor(hours / 24);
+	return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+/** The mark that says what kind of thing was recorded. */
+const EVENT_MARK: { [kind: string]: string } = { draft: 'sparkle', release: 'upload', build: 'play', read: 'repo' };
+
 const action = (label: string, command: string, kind?: 'primary' | 'ghost'): string =>
 	`<button type="button" class="btn${kind ? ` btn--${kind}` : ''}" data-command="${command}"><span>${escapeHtml(label)}</span></button>`;
 
 /** The small line under a KPI's number. */
-const kpi = (entry: typeof KPIS[number]): string =>
+const kpi = (entry: { label: string; value: string; note: string }): string =>
 	`<div class="kpi"><div class="kpi__label">${escapeHtml(entry.label)}</div><div class="kpi__value">${escapeHtml(entry.value)}</div><div class="cell-muted" style="font-size:12px">${escapeHtml(entry.note)}</div></div>`;
 
 /** One event: a tone mark, what happened, and when. */
-const eventRow = (entry: Event): string =>
+const eventRow = (event: EventRow): string =>
 	`<li class="feed__item">
-	${toneMark(entry.icon, entry.tone)}
+	${toneMark(EVENT_MARK[event.kind] ?? 'info', event.seenAt === undefined ? 'info' : 'ok')}
 	<div class="feed__main">
-		<div class="feed__title">${escapeHtml(entry.title)}</div>
-		<div class="feed__meta">${escapeHtml(entry.sub)} · ${escapeHtml(entry.when)}</div>
+		<div class="feed__title">${escapeHtml(event.detail ?? event.kind)}</div>
+		<div class="feed__meta">${escapeHtml(event.kind)} · ${escapeHtml(age(event.at))}</div>
 	</div>
-	<div class="feed__side"><span class="feed__module">${escapeHtml(entry.module)}</span></div>
+	<div class="feed__side"><span class="feed__module">Platform</span></div>
 </li>`;
 
-function rules(label: string, count: string, buttons = ''): string {
-	return `<div class="group-head"><span class="group-head__label">${escapeHtml(label)}</span><span class="group-head__rule"></span><span class="group-head__count">${escapeHtml(count)}</span>${buttons ? `<span class="group-head__actions">${buttons}</span>` : ''}</div>`;
-}
+function overviewBody(facts: DashboardFacts): string {
+	const stage = (n: string, name: string, meta: string, view: string): string =>
+		`<button type="button" class="pipeline__stage" data-command="${view}">
+			<span class="pipeline__n">${n}</span>
+			<span class="pipeline__name">${escapeHtml(name)}</span>
+			<span class="pipeline__meta">${escapeHtml(meta)}</span>
+		</button>`;
 
-function overviewBody(): string {
-	const pipeline = PIPELINE.map((stage) =>
-		`<button type="button" class="pipeline__stage" data-command="${stage.view}">
-			<span class="pipeline__n">${stage.n}</span>
-			<span class="pipeline__name">${escapeHtml(stage.name)}</span>
-			<span class="pipeline__meta">${escapeHtml(stage.meta)}</span>
-		</button>`).join('');
+	const pipeline = [
+		stage('01', 'Sources', facts.sources === 1 ? '1 read' : `${facts.sources} read`, 'temcoDocs.sources'),
+		stage('02', 'Documents', `${facts.pages} pages`, 'temcoDocs.documents'),
+		stage('03', 'Review', `${facts.drafts.length} waiting`, 'temcoDocs.review'),
+		stage('04', 'Build', `${facts.faults} problems`, 'temcoDocs.builds'),
+		stage('05', 'Publish', `${facts.releases} published`, 'temcoDocs.releases')
+	].join('');
+
+	const waiting = facts.drafts;
+	const hero = waiting.length === 0
+		? `<div class="hero-panel">
+		<div class="eyebrow">Nothing is waiting</div>
+		<div class="hero-panel__title">Nothing needs a person right now</div>
+		<p class="hero-panel__desc">No draft is waiting in the Review Center, and every page the registries declare has a file. Writing a page, reading a source or building the site will put something here.</p>
+		<div class="hero-panel__actions">${action('New Page', 'temcoDocs.newPage', 'primary')}${action('Open the Documents', 'temcoDocs.documents')}</div>
+	</div>`
+		: `<div class="hero-panel hero-panel--warn">
+		<div class="eyebrow">${escapeHtml(facts.project === undefined ? 'The project being worked on' : 'Review queue')}</div>
+		<div class="hero-panel__title">${waiting.length} ${waiting.length === 1 ? 'draft is' : 'drafts are'} waiting for a person</div>
+		<p class="hero-panel__desc">Each one is a proposal in the platform database: accepting it writes the page exactly as it reads, discarding it throws the text away. The newest is <b>${escapeHtml(waiting[0].title)}</b>.</p>
+		<div class="hero-panel__actions">${action('Open the Review Center', 'temcoDocs.review', 'primary')}${action('See What Needs Doing', 'temcoWorkbench.openNeeds')}</div>
+	</div>`;
+
+	const needs = waiting.length === 0
+		? '<p class="group-note">Nothing is waiting. The Needs page also lists structural faults, missing files and pages nobody owns.</p>'
+		: waiting.slice(0, 4).map((draft) =>
+			`<div class="record-row record-row--static">
+				${toneMark('sparkle', 'accent')}
+				<div class="record-row__main">
+					<div class="record-row__title"><span class="record-row__name">${escapeHtml(draft.title)}</span></div>
+					<div class="record-row__meta"><span class="cell-mono">${escapeHtml(draft.pageId)}</span> · <span>waiting ${escapeHtml(age(draft.createdAt))}</span></div>
+				</div>
+				<div class="record-row__state"><span class="badge badge--info">Draft</span></div>
+				<span class="record-row__go"></span>
+			</div>`).join('');
+
+	const activity = facts.events.length === 0
+		? '<p class="group-note">Nothing has been recorded yet. Saving a draft, building or publishing writes the first row here.</p>'
+		: `<ol class="feed">${facts.events.slice(0, 6).map(eventRow).join('')}</ol>`;
 
 	return `<div class="page-head">
 	<div class="page-head__main">
@@ -55,16 +208,14 @@ function overviewBody(): string {
 	<div class="page-head__actions">${action('New Project', 'temcoProjects.newProject', 'primary')}${action('Build the Site', 'temcoDocs.buildSite')}</div>
 </div>
 
-<div class="grid grid--4">${KPIS.map(kpi).join('')}</div>
+<div class="grid grid--4">${[
+			{ label: 'Projects', value: String(facts.projects), note: facts.projects === 1 ? 'in the platform database' : 'in the platform database' },
+			{ label: 'Pages', value: String(facts.pages), note: `${facts.sources} source${facts.sources === 1 ? '' : 's'} being read` },
+			{ label: 'Drafts waiting', value: String(facts.drafts.length), note: facts.drafts.length === 0 ? 'nothing to review' : 'a person has to settle them' },
+			{ label: 'Never reviewed', value: String(facts.neverReviewed), note: 'readable, but nobody has read it' }
+		].map(kpi).join('')}</div>
 
-<div class="mt-16">
-	<div class="hero-panel">
-		<div class="eyebrow">Version 13.0</div>
-		<div class="hero-panel__title">Release 13.0 is waiting on two checks</div>
-		<p class="hero-panel__desc">The site, the PDF and the search index are built. The help compiler is still running and <b>Data Points API</b> carries an ordering error the last release did not have.</p>
-		<div class="hero-panel__actions">${action('Open Documentation Owed', 'temcoDocs.stalenessReport', 'primary')}${action('Build the Offline Help', 'temcoDocs.buildHelp')}</div>
-	</div>
-</div>
+<div class="mt-16">${hero}</div>
 
 <div class="mt-24">
 	<div class="row row--between" style="margin-bottom:10px">
@@ -76,92 +227,83 @@ function overviewBody(): string {
 
 <div class="mt-24 grid grid--2">
 	<div>
-		${rules('Recent Activity', `${ACTIVITY_TODAY.length} today`, action('All Activity', 'temcoWorkbench.activity', 'ghost'))}
-		<ol class="feed">${ACTIVITY_TODAY.map(eventRow).join('')}</ol>
+		${rules('Recent Activity', facts.events.length === 1 ? '1 event' : `${facts.events.length} events`, action('All Activity', 'temcoWorkbench.activity', 'ghost'))}
+		${activity}
 	</div>
 	<div>
-		${rules('Needs You', `${NEEDS.length} items`, action('Review', 'temcoWorkbench.openNeeds', 'ghost'))}
-		<div class="record-list">${NEEDS.slice(0, 4).map((entry) =>
-			`<div class="record-row record-row--static">
-				${toneMark(entry.tone === 'err' ? 'alert' : 'clock', entry.tone)}
-				<div class="record-row__main">
-					<div class="record-row__title"><span class="record-row__name">${escapeHtml(entry.title)}</span></div>
-					<div class="record-row__meta"><span>${escapeHtml(entry.issue)}</span></div>
-				</div>
-				<div class="record-row__state"><span class="badge badge--${entry.tone === 'err' ? 'err' : entry.tone === 'warn' ? 'warn' : 'info'}">${entry.tone === 'err' ? 'Error' : entry.tone === 'warn' ? 'Warning' : 'Review'}</span></div>
-				<span class="record-row__go"></span>
-			</div>`).join('')}</div>
+		${rules('Needs You', facts.drafts.length === 0 ? 'nothing' : `${facts.drafts.length} waiting`, action('Review', 'temcoWorkbench.openNeeds', 'ghost'))}
+		<div class="record-list">${needs}</div>
 	</div>
 </div>
 
 <div class="mt-24 grid grid--3">
-	<div class="card"><div class="card__head"><div class="card__title">Devices</div></div><p class="card__desc">31 of 34 controllers are answering. T3-22I has been silent for two hours.</p><div class="card__body">${bar(91, '31 / 34', 'ok')}</div></div>
-	<div class="card"><div class="card__head"><div class="card__title">Knowledge</div></div><p class="card__desc">1,254 pages across 8 areas. 341 pages have never been reviewed.</p><div class="card__body">${bar(73, '73%')}</div></div>
-	<div class="card"><div class="card__head"><div class="card__title">Temco Learn</div></div><p class="card__desc">Version 12.9 is live. 13.0 publishes when the build finishes.</p><div class="card__body">${bar(100, 'Live', 'ok')}</div></div>
+	<div class="card"><div class="card__head"><div class="card__title">Sources</div></div><p class="card__desc">${facts.sources === 0 ? 'Nothing is being read yet: choose a project, or open a folder with a <b>docs/</b> folder.' : `${facts.sources} source${facts.sources === 1 ? ' is' : 's are'} being read. ${facts.faults === 0 ? 'None of their pages has a structural problem.' : `${facts.faults} structural problem${facts.faults === 1 ? '' : 's'} found.`}`}</p><div class="card__body">${bar(facts.sources === 0 ? 0 : 100, facts.sources === 0 ? 'nothing read' : 'all read', facts.sources === 0 ? undefined : 'ok')}</div></div>
+	<div class="card"><div class="card__head"><div class="card__title">Knowledge</div></div><p class="card__desc">${facts.pages} pages across ${facts.areas.length} area${facts.areas.length === 1 ? '' : 's'}. ${facts.neverReviewed} ${facts.neverReviewed === 1 ? 'page has' : 'pages have'} never been reviewed; ${facts.stale} ${facts.stale === 1 ? 'is' : 'are'} stale.</p><div class="card__body">${bar(facts.pages === 0 ? 0 : Math.round(((facts.pages - facts.neverReviewed) / facts.pages) * 100), facts.pages === 0 ? 'no pages' : `${facts.pages - facts.neverReviewed} of ${facts.pages} read`, 'ok')}</div></div>
+	<div class="card"><div class="card__head"><div class="card__title">Releases</div></div><p class="card__desc">${facts.releases === 0 ? 'Nothing has been published from this project yet. Build the site, then publish it: the copy is what a reader opens.' : `${facts.releases} version${facts.releases === 1 ? '' : 's'} published. The files stay where the build wrote them.`}</p><div class="card__body">${bar(facts.releases === 0 ? 0 : 100, facts.releases === 0 ? 'not published' : `${facts.releases} published`, facts.releases === 0 ? undefined : 'ok')}</div></div>
 </div>`;
+}
+
+function rules(label: string, count: string, buttons = ''): string {
+	return `<div class="group-head"><span class="group-head__label">${escapeHtml(label)}</span><span class="group-head__rule"></span><span class="group-head__count">${escapeHtml(count)}</span>${buttons ? `<span class="group-head__actions">${buttons}</span>` : ''}</div>`;
 }
 
 function bar(pct: number, label: string, kind?: string): string {
 	return `<div class="bar"><span class="bar__fill${kind ? ` bar__fill--${kind}` : ''}" style="width:${pct}%"></span></div><div class="cell-muted" style="font-size:12px;margin-top:6px">${escapeHtml(label)}</div>`;
 }
 
-function activityBody(): string {
-	const group = (label: string, items: Event[]): string =>
-		`${rules(label, `${items.length} ${items.length === 1 ? 'event' : 'events'}`)}<ol class="feed">${items.map(eventRow).join('')}</ol>`;
-
+/** *Recent Activity* — every row the platform wrote about itself, newest first. */
+function activityBody(facts: DashboardFacts): string {
 	return `<div class="page-head">
 	<div class="page-head__main">
 		<h1 class="page-head__title">${icon('clock')}Recent Activity</h1>
-		<p class="page-head__desc">Everything every module recorded, newest first. Nothing here is editable.</p>
+		<p class="page-head__desc">Everything the platform recorded, newest first. A row is written by the module that did the thing, so nothing here is a second, derived history.</p>
 	</div>
+	<div class="page-head__actions">${action('Review Center', 'temcoDocs.review', 'primary')}${action('Open the Builds', 'temcoDocs.builds')}</div>
 </div>
-<div class="feed-wrap">
-	<div class="mt-8">${group('Today', ACTIVITY_TODAY)}</div>
-	<div class="mt-24">${group('Yesterday', ACTIVITY_YESTERDAY)}</div>
-	<div class="mt-24">${group('This Week', ACTIVITY_WEEK)}</div>
-</div>`;
+${facts.events.length === 0
+			? `<div class="mt-16"><div class="callout">${icon('info')}<div><b>Nothing has been recorded yet.</b> The first row appears when a draft is saved, a build runs or a release is published — each of those writes one, and this page lists them in the order they happened.</div></div></div>`
+			: `<div class="feed-wrap"><div class="mt-8">${rules('Newest First', facts.events.length === 1 ? '1 event' : `${facts.events.length} events`)}<ol class="feed">${facts.events.map(eventRow).join('')}</ol></div></div>`}`;
 }
 
-function healthBody(): string {
-	const rows = COVERAGE.map((area) => {
-		const pct = Math.round((area.reviewed / area.pages) * 100);
+/** *Coverage & Health* — how much of each area has been read, and what the sources have outrun. */
+function healthBody(facts: DashboardFacts): string {
+	const rows = facts.areas.map((area) => {
+		const read = Math.max(0, area.pages - area.neverReviewed);
+		const pct = area.pages === 0 ? 0 : Math.round((read / area.pages) * 100);
 		return `<div class="record-row record-row--static">
-			${toneMark('folder', area.stale > 15 ? 'warn' : undefined)}
+			${toneMark('folder', area.stale > 0 ? 'warn' : undefined)}
 			<div class="record-row__main">
-				<div class="record-row__title"><span class="record-row__name">${escapeHtml(area.area)}</span></div>
-				<div class="record-row__meta"><span>${area.pages} pages · ${area.reviewed} reviewed · ${area.stale} stale</span></div>
-				<div style="margin-top:8px;max-width:420px">${bar(pct, `${pct}% reviewed`)}</div>
+				<div class="record-row__title"><span class="record-row__name">${escapeHtml(area.name)}</span></div>
+				<div class="record-row__meta"><span>${area.pages} pages · ${read} read · ${area.stale} stale · ${area.issues} problems</span></div>
+				<div style="margin-top:8px;max-width:420px">${bar(pct, `${pct}% read`)}</div>
 			</div>
 			<div class="record-row__state"><span class="badge ${pct >= 70 ? 'badge--ok' : 'badge--warn'}">${pct}%</span></div>
 			<span class="record-row__go"></span>
 		</div>`;
 	}).join('');
 
-	const checks = CHECKS.map((check) =>
-		`<div class="record-row record-row--static">
-			${toneMark(check.tone === 'err' ? 'error' : check.tone === 'ok' ? 'check' : 'warning', check.tone === 'ok' ? 'ok' : check.tone)}
-			<div class="record-row__main">
-				<div class="record-row__title"><span class="record-row__name">${escapeHtml(check.name)}</span></div>
-				<div class="record-row__meta"><span>${escapeHtml(check.detail)}</span></div>
-			</div>
-			<div class="record-row__state"><span class="badge ${check.tone === 'ok' ? 'badge--ok' : check.tone === 'err' ? 'badge--err' : check.tone === 'warn' ? 'badge--warn' : 'badge--info'}">${check.found}</span></div>
-			<span class="record-row__go"></span>
-		</div>`).join('');
-
 	return `<div class="page-head">
 	<div class="page-head__main">
 		<h1 class="page-head__title">${icon('chart')}Coverage &amp; Health</h1>
-		<p class="page-head__desc">How much of the set has been read, reviewed and shipped — per area, and what the checks found.</p>
+		<p class="page-head__desc">How much of the set has been read, reviewed and shipped — per area, and what the checks found. Read is what a person signed off; stale is what the sources have outrun.</p>
 	</div>
-	<div class="page-head__actions">${action('Validate', 'temcoDocs.validate', 'primary')}${action('Documentation Owed', 'temcoDocs.stalenessReport')}</div>
+	<div class="page-head__actions">${action('Validate', 'temcoDocs.validate', 'primary')}${action('What Needs Doing', 'temcoWorkbench.openNeeds')}</div>
 </div>
 
-${rules('Coverage by Area', `${COVERAGE.length} areas`)}
-<div class="record-list">${rows}</div>
+<div class="settings-strip settings-strip--wide">
+	<div><div class="settings-strip__label">Pages</div><div class="settings-strip__value">${facts.pages}</div></div>
+	<div><div class="settings-strip__label">Never reviewed</div><div class="settings-strip__value">${facts.neverReviewed}</div></div>
+	<div><div class="settings-strip__label">Stale</div><div class="settings-strip__value">${facts.stale}</div></div>
+	<div><div class="settings-strip__label">Without an owner</div><div class="settings-strip__value">${facts.unowned}</div></div>
+	<div><div class="settings-strip__label">Problems</div><div class="settings-strip__value">${facts.faults}</div></div>
+	<div><div class="settings-strip__label">Sources</div><div class="settings-strip__value">${facts.sources}</div></div>
+</div>
 
 <div class="mt-24">
-	${rules('Checks', `${CHECKS.length} run by the build`)}
-	<div class="record-list">${checks}</div>
+	${rules('Coverage by Area', facts.areas.length === 1 ? '1 area' : `${facts.areas.length} areas`)}
+	${facts.areas.length === 0
+			? '<p class="group-note">Nothing is being read yet, so there is no area to draw. Choose the project you are working on.</p>'
+			: `<div class="record-list">${rows}</div>`}
 </div>`;
 }
 
@@ -171,17 +313,16 @@ export class DashboardPages {
 
 	constructor(private readonly context: vscode.ExtensionContext) { }
 
-	open(pageId: 'overview' | 'activity' | 'health'): void {
+	async open(pageId: 'overview' | 'activity' | 'health'): Promise<void> {
 		const existing = this.panels.get(pageId);
+		const definition = await this.body(pageId);
 		if (existing) {
+			// Redrawn as well as revealed: a queue or a coverage figure that was true when the tab opened need
+			// not be true now, and a page that lies quietly is worse than one that takes a moment to open.
 			existing.reveal(pageColumn());
+			existing.webview.html = page(definition.body, { title: definition.title, script: commandScript });
 			return;
 		}
-		const definition = pageId === 'overview'
-			? { type: OVERVIEW_VIEW_TYPE, title: 'Overview', body: overviewBody() }
-			: pageId === 'activity'
-				? { type: ACTIVITY_VIEW_TYPE, title: 'Recent Activity', body: activityBody() }
-				: { type: HEALTH_VIEW_TYPE, title: 'Coverage & Health', body: healthBody() };
 
 		const panel = vscode.window.createWebviewPanel(definition.type, definition.title, pageColumn(), {
 			enableScripts: true,
@@ -192,6 +333,16 @@ export class DashboardPages {
 		panel.webview.onDidReceiveMessage(runCommand);
 		panel.webview.html = page(definition.body, { title: definition.title, script: commandScript });
 		this.panels.set(pageId, panel);
+	}
+
+	/** One page's body, read fresh: the registries and the catalog answer, in that order. */
+	private async body(pageId: 'overview' | 'activity' | 'health'): Promise<{ type: string; title: string; body: string }> {
+		const facts = await readFacts(this.context);
+		return pageId === 'overview'
+			? { type: OVERVIEW_VIEW_TYPE, title: 'Overview', body: overviewBody(facts) }
+			: pageId === 'activity'
+				? { type: ACTIVITY_VIEW_TYPE, title: 'Recent Activity', body: activityBody(facts) }
+				: { type: HEALTH_VIEW_TYPE, title: 'Coverage & Health', body: healthBody(facts) };
 	}
 
 	dispose(): void {

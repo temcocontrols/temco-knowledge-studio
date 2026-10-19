@@ -56,6 +56,8 @@ interface SelectionShape {
 
 /** A row of the projects list. */
 export interface DocumentRow {
+	/** The name the database keys it by — what a selection, a draft and a build all point at. */
+	slug: string;
 	name: string;
 	version?: string;
 	sources: number;
@@ -85,6 +87,25 @@ export interface DocumentDetail {
 	sources: { name: string; kind: string; branch?: string }[];
 }
 
+/** One thing the platform noticed. */
+export interface EventRow {
+	id: number;
+	at: string;
+	kind: string;
+	detail?: string;
+	seenAt?: string;
+}
+
+/** A release: what was published, where it went, and when. */
+export interface ReleaseRow {
+	id: number;
+	buildId?: number;
+	version: string;
+	destination: string;
+	files: number;
+	publishedAt: string;
+}
+
 /** A page as a read found it. */
 export interface PageRow {
 	id: string;
@@ -93,17 +114,36 @@ export interface PageRow {
 	owner?: string;
 }
 
+/** A draft as the queue reads it. */
+export interface DraftRow {
+	id: number;
+	documentSlug: string;
+	source?: string;
+	pageId: string;
+	title: string;
+	kind: string;
+	body: string;
+	createdAt: string;
+	state: 'draft' | 'accepted' | 'discarded';
+}
+
 /** The platform's database, as this module uses it — the copy of `Catalog` in the store. */
 export interface Catalog {
 	readonly file: vscode.Uri;
 	counts(): [string, number][];
 	schemaVersion(): number;
 	unseenEvents(): number;
+	/** What the platform noticed, newest first. */
+	events(limit?: number): EventRow[];
 	documents(): DocumentRow[];
 	sources(): SourceRow[];
 	document(slug: string): DocumentDetail | undefined;
 	documentSources(documentSlug: string): { name: string; kind: string; branch?: string }[];
 	documentPages(documentSlug: string): (PageRow & { source: string })[];
+	/** The drafts of one project — waiting ones by default, which is what a queue is. */
+	drafts(documentSlug: string): DraftRow[];
+	/** The releases of one project, newest first. */
+	releases(documentSlug: string): ReleaseRow[];
 	documentArtifacts(documentSlug: string): { kind: string; path: string; builtAt: string }[];
 	pagesFor(sourceId: number): PageRow[];
 	close(): void;

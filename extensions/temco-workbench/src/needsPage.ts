@@ -13,6 +13,7 @@
 import * as vscode from 'vscode';
 import { DocsRoot, collectPages, countStale, scriptsIn } from './docs';
 import { OFFERED_SCRIPTS } from './repositories';
+import { Catalog, DraftRow, selection } from './store';
 import { NEEDS_VIEW_TYPE } from './surface';
 import { commandScript, escapeHtml, icon, page, pageColumn, runCommand, toneMark } from './ui';
 
@@ -153,6 +154,7 @@ export class NeedsPage {
       .filter((script) => scriptsPresent.has(script.id))
       .map((script) => ({ id: script.id, label: script.label, detail: script.detail, run: this.runs.get(script.id) }));
     const errors = faults.filter((fault) => fault.severity === 'error').length;
+    const drafts = await draftsWaiting(this.context);
 
     const fact = (label: string, value: string): string =>
       `<div><div class="settings-strip__label">${escapeHtml(label)}</div><div class="settings-strip__value">${escapeHtml(value)}</div></div>`;
@@ -220,6 +222,20 @@ export class NeedsPage {
 	<span class="record-row__go">›</span>
 </div>`;
 
+    const draftRow = (draft: DraftRow): string =>
+      `<div class="record-row record-row--static">
+	${toneMark('sparkle', 'accent')}
+	<div class="record-row__main">
+		<div class="record-row__title"><span class="record-row__name">${escapeHtml(draft.title)}</span><span class="cell-muted cell-mono">${escapeHtml(draft.pageId)}</span></div>
+		<div class="record-row__meta"><span>${escapeHtml(draft.kind || 'draft')}</span> · <span>written ${escapeHtml(age(draft.createdAt))}</span>${draft.source === undefined ? '' : ` · <span>read from ${escapeHtml(draft.source)}</span>`}</div>
+	</div>
+	<div class="record-row__state">
+		<button type="button" class="btn btn--sm btn--primary" data-command="temcoDocs.acceptDraft" data-args="${escapeHtml(String(draft.id))}"><span>Accept</span></button>
+		<button type="button" class="btn btn--sm btn--ghost" data-command="temcoDocs.discardDraft" data-args="${escapeHtml(String(draft.id))}"><span>Discard</span></button>
+	</div>
+	<span class="record-row__go"></span>
+</div>`;
+
     const scriptRow = (script: (typeof scripts)[number]): string => {
       const last = script.run === undefined
         ? 'not run in this session'
@@ -251,9 +267,17 @@ export class NeedsPage {
 	${fact('Errors', String(errors))}
 	${fact('Warnings', String(faults.length - errors))}
 	${fact('Missing files', String(missing.length))}
+	${fact('Drafts waiting', String(drafts.length))}
 	${fact('Stale', String(stale.length))}
 	${fact('Unowned', String(unowned.length))}
 	${fact('Sources', String(sources.length))}
+</div>
+
+<div class="mt-24">
+	${rule('Drafts Waiting', drafts.length === 1 ? '1 draft' : `${drafts.length} drafts`, '<button type="button" class="btn btn--sm btn--ghost" data-command="temcoDocs.review"><span>Open the Queue</span></button>')}
+	${drafts.length === 0
+        ? '<p class="group-note">Nothing is waiting for a person. A draft is written by <b>New Page</b> → <b>Draft</b>, and lands here until somebody settles it.</p>'
+        : `<div class="record-list">${drafts.map(draftRow).join('')}</div>`}
 </div>
 
 <div class="mt-24">
@@ -301,4 +325,46 @@ export class NeedsPage {
 
     this.panel.webview.html = page(body, { title: 'What needs doing', script: commandScript });
   }
+}
+
+/**
+ * The drafts a person has to settle.
+ *
+ * Read from the catalog, not from the registry: a draft is a proposal that has not been written anywhere yet, so
+ * this is the one part of "what needs doing" that no folder can answer.
+ */
+async function draftsWaiting(context: vscode.ExtensionContext): Promise<DraftRow[]> {
+  try {
+    const catalog = await Catalog.open(context);
+    try {
+      const documents = catalog.documents();
+      const project = selection.project() ?? (documents.length === 1 ? documents[0].slug : undefined);
+      return project === undefined ? [] : catalog.drafts(project);
+    } finally {
+      catalog.close();
+    }
+  } catch {
+    return [];
+  }
+}
+
+/** How long a draft has been waiting, in words a reviewer reads at a glance. */
+function age(iso: string): string {
+  const at = new Date(iso).getTime();
+  if (Number.isNaN(at)) {
+    return 'just now';
+  }
+  const minutes = Math.floor((Date.now() - at) / 60_000);
+  if (minutes < 1) {
+    return 'just now';
+  }
+  if (minutes < 60) {
+    return `${minutes} min ago`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours} h ago`;
+  }
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
 }

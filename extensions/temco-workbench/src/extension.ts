@@ -20,16 +20,36 @@ import { LearnPages } from './learnPages';
 import { NeedsPage } from './needsPage';
 import { registerSettings } from './settingsPages';
 import { registerSidebarViews } from './sidebar';
-import { selection } from './store';
+import { Catalog, selection } from './store';
 import { WorkspacesPages } from './workspaces';
 export function activate(context: vscode.ExtensionContext): void {
+	// How many drafts a person still has to settle. A queue is not in the registry, so it is read from the catalog
+	// once per refresh and kept here — the badge is drawn synchronously, and a number that lags one refresh is
+	// honest, whereas a badge that cannot be drawn is not.
+	let waiting = 0;
 	// The five group views whose containers this module declares: Workspaces, AI Hub, Temco Learn, Settings, Help.
 	// The two rows that carry a number — Modules and Needs Review — read it when they are drawn, so installing a
 	// module or reviewing a page changes the panel without a reload.
 	const sidebars = registerSidebarViews(context, () => ({
 		modules: vscode.extensions.all.filter((extension) => extension.packageJSON.publisher === 'temcocontrols').length,
-		needs: totals(roots()).neverReviewed,
+		needs: totals(roots()).neverReviewed + waiting,
 	}));
+	/** Re-read the queue, then redraw the panel: what is left is what a person still has to look at. */
+	const countDrafts = async (): Promise<void> => {
+		try {
+			const catalog = await Catalog.open(context);
+			try {
+				const documents = catalog.documents();
+				const project = selection.project() ?? (documents.length === 1 ? documents[0].slug : undefined);
+				waiting = project === undefined ? 0 : catalog.drafts(project).length;
+			} finally {
+				catalog.close();
+			}
+		} catch {
+			waiting = 0;
+		}
+		sidebars.refresh();
+	};
 	// The page behind the Library's *Needs attention* row: what wants a person, said in full.
 	const needs = new NeedsPage(context, () => roots());
 	// The page a window with nothing better to show opens on: the application, not one project's work, and the
@@ -126,6 +146,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		onDidChange(() => {
 			sidebars.refresh();
 			needs.refresh();
+			void countDrafts();
 		})
 	);
 
@@ -146,6 +167,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	// Then the tab: what `temcoWorkbench.start.open` names, falling through rather than opening an empty editor.
 	void reread().then(() => {
 		started = true;
+		void countDrafts();
 		return openStart(dashboard, help);
 	});
 }
