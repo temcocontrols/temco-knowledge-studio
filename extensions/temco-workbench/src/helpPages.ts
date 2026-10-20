@@ -241,7 +241,7 @@ export class HelpPages {
 	${actionRow('plus', 'Create a documentation project', 'a name, a version, and the sources it reads', 'temcoProjects.newProject')}
 	${actionRow('repo', 'Read a source', 'a repository, a document, a folder or a connected library', 'temcoProjects.addSource')}
 	${actionRow('document', 'Open the content tree', 'every area, folder and page this workspace holds', 'temcoDocs.pages.focus')}
-	${actionRow('graduation', 'See how Documentation works', 'five steps from a repository to a published page', 'temcoDocs.howTo')}
+		${actionRow('book', 'Open the Documentation overview', 'what the set holds, and what is waiting on a person', 'temcoDocs.overview')}
 	${actionRow('chip', 'Bring in a controller', 'discover one on the segment, or add it by address', 'workbench.view.extension.temcoDevices')}
 	${actionRow('sparkle', 'Ask the AI about this workspace', 'answers cite the pages and sources they used', 'temcoAi.chat')}
 </div>

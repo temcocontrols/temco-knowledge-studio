@@ -29,9 +29,9 @@ displays it. Keeping them apart is what stops "put it in Temco Learn" from being
 
 ## The guide, and why a module has one
 
-`temcoDocs.howTo` opens **How To Use** (`src/docsPages.ts`): five steps from a source to a page a reader can open, each step carrying the sentence a new person needs and, folded under it, what the window actually does. It is the one surface in the module about the module — every other page is about the work — and it explains rather than re-implements: each button runs a command another module already owns (`temcoProjects.newProject`, `temcoRepositories.readSource`, `temcoDocs.buildSite`, …).
+`temcoDocs.overview` opens **Documentation Overview** (`src/overview.ts`): the set as this window reads it — areas, counts, what is stale and what is unshipped. **How To Use** was removed: it was a mock guide whose numbers were typed in (“13.0 is current”, “17 pages are waiting”), and a guide that quotes stale figures teaches the wrong thing.
 
-The rest of the container is the mock's Documentation module, page for page: **Projects**, **Repositories** and a repository, **Sources**, **Documents** and a page, a **Source Explorer**, **Review Center**, **Build Center**, **Releases** and **How To Use** (`src/docsPages.ts`, drawn from `src/mockDocs.ts`). The side bar holds the mock's five sections and rows — Projects · Repositories, Sources · Documents · Review Center, Build Center, Releases · How To Use — so a surface is found where the design puts it.
+The rest of the container is the mock's Documentation module, page for page: **Projects**, **Repositories** and a repository, **Sources**, **Documents** and a page, a **Source Explorer**, **Review Center**, **Build Center** and **Releases** (`src/docsPages.ts`). The side bar holds the mock's sections and rows — Projects · Repositories, Sources · Documents · Review Center, Build Center, Releases — so a surface is found where the design puts it.
 
 `temcoDocs.overview` opens **Documentation** (`src/overview.ts`): the tree answers "where is this page", and this page answers "what am I looking at" — pages, areas, how much is behind its source, which faults the checks found. Every number is computed from the same registry the tree reads, so the page and the tree cannot disagree.
 

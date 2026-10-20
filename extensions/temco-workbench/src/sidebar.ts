@@ -98,8 +98,7 @@ const GROUPS: Group[] = [
 		rows: [
 			{ label: 'Logs', note: 'four files, and how to read one', icon: 'output', command: 'temcoWorkbench.help.logs' },
 			{ label: 'Report an Issue', note: 'the facts a report needs, collected', icon: 'report', command: 'temcoWorkbench.help.issue' },
-			{ label: 'About Temco Platform', note: 'the version in front of you', icon: 'info', command: 'temcoWorkbench.help.about' }, { label: 'Documentation', note: 'what is being read', icon: 'book', command: 'temcoDocs.overview' },
-			{ label: 'How To Use', note: 'five steps, start here', icon: 'mortar-board', command: 'temcoDocs.howTo' }
+			{ label: 'About Temco Platform', note: 'the version in front of you', icon: 'info', command: 'temcoWorkbench.help.about' }, { label: 'Documentation', note: 'what is being read', icon: 'book', command: 'temcoDocs.overview' }
 		]
 	}
 ];

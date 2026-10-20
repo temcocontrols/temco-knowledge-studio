@@ -167,8 +167,8 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
 
   // The page behind the *Documentation Owed* row, and the form that creates a page.
 
-  // The side bar's groups, as the mock draws them: Projects, Sources, Areas, Pipeline, How-To and the Working Set
-  // of the pages opened in this window. The Docs Explorer is the tree of pages, registered above.
+  // The side bar's groups, as the mock draws them: Projects, Sources, Areas, Pipeline and the Working Set of the
+  // pages opened in this window. The Docs Explorer is the tree of pages, registered above.
   //
   // The groups read the module rather than a copy of it: the projects the catalog holds, the areas of the project
   // being worked on, and the pages this window has shown. `sidebar` is filled in below, before the first read.
@@ -599,8 +599,6 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     vscode.commands.registerCommand('temcoDocs.showStatus', report),
     vscode.commands.registerCommand('temcoDocs.validate', report),
     vscode.commands.registerCommand('temcoDocs.refresh', refresh),
-    // The guide: five steps that run the commands the rest of the platform already owns.
-    vscode.commands.registerCommand('temcoDocs.howTo', () => docsPages.howTo()),
     // The Documentation container's surfaces, rebuilt from the mock: projects, repositories, sources,
     // documents, a page, a source, review, builds and releases.
     vscode.commands.registerCommand('temcoDocs.projects', () => docsPages.projects()),

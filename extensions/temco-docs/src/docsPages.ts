@@ -1,7 +1,7 @@
 // The Documentation module's pages.
 //
 // The eleven surfaces the Documentation container has (Projects, Repositories, a repository, Sources, Documents,
-// a page, a source, Review Center, Build Center, Releases, How To Use). The markup, the groups, the words and the
+// a page, a source, Review Center, Build Center and Releases). The markup, the groups, the words and the
 // order came from the mock (`docs/mock/js/views.docs.js`); the data is now the platform's own — the catalog, the
 // registries this window reads, and the clones in the working area — so an empty platform draws empty lists
 // rather than a demonstration.
@@ -24,7 +24,6 @@ export const SOURCE_VIEW_TYPE = 'temcoDocs.source';
 export const REVIEW_VIEW_TYPE = 'temcoDocs.review';
 export const BUILDS_VIEW_TYPE = 'temcoDocs.builds';
 export const RELEASES_VIEW_TYPE = 'temcoDocs.releases';
-export const HOW_TO_VIEW_TYPE = 'temcoDocs.howTo';
 
 interface ActionOptions {
 	kind?: 'primary' | 'ghost';
@@ -310,10 +309,6 @@ export class DocsPages {
 
 	private async openReleases(): Promise<void> {
 		this.open('releases', RELEASES_VIEW_TYPE, 'Releases', releasesBody(await this.buildFacts()));
-	}
-
-	howTo(): void {
-		this.open('howTo', HOW_TO_VIEW_TYPE, 'How To Use', howToBody());
 	}
 
 	dispose(): void {
@@ -1185,58 +1180,3 @@ function artifactLabel(kind: string): string {
 	return kind === 'chm' ? 'Offline help (CHM)' : kind === 'pdf' ? 'PDF' : kind === 'site' ? 'Website' : kind === 'search' ? 'Search index' : kind;
 }
 
-/** *How To Use* — the mock's `docs/how-to`. */
-function howToBody(): string {
-	const step = (n: number, title: string, text: string, detail: string, label: string, command: string): string =>
-		`<div class="howto__row"><span class="howto__n">${n}</span><div class="howto__main"><div class="howto__title">${esc(title)}</div><p class="howto__text">${text}</p><details class="disclosure howto__more"><summary>What happens underneath</summary><div class="howto__detail">${detail}</div></details></div><div class="howto__do">${button(label, command, { small: true, kind: 'ghost' })}</div></div>`;
-
-	const question = (q: string, a: string): string => `<details class="howto__q"><summary>${esc(q)}</summary><div class="howto__a">${a}</div></details>`;
-
-	const railStep = (n: string, title: string, hint: string, command: string): string =>
-		`<button type="button" class="howto-rail__step" data-command="${command}"><span class="howto-rail__n">${n}</span><span class="howto-rail__title">${esc(title)}</span><span class="howto-rail__hint">${esc(hint)}</span></button>`;
-
-	const linkRow = (mark: string, title: string, note: string, command: string): string =>
-		`<div class="record-row" data-command="${command}">${toneMark(mark)}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">${esc(title)}</span></div><div class="record-row__meta"><span>${esc(note)}</span></div></div><div class="record-row__state"></div><span class="record-row__go">${icon('chevron-right', 'icon--sm')}</span></div>`;
-
-	return `${pageHead({
-		title: 'How To Use',
-		mark: 'graduation',
-		desc: 'From a repository to a page a reader can open, in five steps.',
-		actions: button('Open Documents', 'temcoDocs.documents', { kind: 'primary', mark: 'book' }) + button('Ask the AI', 'temcoAi.openPanel', { mark: 'sparkle' })
-	})}
-<div class="howto-rail">
-${railStep('01', 'Pick a project', '13.0 is current', 'temcoDocs.projects')}
-${railStep('02', 'Add a source', 'a repo or a library', 'temcoDocs.sources')}
-${railStep('03', 'Read it', 'files become pages', 'temcoDocs.sources')}
-${railStep('04', 'Edit and review', 'one approval', 'temcoDocs.documents')}
-${railStep('05', 'Build and publish', 'readers get it', 'temcoDocs.builds')}
-</div>
-${rule({ label: 'Each Step, In Full', count: 'about 10 minutes' })}
-<div class="howto">
-${step(1, 'Choose the project', 'A project is one version of a product’s documentation — <strong>13.0</strong> is the current one. Everything below happens inside it.', '<p>The text stays in the repositories you already own. The project keeps only the choices around it: version, audience, owner and where it publishes. Two versions of the same repository therefore share files but never share pages.</p>', 'Projects', 'temcoDocs.projects')}
-${step(2, 'Say where the text comes from', 'A repository you have cloned, or a connected library. Adding a source records <code>where to read</code>; it copies nothing.', '<p>A repository is read at a commit, a connected library at a version. The commit is kept with every read, so a page can always name the exact file and revision it came from.</p>', 'Sources', 'temcoDocs.sources')}
-${step(3, 'Read it', 'Reading turns files into pages. A file becomes a page, its heading becomes the name, its folder becomes the <strong>area</strong>, and its order in the file becomes the reading order.', '<p>A read writes <code>docs/help/registry.json</code> inside a repository, and <code>docs/index.json</code> for a connected library. Files that did not change are skipped, so a second read is quick, and a page written by hand in the window is never overwritten by a read.</p>', 'Read Now', 'temcoRepositories.readAllSources')}
-${step(4, 'Open, edit and review', 'Open a page from the Docs Explorer tree or the Documents list, edit it in the page editor and save. The change waits in Review Center until someone approves it.', '<p>Every page carries an area, an order, an owner and the source it came from. Two pages cannot share an order inside one area — the build reports it as an error — and <strong>17</strong> pages are waiting for review right now.</p>', 'Documents', 'temcoDocs.documents')}
-${step(5, 'Build, then publish', 'A build turns approved pages into the artifacts readers get: the website, the PDF, the offline CHM, the search index and the AI index. Publishing points Temco Learn at one build.', '<p>The AI index never blocks a build: a slow embedding pass delays answers, not readers. A published version is frozen, so a correction after release starts the next version rather than rewriting a link someone already sent.</p>', 'Build Center', 'temcoDocs.builds')}
-</div>
-<div class="mt-24">
-${rule({ label: 'Questions That Come Up', count: '5 answers' })}
-<div class="howto__faq">
-${question('I edited a page — why has the site not changed?', 'Saving edits the page in the registry; the site reads a <em>build</em>. Run Build Center, then publish, and the page is on Temco Learn. Until then the edit is visible here and in review, and nowhere else.')}
-${question('Do I lose a hand-written page when the source is read again?', 'No. A read only writes pages for files that changed, and leaves pages that were written in this window alone — <code>docs/scale-factor.md</code> is one of them.')}
-${question('Two pages have the same order. What now?', 'The build refuses it as an error. Open one of the two pages, change its order in the facts strip, and build again; Review Center lists the pair so you do not have to search for it.')}
-${question('Where does the text actually live?', 'The pages live in the registry — the platform database — and the files stay in the repository untouched. SQL Studio queries that same database, which is why its numbers match the dashboard.')}
-${question('Can I publish the site without the PDF?', 'A build produces the targets you tick. A release publishes the artifacts it includes, so a version can ship the website and the search index on its own and add the PDF later.')}
-</div>
-</div>
-<div class="mt-24">
-${rule({ label: 'Where the Rest Lives', count: '5 pages' })}
-<div class="record-list">
-${linkRow('folder', 'Projects', 'the versions, their sources and what each one publishes', 'temcoDocs.projects')}
-${linkRow('link', 'Sources', 'repositories and connected libraries, and when each was last read', 'temcoDocs.sources')}
-${linkRow('check', 'Review Center', 'the 17 changes waiting for an approval', 'temcoDocs.review')}
-${linkRow('play', 'Build Center', 'the targets and the errors that block them', 'temcoDocs.builds')}
-${linkRow('upload', 'Releases', 'published versions, and the one still in flight', 'temcoDocs.releases')}
-</div>
-</div>`;
-}

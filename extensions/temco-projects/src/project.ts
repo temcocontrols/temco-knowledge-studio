@@ -3,11 +3,13 @@
 // The work happens on a page (`src/projectPage.ts`): the popups this replaces asked one field at a time and
 // could not show a source list at all. These commands only decide **which** project the page opens for, so
 // there is one form to maintain instead of a wizard and an editor that drift apart.
+//
+// There is no project *hub*: opening a project points the application at it and shows its pages, because a
+// summary page between the list and the work was a second place to read the same counts.
 
 import * as vscode from 'vscode';
 import { ProjectFlowPage } from './projectFlow';
 import { ProjectPage } from './projectPage';
-import { ProjectHub } from './projectHub';
 import { AddSourcePage } from './sourceFlow';
 import { Catalog, CatalogUnavailable, Selection, slugOf } from './store';
 import { focusLibrary, rowSlug } from './ui';
@@ -22,38 +24,25 @@ export function registerProjectCommands(
   selection: Selection,
   refresh: () => void
 ): void {
-  // The hub is built first and told what to call afterwards, because the callback it needs is the one that tells
-  // the hub about a removal — a loop, unless the reference is filled in after both exist.
-  let notify: (removed?: string) => void = () => void 0;
-  const hub = new ProjectHub(context, selection, (removed) => notify(removed));
-  const page = new ProjectPage(context, selection, (removed) => notify(removed));
-  // New Project is the mock's `flow/new-project`: a four-step wizard rather than the edit form opened empty.
-  const flow = new ProjectFlowPage(context, selection, () => notify());
+  const page = new ProjectPage(context, selection, () => refresh());
+  // New Project is the mock's `flow/new-project`: a wizard rather than the edit form opened empty.
+  const flow = new ProjectFlowPage(context, selection, () => refresh());
   context.subscriptions.push(flow);
   // Add Source is the mock's `flow/add-source`: three steps, and the same store call the dialog made.
   const source = new AddSourcePage(context);
   context.subscriptions.push(source);
 
-  /** Anything about a project changed: the Library's project rows re-read, and a project's own page says so. */
-  notify = (removed?: string): void => {
-    if (removed !== undefined) {
-      hub.notifyRemoved(removed);
-    }
-    refresh();
-  };
-
   context.subscriptions.push(
     vscode.commands.registerCommand('temcoProjects.newProject', () => void flow.open()),
     vscode.commands.registerCommand('temcoProjects.removeProject', (target?: ProjectArgument) =>
-      removeProject(context, selection, notify, rowSlug(target))
+      removeProject(context, selection, () => refresh(), rowSlug(target))
     ),
     // Adding a source is the mock's own flow: kind, location, read. A source is recorded once and cited by any
     // number of projects, so the flow is about the source itself rather than about the project it is added to.
     vscode.commands.registerCommand('temcoProjects.addSource', () => source.open()),
-    // Two doors on purpose: the hub is what a project *is*, the page is what it is *made of*. Opening the
-    // editor for every look at a project would make reading its pages and editing its fields the same act.
+    // Opening a project is two acts and no page in between: point the application at it, then show its pages.
     vscode.commands.registerCommand('temcoProjects.openProject', (target?: ProjectArgument) =>
-      withProject(context, (chosen) => hub.open(chosen), rowSlug(target))
+      withProject(context, (chosen) => void openDocuments(selection, chosen), rowSlug(target))
     ),
     vscode.commands.registerCommand('temcoProjects.editProject', (target?: ProjectArgument) =>
       withProject(context, (chosen) => page.openEdit(chosen), rowSlug(target))
@@ -64,6 +53,23 @@ export function registerProjectCommands(
     ),
     vscode.commands.registerCommand('temcoProjects.clearProject', () => selection.select(undefined))
   );
+}
+
+/**
+ * Opening a project: it becomes the one being worked on, and its pages are what opens.
+ *
+ * A command to the documentation module rather than an import — the list of a project's pages is that module's,
+ * and this one only knows which project the application follows.
+ */
+async function openDocuments(selection: Selection, slug: string): Promise<void> {
+  if (selection.project() !== slug) {
+    await selection.select(slug);
+  }
+  try {
+    await vscode.commands.executeCommand('temcoDocs.documents');
+  } catch {
+    // Without the documentation module there are no pages to show; the project is still the one being worked on.
+  }
 }
 
 /**

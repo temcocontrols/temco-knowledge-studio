@@ -121,7 +121,6 @@ function html(roots: readonly DocsRoot[]): string {
 	<div class="card__body">
 		<div class="row" style="gap:8px">
 			<button type="button" class="btn btn--primary" data-command="temcoDocs.projects"><span>Projects</span></button>
-			<button type="button" class="btn" data-command="temcoDocs.howTo"><span>How To Use</span></button>
 		</div>
 	</div>
 </div>`;
@@ -182,7 +181,6 @@ ${problems}
 		<button type="button" class="btn" data-command="temcoDocs.validate"><span>Validate the Set</span></button>
 		<button type="button" class="btn" data-command="temcoDocs.buildSite"><span>Build the Site</span></button>
 		<button type="button" class="btn" data-command="temcoDocs.buildHelp"><span>Build the Offline Help</span></button>
-		<button type="button" class="btn" data-command="temcoDocs.howTo"><span>How To Use</span></button>
 	</div>
 </div>`;
 }

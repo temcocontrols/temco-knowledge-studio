@@ -1,12 +1,13 @@
 // The module's side bar, grouped and counted the way the mock draws it.
 //
-// The mock's Documentation side bar (`docs/mock/js/shell.js`, `renderSidebar`) is five headings — Projects,
-// Sources, Areas, Pipeline, How-To — and three things each heading does that a flat list of rows does not:
+// The mock's Documentation side bar (`docs/mock/js/shell.js`, `renderSidebar`) had five headings — Projects,
+// Sources, Areas, Pipeline, How-To — and three things each heading does that a flat list of rows does not. How-To
+// is gone with its page (a mock guide with invented counts); the rest are here:
 //
 //   * it carries a **count**, at the end of the row;
 //   * the two headings that name things inside them — the projects and the areas — list those things, with the one
 //     being worked on first and the rest behind "… N more" (`treeBody`);
-//   * the pages opened in this window are a sixth group, **Working Set**, folded by area.
+//   * the pages opened in this window are the group **Working Set**, folded by area.
 //
 // VS Code draws a heading as a view, so each group is one. The view's own header carries the count as a badge, and
 // every row carries its own as the description — the same number at the same end of the row as the mock.
@@ -323,17 +324,12 @@ export function registerSectionViews(context: vscode.ExtensionContext, model: Si
 		{ label: 'Releases', note: 'published versions, and the one in flight', command: 'temcoDocs.releases', icon: 'cloud-upload' },
 	];
 
-	const howTo = (): Row[] => [
-		{ label: 'How To Use', note: 'five steps, start here', command: 'temcoDocs.howTo', icon: 'mortar-board' },
-	];
-
 	const projects = new LongList('projects', project);
 	const areas = new LongList('areas', area);
 	const flatSources = new Flat('sources', sources);
 	const flatPipeline = new Flat('pipeline', pipeline);
-	const flatHowTo = new Flat('howto', howTo);
 	const working = new WorkingSet(model);
-	groups.push(projects, areas, flatSources, flatPipeline, flatHowTo, working);
+	groups.push(projects, areas, flatSources, flatPipeline, working);
 
 	const view = (id: string, group: Group): void => {
 		context.subscriptions.push(
@@ -345,7 +341,6 @@ export function registerSectionViews(context: vscode.ExtensionContext, model: Si
 	view('areas', areas);
 	view('sources', flatSources);
 	view('pipeline', flatPipeline);
-	view('howto', flatHowTo);
 	view('working', working);
 
 	context.subscriptions.push(

@@ -33,7 +33,6 @@
     "onView:temcoDocs.section.sources",
     "onView:temcoDocs.section.areas",
     "onView:temcoDocs.section.pipeline",
-    "onView:temcoDocs.section.howto",
     "onView:temcoDocs.section.working"
   ],
   "contributes": {
@@ -54,10 +53,6 @@
         {
           "id": "temcoDocs.section.pipeline",
           "name": "Pipeline"
-        },
-        {
-          "id": "temcoDocs.section.howto",
-          "name": "How-To"
         },
         {
           "id": "temcoDocs.section.working",
@@ -135,11 +130,6 @@
       {
         "command": "temcoDocs.showStatus",
         "title": "Temco Docs: Show Status"
-      },
-      {
-        "command": "temcoDocs.howTo",
-        "title": "How To Use Temco Docs",
-        "icon": "$(question)"
       },
       {
         "command": "temcoDocs.overview",
@@ -611,11 +601,6 @@
           "command": "temcoDocs.retirePage",
           "when": "view == temcoDocs.pages",
           "group": "4_retire@1"
-        },
-        {
-          "command": "temcoDocs.howTo",
-          "when": "view == temcoDocs.pages",
-          "group": "5_view@0"
         },
         {
           "command": "temcoDocs.overview",

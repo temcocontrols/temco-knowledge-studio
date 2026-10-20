@@ -62,7 +62,6 @@ export const TEMCO_WORKBENCH_WELCOME_COMMAND_ID = 'temcoWorkbench.welcome';
 export const TEMCO_WORKBENCH_ABOUT_COMMAND_ID = 'temcoWorkbench.help.about';
 
 /** The pages the modules publish and the Temco menu names. */
-export const TEMCO_DOCS_HOWTO_COMMAND_ID = 'temcoDocs.howTo';
 export const TEMCO_SETTINGS_COMMAND_ID = 'temcoWorkbench.settings';
 export const TEMCO_HELP_COMMAND_ID = 'temcoWorkbench.help';
 
@@ -93,7 +92,6 @@ export const TEMCO_SHOW_LOGS_TITLE = localize('temco.showLogsTitle', "Show Logs"
 export const TEMCO_ABOUT_TITLE = localize('temco.aboutTitle', "About Temco Platform");
 export const TEMCO_DOCUMENTATION_TITLE = localize('temco.documentationTitle', "Open Documentation");
 export const TEMCO_WELCOME_TITLE = localize('temco.welcomeTitle', "Welcome");
-export const TEMCO_HOWTO_TITLE = localize('temco.howToTitle', "How To Use");
 export const TEMCO_SETTINGS_TITLE = localize('temco.settingsTitle', "Settings");
 export const TEMCO_HELP_TITLE = localize('temco.helpTitle', "Help");
 export const TEMCO_PLATFORM_TITLE = localize('temco.platformTitle', "Temco Platform");
