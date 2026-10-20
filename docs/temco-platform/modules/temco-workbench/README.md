@@ -9,7 +9,7 @@ The application's own surfaces. It is the only module that is not a domain: it o
 | Namespace | `temcoWorkbench` |
 | State | active |
 | View | **Library** (`temcoWorkbench.library`), contributed into the `temco` activity-bar container that the documentation module declares |
-| Pages | `temcoWorkbench.home` (the dashboard), `temcoWorkbench.needs` (what wants a person), `temcoWorkbench.welcome` (the page a new window opens on) |
+| Pages | `temcoWorkbench.overview` (the dashboard), `temcoWorkbench.activity` (what the platform recorded), `temcoWorkbench.openNeeds` (what wants a person), `temcoWorkbench.welcome` (the page a new window opens on) |
 | Setting | `temcoWorkbench.start.open` — `welcome` · `project` · `page` · `home` · `none` (default `welcome`) |
 | Requires | `temco-store`, `temco-ui`, `temco-repositories`, `temco-docs` |
 | Required by | `temco-docs` — nothing; the dependency runs one way, and the workbench reads the documentation module's model |
@@ -19,12 +19,12 @@ The application's own surfaces. It is the only module that is not a domain: it o
 | Module | Owns |
 |---|---|
 | `src/extension.ts` | activation: builds the three surfaces, wires their signals, and decides the first tab |
-| `src/views.ts` | the Library — one row per thing every module has (needs attention, projects, sources, repositories, the AI), each row's actions being that module's own commands |
-| `src/home.ts` | the dashboard: identity, how the application works, what exists now, how to start, and every feature with its state |
-| `src/welcome.ts` | the welcome page: what the application is for, five ways in, three walkthroughs, and the one preference it carries (open at startup) |
-| `src/settings.ts` | the settings page: the choices the application itself owns (`start.open`), and a filtered route into the settings editor for the ones the modules own |
-| `src/help.ts` | the help page: the build's real identity, the module register read from the host, and where a report goes |
+| `src/sidebar.ts` | the side-bar groups that are not a data view — Platform, Needs Work, Site, Delivery, Profile, Learn, Support — registered here because a container cannot declare its order in the activity bar |
+| `src/dashboard.ts` | the dashboard's two pages: **Overview** (what the platform holds, what is waiting, the pipeline, the activity) and **Recent Activity** |
+| `src/helpPages.ts` | Welcome, Help, Keyboard Shortcuts, Logs, Report an Issue, About — and the one preference Welcome carries |
+| `src/settingsPages.ts` | the settings pages: the choices the application itself owns (`start.open`), and a filtered route into the settings editor for the ones the modules own |
 | `src/needsPage.ts` | what wants a person, gathered from every module into one list with the reason and where the fix is |
+| `src/learnPages.ts` | Temco Learn as a reader sees it: Home, T3000, an article, Downloads, Learning Paths |
 | `src/surface.ts` | the page view types |
 | `src/docs.ts` · `src/store.ts` · `src/ui.ts` · `src/repositories.ts` · `src/aiModule.ts` | what it reads of the documentation module, the store, the UI rules, the repository scripts and the AI — each in one file, because an extension cannot import another extension's sources |
 
@@ -42,11 +42,18 @@ The mock has surfaces whose content this product cannot honestly produce, and no
 | Workspaces | Removed. A workspace was the mock's folder-above-the-project level, drawn over a fixed sample (`T3000`, `T3-BACnet`, …) with counts nothing recorded, and a “create” that wrote only into the window. The product's unit is the **project**, which the catalog holds; its sources are the folders, and New Project is the wizard the sample stood in for. |
 | Devices, I/O Studio, BACnet, Network, SQL Studio | Not built. Those modules are reserved — a page over a module that does not exist would be a mock inside the product. |
 
-## The welcome page, and why it is the default
+## One home: Welcome, the VS Code way
 
-A window that opens on a page you did not ask for has to earn it, so the welcome page carries only what a person can act on: five ways in (each a button running another module's command), three walkthroughs that list their steps instead of claiming progress, and a footer whose single checkbox writes the setting that decides the first tab. There is no picture of the product on it.
+A window that opens on a page you did not ask for has to earn it, so the welcome page carries only what a person can act on: six ways in (each a button running another module's command), three walkthroughs that list their steps instead of claiming progress, and a footer whose single checkbox writes the setting that decides the first tab. There is no picture of the product on it.
 
-It is a page and not the dashboard because the dashboard answers "what is in the project you are working on", and a window that has just started may have no project at all. `start.open` therefore begins at `welcome`, and `project`, `page` and `home` remain one setting away — the fall-through chain is unchanged, so a preference that cannot be honoured still lands on something rather than an empty editor.
+The arrangement is VS Code's, deliberately:
+
+- **Welcome is the first tab.** `start.open` defaults to `welcome`, so a launch answers "what is this and where do I begin" before it shows any work.
+- **The page owns the switch.** Its footer checkbox *Show the welcome page at startup* writes `temcoWorkbench.start.open` — there is no second place to turn it off, and the checkbox and the setting cannot disagree.
+- **Help ▸ Welcome brings it back**, as does the palette, every time.
+- **The Dashboard is not a second home.** It is the activity-bar container you go to *after* Welcome — Overview (what the platform holds and what is waiting), Recent Activity, Needs Work. VS Code's equivalent is Explorer: state you click into, never a page that opens itself beside the welcome page.
+
+The two only ever fought because either could be the first tab. Now one is the default and the other is a click, and each has one question: Welcome asks *where do I start*, the Overview asks *what is in it and what needs me*. With the checkbox off the chain never ends at the welcome page — `project` → the page you were last on → the overview — so turning it off means what it says; an empty window gets the overview, which has its own empty state and a *New Project* button. **Coverage & Health** is gone as a third dashboard page: the documentation module draws that report from the same registry with the same figures, so the Overview's Knowledge card links to it instead of duplicating it.
 
 ## Boundary rules
 

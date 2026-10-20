@@ -210,7 +210,8 @@ a {
 /* A page fills its tab. The mock centred its content in a 1180px column because it was a window inside a window;
    a webview tab already is one, and a column it does not need costs a row four facts of width. The side margin is
    the smallest that still separates content from the scrollbar, and the top margin is the smallest that does not
-   put the page head against the tab strip. */
+   put the page head against the tab strip. Both are deliberately small: the page head is the first thing in the
+   tab, and every pixel of padding above it is a pixel of the tree or the list that a person cannot see. */
 .view {
 	min-height: 100%;
 	background: var(--editor-bg);
@@ -219,7 +220,7 @@ a {
 .view__inner {
 	max-width: none;
 	margin: 0;
-	padding: 14px 20px 40px;
+	padding: 8px 12px 32px;
 }
 
 /* A link in a page is a button that runs a command, so it keeps the link colour and loses the

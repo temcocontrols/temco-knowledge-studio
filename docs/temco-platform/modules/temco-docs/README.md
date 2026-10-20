@@ -29,13 +29,13 @@ displays it. Keeping them apart is what stops "put it in Temco Learn" from being
 
 ## The guide, and why a module has one
 
-`temcoDocs.overview` opens **Documentation Overview** (`src/overview.ts`): the set as this window reads it — areas, counts, what is stale and what is unshipped. **How To Use** was removed: it was a mock guide whose numbers were typed in (“13.0 is current”, “17 pages are waiting”), and a guide that quotes stale figures teaches the wrong thing.
+`temcoDocs.overview` opens **Documentation** (`src/overview.ts`): the tree answers "where is this page", and this page answers "what am I looking at" — pages, areas, how much is behind its source, which faults the checks found, and the three checks that can be run from here. Every number is computed from the same registry the tree reads, so the page and the tree cannot disagree. It is also the **one owner of per-area coverage**: a *Coverage & Health* page used to exist on the workbench dashboard, drawn from this same registry, and was removed rather than left to drift.
 
-The rest of the container is the mock's Documentation module, page for page: **Projects**, **Repositories** and a repository, **Sources**, **Documents** and a page, a **Source Explorer**, **Review Center**, **Build Center** and **Releases** (`src/docsPages.ts`). The side bar holds the mock's sections and rows — Projects · Repositories, Sources · Documents · Review Center, Build Center, Releases — so a surface is found where the design puts it.
+**How To Use** was removed: it was a mock guide whose numbers were typed in (“13.0 is current”, “17 pages are waiting”), and a guide that quotes stale figures teaches the wrong thing.
 
-`temcoDocs.overview` opens **Documentation** (`src/overview.ts`): the tree answers "where is this page", and this page answers "what am I looking at" — pages, areas, how much is behind its source, which faults the checks found. Every number is computed from the same registry the tree reads, so the page and the tree cannot disagree.
+The rest of the container is the mock's Documentation module, page for page: **Projects**, a repository, **Sources**, **Documents** and a page, a **Source Explorer**, **Review Center**, **Build Center** and **Releases** (`src/docsPages.ts`). The side bar holds the mock's sections and rows — Pages, Projects, Sources, Areas, Pipeline, Working Set — plus the page tree itself, which is why there is no separate *Docs Explorer* activity-bar icon: one icon browses one object.
 
-Both are drawn with the shared page vocabulary from `temco-ui` (`page.css` + `page()`), so they are the pages whose look is the mock's design rather than a private `<style>` block. The pattern they establish is the one the module's other pages move to: a page describes what it draws, and `temco-ui` decides how that looks and how a click becomes a command.
+Every one of them is drawn with the shared page vocabulary from `temco-ui` (`page.css` + `page()`), so they are the pages whose look is the mock's design rather than a private `<style>` block. The pattern they establish is the one the module's other pages move to: a page describes what it draws, and `temco-ui` decides how that looks and how a click becomes a command.
 
 ## Where the platform design lives
 

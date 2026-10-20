@@ -35,6 +35,12 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
  * activity bar, so the first thing a person sees is what the application is for rather than an
  * empty editor beside Explorer.
  *
+ * This is the same arrangement VS Code has: a fresh window opens on the welcome page, the page
+ * carries the checkbox that turns that off, and Help ▸ Welcome brings it back. What this
+ * contribution adds over the setting (`temcoWorkbench.start.open`, whose default is `welcome`) is
+ * the *once-only* case — on a fresh installation the welcome page is shown even if a profile was
+ * copied in with the setting already turned off.
+ *
  * The flag is written in the application scope, so an update never asks twice. The welcome page is
  * reached through the command the Temco menu uses; the container is opened through the view
  * services, because it is contributed by a module that may not have been activated yet.

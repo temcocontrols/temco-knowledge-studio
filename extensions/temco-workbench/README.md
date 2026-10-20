@@ -37,7 +37,7 @@ src/aiModule.ts       what it knows of the AI module — whether it is installed
 
 The Library is not about documentation. It lists what **every** module has — projects, sources, repositories, pages, and the AI — and each row's actions are that module's own commands. The dashboard is the application talking about itself, and the needs page is one list of everything that wants a person, gathered from every module. While those lived in the documentation module, that module was the application, and every other module had to be reached through it.
 
-Two layout decisions came with them, and they belong here for the same reason: **which tab opens at startup** (`temcoWorkbench.start.open`: the project you are on, the page you last opened, the dashboard, or nothing) and **which sidebar section comes forward** when the project changes (choosing one brings the Workspace, clearing one brings the Library back).
+Two layout decisions came with them, and they belong here for the same reason: **which tab opens at startup** (`temcoWorkbench.start.open`: the welcome page, which is the default and is switched off by the checkbox in its own footer — then the project you are on, the page you last opened, the overview, or nothing) and **which sidebar section comes forward** when the project changes (choosing one brings the Workspace, clearing one brings the Library back).
 
 ## What it does not own
 

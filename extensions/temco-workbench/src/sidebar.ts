@@ -38,8 +38,7 @@ const GROUPS: Group[] = [
 		title: 'Platform',
 		rows: [
 			{ label: 'Overview', note: 'what the platform holds, in one screen', icon: 'home', command: 'temcoWorkbench.overview' },
-			{ label: 'Recent Activity', note: 'everything every module recorded', icon: 'history', command: 'temcoWorkbench.activity' },
-			{ label: 'Coverage & Health', note: 'read, reviewed and shipped, per area', icon: 'pass', command: 'temcoWorkbench.health' }
+			{ label: 'Recent Activity', note: 'everything every module recorded', icon: 'history', command: 'temcoWorkbench.activity' }
 		]
 	},
 	{

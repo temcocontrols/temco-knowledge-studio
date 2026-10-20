@@ -203,7 +203,7 @@ you are working on.
 
 **What opens when the platform is activated is the project you are on** — its dashboard, the one surface that
 says what is in it and what next — then the page you were last working on, then the home page when there is
-neither. `temcoWorkbench.start.open` (`project` · `page` · `home` · `none`) chooses, and `none` opens no tab at
+neither. `temcoWorkbench.start.open` (`project` · `page` · `home` · `welcome` · `none`) chooses, and `none` opens no tab at
 all for anyone who would rather nothing opened by itself.
 
 **The Workspace is the first view, and the Library is beneath it.** Both sit in the `temco` activity bar: the
@@ -301,7 +301,7 @@ rather than leaving a view about something that is not there.
 **On activation, nothing has to be clicked.** The one project with nothing chosen selects itself (with two or
 more nothing is guessed — see *Surfaces*); the Workspace view arrives with the only repository's areas open and
 their chapters beneath them; the Library opens *Projects*, so the names of what you have are on screen; and the
-tab that opens is the selected project's dashboard, or the page you were last on (`temcoWorkbench.start.open`).
+tab that opens is the welcome page (`temcoWorkbench.start.open`, default `welcome`), or — once that checkbox is off — the selected project's pages, then the page you were last on, then the overview.
 A tree that re-decided itself after every refresh would be worse than one that never opened at all, so a
 person's own expand or collapse is remembered for the session and beats both defaults — a refresh re-reads the
 data, never the layout (`extensions/temco-workbench/src/views.ts`).
@@ -631,7 +631,7 @@ changes with it.
 | **The catalog's store** | **`node:sqlite`** — built into the Node the extension host runs, so the platform adds no dependency for it. Where that built-in is missing, the store refuses in words at the point of use and activation is unaffected |
 | **Branch policy** | the default branch, with the mismatch reported and a per-source override |
 | **Notification default** | `docs-only` — a daily summary of documentation change, no modals |
-| **The entry point** | **the project's dashboard opens on activation** (`temcoWorkbench.start.open`, default `project`), then the page you were last on, then the home page. The one recorded project selects itself, so the tree is ready without anyone picking it |
+| **The entry point** | **the welcome page opens on activation** (`temcoWorkbench.start.open`, default `welcome`, with the checkbox in its own footer as VS Code has it), falling through to the project's pages, then the page you were last on, then the overview. The one recorded project selects itself, so the tree is ready without anyone picking it |
 | **The Workspace, gated by content** | **the Workspace stays the first view and the Library sits beneath it**, and the open folders are never read into it. Its empty states are **rows the tree draws itself**, offering the act that fills it — *create a project* · *choose one in the Library* · *open this project and read its sources*. Hiding the view on a context key (`when:`) and phrasing these states as `viewsWelcome` were both tried and rejected: a selected project with no visible tree reads as a fault, and a welcome's `when` is resolved before the refresh has read anything |
 
 ## Build order

@@ -720,7 +720,7 @@ ${card({
 				title: 'Areas',
 				mark: 'book',
 				plain: true,
-				actions: button('Coverage & Health', 'temcoWorkbench.health', { small: true, kind: 'ghost' }),
+				actions: button('Coverage & Health', 'temcoDocs.overview', { small: true, kind: 'ghost' }),
 				desc: 'Read is what a person signed off; stale is what the sources have outrun. Pick an area.',
 				body: `<div class="area-list">${areas.map(areaRow).join('')}</div>`
 			})}

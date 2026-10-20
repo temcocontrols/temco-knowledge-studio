@@ -82,7 +82,7 @@ const START_OPTIONS = [
 	{ value: 'welcome', label: 'Welcome' },
 	{ value: 'project', label: 'The project' },
 	{ value: 'page', label: 'The last page' },
-	{ value: 'home', label: 'Home' },
+	{ value: 'home', label: 'Overview' },
 	{ value: 'none', label: 'Nothing' }
 ];
 

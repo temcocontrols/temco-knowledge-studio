@@ -254,11 +254,6 @@
         "command": "temcoWorkbench.activity",
         "title": "Recent Activity",
         "icon": "$(history)"
-      },
-      {
-        "command": "temcoWorkbench.health",
-        "title": "Coverage & Health",
-        "icon": "$(graph)"
       }
     ],
     "configuration": {
@@ -274,14 +269,14 @@
             "none"
           ],
           "enumDescriptions": [
-            "The welcome page: what the application is for, and the five things to do first.",
-            "The dashboard of the project being worked on. With no project, the page you were last on.",
-            "The page you were last working on in the project being worked on. With none, that project's dashboard.",
-            "The platform's home page.",
+            "The welcome page — what the application is for, and the six things to do first. This is the default, and its footer checkbox writes this same setting.",
+            "The project being worked on: its pages. With no project, the page you were last on.",
+            "The page you were last working on in the project being worked on. With none, that project's pages.",
+            "The platform's overview — what it holds and what needs a person. Reached from the Dashboard too.",
             "Nothing — no tab opens by itself."
           ],
           "default": "welcome",
-          "markdownDescription": "What opens in the editor when the extension is activated. Each choice falls through to the next when it cannot be honoured: `welcome`, then `project`, then the page you were last on, then the home page. Only `none` opens nothing."
+          "markdownDescription": "What opens in the editor when the extension is activated — the one decision that makes a first tab. Each choice falls through to the next when it cannot be honoured: `project`, then the page you were last on, then the overview. With the welcome page switched off, that chain never ends at the welcome page. Only `none` opens nothing."
         }
       }
     },
@@ -296,11 +291,6 @@
           "id": "temco",
           "title": "Documentation",
           "icon": "media/document.svg"
-        },
-        {
-          "id": "temcoDocuments",
-          "title": "Docs Explorer",
-          "icon": "media/documents.svg"
         },
         {
           "id": "temcoAiHub",

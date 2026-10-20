@@ -16,7 +16,6 @@ const PINNED_VIEWLETS_KEY = 'workbench.activity.pinnedViewlets2';
 const ORDER = [
 	'temcoDashboard',
 	'temco',
-	'temcoDocuments',
 	'temcoAiHub',
 	'temcoLearn',
 	'temcoDevices',

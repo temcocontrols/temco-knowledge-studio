@@ -57,7 +57,8 @@ export function activate(context: vscode.ExtensionContext): void {
 	const help = new HelpPages(context, selection);
 	// The five choices the application asks a profile to make — General, Modules, Branding, AI Models, Publishing.
 	const settings = registerSettings(context);
-	// The Dashboard's own pages: Overview, Recent Activity, Coverage & Health — the mock's three.
+	// The Dashboard's own pages: Overview and Recent Activity. Coverage is the documentation module's report, and
+	// is linked from the Overview rather than drawn twice from the same registry.
 	const dashboard = new DashboardPages(context);
 	context.subscriptions.push(dashboard);
 	// Temco Learn: the published site as a reader sees it — Home, T3000, an article, Downloads, Learning Paths.
@@ -89,7 +90,6 @@ export function activate(context: vscode.ExtensionContext): void {
 		),
 		vscode.commands.registerCommand('temcoWorkbench.overview', () => dashboard.open('overview')),
 		vscode.commands.registerCommand('temcoWorkbench.activity', () => dashboard.open('activity')),
-		vscode.commands.registerCommand('temcoWorkbench.health', () => dashboard.open('health')),
 		vscode.commands.registerCommand('temcoWorkbench.settings', () => settings.pages.general()),
 		vscode.commands.registerCommand('temcoWorkbench.settings.general', () => settings.pages.general()),
 		vscode.commands.registerCommand('temcoWorkbench.settings.modules', () => settings.pages.modules()),
@@ -167,12 +167,14 @@ export function deactivate(): void {
 /**
  * The tab the platform opens when it starts. `temcoWorkbench.start.open` decides, and nothing else.
  *
- * The order is the order a person works in: **the welcome page** — the application itself, which is what a window
- * with no project can honestly say — then **the project you are on** — its dashboard, which says what is in it and
- * what next — then **the page you were last on**, because that is the work you left, then **the home page**.
- * A preference that cannot be honoured falls through instead of showing an empty editor, so `project` with no
- * project opens the page you left, and `page` whose file is gone opens the project's dashboard. Only `none` opens
- * no tab at all.
+ * The default is **the welcome page**, which is the VS Code arrangement: a fresh window opens on the page that says
+ * what the application is for, and the checkbox in that page's own footer turns it off. `project`, `page` and `home`
+ * are the working choices — the work you were doing instead of the orientation page.
+ *
+ * With the welcome page switched off the chain never ends there: `project` → the page you were last on → the
+ * overview. That is the whole point of the checkbox — a person who turns it off is never shown it again by
+ * accident, and an empty window gets the overview, which has its own empty state and a *New Project* button.
+ * Only `none` opens no tab at all.
  */
 async function openStart(dashboard: DashboardPages, help: HelpPages): Promise<void> {
 	const mode = vscode.workspace.getConfiguration('temcoWorkbench').get<string>('start.open', 'welcome');

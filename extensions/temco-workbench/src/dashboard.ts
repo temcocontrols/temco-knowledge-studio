@@ -1,4 +1,7 @@
-// The Dashboard's pages: Overview, Recent Activity, Coverage & Health.
+// The Dashboard's two pages: Overview and Recent Activity.
+//
+// Coverage & Health used to be a third. It was removed because the documentation module already draws that report
+// from the same registry, with the same figures — one report, one owner. The Overview's Knowledge card links there.
 //
 // Rebuilt from the mock (`docs/mock/js/views.overview.js`) on the shared page kit. What changed is where the
 // numbers come from: the registries this window is reading, and the catalog's own record of what the platform did
@@ -13,16 +16,6 @@ import { commandScript, escapeHtml, icon, page, pageColumn, runCommand, toneMark
 /** The view types the dashboard opens under. */
 export const OVERVIEW_VIEW_TYPE = 'temcoWorkbench.overview';
 export const ACTIVITY_VIEW_TYPE = 'temcoWorkbench.activity';
-export const HEALTH_VIEW_TYPE = 'temcoWorkbench.health';
-
-/** One area across every source being read, which is how the health page draws it. */
-interface AreaFact {
-	name: string;
-	pages: number;
-	neverReviewed: number;
-	stale: number;
-	issues: number;
-}
 
 /** What every dashboard page reads: the registries on this machine, and the catalog's account of itself. */
 interface DashboardFacts {
@@ -30,11 +23,10 @@ interface DashboardFacts {
 	project?: string;
 	projects: number;
 	sources: number;
-	areas: AreaFact[];
+	areas: number;
 	pages: number;
 	neverReviewed: number;
 	stale: number;
-	unowned: number;
 	faults: number;
 	drafts: DraftRow[];
 	releases: number;
@@ -50,40 +42,15 @@ interface DashboardFacts {
 async function readFacts(context: vscode.ExtensionContext): Promise<DashboardFacts> {
 	const list = readRoots();
 	const pages = list.flatMap((root) => collectPages(root));
-	const areas = new Map<string, AreaFact>();
-	for (const root of list) {
-		for (const area of root.areas) {
-			const stale = area.chapters.reduce(
-				(total, chapter) => total + chapter.pages.filter((entry) => entry.provenance?.stale === true).length,
-				0
-			);
-			const found = areas.get(area.area);
-			if (found === undefined) {
-				areas.set(area.area, {
-					name: area.area,
-					pages: area.pages,
-					neverReviewed: area.neverReviewed,
-					stale,
-					issues: area.issues
-				});
-				continue;
-			}
-			found.pages += area.pages;
-			found.neverReviewed += area.neverReviewed;
-			found.stale += stale;
-			found.issues += area.issues;
-		}
-	}
 
 	const counted = totals(list);
 	const facts: DashboardFacts = {
 		projects: 0,
 		sources: list.length,
-		areas: [...areas.values()].sort((one, other) => one.name.localeCompare(other.name)),
+		areas: list.reduce((total, root) => total + root.areas.length, 0),
 		pages: counted.pages,
 		neverReviewed: counted.neverReviewed,
 		stale: countStale(pages),
-		unowned: pages.filter((entry) => entry.owner.length === 0).length,
 		faults: counted.issues,
 		drafts: [],
 		releases: 0,
@@ -238,7 +205,7 @@ function overviewBody(facts: DashboardFacts): string {
 
 <div class="mt-24 grid grid--3">
 	<div class="card"><div class="card__head"><div class="card__title">Sources</div></div><p class="card__desc">${facts.sources === 0 ? 'Nothing is being read yet: choose a project, or open a folder with a <b>docs/</b> folder.' : `${facts.sources} source${facts.sources === 1 ? ' is' : 's are'} being read. ${facts.faults === 0 ? 'None of their pages has a structural problem.' : `${facts.faults} structural problem${facts.faults === 1 ? '' : 's'} found.`}`}</p><div class="card__body">${bar(facts.sources === 0 ? 0 : 100, facts.sources === 0 ? 'nothing read' : 'all read', facts.sources === 0 ? undefined : 'ok')}</div></div>
-	<div class="card"><div class="card__head"><div class="card__title">Knowledge</div></div><p class="card__desc">${facts.pages} pages across ${facts.areas.length} area${facts.areas.length === 1 ? '' : 's'}. ${facts.neverReviewed} ${facts.neverReviewed === 1 ? 'page has' : 'pages have'} never been reviewed; ${facts.stale} ${facts.stale === 1 ? 'is' : 'are'} stale.</p><div class="card__body">${bar(facts.pages === 0 ? 0 : Math.round(((facts.pages - facts.neverReviewed) / facts.pages) * 100), facts.pages === 0 ? 'no pages' : `${facts.pages - facts.neverReviewed} of ${facts.pages} read`, 'ok')}</div></div>
+	<div class="card"><div class="card__head"><div class="card__title">Knowledge</div><div class="card__actions">${action('Coverage', 'temcoDocs.overview', 'ghost')}</div></div><p class="card__desc">${facts.pages} pages across ${facts.areas} area${facts.areas === 1 ? '' : 's'}. ${facts.neverReviewed} ${facts.neverReviewed === 1 ? 'page has' : 'pages have'} never been reviewed; ${facts.stale} ${facts.stale === 1 ? 'is' : 'are'} stale.</p><div class="card__body">${bar(facts.pages === 0 ? 0 : Math.round(((facts.pages - facts.neverReviewed) / facts.pages) * 100), facts.pages === 0 ? 'no pages' : `${facts.pages - facts.neverReviewed} of ${facts.pages} read`, 'ok')}</div></div>
 	<div class="card"><div class="card__head"><div class="card__title">Releases</div></div><p class="card__desc">${facts.releases === 0 ? 'Nothing has been published from this project yet. Build the site, then publish it: the copy is what a reader opens.' : `${facts.releases} version${facts.releases === 1 ? '' : 's'} published. The files stay where the build wrote them.`}</p><div class="card__body">${bar(facts.releases === 0 ? 0 : 100, facts.releases === 0 ? 'not published' : `${facts.releases} published`, facts.releases === 0 ? undefined : 'ok')}</div></div>
 </div>`;
 }
@@ -265,55 +232,13 @@ ${facts.events.length === 0
 			: `<div class="feed-wrap"><div class="mt-8">${rules('Newest First', facts.events.length === 1 ? '1 event' : `${facts.events.length} events`)}<ol class="feed">${facts.events.map(eventRow).join('')}</ol></div></div>`}`;
 }
 
-/** *Coverage & Health* — how much of each area has been read, and what the sources have outrun. */
-function healthBody(facts: DashboardFacts): string {
-	const rows = facts.areas.map((area) => {
-		const read = Math.max(0, area.pages - area.neverReviewed);
-		const pct = area.pages === 0 ? 0 : Math.round((read / area.pages) * 100);
-		return `<div class="record-row record-row--static">
-			${toneMark('folder', area.stale > 0 ? 'warn' : undefined)}
-			<div class="record-row__main">
-				<div class="record-row__title"><span class="record-row__name">${escapeHtml(area.name)}</span></div>
-				<div class="record-row__meta"><span>${area.pages} pages · ${read} read · ${area.stale} stale · ${area.issues} problems</span></div>
-				<div style="margin-top:8px;max-width:420px">${bar(pct, `${pct}% read`)}</div>
-			</div>
-			<div class="record-row__state"><span class="badge ${pct >= 70 ? 'badge--ok' : 'badge--warn'}">${pct}%</span></div>
-			<span class="record-row__go"></span>
-		</div>`;
-	}).join('');
-
-	return `<div class="page-head">
-	<div class="page-head__main">
-		<h1 class="page-head__title">${icon('chart')}Coverage &amp; Health</h1>
-		<p class="page-head__desc">How much of the set has been read, reviewed and shipped — per area, and what the checks found. Read is what a person signed off; stale is what the sources have outrun.</p>
-	</div>
-	<div class="page-head__actions">${action('Validate', 'temcoDocs.validate', 'primary')}${action('What Needs Doing', 'temcoWorkbench.openNeeds')}</div>
-</div>
-
-<div class="settings-strip settings-strip--wide">
-	<div><div class="settings-strip__label">Pages</div><div class="settings-strip__value">${facts.pages}</div></div>
-	<div><div class="settings-strip__label">Never reviewed</div><div class="settings-strip__value">${facts.neverReviewed}</div></div>
-	<div><div class="settings-strip__label">Stale</div><div class="settings-strip__value">${facts.stale}</div></div>
-	<div><div class="settings-strip__label">Without an owner</div><div class="settings-strip__value">${facts.unowned}</div></div>
-	<div><div class="settings-strip__label">Problems</div><div class="settings-strip__value">${facts.faults}</div></div>
-	<div><div class="settings-strip__label">Sources</div><div class="settings-strip__value">${facts.sources}</div></div>
-</div>
-
-<div class="mt-24">
-	${rules('Coverage by Area', facts.areas.length === 1 ? '1 area' : `${facts.areas.length} areas`)}
-	${facts.areas.length === 0
-			? '<p class="group-note">Nothing is being read yet, so there is no area to draw. Choose the project you are working on.</p>'
-			: `<div class="record-list">${rows}</div>`}
-</div>`;
-}
-
 /** One panel per page, kept open so a second visit reveals the tab. */
 export class DashboardPages {
 	private readonly panels = new Map<string, vscode.WebviewPanel>();
 
 	constructor(private readonly context: vscode.ExtensionContext) { }
 
-	async open(pageId: 'overview' | 'activity' | 'health'): Promise<void> {
+	async open(pageId: 'overview' | 'activity'): Promise<void> {
 		const existing = this.panels.get(pageId);
 		const definition = await this.body(pageId);
 		if (existing) {
@@ -336,13 +261,11 @@ export class DashboardPages {
 	}
 
 	/** One page's body, read fresh: the registries and the catalog answer, in that order. */
-	private async body(pageId: 'overview' | 'activity' | 'health'): Promise<{ type: string; title: string; body: string }> {
+	private async body(pageId: 'overview' | 'activity'): Promise<{ type: string; title: string; body: string }> {
 		const facts = await readFacts(this.context);
 		return pageId === 'overview'
 			? { type: OVERVIEW_VIEW_TYPE, title: 'Overview', body: overviewBody(facts) }
-			: pageId === 'activity'
-				? { type: ACTIVITY_VIEW_TYPE, title: 'Recent Activity', body: activityBody(facts) }
-				: { type: HEALTH_VIEW_TYPE, title: 'Coverage & Health', body: healthBody(facts) };
+			: { type: ACTIVITY_VIEW_TYPE, title: 'Recent Activity', body: activityBody(facts) };
 	}
 
 	dispose(): void {

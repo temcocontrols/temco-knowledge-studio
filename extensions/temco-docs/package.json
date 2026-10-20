@@ -39,6 +39,10 @@
     "views": {
       "temco": [
         {
+          "id": "temcoDocs.pages",
+          "name": "Pages"
+        },
+        {
           "id": "temcoDocs.section.projects",
           "name": "Projects"
         },
@@ -57,12 +61,6 @@
         {
           "id": "temcoDocs.section.working",
           "name": "Working Set"
-        }
-      ],
-      "temcoDocuments": [
-        {
-          "id": "temcoDocs.pages",
-          "name": "Pages"
         }
       ]
     },
