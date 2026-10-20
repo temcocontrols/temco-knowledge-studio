@@ -1,0 +1,10 @@
+{
+	"name": "{{name}}",
+	"private": true,
+	"version": "{{version}}",
+	"description": "Documentation project created in Temco Platform.",
+	"scripts": {
+		"docs:registry": "node scripts/docs-registry.mjs",
+		"docs:site": "node scripts/docs-site.mjs"
+	}
+}

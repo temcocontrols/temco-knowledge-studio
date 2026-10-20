@@ -1,0 +1,24 @@
+{
+	"version": 1,
+	"areas": {
+		"overview": {
+			"title": "Overview"
+		}
+	},
+	"pages": {
+		"overview/index": {
+			"title": "{{name}}",
+			"area": "overview",
+			"chapter": "(root)",
+			"order": 10,
+			"ship": true
+		},
+		"overview/getting-started": {
+			"title": "Getting started",
+			"area": "overview",
+			"chapter": "(root)",
+			"order": 20,
+			"ship": true
+		}
+	}
+}

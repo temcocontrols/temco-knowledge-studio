@@ -1,0 +1,92 @@
+// Builds docs/help/registry.json from the Markdown under docs/.
+//
+// The rule is the product repositories' own rule: a value a person already put in the registry wins, field by
+// field, so a curated title, order, ship flag, keyword or help id is never recomputed by a run. Everything nobody
+// curated is derived — the title from the first "#", the area and chapter from the path, the order from 10, 20, 30.
+//
+// Temco Platform offers this as "Run the generator"; on its own it is `npm run docs:registry`.
+
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join, relative, sep } from 'node:path';
+
+const root = process.cwd();
+const docs = join(root, 'docs');
+const registryPath = join(docs, 'help', 'registry.json');
+
+const previous = readJson(registryPath) ?? {};
+const areas = { ...(previous.areas ?? {}) };
+const pages = { ...(previous.pages ?? {}) };
+const orders = new Map();
+
+for (const file of markdownFiles(docs)) {
+	const parts = relative(docs, file).split(sep);
+	const name = parts.pop().replace(/\.md$/i, '');
+	const area = parts[0] ?? 'overview';
+	const chapter = parts[1] ?? '';
+	const id = [area, ...(chapter ? [chapter] : []), name].join('/');
+	const heading = /^#\s+(.+)$/m.exec(readFileSync(file, 'utf8'))?.[1]?.trim();
+	const kept = pages[id] ?? {};
+
+	const key = area + '/' + chapter;
+	const next = (orders.get(key) ?? 0) + 10;
+	orders.set(key, next);
+
+	areas[area] = areas[area] ?? { title: titleCase(area) };
+	pages[id] = {
+		title: kept.title ?? heading ?? titleCase(name),
+		area: kept.area ?? area,
+		chapter: kept.chapter ?? (chapter || '(root)'),
+		order: kept.order ?? next,
+		ship: kept.ship ?? true,
+		...pick(kept, ['owner', 'audience', 'tags', 'keywords', 'help_ids', 'code', 'reviewed'])
+	};
+}
+
+const sorted = Object.fromEntries(Object.entries(pages).sort(([left], [right]) => left.localeCompare(right)));
+mkdirSync(dirname(registryPath), { recursive: true });
+writeFileSync(registryPath, JSON.stringify({ version: 1, areas, pages: sorted }, null, 2) + '\n');
+console.log('registry: ' + Object.keys(sorted).length + ' page(s) in ' + relative(root, registryPath));
+
+function* markdownFiles(directory) {
+	let entries = [];
+	try {
+		entries = readdirSync(directory).sort();
+	} catch {
+		return;
+	}
+	for (const name of entries) {
+		if (name.startsWith('.') || name === 'help' || name === 'node_modules' || name === 'dist') {
+			continue;
+		}
+		const full = join(directory, name);
+		const stats = statSync(full);
+		if (stats.isDirectory()) {
+			yield* markdownFiles(full);
+		} else if (/\.md$/i.test(name)) {
+			yield full;
+		}
+	}
+}
+
+function readJson(file) {
+	try {
+		return JSON.parse(readFileSync(file, 'utf8'));
+	} catch {
+		return undefined;
+	}
+}
+
+function pick(source, keys) {
+	const picked = {};
+	for (const key of keys) {
+		if (source[key] !== undefined) {
+			picked[key] = source[key];
+		}
+	}
+	return picked;
+}
+
+function titleCase(text) {
+	const words = String(text).replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+	return words.length === 0 ? 'Overview' : words.replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+}

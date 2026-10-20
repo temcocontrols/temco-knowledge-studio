@@ -137,7 +137,7 @@ export class ProjectFlowPage {
 			if (origin === 'folder' || origin === 'template' || origin === 'import') {
 				const folder = resolveFolder(values.folder, name, origin !== 'folder');
 				if (origin === 'template') {
-					const outcome = await writeTemplate(folder, name, values.template);
+					const outcome = await writeTemplate(this.context.extensionUri, folder, name, values.version.trim() || '0.1.0', values.template);
 					if (outcome !== undefined) {
 						void vscode.window.showErrorMessage(`Temco Projects: ${outcome}`);
 						return;
@@ -282,60 +282,65 @@ async function exists(uri: vscode.Uri): Promise<boolean> {
 /**
  * Writes the starter tree a `template` project begins from — and nothing over anything.
  *
- * The shape is the one the product's own generator writes: pages under `docs/<area>/`, the registry at
- * `docs/help/registry.json`, a page id of `area/chapter/slug`. Two topics, so the tree has something in it and
- * the first edit is an edit rather than a form.
+ * The files are the extension's own assets under `templates/<id>/`, copied rather than written from strings, so the
+ * starter is readable and reviewable like any other source. Two of them are what make the project *finished* rather
+ * than merely started: `scripts/docs-registry.mjs` (the generator the repository would otherwise have to bring, which
+ * is what turns a new page into a page) and `scripts/docs-site.mjs` (the site build the Build Center invokes). Without
+ * them a project made in this window could not index its own page or build its own site.
+ *
+ * `*.mjs.txt` assets are copied to `*.mjs`: the repository's hygiene rule forbids committing JavaScript, and a starter's
+ * copy is JavaScript only once it is a project's own file.
  *
  * Returns the reason it could not be written, or `undefined` when it was.
  */
-async function writeTemplate(folder: vscode.Uri, name: string, template: string): Promise<string | undefined> {
+async function writeTemplate(
+	extensionUri: vscode.Uri,
+	folder: vscode.Uri,
+	name: string,
+	version: string,
+	template: string
+): Promise<string | undefined> {
 	if (!TEMPLATES.some((known) => known.value === template)) {
 		return `“${template}” is not a starter this build knows.`;
 	}
 
-	const files: { uri: vscode.Uri; text: string }[] = [
-		{
-			uri: vscode.Uri.joinPath(folder, 'docs', 'overview', 'index.md'),
-			text: `# ${name}\n\nWhat this product is, in a paragraph a reader can act on.\n\n## Sections\n\n- [Getting started](getting-started.md)\n`
-		},
-		{
-			uri: vscode.Uri.joinPath(folder, 'docs', 'overview', 'getting-started.md'),
-			text: '# Getting started\n\n## Before you start\n\n## Steps\n\n## If it does not work\n'
-		},
-		{
-			uri: vscode.Uri.joinPath(folder, 'docs', 'help', 'registry.json'),
-			text: registryTemplate(name)
-		}
-	];
+	const files = TEMPLATE_FILES.map((relative) => ({
+		source: vscode.Uri.joinPath(extensionUri, 'templates', template, ...relative.split('/')),
+		target: vscode.Uri.joinPath(folder, ...relative.replace(/\.txt$/, '').split('/'))
+	}));
 
 	// Refuse before writing one byte: a starter that replaces a page is a starter that loses work.
 	for (const file of files) {
-		if (await exists(file.uri)) {
-			return `${file.uri.fsPath} already exists, so nothing was written. Choose an empty folder.`;
+		if (await exists(file.target)) {
+			return `${file.target.fsPath} already exists, so nothing was written. Choose an empty folder.`;
 		}
 	}
 
 	for (const file of files) {
-		await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(file.uri, '..'));
-		await vscode.workspace.fs.writeFile(file.uri, Buffer.from(file.text, 'utf8'));
+		const text = Buffer.from(await vscode.workspace.fs.readFile(file.source))
+			.toString('utf8')
+			.replace(/\{\{name\}\}/g, name)
+			.replace(/\{\{version\}\}/g, version);
+		await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(file.target, '..'));
+		await vscode.workspace.fs.writeFile(file.target, Buffer.from(text, 'utf8'));
 	}
 	return undefined;
 }
 
-/** The registry a starter ships with — the generator's own shape, so its next run keeps every value. */
-function registryTemplate(name: string): string {
-	const registry = {
-		version: 1,
-		areas: {
-			overview: { title: 'Overview' }
-		},
-		pages: {
-			'overview/index': { title: name, area: 'overview', chapter: '(root)', order: 10, ship: true },
-			'overview/getting-started': { title: 'Getting started', area: 'overview', chapter: '(root)', order: 20, ship: true }
-		}
-	};
-	return `${JSON.stringify(registry, null, 2)}\n`;
-}
+/**
+ * The files a starter is made of, relative to `templates/<id>/`.
+ *
+ * Everything a project needs to be self-sufficient: the pages, the registry, the generator that keeps the registry
+ * in step with the pages, and the site build.
+ */
+const TEMPLATE_FILES = [
+	'package.json',
+	'docs/help/registry.json',
+	'docs/overview/index.md',
+	'docs/overview/getting-started.md',
+	'scripts/docs-registry.mjs.txt',
+	'scripts/docs-site.mjs.txt'
+];
 
 const field = (label: string, control: string, hint?: string): string =>
 	`<div class="field"><label>${esc(label)}</label>${control}${hint ? `<div class="field__hint">${esc(hint)}</div>` : ''}</div>`;
