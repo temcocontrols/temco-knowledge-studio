@@ -1,12 +1,12 @@
 // The application's side-bar groups that are not a data view.
 //
-// Each of these containers — Workspaces, AI Hub, Temco Learn, Settings, Help — is a short list of rows, one per thing
+// Each of these containers — AI Hub, Temco Learn, Settings, Help — is a short list of rows, one per thing
 // that can be done from there. They are rows rather than a page because a side bar answers "where do I go next"; the
 // page behind each row is the module's.
 //
 // They live in the workbench module for one reason: **the order of the activity bar is the order the containers were
 // registered**, and a container cannot declare an order. Declaring them all in one manifest is the only way to get the
-// mock's sequence — Dashboard, Workspaces, Documentation, Documents, AI Hub, Temco Learn, Devices, I/O, BACnet,
+// mock's sequence — Dashboard, Documentation, Documents, AI Hub, Temco Learn, Devices, I/O, BACnet,
 // Network, SQL, Settings, Help — instead of whichever module happened to be scanned first.
 
 import * as vscode from 'vscode';
@@ -47,15 +47,6 @@ const GROUPS: Group[] = [
 		title: 'Needs Work',
 		rows: [
 			{ label: 'Needs Review', note: 'what wants a person, said in full', icon: 'warning', command: 'temcoWorkbench.openNeeds', countKey: 'needs' }
-		]
-	},
-	{
-		id: 'temcoWorkbench.workspacesView',
-		title: 'Workspaces',
-		rows: [
-			{ label: 'All Workspaces', note: 'the folders this window has open', icon: 'layers', command: 'temcoWorkbench.workspaces' },
-			{ label: 'T3000', note: 'the workspace this window is on', icon: 'server', command: 'temcoWorkbench.workspace', args: ['t3000'] },
-			{ label: 'Templates', note: 'the shape a project starts with', icon: 'package', command: 'temcoWorkbench.templates' }
 		]
 	},
 	{

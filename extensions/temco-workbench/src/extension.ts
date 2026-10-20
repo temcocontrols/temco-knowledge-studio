@@ -21,13 +21,12 @@ import { NeedsPage } from './needsPage';
 import { registerSettings } from './settingsPages';
 import { registerSidebarViews } from './sidebar';
 import { Catalog, selection } from './store';
-import { WorkspacesPages } from './workspaces';
 export function activate(context: vscode.ExtensionContext): void {
 	// How many drafts a person still has to settle. A queue is not in the registry, so it is read from the catalog
 	// once per refresh and kept here — the badge is drawn synchronously, and a number that lags one refresh is
 	// honest, whereas a badge that cannot be drawn is not.
 	let waiting = 0;
-	// The five group views whose containers this module declares: Workspaces, AI Hub, Temco Learn, Settings, Help.
+	// The group views whose containers this module declares: AI Hub, Temco Learn, Settings, Help.
 	// The two rows that carry a number — Modules and Needs Review — read it when they are drawn, so installing a
 	// module or reviewing a page changes the panel without a reload.
 	const sidebars = registerSidebarViews(context, () => ({
@@ -61,9 +60,6 @@ export function activate(context: vscode.ExtensionContext): void {
 	// The Dashboard's own pages: Overview, Recent Activity, Coverage & Health — the mock's three.
 	const dashboard = new DashboardPages(context);
 	context.subscriptions.push(dashboard);
-	// The Workspaces module's three surfaces — All Workspaces, one page per open folder, and Templates — the
-	// mock's three, drawn over the folders this window actually has.
-	const workspaces = new WorkspacesPages(context);
 	// Temco Learn: the published site as a reader sees it — Home, T3000, an article, Downloads, Learning Paths.
 	const learn = new LearnPages(context);
 
@@ -71,7 +67,6 @@ export function activate(context: vscode.ExtensionContext): void {
 		help,
 		settings.pages,
 		...settings.disposables,
-		workspaces,
 		learn,
 		vscode.commands.registerCommand('temcoWorkbench.home', () => dashboard.open('overview')),
 		vscode.commands.registerCommand('temcoWorkbench.openNeeds', () => needs.open()),
@@ -111,14 +106,6 @@ export function activate(context: vscode.ExtensionContext): void {
 			await vscode.env.clipboard.writeText(diagnostics(context));
 			vscode.window.setStatusBarMessage('Diagnostics copied.', 3000);
 		}),
-		vscode.commands.registerCommand('temcoWorkbench.workspaces', () => workspaces.open()),
-		vscode.commands.registerCommand('temcoWorkbench.newWorkspace', () => workspaces.openNewWorkspace()),
-		// What the wizard posts when its last step is done: the name, the folder and the modules chosen.
-		vscode.commands.registerCommand('temcoWorkbench.createWorkspace', (values?: { name?: unknown; folder?: unknown; modules?: unknown }) =>
-			workspaces.create(values ?? {})
-		),
-		vscode.commands.registerCommand('temcoWorkbench.workspace', (id?: unknown) => workspaces.openWorkspace(typeof id === 'string' ? id : 't3000')),
-		vscode.commands.registerCommand('temcoWorkbench.templates', () => workspaces.openTemplates()),
 		vscode.commands.registerCommand('temcoWorkbench.learn.home', () => learn.home()),
 		vscode.commands.registerCommand('temcoWorkbench.learn.t3000', () => learn.product()),
 		vscode.commands.registerCommand('temcoWorkbench.learn.article', () => learn.article()),

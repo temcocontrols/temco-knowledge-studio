@@ -15,7 +15,6 @@ const PINNED_VIEWLETS_KEY = 'workbench.activity.pinnedViewlets2';
 /** The bar's order, as the mock has it. Explorer and Search come before these and are VS Code's own. */
 const ORDER = [
 	'temcoDashboard',
-	'temcoWorkspaces',
 	'temco',
 	'temcoDocuments',
 	'temcoAiHub',

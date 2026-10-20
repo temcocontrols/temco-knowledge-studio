@@ -9,7 +9,9 @@ import { Extensions as ConfigurationExtensions, IConfigurationRegistry } from '.
 import { Registry } from '../../vs/platform/registry/common/platform.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../vs/platform/storage/common/storage.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../vs/workbench/common/contributions.js';
-import { TEMCO_DOCUMENTATION_COMMAND_ID, TEMCO_FIRST_RUN_STORAGE_KEY, TEMCO_WELCOME_COMMAND_ID } from '../platform/temco.ids.js';
+import { IViewDescriptorService } from '../../vs/workbench/common/views.js';
+import { IViewsService } from '../../vs/workbench/services/views/common/viewsService.js';
+import { TEMCO_DOCS_CONTAINER_ID, TEMCO_FIRST_RUN_STORAGE_KEY, TEMCO_WELCOME_COMMAND_ID } from '../platform/temco.ids.js';
 
 /**
  * The window opens on our welcome page and nothing else: `none` is the only value of
@@ -29,14 +31,13 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 }]);
 
 /**
- * Startup: a fresh installation opens on the welcome page, and reveals the documentation views
- * beside it, so the first thing a person sees is what the application is for rather than an empty
- * editor.
+ * Startup: a fresh installation opens on the welcome page and selects Documentation in the
+ * activity bar, so the first thing a person sees is what the application is for rather than an
+ * empty editor beside Explorer.
  *
- * The flag is written in the application scope, so an update never asks twice, and both surfaces
- * are reached through the same commands the Temco menu uses — the shell does not reach into a
- * module. The welcome page is a module's page, so if that module is not there the documentation
- * reveal still happens and the first run is not wasted.
+ * The flag is written in the application scope, so an update never asks twice. The welcome page is
+ * reached through the command the Temco menu uses; the container is opened through the view
+ * services, because it is contributed by a module that may not have been activated yet.
  */
 class TemcoFirstRun extends Disposable {
 
@@ -44,7 +45,9 @@ class TemcoFirstRun extends Disposable {
 
 	constructor(
 		@ICommandService private readonly commandService: ICommandService,
-		@IStorageService private readonly storageService: IStorageService
+		@IStorageService private readonly storageService: IStorageService,
+		@IViewDescriptorService private readonly viewDescriptorService: IViewDescriptorService,
+		@IViewsService private readonly viewsService: IViewsService
 	) {
 		super();
 
@@ -52,8 +55,31 @@ class TemcoFirstRun extends Disposable {
 		if (!seen) {
 			this.storageService.store(TEMCO_FIRST_RUN_STORAGE_KEY, true, StorageScope.APPLICATION, StorageTarget.USER);
 			void this.commandService.executeCommand(TEMCO_WELCOME_COMMAND_ID);
-			void this.commandService.executeCommand(TEMCO_DOCUMENTATION_COMMAND_ID);
+			this.selectDocumentation();
 		}
+	}
+
+	/**
+	 * Selects the Documentation container in the activity bar.
+	 *
+	 * The container is contributed by a module's manifest, so it is in the registry only once that
+	 * module has been activated — and the first run happens earlier than that. Asking the container's
+	 * own command is not a way around it: that command is registered with the container, so it does
+	 * not exist yet either. Waiting for the registry is.
+	 */
+	private selectDocumentation(): void {
+		if (this.viewDescriptorService.getViewContainerById(TEMCO_DOCS_CONTAINER_ID) !== null) {
+			void this.viewsService.openViewContainer(TEMCO_DOCS_CONTAINER_ID);
+			return;
+		}
+
+		const listener = this.viewDescriptorService.onDidChangeViewContainers(({ added }) => {
+			if (added.some(({ container }) => container.id === TEMCO_DOCS_CONTAINER_ID)) {
+				listener.dispose();
+				void this.viewsService.openViewContainer(TEMCO_DOCS_CONTAINER_ID);
+			}
+		});
+		this._register(listener);
 	}
 }
 

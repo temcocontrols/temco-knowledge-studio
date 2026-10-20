@@ -29,7 +29,6 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onView:temcoWorkbench.workspacesView",
     "onView:temcoWorkbench.learnView",
     "onView:temcoWorkbench.learnDelivery",
     "onView:temcoWorkbench.settingsProfile",
@@ -49,12 +48,6 @@
         {
           "id": "temcoWorkbench.needsWorkView",
           "name": "Needs Work"
-        }
-      ],
-      "temcoWorkspaces": [
-        {
-          "id": "temcoWorkbench.workspacesView",
-          "name": "Workspaces"
         }
       ],
       "temcoLearn": [
@@ -253,26 +246,6 @@
         "title": "Copy the Report and Open the Issue Reporter"
       },
       {
-        "command": "temcoWorkbench.workspaces",
-        "title": "All Workspaces",
-        "icon": "$(layers)"
-      },
-      {
-        "command": "temcoWorkbench.newWorkspace",
-        "title": "New Workspace",
-        "icon": "$(add)"
-      },
-      {
-        "command": "temcoWorkbench.workspace",
-        "title": "Open This Folder's Workspace",
-        "icon": "$(folder)"
-      },
-      {
-        "command": "temcoWorkbench.templates",
-        "title": "Templates",
-        "icon": "$(package)"
-      },
-      {
         "command": "temcoWorkbench.overview",
         "title": "Overview",
         "icon": "$(home)"
@@ -318,11 +291,6 @@
           "id": "temcoDashboard",
           "title": "Dashboard",
           "icon": "media/dashboard.svg"
-        },
-        {
-          "id": "temcoWorkspaces",
-          "title": "Workspaces",
-          "icon": "media/workspaces.svg"
         },
         {
           "id": "temco",

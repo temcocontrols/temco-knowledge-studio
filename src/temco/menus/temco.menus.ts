@@ -107,7 +107,6 @@ item(MenuId.MenubarViewMenu, 'workbench.action.selectTheme', localize('temco.men
 
 // Go — the modules, then the studios, then the surface palette and settings.
 item(MenuId.MenubarGoMenu, 'temcoWorkbench.home', localize('temco.menu.dashboard', "Dashboard"), '1_modules', 1);
-item(MenuId.MenubarGoMenu, 'temcoWorkbench.workspaces', localize('temco.menu.workspaces', "Workspaces"), '1_modules', 2);
 item(MenuId.MenubarGoMenu, 'temcoDocs.overview', localize('temco.menu.documentation', "Documentation"), '1_modules', 3);
 item(MenuId.MenubarGoMenu, 'temcoAi.page', localize('temco.menu.aiHub', "AI Hub"), '1_modules', 4);
 STUDIOS.forEach(([studio, title], index) => {

@@ -249,7 +249,7 @@ ${recent}
 <div class="mt-24">
 	${rule({ label: 'Walkthroughs', count: '3 guides' })}
 	<div class="grid grid--3 mt-16">
-		${walkthrough('Set up a workspace', 'The folder, the sources it reads, and the devices it can reach.', 4, folder ? 1 : 0, 'temcoWorkbench.newWorkspace')}
+		${walkthrough('Set up a project', 'A name, the sources it reads, and the devices it can reach.', 4, folder ? 1 : 0, 'temcoProjects.newProject')}
 		${walkthrough('Write and review a page', 'From a source read to a reviewed page in an area.', 5, project ? 1 : 0, 'temcoDocs.documents')}
 		${walkthrough('Publish a version', 'Build every artifact, then freeze the version for readers.', 4, undefined, 'temcoDocs.releases')}
 	</div>
