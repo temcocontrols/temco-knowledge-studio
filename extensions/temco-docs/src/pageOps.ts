@@ -24,7 +24,7 @@
 // stays where it is so the generated redirect keeps old links working (`14-governance.md`, *Deprecation and retirement*).
 
 import * as vscode from 'vscode';
-import { runScript } from './builds';
+import { runScript, scriptsIn } from './builds';
 import { DocsRoot, PageEntry, ROOT_CHAPTER, collectPages } from './registry';
 import { RegistryEdit, describeChange } from './registryEdit';
 import { fileColumn } from './surface';
@@ -311,17 +311,49 @@ export async function writePage(deps: PageDeps, spec: NewPageSpec): Promise<{ re
   await vscode.window.showTextDocument(document, { preview: false, viewColumn: fileColumn() });
   deps.redraw();
 
-  // The entry is what makes it a page rather than a file: index.json, the table of contents, the CHM manifest
-  // and the tree are all built from the registry, so the generator is the next step — offered, never assumed.
-  const run = await vscode.window.showInformationMessage(
-    `Temco Docs: ${relative} is written. It becomes a page when the registry names it.`,
-    'Run the generator'
-  );
-  if (run === 'Run the generator') {
-    await runScript(deps.roots(), deps.output, 'docs:registry');
-    deps.redraw();
+  // The entry is what makes it a page rather than a file: index.json, the table of contents, the CHM manifest and
+  // the tree are all built from the registry. A project that carries a generator runs it. A project that does not —
+  // one started from a template or an import — would dead-end here, so the window writes the entry itself.
+  if (scriptsIn([root]).has('docs:registry')) {
+    const run = await vscode.window.showInformationMessage(
+      `Temco Docs: ${relative} is written. It becomes a page when the registry names it.`,
+      'Run the generator'
+    );
+    if (run === 'Run the generator') {
+      await runScript(deps.roots(), deps.output, 'docs:registry');
+      deps.redraw();
+    }
+    return { relative };
   }
+
+  const id = chapter === ROOT_CHAPTER ? `${area}/${slug}` : `${area}/${chapter}/${slug}`;
+  const added = await addEntry(root, id, title, area, chapter);
+  deps.redraw();
+  void vscode.window.showInformationMessage(
+    added
+      ? `Temco Docs: ${relative} is written, and the registry now names it — this project has no ` +
+        '`docs:registry` script, so the window wrote the entry.'
+      : `Temco Docs: ${relative} is written. The registry could not be updated, so the page is not listed yet.`
+  );
   return { relative };
+}
+
+/**
+ * The registry entry for a page whose project carries no generator — placed at the end of its chapter, which is
+ * exactly where the generator would have put it.
+ */
+async function addEntry(root: DocsRoot, id: string, title: string, area: string, chapter: string): Promise<boolean> {
+  const edit = await RegistryEdit.open(root.registryUri);
+  if (edit === undefined) {
+    return false;
+  }
+  const siblings = edit.chapterPages(area, chapter || ROOT_CHAPTER);
+  const order = siblings.length === 0 ? 10 : Math.max(...siblings.map((sibling) => sibling.order)) + 10;
+  if (!edit.addPage(id, { title, area, chapter: chapter || ROOT_CHAPTER, order, ship: true })) {
+    return false;
+  }
+  await edit.save();
+  return true;
 }
 
 /**

@@ -73,11 +73,6 @@
         "icon": "$(folder)"
       },
       {
-        "command": "temcoDocs.repositories",
-        "title": "Repositories",
-        "icon": "$(repo)"
-      },
-      {
         "command": "temcoDocs.repository",
         "title": "Open a Repository",
         "icon": "$(repo)"

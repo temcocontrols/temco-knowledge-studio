@@ -15,10 +15,9 @@ import { commandScript, escapeHtml as esc, icon, page, pageColumn, runCommand, t
 
 /** The view types, one per surface. */
 export const PROJECTS_VIEW_TYPE = 'temcoDocs.projects';
-export const REPOSITORIES_VIEW_TYPE = 'temcoDocs.repositories';
 export const REPOSITORY_VIEW_TYPE = 'temcoDocs.repository';
 export const SOURCES_VIEW_TYPE = 'temcoDocs.sources';
-export const DOCUMENTS_VIEW_TYPE = 'temcoDocs.knowledge';
+export const DOCUMENTS_VIEW_TYPE = 'temcoDocs.documents';
 export const PAGE_VIEW_TYPE = 'temcoDocs.page';
 export const SOURCE_VIEW_TYPE = 'temcoDocs.source';
 export const REVIEW_VIEW_TYPE = 'temcoDocs.review';
@@ -138,10 +137,6 @@ export class DocsPages {
 		this.open('projects', PROJECTS_VIEW_TYPE, 'Projects', projectsBody(documents, selection.project(), linked));
 	}
 
-	repositories(): void {
-		void this.openRepositories();
-	}
-
 	repository(name?: string): void {
 		void this.openRepository(name);
 	}
@@ -179,10 +174,6 @@ export class DocsPages {
 			catalog?.close();
 		}
 		return facts;
-	}
-
-	private async openRepositories(): Promise<void> {
-		this.open('repositories', REPOSITORIES_VIEW_TYPE, 'Repositories', repositoriesBody(await this.repositoryFacts()));
 	}
 
 	private async openRepository(name: string | undefined): Promise<void> {
@@ -473,61 +464,6 @@ interface RepositoryFact {
 }
 
 /**
- * *Repositories* — the repository sources the catalog holds, and whether each has a local copy.
- *
- * Reading a repository records the pages it declares; cloning it puts the working tree where a draft can read
- * the code behind those pages. Neither writes to the repository.
- */
-function repositoriesBody(repositories: readonly RepositoryFact[]): string {
-	const cloned = repositories.filter((fact) => fact.cloned);
-	const pages = repositories.reduce((total, fact) => total + fact.pages, 0);
-	const reads = repositories.reduce((total, fact) => total + fact.reads.length, 0);
-
-	const row = (fact: RepositoryFact): string => {
-		const items = [fact.remoteUrl ?? 'no remote recorded'];
-		if (fact.branch !== undefined) {
-			items.push(`on ${fact.branch}`);
-		}
-			items.push(fact.reads.length === 0
-			? 'never read'
-			: fact.pages === 0 ? 'no pages found' : `${fact.pages} ${fact.pages === 1 ? 'page' : 'pages'} found`);
-		if (fact.pages === 0 && fact.state !== undefined) {
-			items.push(fact.state);
-		}
-		items.push(fact.cloned ? 'cloned locally' : 'no local copy');
-		return `<div class="record-row" data-command="temcoDocs.repository" data-args="${esc(JSON.stringify([fact.slug]))}">${toneMark('repo', fact.cloned ? 'accent' : undefined)}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">${esc(fact.name)}</span></div><div class="record-row__meta">${facts(items)}</div></div><div class="record-row__state">${badge(fact.cloned ? 'Cloned' : 'Remote only', fact.cloned ? 'ok' : 'neutral')}</div><span class="record-row__go">${icon('chevron-right', 'icon--sm')}</span></div>`;
-	};
-
-	const partition = (title: string, note: string, items: RepositoryFact[]): string =>
-		items.length === 0 ? '' : `<div class="mt-24">${group({ label: title, count: `${items.length} ${items.length === 1 ? 'repository' : 'repositories'}`, note, actions: button('Read All', 'temcoRepositories.readAllSources', { small: true, kind: 'ghost', mark: 'refresh' }), body: items.map(row).join('') })}</div>`;
-
-	const origin = (fact: RepositoryFact): string => {
-		const remote = fact.remoteUrl ?? '';
-		return /github\.com\/temcocontrols/i.test(remote) ? 'temco' : 'other';
-	};
-
-	const missing = repositories.filter((fact) => !fact.cloned).length;
-
-	return `${pageHead({
-		title: 'Repositories',
-		mark: 'repo',
-		desc: 'The repository sources this platform reads, and whether their local copy is here. Reading one records the pages it declares; a draft reads its code. Nothing is ever written back.',
-		actions: button('Add Repository', 'temcoProjects.addSource', { kind: 'primary', mark: 'plus' }) + (missing > 0 ? button(`Read ${missing} Missing`, 'temcoRepositories.readAllSources', { mark: 'download' }) : '')
-	})}
-${tiles([
-			{ value: String(repositories.length), label: repositories.length === 1 ? 'Repository' : 'Repositories' },
-			{ value: String(cloned.length), label: 'Cloned locally' },
-			{ value: String(pages), label: 'Pages found' },
-			{ value: String(reads), label: 'Reads recorded' }
-		])}
-${repositories.length === 0
-			? `<div class="mt-16">${callout('<b>No repository yet.</b> <b>Add Repository</b> opens the three steps the mock site draws — kind, location, read — and the read is what clones it into the working area and records the pages it declares.')}</div>`
-			: partition('Temco', 'Published under <b class="cell-mono">github.com/temcocontrols</b>. Their pages carry product names, register maps and firmware behaviour that Temco stands behind.', repositories.filter((fact) => origin(fact) === 'temco'))
-				+ partition('Third-party', 'Read exactly like a Temco repository — same clone, same read, same pages — but nothing in one is Temco&#39;s word. Useful for protocol references; never for product behaviour.', repositories.filter((fact) => origin(fact) === 'other'))}
-<div class="mt-24">${callout('A repository is cloned into the working area (<code>~/Temco</code>) with its history, so a draft can name the commit it read. Nothing is ever pushed back.')}</div>`;
-}
-
-/**
  * *Repository* — one repository: its clone, what each read found, its own scripts, and the pages it declares.
  *
  * Every row here is a fact the platform owns — a row in the catalog, a file in the clone, or a script read from
@@ -539,7 +475,7 @@ function repositoryBody(fact: RepositoryFact | undefined): string {
 			title: 'Repository',
 			mark: 'repo',
 			desc: 'No repository with that name is recorded in the platform database.',
-			actions: button('All Repositories', 'temcoDocs.repositories', { kind: 'primary', mark: 'repo' }) + button('Add a Repository', 'temcoProjects.addSource', { mark: 'plus' })
+			actions: button('All Sources', 'temcoDocs.sources', { kind: 'primary', mark: 'repo' }) + button('Add a Repository', 'temcoProjects.addSource', { mark: 'plus' })
 		})}
 <div class="mt-16">${callout('A repository is a source the catalog holds. If it was removed, its row is gone with it — the clone in the working area is not touched.')}</div>`;
 	}
@@ -561,7 +497,7 @@ function repositoryBody(fact: RepositoryFact | undefined): string {
 		desc: `${fact.remoteUrl === undefined ? 'no remote recorded' : `<span class="cell-mono">${esc(fact.remoteUrl)}</span>`} · ${fact.cloned ? `cloned at <span class="cell-mono">${esc(fact.path ?? '')}</span>` : 'no local copy yet'}`,
 		actions: button('Read Source', 'temcoRepositories.readSource', { kind: 'primary', mark: 'refresh', args: [fact.slug] })
 			+ (fact.cloned ? button('Pull', 'temcoRepositories.pullSource', { mark: 'download', args: [fact.slug] }) + button('Open the Copy', 'temcoRepositories.openClone', { mark: 'folder', args: [fact.slug] }) : '')
-			+ button('All Repositories', 'temcoDocs.repositories', { mark: 'repo' })
+			+ button('All Sources', 'temcoDocs.sources', { mark: 'repo' })
 	})}
 ${tiles([
 			{ value: String(fact.pages), label: fact.pages === 1 ? 'Page found' : 'Pages found' },
@@ -644,7 +580,7 @@ function sourcesBody(sources: readonly SourceRow[], roots: readonly DocsRoot[]):
 		if (source.state !== undefined) {
 			items.push(source.state);
 		}
-		return `<div class="record-row">${toneMark(markFor(source.kind), here ? 'accent' : undefined)}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">${esc(source.name)}</span><span class="tag">${esc(source.slug)}</span></div><div class="record-row__meta">${facts(items)}</div></div><div class="record-row__state">${badge(here ? 'Here' : 'Recorded', here ? 'ok' : 'neutral')}</div>${button('Read', 'temcoRepositories.readSource', { small: true, kind: here ? 'primary' : 'ghost' })}</div>`;
+		return `<div class="record-row"${source.kind === 'git' ? ` data-command="temcoDocs.repository" data-args="${esc(JSON.stringify([source.slug]))}"` : ''}>${toneMark(markFor(source.kind), here ? 'accent' : undefined)}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">${esc(source.name)}</span><span class="tag">${esc(source.slug)}</span></div><div class="record-row__meta">${facts(items)}</div></div><div class="record-row__state">${badge(here ? 'Here' : 'Recorded', here ? 'ok' : 'neutral')}</div>${button('Read', 'temcoRepositories.readSource', { small: true, kind: here ? 'primary' : 'ghost' })}</div>`;
 	};
 
 	const partition = (title: string, note: string, kinds: string[]): string => {
@@ -659,7 +595,7 @@ function sourcesBody(sources: readonly SourceRow[], roots: readonly DocsRoot[]):
 		title: 'Sources',
 		mark: 'repo',
 		desc: 'Everything a project reads: repositories, folders and archives. Reading a source is what puts pages in the knowledge base, and a repository is cloned locally so a draft can read its code.',
-		actions: button('Add Source', 'temcoProjects.addSource', { kind: 'primary', mark: 'plus' }) + button('Repositories', 'temcoDocs.repositories', { mark: 'repo' })
+		actions: button('Add Source', 'temcoProjects.addSource', { kind: 'primary', mark: 'plus' }) + button('GitHub Repositories', 'temcoRepositories.page', { mark: 'repo' })
 	})}
 ${tiles([
 			{ value: String(sources.length), label: sources.length === 1 ? 'Source' : 'Sources' },
@@ -940,7 +876,7 @@ function sourceBody(fact: RepositoryFact | undefined): string {
 			title: 'Source Explorer',
 			mark: 'code',
 			desc: 'No repository with that name is recorded in the platform database.',
-			actions: button('All Repositories', 'temcoDocs.repositories', { kind: 'primary', mark: 'repo' })
+			actions: button('All Sources', 'temcoDocs.sources', { kind: 'primary', mark: 'repo' })
 		})}
 <div class="mt-16">${callout('The Source Explorer reads a clone. A repository is added as a source and read, which puts a copy on this machine.')}</div>`;
 	}

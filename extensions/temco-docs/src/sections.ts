@@ -297,13 +297,6 @@ export function registerSectionViews(context: vscode.ExtensionContext, model: Si
 
 	const sources = (): Row[] => [
 		{
-			label: 'Repositories',
-			note: 'the organisation and the local copies',
-			command: 'temcoDocs.repositories',
-			icon: 'repo',
-			count: model.counts().repositories,
-		},
-		{
 			label: 'Sources',
 			note: 'everything a project reads',
 			command: 'temcoDocs.sources',

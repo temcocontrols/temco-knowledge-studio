@@ -32,6 +32,8 @@ export interface RegistryChange {
   field: string;
   from: unknown;
   to: unknown;
+  /** True when the change added the whole entry rather than one field of it. */
+  entry?: boolean;
 }
 
 function isEntry(value: unknown): value is RegistryEntry {
@@ -103,6 +105,23 @@ export class RegistryEdit {
     return true;
   }
 
+  /**
+   * Adds an entry the generator has never written.
+   *
+   * This exists for one case: a project with no `docs:registry` script — a project started from a template or an
+   * import — where a new page would otherwise be a file no tree lists. Everywhere a generator exists, creating a
+   * page needs no entry written by us at all, and this is not called.
+   */
+  addPage(id: string, fields: Record<string, unknown>): boolean {
+    const pages = this.pages();
+    if (!pages || pages[id] !== undefined) {
+      return false;
+    }
+    pages[id] = fields;
+    this.changes.push({ id, field: '(entry)', from: undefined, to: fields, entry: true });
+    return true;
+  }
+
   get changed(): readonly RegistryChange[] {
     return this.changes;
   }
@@ -158,8 +177,11 @@ export class RegistryEdit {
   }
 }
 
-/** Names a change the way a person reads it: `pages["a/b"].order 20 → 30`. */
+/** Names a change the way a person reads it: `pages["a/b"].order 20 → 30`, or `pages["a/b"] (new entry)`. */
 export function describeChange(change: RegistryChange): string {
+  if (change.entry === true) {
+    return `pages["${change.id}"]  (new entry)`;
+  }
   const from = change.from === undefined ? '(not set)' : JSON.stringify(change.from);
   return `pages["${change.id}"].${change.field}  ${from} → ${JSON.stringify(change.to)}`;
 }

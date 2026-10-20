@@ -602,7 +602,6 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     // The Documentation container's surfaces, rebuilt from the mock: projects, repositories, sources,
     // documents, a page, a source, review, builds and releases.
     vscode.commands.registerCommand('temcoDocs.projects', () => docsPages.projects()),
-    vscode.commands.registerCommand('temcoDocs.repositories', () => docsPages.repositories()),
     vscode.commands.registerCommand('temcoDocs.repository', (name?: unknown) => docsPages.repository(typeof name === 'string' ? name : undefined)),
     vscode.commands.registerCommand('temcoDocs.sources', () => docsPages.sources()),
     vscode.commands.registerCommand('temcoDocs.documents', (area?: unknown) => docsPages.documents(typeof area === 'string' ? area : undefined)),
