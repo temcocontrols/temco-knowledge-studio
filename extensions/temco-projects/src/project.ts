@@ -15,6 +15,8 @@ import { focusLibrary, rowSlug } from './ui';
 /** A slug, or the sidebar row that stands for a project — the two things a command argument can be. */
 type ProjectArgument = string | object | undefined;
 
+//
+
 export function registerProjectCommands(
   context: vscode.ExtensionContext,
   selection: Selection,

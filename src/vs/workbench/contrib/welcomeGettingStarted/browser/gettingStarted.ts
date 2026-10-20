@@ -1778,7 +1778,12 @@ export class GettingStartedPage extends EditorPane {
 
 export class GettingStartedInputSerializer implements IEditorSerializer {
 	public canSerialize(editorInput: GettingStartedInput): boolean {
-		return true;
+		// TEMCO: fork edit — never restore this editor from the previous session. Whether a window
+		// opens on the welcome page is `workbench.startupEditor`'s decision (this product sets it to
+		// `none` through the shell's default configurations), and persisting the editor as part of
+		// the editor part made VS Code's Welcome tab outlive the setting: it came back on every
+		// launch as a restored tab, before the product's own welcome page opened.
+		return false;
 	}
 
 	public serialize(editorInput: GettingStartedInput): string {
