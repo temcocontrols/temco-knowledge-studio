@@ -6,7 +6,7 @@
 // One table per idea — see `docs/platform-design.md`, "The catalog". Nothing here is derived at read time from
 // the network: a row is written by a scan and read by a view.
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /**
  * Every statement is `IF NOT EXISTS`, so applying the schema is idempotent — it is how an older database is
@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS sources (
 );
 
 -- What a person creates and versions: the unit of management, not a repository.
+-- "origin" is how the project began — blank, template, folder, repository or import — and it is written once:
+-- editing a project never re-answers where it came from. "template" names the starter it was written from.
 CREATE TABLE IF NOT EXISTS documents (
   id         INTEGER PRIMARY KEY,
   name       TEXT NOT NULL,
@@ -47,6 +49,8 @@ CREATE TABLE IF NOT EXISTS documents (
   version    TEXT,
   audience   TEXT,
   owner      TEXT,
+  origin     TEXT NOT NULL DEFAULT 'blank',
+  template   TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -184,3 +188,17 @@ CREATE INDEX IF NOT EXISTS commits_by_source ON commits (source_id, at DESC);
 CREATE INDEX IF NOT EXISTS artifacts_by_document ON artifacts (document_id, built_at DESC);
 CREATE INDEX IF NOT EXISTS builds_by_document ON builds (document_id, started_at DESC);
 `;
+
+/**
+ * What a database written by an earlier schema needs before this build can read it.
+ *
+ * `CREATE TABLE IF NOT EXISTS` above does nothing to a table that is already there, so a new column is an
+ * `ALTER TABLE` applied once per version step, in order, by `Catalog.open`. Keyed by the version the step leads
+ * to: `MIGRATIONS[4]` is what a schema 3 file needs to become a schema 4 file.
+ */
+export const MIGRATIONS: Readonly<Record<number, readonly string[]>> = {
+  4: [
+    "ALTER TABLE documents ADD COLUMN origin TEXT NOT NULL DEFAULT 'blank'",
+    'ALTER TABLE documents ADD COLUMN template TEXT',
+  ],
+};

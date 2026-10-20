@@ -19,7 +19,7 @@ import {
   sizeOf,
   tablesOf,
 } from './manage';
-import { SCHEMA, SCHEMA_VERSION } from './schema';
+import { MIGRATIONS, SCHEMA, SCHEMA_VERSION } from './schema';
 
 export const CATALOG_FILE = 'catalog.db';
 
@@ -87,6 +87,15 @@ export class Catalog {
         `the catalog at ${file.fsPath} was written by a newer version of the platform (schema ${found}, ` +
         `this build knows ${SCHEMA_VERSION}).`
       );
+    } else if (found < SCHEMA_VERSION) {
+      // Brought forward one step at a time: a table that already exists is untouched by `CREATE TABLE IF NOT
+      // EXISTS`, so a column added after this file was written needs its own statement.
+      for (let version = found + 1; version <= SCHEMA_VERSION; version++) {
+        for (const statement of MIGRATIONS[version] ?? []) {
+          db.exec(statement);
+        }
+      }
+      db.prepare('UPDATE meta SET value = ? WHERE key = ?').run(String(SCHEMA_VERSION), 'schema_version');
     }
 
     return new Catalog(db, file);
@@ -166,7 +175,7 @@ export class Catalog {
   documents(): DocumentRow[] {
     const rows = this.db
       .prepare(
-        `SELECT d.slug AS slug, d.name AS name, d.version AS version,
+        `SELECT d.slug AS slug, d.name AS name, d.version AS version, d.origin AS origin,
                 (SELECT COUNT(*) FROM doc_sources ds WHERE ds.document_id = d.id) AS sources,
                 (SELECT MAX(a.built_at) FROM artifacts a WHERE a.document_id = d.id) AS builtAt
            FROM documents d
@@ -178,6 +187,7 @@ export class Catalog {
       slug: String(row.slug ?? ''),
       name: String(row.name ?? ''),
       version: row.version === null || row.version === undefined ? undefined : String(row.version),
+      origin: row.origin === null || row.origin === undefined ? undefined : String(row.origin),
       sources: Number(row.sources ?? 0),
       builtAt: row.builtAt === null || row.builtAt === undefined ? undefined : String(row.builtAt),
     }));
@@ -314,8 +324,10 @@ export class Catalog {
     const now = new Date().toISOString();
     this.db
       .prepare(
-        `INSERT INTO documents (name, slug, version, audience, owner, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        // `origin` and `template` are written by the create and then left alone: where a project began is not a
+        // value an edit re-answers, and the edit page writes through this same statement.
+        `INSERT INTO documents (name, slug, version, audience, owner, origin, template, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(slug) DO UPDATE SET
            name = excluded.name, version = excluded.version, audience = excluded.audience,
            owner = excluded.owner, updated_at = excluded.updated_at`
@@ -326,6 +338,8 @@ export class Catalog {
         document.version ?? null,
         document.audience ?? null,
         document.owner ?? null,
+        document.origin ?? 'blank',
+        document.template ?? null,
         now,
         now
       );
@@ -566,7 +580,7 @@ export class Catalog {
   /** One document, with everything the edit page needs to fill itself in. */
   document(slug: string): DocumentDetail | undefined {
     const row = this.db
-      .prepare('SELECT name, version, audience, owner FROM documents WHERE slug = ?')
+      .prepare('SELECT name, version, audience, owner, origin, template FROM documents WHERE slug = ?')
       .get(slug) as Record<string, unknown> | undefined;
     if (!row) {
       return undefined;
@@ -591,6 +605,8 @@ export class Catalog {
       version: row.version === null || row.version === undefined ? undefined : String(row.version),
       audience: row.audience === null || row.audience === undefined ? undefined : String(row.audience),
       owner: row.owner === null || row.owner === undefined ? undefined : String(row.owner),
+      origin: row.origin === null || row.origin === undefined ? undefined : String(row.origin),
+      template: row.template === null || row.template === undefined ? undefined : String(row.template),
       engine: recipe?.engine === null || recipe?.engine === undefined ? undefined : String(recipe.engine),
       outputs,
       sources: this.documentSources(slug),
@@ -831,6 +847,10 @@ export interface DocumentInput {
   version?: string;
   audience?: string;
   owner?: string;
+  /** How the project began. Defaults to `blank`. */
+  origin?: string;
+  /** The starter the project's files were written from, when there was one. */
+  template?: string;
 }
 
 /** A body that was drafted but not written. */
@@ -916,6 +936,10 @@ export interface DocumentDetail {
   version?: string;
   audience?: string;
   owner?: string;
+  /** How the project began — `blank`, `template`, `folder`, `repository` or `import`. */
+  origin?: string;
+  /** The starter it was written from, when it was written from one. */
+  template?: string;
   engine?: string;
   outputs: string[];
   sources: { name: string; kind: string; branch?: string }[];
@@ -968,6 +992,8 @@ export interface SourceInput {
 export interface DocumentRow {  /** The name the database keys it by — what a selection, a draft and a build all point at. */
   slug: string;  name: string;
   version?: string;
+  /** How the project began — `blank`, `template`, `folder`, `repository` or `import`. */
+  origin?: string;
   sources: number;
   builtAt?: string;
 }

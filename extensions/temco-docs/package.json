@@ -103,6 +103,16 @@
         "icon": "$(document)"
       },
       {
+        "command": "temcoDocs.pageProperties",
+        "title": "Page Properties",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "temcoDocs.import",
+        "title": "Import a Document Set",
+        "icon": "$(cloud-download)"
+      },
+      {
         "command": "temcoDocs.source",
         "title": "Open a Source",
         "icon": "$(code)"
@@ -422,6 +432,11 @@
           "command": "temcoDocs.format.pick",
           "when": "editorLangId == markdown && resourceScheme == file",
           "group": "temcoDocs@4"
+        },
+        {
+          "command": "temcoDocs.pageProperties",
+          "when": "editorLangId == markdown && resourceScheme == file",
+          "group": "temcoDocs@5"
         }
       ],
       "editor/title/context": [

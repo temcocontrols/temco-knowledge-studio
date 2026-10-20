@@ -62,6 +62,10 @@ export interface DocumentInput {
 	version?: string;
 	audience?: string;
 	owner?: string;
+	/** How the project began — `blank`, `template`, `folder`, `repository` or `import`. */
+	origin?: string;
+	/** The starter the project's files were written from, when there was one. */
+	template?: string;
 }
 
 /** A project as the edit page sees it. */
@@ -70,6 +74,8 @@ export interface DocumentDetail {
 	version?: string;
 	audience?: string;
 	owner?: string;
+	origin?: string;
+	template?: string;
 	engine?: string;
 	outputs: string[];
 	sources: { name: string; kind: string; branch?: string }[];
@@ -106,6 +112,7 @@ export interface DocumentRow {
 	slug: string;
 	name: string;
 	version?: string;
+	origin?: string;
 	sources: number;
 	builtAt?: string;
 }

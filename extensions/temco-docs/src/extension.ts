@@ -14,10 +14,12 @@ import { registerBuildCommands, registerScriptCommands, scriptsIn } from './buil
 import { publishDiagnostics } from './diagnostics';
 import { registerFeedbackCommands } from './feedback';
 import { registerFormatCommands } from './format';
+import { registerImportCommand } from './importer';
 import { DocsPages } from './docsPages';
 import { NewPagePage } from './newPagePage';
 import { OverviewPage } from './overview';
 import { AREA_CHAPTER, KINDS, PageDeps, PageOperations, registerPageCommands, writePage } from './pageOps';
+import { PageProperties } from './pageProperties';
 import { projects } from './projects';
 import { registerReportCommands } from './report';
 import { registerRowCommands } from './rowOps';
@@ -585,7 +587,15 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     }
   };
 
+  // The page properties: the registry fields of the page in front, in one form. It writes through
+  // `RegistryEdit`, so the repository's generator keeps every value it sets.
+  const pageProperties = new PageProperties(() => roots, () => void refresh());
+
   context.subscriptions.push(
+    pageProperties,
+    vscode.commands.registerCommand('temcoDocs.pageProperties', () => void pageProperties.open()),
+    // Importing a document set: the conversion the project wizard calls after it has a destination.
+    registerImportCommand(),
     vscode.commands.registerCommand('temcoDocs.showStatus', report),
     vscode.commands.registerCommand('temcoDocs.validate', report),
     vscode.commands.registerCommand('temcoDocs.refresh', refresh),
