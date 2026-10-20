@@ -500,11 +500,11 @@ function repositoryBody(fact: RepositoryFact | undefined): string {
 			+ button('All Sources', 'temcoDocs.sources', { mark: 'repo' })
 	})}
 ${tiles([
-			{ value: String(fact.pages), label: fact.pages === 1 ? 'Page found' : 'Pages found' },
-			{ value: String(fact.reads.length), label: fact.reads.length === 1 ? 'Read recorded' : 'Reads recorded' },
-			{ value: String(fact.scripts.length), label: fact.scripts.length === 1 ? 'Doc script' : 'Doc scripts' },
-			{ value: newest === undefined ? 'never' : waitingSince(newest.at), label: 'Last read' }
-		])}
+		{ value: String(fact.pages), label: fact.pages === 1 ? 'Page found' : 'Pages found' },
+		{ value: String(fact.reads.length), label: fact.reads.length === 1 ? 'Read recorded' : 'Reads recorded' },
+		{ value: String(fact.scripts.length), label: fact.scripts.length === 1 ? 'Doc script' : 'Doc scripts' },
+		{ value: newest === undefined ? 'never' : waitingSince(newest.at), label: 'Last read' }
+	])}
 ${fact.cloned ? '' : `<div class="mt-16">${callout('<b>Nothing is local yet.</b> Reading this repository clones it into the working area with its history; until then there is no code for a draft to read.', 'warn')}</div>`}
 ${fact.reads.length === 0
 			? `<div class="mt-24">${callout('Nothing has been read from this repository yet. A read records the pages it declares and the commit it read them at; it never writes to the repository.')}</div>`
@@ -531,13 +531,13 @@ ${fact.pageRows.length === 0
 				body: fact.pageRows.slice(0, 40).map(pageRow).join('')
 			})}</div>`}
 <div class="mt-24">${rule({ label: 'Where It Lives' })}${settingsStrip([
-			{ label: 'Remote', value: fact.remoteUrl ?? 'not recorded', mono: true },
-			{ label: 'Working copy', value: fact.path ?? '—', mono: true },
-			{ label: 'Branch', value: fact.branch ?? 'not recorded', mono: true },
-			{ label: 'Default branch', value: fact.defaultBranch ?? 'not recorded', mono: true },
-			{ label: 'Pages folder', value: `${fact.docsRoot ?? 'docs'}/`, mono: true },
-			{ label: 'Catalog row', value: fact.slug, mono: true }
-		])}</div>`;
+				{ label: 'Remote', value: fact.remoteUrl ?? 'not recorded', mono: true },
+				{ label: 'Working copy', value: fact.path ?? '—', mono: true },
+				{ label: 'Branch', value: fact.branch ?? 'not recorded', mono: true },
+				{ label: 'Default branch', value: fact.defaultBranch ?? 'not recorded', mono: true },
+				{ label: 'Pages folder', value: `${fact.docsRoot ?? 'docs'}/`, mono: true },
+				{ label: 'Catalog row', value: fact.slug, mono: true }
+			])}</div>`;
 }
 
 /** What a read reported, in the one number a person looks for — or the JSON it was written as. */
@@ -598,16 +598,16 @@ function sourcesBody(sources: readonly SourceRow[], roots: readonly DocsRoot[]):
 		actions: button('Add Source', 'temcoProjects.addSource', { kind: 'primary', mark: 'plus' }) + button('GitHub Repositories', 'temcoRepositories.page', { mark: 'repo' })
 	})}
 ${tiles([
-			{ value: String(sources.length), label: sources.length === 1 ? 'Source' : 'Sources' },
-			{ value: String(read.length), label: 'Read at least once' },
-			{ value: String(pages), label: 'Pages found' },
-			{ value: String(pending.length), label: 'Never read' }
-		])}
+		{ value: String(sources.length), label: sources.length === 1 ? 'Source' : 'Sources' },
+		{ value: String(read.length), label: 'Read at least once' },
+		{ value: String(pages), label: 'Pages found' },
+		{ value: String(pending.length), label: 'Never read' }
+	])}
 ${sources.length === 0
 			? `<div class="mt-16">${callout('<b>No source yet.</b> A project reads sources — a repository, a folder of Markdown, a document. Adding one records it here; reading it fills in the pages it declares.')}</div>`
 			: partition('Repositories', 'Cloned into the working area with full history and read by commit, so a draft can point at the commit it came from.', ['git'])
-				+ partition('Folders', 'Read in place from disk — one read per file, no clone and no history. A folder that changed keeps its old pages until it is read again.', ['folder'])
-				+ partition('Archives', 'Unpacked and read like a folder; the archive stays the only copy of what it held.', ['archive'])}
+			+ partition('Folders', 'Read in place from disk — one read per file, no clone and no history. A folder that changed keeps its old pages until it is read again.', ['folder'])
+			+ partition('Archives', 'Unpacked and read like a folder; the archive stays the only copy of what it held.', ['archive'])}
 <div class="mt-24">${callout('Reading a source never edits it. The pages it finds are recorded in the platform database; the source stays the only copy of its own content.')}</div>`;
 }
 
@@ -707,11 +707,11 @@ function documentsBody(roots: readonly DocsRoot[], areaName?: string): string {
 		actions: button('New Page', 'temcoDocs.newPage', { kind: 'primary', mark: 'plus' }) + button('Generate from Sources', 'temcoDocs.createPage', { mark: 'sparkle' }) + button('Open Tree', 'temcoDocs.pages.focus', { mark: 'sidebar', title: 'Show this content as a folder tree in the side bar' })
 	})}
 ${tiles([
-			{ value: pages.length.toLocaleString('en-US'), label: 'Pages' },
-			{ value: String(reviewed), label: 'Read by a person' },
-			{ value: String(missing), label: 'Registry, no file' },
-			{ value: String(problems), label: 'Problems found' }
-		])}
+		{ value: pages.length.toLocaleString('en-US'), label: 'Pages' },
+		{ value: String(reviewed), label: 'Read by a person' },
+		{ value: String(missing), label: 'Registry, no file' },
+		{ value: String(problems), label: 'Problems found' }
+	])}
 ${roots.length === 0
 			? `<div class="mt-16">${callout('<b>No registry is being read.</b> A page is a file the registry declares, so this list is empty until a source with a <code>docs/</code> folder is open in this window.')}</div>`
 			: `<div class="know-wrap mt-24">
@@ -838,28 +838,28 @@ ${page.exists ? '' : `<div class="mt-16">${callout(`<b>The registry declares thi
 <div class="mt-24">${editor}</div>
 <div class="mt-24 grid grid--2">
 <div>${group({
-		label: 'What the Checks Found',
-		count: page.issues.length === 0 ? 'nothing' : `${page.issues.length} ${page.issues.length === 1 ? 'finding' : 'findings'}`,
-		body: page.issues.length === 0
-			? factRow('check', 'No structural problem', 'this page agrees with the registry and with the pages it links to')
-			: page.issues.map((issue) => factRow(issue.severity === 'error' ? 'alert' : 'info', issue.severity, issue.message)).join('')
-	})}</div>
+			label: 'What the Checks Found',
+			count: page.issues.length === 0 ? 'nothing' : `${page.issues.length} ${page.issues.length === 1 ? 'finding' : 'findings'}`,
+			body: page.issues.length === 0
+				? factRow('check', 'No structural problem', 'this page agrees with the registry and with the pages it links to')
+				: page.issues.map((issue) => factRow(issue.severity === 'error' ? 'alert' : 'info', issue.severity, issue.message)).join('')
+		})}</div>
 <div>${group({
-		label: 'Where It Comes From',
-		count: page.provenance === undefined ? 'nothing recorded' : 'what the generator knows',
-		body: page.provenance === undefined
-			? factRow('info', 'No neighbour file', 'neither the history nor the headings could be read for this page')
-			: factRow('edit', page.provenance.updated ?? 'no date recorded', page.provenance.git?.author === undefined ? 'no commit recorded' : `${page.provenance.git.author} · ${page.provenance.git.sha ?? 'no sha'}`)
+			label: 'Where It Comes From',
+			count: page.provenance === undefined ? 'nothing recorded' : 'what the generator knows',
+			body: page.provenance === undefined
+				? factRow('info', 'No neighbour file', 'neither the history nor the headings could be read for this page')
+				: factRow('edit', page.provenance.updated ?? 'no date recorded', page.provenance.git?.author === undefined ? 'no commit recorded' : `${page.provenance.git.author} · ${page.provenance.git.sha ?? 'no sha'}`)
 				+ factRow('code', `${page.provenance.headings.length} headings`, page.provenance.code.length === 0 ? 'claims no code, so nothing can make it stale' : `judged against ${page.provenance.code.join(', ')}`)
 				+ factRow(page.provenance.stale ? 'alert' : 'check', page.provenance.stale ? 'Stale' : 'Current', page.provenance.stale ? 'a code glob moved on after the last review' : 'nothing the page claims has changed since it was written')
-	})}</div>
+		})}</div>
 </div>
 <div class="mt-24">${group({
-		label: 'How a Page Reaches a Reader',
-		count: '3 steps',
-		body: factRow('edit', 'A person edits the file', `the page is the file at ${page.id}.md, so editing it is editing the page`)
-			+ factRow('sparkle', 'Or a draft reaches it', 'New Page → Draft writes a proposal into the database and it waits in the Review Center until somebody accepts it')
-			+ factRow('upload', 'A build and a release carry it', 'only then does the site, the CHM or the PDF show it')
+			label: 'How a Page Reaches a Reader',
+			count: '3 steps',
+			body: factRow('edit', 'A person edits the file', `the page is the file at ${page.id}.md, so editing it is editing the page`)
+				+ factRow('sparkle', 'Or a draft reaches it', 'New Page → Draft writes a proposal into the database and it waits in the Review Center until somebody accepts it')
+				+ factRow('upload', 'A build and a release carry it', 'only then does the site, the CHM or the PDF show it')
 		})}</div>
 <div class="mt-16">${callout('This view is read-only. It shows the file as the build will read it — headings, lists, notes and code fence markers — rather than as a browser would render it.')}</div>`
 	};
@@ -897,11 +897,11 @@ function sourceBody(fact: RepositoryFact | undefined): string {
 		actions: button('Read Again', 'temcoRepositories.readSource', { kind: 'primary', mark: 'refresh', args: [fact.slug] }) + button('Repository', 'temcoDocs.repository', { mark: 'repo', args: [fact.slug] })
 	})}
 ${tiles([
-			{ value: String(files.length), label: files.length === 1 ? 'Page file' : 'Page files' },
-			{ value: String(fact.pages), label: 'Pages recorded' },
-			{ value: newest?.revision ?? '—', label: 'Commit read' },
-			{ value: newest === undefined ? 'never' : waitingSince(newest.at), label: 'Last read' }
-		])}
+		{ value: String(files.length), label: files.length === 1 ? 'Page file' : 'Page files' },
+		{ value: String(fact.pages), label: 'Pages recorded' },
+		{ value: newest?.revision ?? '—', label: 'Commit read' },
+		{ value: newest === undefined ? 'never' : waitingSince(newest.at), label: 'Last read' }
+	])}
 ${fact.cloned ? '' : `<div class="mt-16">${callout('<b>Nothing is local yet.</b> Reading the repository clones it into the working area; the files behind the pages are only there once it has.', 'warn')}</div>`}
 ${files.length === 0
 			? fact.cloned ? `<div class="mt-24">${callout(`<b>No Markdown under <code>${esc(fact.docsRoot ?? 'docs')}/</code>.</b> The clone is there, but it declares no page files — so there is nothing for a read to record.`)}</div>` : ''
@@ -913,12 +913,12 @@ ${files.length === 0
 				body: files.slice(0, 60).map(fileRow).join('')
 			})}</div>`}
 <div class="mt-24">${group({
-			label: 'What a Read Does With These Files',
-			count: '3 steps',
-			body: factRow('search', 'Finds the headings', 'a heading with text under it becomes a page; a heading with nothing under it becomes a gap')
-				+ factRow('document', 'Keeps the code samples', 'a fenced block in the source is quoted verbatim, so the page cannot drift from the code')
-				+ factRow('link', 'Records the links', 'a link to another heading becomes an internal link, which is what the broken-link check reads')
-		})}</div>
+				label: 'What a Read Does With These Files',
+				count: '3 steps',
+				body: factRow('search', 'Finds the headings', 'a heading with text under it becomes a page; a heading with nothing under it becomes a gap')
+					+ factRow('document', 'Keeps the code samples', 'a fenced block in the source is quoted verbatim, so the page cannot drift from the code')
+					+ factRow('link', 'Records the links', 'a link to another heading becomes an internal link, which is what the broken-link check reads')
+			})}</div>
 <div class="mt-16">${callout('A draft reads these files as evidence and cites them. Editing a file does not change a page on its own: the page is written, and the next read records what changed.')}</div>`;
 }
 
@@ -964,22 +964,22 @@ ${card({
 </div>`}
 ${newest === undefined ? '' : `<div class="mt-24">
 ${card({
-			title: `Open draft · ${newest.title}`,
-			mark: 'sparkle',
-			plain: true,
-			actions: badge(newest.kind || 'Draft', 'info') + badge(`${newest.body.split('\n').length} lines`, 'neutral'),
-			desc: `Proposed for <code>${esc(newest.pageId)}</code>${newest.source === undefined ? '' : `, written from <code>${esc(newest.source)}</code>`}, ${waitingSince(newest.createdAt)}. Accepting writes the page exactly as it reads here; discarding keeps the page as it was and settles the draft.`,
-			body: `<div style="padding-top:10px"><pre class="code" style="max-height:420px">${esc(newest.body)}</pre></div>`,
-			foot: button('Accept', 'temcoDocs.acceptDraft', { small: true, kind: 'primary', mark: 'check', args: [newest.id] }) + button('Discard', 'temcoDocs.discardDraft', { small: true, mark: 'close', args: [newest.id] }) + '<span>accepting writes the page · discarding settles the draft</span>'
-		})}
+				title: `Open draft · ${newest.title}`,
+				mark: 'sparkle',
+				plain: true,
+				actions: badge(newest.kind || 'Draft', 'info') + badge(`${newest.body.split('\n').length} lines`, 'neutral'),
+				desc: `Proposed for <code>${esc(newest.pageId)}</code>${newest.source === undefined ? '' : `, written from <code>${esc(newest.source)}</code>`}, ${waitingSince(newest.createdAt)}. Accepting writes the page exactly as it reads here; discarding keeps the page as it was and settles the draft.`,
+				body: `<div style="padding-top:10px"><pre class="code" style="max-height:420px">${esc(newest.body)}</pre></div>`,
+				foot: button('Accept', 'temcoDocs.acceptDraft', { small: true, kind: 'primary', mark: 'check', args: [newest.id] }) + button('Discard', 'temcoDocs.discardDraft', { small: true, mark: 'close', args: [newest.id] }) + '<span>accepting writes the page · discarding settles the draft</span>'
+			})}
 </div>`}
 <div class="mt-24">${group({
-			label: 'What Settling a Draft Does',
-			count: '3 steps',
-			body: factRow('check', 'Accepting writes the page', 'the draft becomes the file at the id it proposed, and the row is settled as accepted')
-				+ factRow('document', 'The text stays as evidence', 'it remains in the database as an accepted draft, so what a page was written from survives the write')
-				+ factRow('upload', 'Only a release reaches a reader', 'a build and a publish, in that order')
-		})}</div>
+				label: 'What Settling a Draft Does',
+				count: '3 steps',
+				body: factRow('check', 'Accepting writes the page', 'the draft becomes the file at the id it proposed, and the row is settled as accepted')
+					+ factRow('document', 'The text stays as evidence', 'it remains in the database as an accepted draft, so what a page was written from survives the write')
+					+ factRow('upload', 'Only a release reaches a reader', 'a build and a publish, in that order')
+			})}</div>
 <div class="mt-16">${callout('A draft is a proposal, not a page. It belongs to the project it was written for and remembers the source it read, and it leaves this queue the moment a person settles it.')}</div>`;
 }
 
@@ -1060,7 +1060,7 @@ function releasesBody(facts1: BuildFacts): string {
 	const kinds = [...new Set(artifacts.map((artifact) => artifact.kind))];
 
 	const releaseRow = (release: ReleaseRow): string =>
-			`<div class="record-row record-row--static">${toneMark('upload', 'ok')}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name cell-mono">${esc(release.version)}</span>${release.buildId === undefined ? '' : `<span class="tag">build #${release.buildId}</span>`}</div><div class="record-row__meta">${facts([`published ${waitingSince(release.publishedAt)}`, `${release.files} ${release.files === 1 ? 'file' : 'files'}`, release.destination])}</div></div><div class="record-row__state">${badge('Published', 'ok')}</div><div style="display:flex;gap:6px;align-items:center">${button('Serve', 'temcoDocs.servePublished', { small: true, kind: 'ghost', args: [release.destination] })}${button('Open', 'temcoDocs.openPublished', { small: true, kind: 'ghost', args: [release.destination] })}</div></div>`;
+		`<div class="record-row record-row--static">${toneMark('upload', 'ok')}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name cell-mono">${esc(release.version)}</span>${release.buildId === undefined ? '' : `<span class="tag">build #${release.buildId}</span>`}</div><div class="record-row__meta">${facts([`published ${waitingSince(release.publishedAt)}`, `${release.files} ${release.files === 1 ? 'file' : 'files'}`, release.destination])}</div></div><div class="record-row__state">${badge('Published', 'ok')}</div><div style="display:flex;gap:6px;align-items:center">${button('Serve', 'temcoDocs.servePublished', { small: true, kind: 'ghost', args: [release.destination] })}${button('Open', 'temcoDocs.openPublished', { small: true, kind: 'ghost', args: [release.destination] })}</div></div>`;
 
 	const fileRow = (file: ArtifactFact): string =>
 		`<div class="record-row">${toneMark(file.kind === 'chm' ? 'package' : file.kind === 'pdf' ? 'document' : 'globe')}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name cell-mono">${esc(file.path.split(/[\\/]/).pop() ?? file.path)}</span></div><div class="record-row__meta"><span class="cell-mono">${esc(file.path)}</span><span>built ${waitingSince(file.builtAt)}</span></div></div><div class="record-row__state"></div>${button('Open', 'temcoDocs.openArtifact', { small: true, kind: 'ghost', args: [file.path] })}</div>`;
@@ -1085,11 +1085,11 @@ ${card({
 		actions: button('Publish', 'temcoDocs.publishRelease', { kind: 'primary', mark: 'upload' }) + button('Serve the Newest', 'temcoDocs.servePublished', { mark: 'radio-tower' }) + button('Build Site', 'temcoDocs.buildSite', { mark: 'play' }) + button('Build Offline Help', 'temcoDocs.buildHelp', { mark: 'package' })
 	})}
 ${tiles([
-			{ value: project ?? '—', label: 'Project' },
-			{ value: String(releases.length), label: releases.length === 1 ? 'Version published' : 'Versions published' },
-			{ value: String(artifacts.length), label: artifacts.length === 1 ? 'Artifact' : 'Artifacts' },
-			{ value: String(kinds.length), label: kinds.length === 1 ? 'Kind of file' : 'Kinds of file' }
-		])}
+		{ value: project ?? '—', label: 'Project' },
+		{ value: String(releases.length), label: releases.length === 1 ? 'Version published' : 'Versions published' },
+		{ value: String(artifacts.length), label: artifacts.length === 1 ? 'Artifact' : 'Artifacts' },
+		{ value: String(kinds.length), label: kinds.length === 1 ? 'Kind of file' : 'Kinds of file' }
+	])}
 ${releases.length === 0
 			? ''
 			: `<div class="mt-24">${group({
@@ -1102,12 +1102,12 @@ ${artifacts.length === 0
 			? `<div class="mt-16">${callout('<b>Nothing to release yet.</b> A release is not a state the platform sets: it is the files a build wrote. Build the site or the offline help, and everything that appeared is listed here — a Learn site to publish, a CHM or a PDF to download.')}</div>`
 			: kinds.map(section).join('')}
 <div class="mt-24">${group({
-			label: 'What Publishing Does',
-			count: '3 facts',
-			body: factRow('upload', 'Copies the site', 'the files a build wrote, into a folder the platform owns — nothing is uploaded anywhere')
-				+ factRow('document', 'Records the release', 'version, build, destination and date, so "when did 13.0 go out" is a query rather than a memory')
-				+ factRow('check', 'Leaves the old one alone', 'a new version is a new row beside the last one; no published file is ever rewritten in place')
-		})}</div>
+				label: 'What Publishing Does',
+				count: '3 facts',
+				body: factRow('upload', 'Copies the site', 'the files a build wrote, into a folder the platform owns — nothing is uploaded anywhere')
+					+ factRow('document', 'Records the release', 'version, build, destination and date, so "when did 13.0 go out" is a query rather than a memory')
+					+ factRow('check', 'Leaves the old one alone', 'a new version is a new row beside the last one; no published file is ever rewritten in place')
+			})}</div>
 <div class="mt-16">${callout('A downloadable CHM or PDF needs no publishing at all — it is a file the build wrote. Publishing is for the site: it puts the same pages in one folder with an entry point, which is what a Learn site is here.')}</div>`;
 }
 

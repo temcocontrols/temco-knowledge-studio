@@ -332,7 +332,7 @@ export async function writePage(deps: PageDeps, spec: NewPageSpec): Promise<{ re
   void vscode.window.showInformationMessage(
     added
       ? `Temco Docs: ${relative} is written, and the registry now names it — this project has no ` +
-        '`docs:registry` script, so the window wrote the entry.'
+      '`docs:registry` script, so the window wrote the entry.'
       : `Temco Docs: ${relative} is written. The registry could not be updated, so the page is not listed yet.`
   );
   return { relative };

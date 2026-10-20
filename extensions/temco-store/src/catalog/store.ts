@@ -990,7 +990,7 @@ export interface SourceInput {
 
 /** A row of the Documents page. */
 export interface DocumentRow {  /** The name the database keys it by — what a selection, a draft and a build all point at. */
-  slug: string;  name: string;
+  slug: string; name: string;
   version?: string;
   /** How the project began — `blank`, `template`, `folder`, `repository` or `import`. */
   origin?: string;

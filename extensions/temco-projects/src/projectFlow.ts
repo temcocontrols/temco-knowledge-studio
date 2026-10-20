@@ -1,12 +1,17 @@
-// New Project — where a project begins, then what it is, what it brings in, and what it builds.
+// New Project — two screens, and one question each.
 //
-// Five steps: **Origin**, Basics, Bring in, Outputs, Review. The origin is not a label: it decides what the
-// third step asks. A project from a repository cites what the platform has already read; a project from a
-// folder records that folder as a source; a project from a template writes a starter `docs/help` tree first.
-// A choice that did not change the next question would be a dropdown that lies, so the one origin we cannot
-// finish yet — importing Word, RTF, HTML or CHM — is shown disabled and says why.
+// **The first screen is the choice**: three cards — Empty project, From a repository, From existing files. There is
+// no step rail and no Next/Back across five screens; a person picks the kind of project, and the second screen is a
+// single form whose middle section is what that kind needs. Everything else on it — name, version, owner, audience,
+// outputs — is the same for all three.
 //
-// Nothing is written until *Create Project*: the wizard is markup and a small script, and every write happens
+// The card is not a label: it decides which origin `create()` receives. Empty plus a starter is a `template`, a
+// folder that already has a registry is a `folder`, anything else under *existing files* is an `import`. That
+// derivation is in the page's own script, so the host keeps the one code path it had.//
+// The form asks for two things and shows them as tiles: a name with a version, and which outputs to build. Owner and
+// audience were asked here for a while and removed — a field nobody must answer is a field that stops the flow for
+// everyone, and both are editable later on the page that owns a project.//
+// Nothing is written until *Create Project*: the flow is markup and a small script, and every write happens
 // in `create()` — the project, its sources, its outputs, and for a template its files.
 
 import * as vscode from 'vscode';
@@ -17,15 +22,16 @@ import { escapeHtml as esc, icon, page, pageColumn } from './ui';
 
 export const NEW_PROJECT_VIEW_TYPE = 'temcoProjects.newProject';
 
-/** What the wizard offers when it opens. The mock's defaults, over whatever sources the catalog has. */
-const DEFAULTS = { name: 'T3000 Documentation', version: '13.0', owner: 'Derek', audience: 'Integrators and installers', folder: '~/Temco' };
+/** What the flow offers when it opens. The mock's defaults, over whatever sources the catalog has. */
+const DEFAULTS = { name: 'T3000 Documentation', version: '13.0', folder: '~/Temco' };
 
+/** What a project can build. One build produces every one of them, so they are ticks, not a choice. */
 const TARGETS = [
-	{ value: 'website', label: 'Website', sub: 'Static pages for Temco Learn' },
-	{ value: 'pdf', label: 'PDF', sub: 'One document, printed layout' },
-	{ value: 'help', label: 'Offline help', sub: 'CHM · needs the help compiler' },
-	{ value: 'search', label: 'Search index', sub: 'lunr index for the site' },
-	{ value: 'ai', label: 'AI index', sub: 'Embeddings, kept on this machine only' }
+	{ value: 'website', label: 'Website', sub: 'Static pages for Temco Learn', mark: 'globe' },
+	{ value: 'pdf', label: 'PDF', sub: 'One document, printed layout', mark: 'document' },
+	{ value: 'help', label: 'Offline help', sub: 'CHM · needs the help compiler', mark: 'book' },
+	{ value: 'search', label: 'Search index', sub: 'lunr index for the site', mark: 'search' },
+	{ value: 'ai', label: 'AI index', sub: 'Embeddings, kept on this machine only', mark: 'sparkle' }
 ];
 
 /** The outputs ticked when the page opens. */
@@ -53,6 +59,15 @@ const IMPORT_KINDS = [
 	{ value: 'markdown', label: 'Markdown folder', sub: 'Existing .md files, brought into the project shape' },
 	{ value: 'word', label: 'Word, RTF or ODT', sub: 'Converted with pandoc — it must be on the PATH' },
 	{ value: 'chm', label: 'Compiled help (CHM)', sub: 'Decompiled with hh.exe, then converted — Windows only' }
+];
+
+/**
+ * What "existing files" can be. `existing` is not a conversion at all: that folder already has a registry, and it is
+ * recorded as the source it is. The four kinds under it are the importer's own.
+ */
+const MATERIALS = [
+	{ value: 'existing', label: 'An existing docs folder', sub: 'It already has a registry, which is read as it stands' },
+	...IMPORT_KINDS
 ];
 
 /** The starters a project can be written from. One, and it is the MSDN shape: area → topics. */
@@ -163,8 +178,6 @@ export class ProjectFlowPage {
 				name,
 				slug,
 				version: values.version.trim() || undefined,
-				audience: values.audience.trim() || undefined,
-				owner: values.owner.trim() || undefined,
 				origin,
 				template: origin === 'template' ? values.template : undefined
 			});
@@ -231,8 +244,6 @@ export class ProjectFlowPage {
 interface Values {
 	name: string;
 	version: string;
-	owner: string;
-	audience: string;
 	origin: string;
 	folder: string;
 	template: string;
@@ -345,23 +356,45 @@ const TEMPLATE_FILES = [
 const field = (label: string, control: string, hint?: string): string =>
 	`<div class="field"><label>${esc(label)}</label>${control}${hint ? `<div class="field__hint">${esc(hint)}</div>` : ''}</div>`;
 
-const options = (values: string[], selected: string): string =>
-	values.map((value) => `<option${value === selected ? ' selected' : ''}>${esc(value)}</option>`).join('');
-
 const checklist = (items: { value: string; label: string; sub: string }[], checked: (item: { value: string }) => boolean, fieldName: string): string =>
 	`<div class="checklist">${items.map((item) => `<label class="checklist__row"><input type="checkbox" data-field="${fieldName}" data-multi value="${esc(item.value)}"${checked(item) ? ' checked' : ''}><span class="checklist__text"><span class="checklist__title">${esc(item.label)}</span><span class="checklist__sub">${esc(item.sub)}</span></span></label>`).join('')}</div>`;
 
-const steps = ['Origin', 'Basics', 'Bring in', 'Outputs', 'Review'];
+/**
+ * The outputs, as compact ticks.
+ *
+ * A column of five ticks has to be read line by line to learn which are on; a tile carries its own state in its
+ * border, its wash and a check, so "what does this project build?" is answered by a glance. Each one stays a single
+ * line high — these are switches, not panels. The input stays a real checkbox, hidden but focusable, so a click, a tap
+ * and the space bar all do the same thing and a screen reader still announces a check box.
+ */
+const tiles = (items: { value: string; label: string; sub: string; mark: string }[], ticked: readonly string[]): string =>
+	`<div class="out-grid">${items.map((item) => `<label class="out-tile"><input type="checkbox" data-field="targets" data-multi value="${esc(item.value)}"${ticked.includes(item.value) ? ' checked' : ''}><span class="out-tile__mark">${icon(item.mark)}</span><span class="out-tile__text"><span class="out-tile__label">${esc(item.label)}</span><span class="out-tile__note">${esc(item.sub)}</span></span><span class="out-tile__check">${icon('check', 'icon--sm')}</span></label>`).join('')}</div>`;
+
+/**
+ * The three starting points, as a side rail against the form.
+ *
+ * This is the master/detail shape a settings surface has in Fluent and in Material: the choice is a narrow rail on the
+ * left that stays put, and the right side is the thing itself — no second screen, no step rail, and no box drawn round
+ * each choice. The rail also shows every type's one-line identity at once, so a person can compare without going back.
+ */
+function typeOptions(): string {
+	const options = [
+		{ value: 'empty', mark: 'document', label: 'Empty project', note: 'No sources, no pages yet' },
+		{ value: 'repository', mark: 'repo', label: 'From a repository', note: 'Cite what is already read' },
+		{ value: 'files', mark: 'layers', label: 'From existing files', note: 'HTML, Markdown, Word or CHM' }
+	];
+
+	return `<div class="opt-list" role="listbox" aria-label="Starting point">${options.map((option, index) => `<button type="button" class="opt${index === 0 ? ' is-on' : ''}" role="option" aria-selected="${index === 0}" data-type="${option.value}" data-title="${esc(option.label)}">
+	<span class="opt__mark">${icon(option.mark)}</span>
+	<span class="opt__text"><span class="opt__title">${esc(option.label)}</span><span class="opt__desc">${esc(option.note)}</span></span>
+</button>`).join('')}</div>`;
+}
 
 function html(sources: SourceRow[], unavailable?: string): string {
 	const repositories = sources.filter((source) => source.kind === 'git');
 	const files = sources.filter((source) => source.kind !== 'git');
 	const repositoryRows = repositories.map((source) => ({ value: source.name, label: source.name, sub: `${source.kind} · ${source.branch ?? 'no branch'} · ${source.pages ? `${source.pages} pages` : 'not read'}` }));
 	const fileRows = files.map((source) => ({ value: source.name, label: source.name, sub: source.kind }));
-
-	const rail = steps.map((label, index) =>
-		`${index > 0 ? '<span class="step__arrow" aria-hidden="true">→</span>' : ''}<button type="button" class="step${index === 0 ? ' is-active' : ''}" data-step="${index}" role="tab" aria-selected="${index === 0}"><span class="step__n">${index + 1}.</span><span class="step__label">${esc(label)}</span></button>`
-	).join('');
 
 	const empty = unavailable
 		? `<div class="callout callout--warn">${icon('alert')}<div><b>The store is not available.</b> ${esc(unavailable)}</div></div>`
@@ -378,231 +411,217 @@ function html(sources: SourceRow[], unavailable?: string): string {
 
 ${empty}
 
-<div class="wizard">
-	<div class="wizard__steps" role="tablist">${rail}</div>
-	<div class="wizard__body">
-		<div data-step-body="0">
-			<div class="wizard__title">Where the project begins</div>
-			<p class="wizard__hint">This decides what the next question is, not just what the project is called.</p>
-			<div class="checklist">
-				${ORIGINS.map((origin) => `<label class="checklist__row"><input type="radio" name="origin" data-field="origin" value="${esc(origin.value)}"${origin.available ? (origin.value === 'blank' ? ' checked' : '') : ' disabled'}><span class="checklist__text"><span class="checklist__title">${esc(origin.label)}${origin.available ? '' : ' — not built yet'}</span><span class="checklist__sub">${esc(origin.sub)}</span></span></label>`).join('')}
-			</div>
-		</div>
-		<div data-step-body="1" hidden>
-			<div class="wizard__title">Name, version and owner</div>
-			<p class="wizard__hint">The name, the version, and who answers for the result.</p>
+<div class="split">
+	<div class="split__side">
+		<div class="split__label">Start from</div>
+		${typeOptions()}
+	</div>
+
+	<div class="split__main">
+		<div class="split__title" id="form-title">Empty project</div>
+		<p class="split__hint" id="form-hint"></p>
+
+		<div class="split__section">
+			<div class="split__section-title">The project</div>
+			<p class="split__section-note">What it is called, and who answers for it.</p>
 			<div class="form">
 				${field('Name', `<input class="input" data-field="name" value="${esc(DEFAULTS.name)}" aria-label="Project name">`)}
 				${field('Version', `<input class="input" data-field="version" value="${esc(DEFAULTS.version)}" aria-label="Version">`, 'A project publishes one version at a time.')}
-				${field('Owner', `<select class="select" data-field="owner" aria-label="Owner">${options(['Derek', 'Mei', 'Ana', 'Unassigned'], DEFAULTS.owner)}</select>`)}
-				${field('Audience', `<input class="input" data-field="audience" value="${esc(DEFAULTS.audience)}" aria-label="Audience">`)}
 			</div>
 		</div>
-		<div data-step-body="2" hidden>
-			<div class="wizard__title">What it brings in</div>
-			<div data-bring="blank">
-				<p class="wizard__hint">Nothing. The project starts with no pages, and the first one is written from the workspace.</p>
+
+		<div class="split__section" data-form="empty">
+			<div class="split__section-title">Where the pages come from</div>
+			<p class="split__section-note">An empty project has no sources at all. A starter writes the first ones — an overview area, two topics, and the registry the platform reads.</p>
+			<div class="form">
+				${field('Starter', `<select class="select" data-field="template" aria-label="Starter"><option value="">Nothing — begin with no pages</option>${TEMPLATES.map((template) => `<option value="${esc(template.value)}">${esc(template.label)} — ${esc(template.sub)}</option>`).join('')}</select>`)}
 			</div>
-			<div data-bring="repository" hidden>
-				<p class="wizard__hint">Search the repositories, or choose individual files and folders. Both record the pages they declare.</p>
-				<div class="checklist-group">
-					<div class="checklist-heading">Repositories<span class="checklist-heading__count">${repositories.length}</span></div>
-					<div class="checklist-tools"><input class="input input--sm" data-filter="repos" placeholder="Search repositories" aria-label="Search repositories"><button type="button" class="btn btn--sm btn--ghost" id="clone-source">${icon('repo')}<span>Clone a source…</span></button><button type="button" class="btn btn--sm btn--ghost" id="load-all">${icon('download')}<span>Load all</span></button></div>
-					<div data-filter-list="repos">${checklist(repositoryRows, () => false, 'sources')}</div>
-				</div>
-				<div class="checklist-group" data-role="files">
-					<div class="checklist-heading">Files and folders<span class="checklist-heading__count">${files.length}</span></div>
-					<details class="disclosure"><summary>Choose files and folders…<span class="cell-muted" id="file-count">0 of ${files.length} selected</span></summary>${checklist(fileRows, () => false, 'sources')}</details>
-				</div>
-				<p class="wizard__hint" style="margin-top:12px"><span id="source-count">0</span> of ${sources.length} selected</p>
-			</div>
-			<div data-bring="folder" hidden>
-				<p class="wizard__hint">The folder is recorded as a source; its pages are read from <code>docs/help/registry.json</code>.</p>
-				<div class="form">
-					${field('Folder on this machine', `<input class="input" data-field="folder" value="${esc(DEFAULTS.folder)}" aria-label="Folder">`, 'A path; ~ is your home folder.')}
-				</div>
-			</div>
-			<div data-bring="template" hidden>
-				<p class="wizard__hint">A starter tree is written where you point. Nothing that already exists is replaced.</p>
-				<div class="form">
-					${field('Starter', `<select class="select" data-field="template" aria-label="Starter">${TEMPLATES.map((template) => `<option value="${esc(template.value)}">${esc(template.label)} — ${esc(template.sub)}</option>`).join('')}</select>`)}
-					${field('Write it under', `<input class="input" data-field="folder" value="${esc(DEFAULTS.folder)}" aria-label="Folder">`, 'A path; ~ is your home folder. The project name becomes the folder under it.')}
-				</div>
-			</div>
-			<div data-bring="import" hidden>
-				<p class="wizard__hint">The material is converted into <code>docs/</code> and <code>docs/help/registry.json</code>. Nothing is overwritten — a folder that already has a registry is refused.</p>
-				<div class="form">
-					${field('Material', `<select class="select" data-field="importKind" aria-label="Material">${IMPORT_KINDS.map((kind) => `<option value="${esc(kind.value)}">${esc(kind.label)} — ${esc(kind.sub)}</option>`).join('')}</select>`)}
-					${field('Where it is', `<input class="input" data-field="importSource" placeholder="C:\\docs\\manual or ~/Downloads/help.chm" aria-label="Source">`, 'A file or a folder; ~ is your home folder.')}
-					${field('Write the project into', `<input class="input" data-field="folder" value="${esc(DEFAULTS.folder)}" aria-label="Folder">`, 'A path; ~ is your home folder. The project name becomes the folder under it.')}
-				</div>
+			<div class="form" data-starter-folder hidden>
+				${field('Write it under', `<input class="input" data-field="folder" value="${esc(DEFAULTS.folder)}" aria-label="Folder">`, 'A path; ~ is your home folder. The project name becomes the folder under it.')}
 			</div>
 		</div>
-		<div data-step-body="3" hidden>
-			<div class="wizard__title">What it builds</div>
-			<p class="wizard__hint">One build produces every target you tick here.</p>
-			${checklist(TARGETS, (item) => DEFAULT_TARGETS.includes(item.value), 'targets')}
+
+		<div class="split__section" data-form="repository" hidden>
+			<div class="split__section-title">Where the pages come from</div>
+			<p class="split__section-note">Search the repositories, or choose individual files and folders. Both record the pages they declare, and neither is written to.</p>
+			<div class="checklist-group">
+				<div class="checklist-heading">Repositories<span class="checklist-heading__count">${repositories.length}</span></div>
+				<div class="checklist-tools"><input class="input input--sm" data-filter="repos" placeholder="Search repositories" aria-label="Search repositories"><button type="button" class="btn btn--sm btn--ghost" id="clone-source">${icon('repo')}<span>Clone a source…</span></button><button type="button" class="btn btn--sm btn--ghost" id="load-all">${icon('download')}<span>Load all</span></button></div>
+				<div data-filter-list="repos">${checklist(repositoryRows, () => false, 'sources')}</div>
+			</div>
+			<div class="checklist-group" data-role="files">
+				<div class="checklist-heading">Files and folders<span class="checklist-heading__count">${files.length}</span></div>
+				<details class="disclosure"><summary>Choose files and folders…<span class="cell-muted" id="file-count">0 of ${files.length} selected</span></summary>${checklist(fileRows, () => false, 'sources')}</details>
+			</div>
+			<p class="split__section-note" style="margin-top:12px"><span id="source-count">0</span> of ${sources.length} selected</p>
 		</div>
-		<div data-step-body="4" hidden>
-			<div class="wizard__title">Check before creating</div>
-			<p class="wizard__hint">Nothing has been written yet.</p>
-			<dl class="kv" id="review"></dl>
-			<div class="mt-16"><div class="callout">${icon('info')}<div>The project is recorded in the platform database under <code>temcoStore</code>. A template writes its files where the step above points; nothing is written into an existing repository, and the first build is yours to start.</div></div></div>
+
+		<div class="split__section" data-form="files" hidden>
+			<div class="split__section-title">What the material is</div>
+			<p class="split__section-note">Everything here is read once and written into <code>docs/</code> and <code>docs/help/registry.json</code>. A folder that already has a registry is refused rather than overwritten.</p>
+			<div class="form">
+				${field('Material', `<select class="select" data-field="material" aria-label="Material">${MATERIALS.map((entry) => `<option value="${esc(entry.value)}">${esc(entry.label)} — ${esc(entry.sub)}</option>`).join('')}</select>`)}
+			</div>
+			<div class="form" data-material="existing">
+				${field('The folder that holds the pages', `<input class="input" data-field="folder" value="${esc(DEFAULTS.folder)}" aria-label="Folder">`, 'A path; ~ is your home folder. Its registry is read as it stands.')}
+			</div>
+			<div class="form" data-material="convert" hidden>
+				${field('Where the material is', `<input class="input" data-field="importSource" placeholder="C:\\docs\\manual or ~/Downloads/help.chm" aria-label="Source">`, 'A file or a folder; ~ is your home folder.')}
+				${field('Write the project into', `<input class="input" data-field="folder" value="${esc(DEFAULTS.folder)}" aria-label="Folder">`, 'A path; ~ is your home folder. The project name becomes the folder under it.')}
+			</div>
 		</div>
+
+		<div class="split__section">
+			<div class="split__section-title">What it builds</div>
+			<p class="split__section-note">One build produces every target you tick here — and every one of them can be turned on later in the Build Center.</p>
+			${tiles(TARGETS, DEFAULT_TARGETS)}
+		</div>
+
 		<div class="wizard__error" id="wizard-error" hidden></div>
-	</div>
-	<div class="wizard__foot">
-		<span class="cell-muted" style="font-size:12px" id="wizard-count">Step 1 of 5</span>
-		<span class="wizard__spacer"></span>
-		<button type="button" class="btn" id="wizard-back" hidden>${icon('chevron-left')}<span>Back</span></button>
-		<button type="button" class="btn btn--primary" id="wizard-next"><span>Next</span></button>
-		<button type="button" class="btn btn--primary" id="wizard-finish" hidden>${icon('check')}<span>Create Project</span></button>
+
+		<div class="wizard__foot">
+			<span class="cell-muted" style="font-size:12px" id="wizard-summary"></span>
+			<span class="wizard__spacer"></span>
+			<button type="button" class="btn btn--primary" id="wizard-create">${icon('check')}<span>Create Project</span></button>
+		</div>
 	</div>
 </div>`;
 }
 
-/** The wizard's behaviour: five steps, the one rule the middle step has per origin, and one message at the end. */
+/**
+ * The flow's behaviour: one screen, a rail of three starting points, and a form that follows the rail.
+ *
+ * The origin the host receives is derived here — `empty` plus a starter is a `template`, a folder that already has a
+ * registry is a `folder`, anything else under *existing files* is an `import` — so `create()` keeps its one code path.
+ */
 const WIZARD_SCRIPT = `
 (function () {
 	const api = acquireVsCodeApi();
-	const steps = Array.prototype.slice.call(document.querySelectorAll('.wizard__steps .step'));
-	const bodies = Array.prototype.slice.call(document.querySelectorAll('[data-step-body]'));
 	const error = document.getElementById('wizard-error');
-	const count = document.getElementById('wizard-count');
-	const back = document.getElementById('wizard-back');
-	const next = document.getElementById('wizard-next');
-	const finish = document.getElementById('wizard-finish');
-	const review = document.getElementById('review');
-	let at = 0;
+	const summary = document.getElementById('wizard-summary');
+	const titleEl = document.getElementById('form-title');
+	const hintEl = document.getElementById('form-hint');
+	const rails = Array.prototype.slice.call(document.querySelectorAll('.opt'));
+	let type = 'empty';
 
-	function field(name) {
-		return document.querySelector('[data-field="' + name + '"]');
+	const HINTS = {
+		empty: 'Nothing is read and nothing is converted: the project exists, and the first page is yours to write.',
+		repository: 'A repository project points at pages that already exist. Reading a source records the pages it declares; it does not change the repository.',
+		files: 'The material is converted into the project shape once; from then on it is written as pages like any other project.'
+	};
+
+	function visible(name) {
+		const all = Array.prototype.slice.call(document.querySelectorAll('[data-field="' + name + '"]'));
+		for (let i = 0; i < all.length; i++) {
+			if (all[i].offsetParent !== null) { return all[i]; }
+		}
+		return null;
+	}
+	function value(name) {
+		const el = visible(name);
+		return el ? el.value : '';
 	}
 	function checked(name) {
-		return Array.prototype.slice.call(document.querySelectorAll('[data-field="' + name + '"]:checked')).map(function (input) { return input.value; });
+		// Not filtered by visibility: a tick inside the closed *files and folders* disclosure is still a tick.
+		return Array.prototype.slice.call(document.querySelectorAll('[data-field="' + name + '"]:checked'))
+			.map(function (input) { return input.value; });
 	}
+	function material() { return value('material') || 'existing'; }
 	function origin() {
-		const chosen = document.querySelector('[data-field="origin"]:checked');
-		return chosen ? chosen.value : 'blank';
-	}
-	function originLabel() {
-		const chosen = document.querySelector('[data-field="origin"]:checked');
-		const title = chosen && chosen.parentElement ? chosen.parentElement.querySelector('.checklist__title') : null;
-		return title ? title.textContent : 'Start empty';
-	}
-	function bringField(name) {
-		return document.querySelector('[data-bring="' + origin() + '"] [data-field="' + name + '"]');
+		if (type === 'empty') { return value('template') ? 'template' : 'blank'; }
+		if (type === 'repository') { return 'repository'; }
+		return material() === 'existing' ? 'folder' : 'import';
 	}
 	function values() {
-		const folder = bringField('folder');
-		const template = bringField('template');
-		const importKind = bringField('importKind');
-		const importSource = bringField('importSource');
-		return {
-			name: field('name').value,
-			version: field('version').value,
-			owner: field('owner').value,
-			audience: field('audience').value,
+		const v = {
+			name: value('name'),
+			version: value('version'),
 			origin: origin(),
-			folder: folder ? folder.value : '',
-			template: template ? template.value : '',
-			importKind: importKind ? importKind.value : '',
-			importSource: importSource ? importSource.value : '',
-			sources: checked('sources'),
+			folder: value('folder'),
+			template: '',
+			importKind: '',
+			importSource: '',
+			sources: [],
 			targets: checked('targets')
 		};
+		if (v.origin === 'template') { v.template = value('template'); }
+		if (v.origin === 'import') { v.importKind = material(); v.importSource = value('importSource'); }
+		if (v.origin === 'repository') { v.sources = checked('sources'); }
+		return v;
 	}
 	function counts() {
-		const total = document.querySelectorAll('[data-bring="repository"] [data-field="sources"]').length;
-		const chosen = checked('sources').length;
 		const sourceCount = document.getElementById('source-count');
-		if (sourceCount) { sourceCount.textContent = String(chosen); }
+		if (sourceCount) { sourceCount.textContent = String(checked('sources').length); }
 		const files = Array.prototype.slice.call(document.querySelectorAll('[data-role="files"] [data-field="sources"]'));
-		const filesChosen = files.filter(function (input) { return input.checked; }).length;
 		const fileCount = document.getElementById('file-count');
-		if (fileCount) { fileCount.textContent = filesChosen + ' of ' + files.length + ' selected'; }
-		return { total: total, chosen: chosen };
+		if (fileCount) {
+			const chosen = files.filter(function (input) { return input.checked; }).length;
+			fileCount.textContent = chosen + ' of ' + files.length + ' selected';
+		}
+	}
+	function refresh() {
+		counts();
+		if (!summary) { return; }
+		const v = values();
+		const parts = [type === 'repository' ? 'From a repository' : type === 'files' ? 'From existing files' : 'Empty project'];
+		if (v.origin === 'template') { parts.push('user-guide starter'); }
+		if (v.origin === 'repository') { parts.push(v.sources.length + (v.sources.length === 1 ? ' source' : ' sources')); }
+		if (v.origin === 'folder') { parts.push('a folder with a registry'); }
+		if (v.origin === 'import') { parts.push(v.importKind + ' import'); }
+		parts.push(v.targets.length + (v.targets.length === 1 ? ' output' : ' outputs'));
+		summary.textContent = parts.join(' · ');
 	}
 	function fail(message) {
 		error.textContent = message;
 		error.hidden = false;
 	}
 	function show() {
-		steps.forEach(function (step, index) {
-			step.classList.toggle('is-active', index === at);
-			step.classList.toggle('is-done', index < at);
-			step.setAttribute('aria-selected', String(index === at));
+		Array.prototype.forEach.call(document.querySelectorAll('[data-form]'), function (block) {
+			block.hidden = block.getAttribute('data-form') !== type;
 		});
-		bodies.forEach(function (body, index) { body.hidden = index !== at; });
-		// The third step is whichever answer the origin gives: the four blocks are one question.
-		const chosenOrigin = origin();
-		Array.prototype.forEach.call(document.querySelectorAll('[data-bring]'), function (block) {
-			block.hidden = block.getAttribute('data-bring') !== chosenOrigin;
+		rails.forEach(function (rail) {
+			const on = rail.getAttribute('data-type') === type;
+			rail.classList.toggle('is-on', on);
+			rail.setAttribute('aria-selected', String(on));
 		});
-		count.textContent = 'Step ' + (at + 1) + ' of ' + bodies.length;
-		back.hidden = at === 0;
-		next.hidden = at === bodies.length - 1;
-		finish.hidden = at !== bodies.length - 1;
-		if (at === bodies.length - 1) {
-			const v = values();
-			const rows = [
-				['Origin', originLabel()],
-				['Name', '<span class="cell-strong">' + v.name + '</span>'],
-				['Version', '<span class="cell-mono">' + v.version + '</span>'],
-				['Owner', v.owner],
-				['Audience', v.audience]
-			];
-			if (v.origin === 'repository') {
-				rows.push(['Sources', v.sources.length + ' — ' + (v.sources.join(', ') || 'none')]);
-			} else if (v.origin === 'folder' || v.origin === 'template' || v.origin === 'import') {
-				rows.push(['Folder', '<span class="cell-mono">' + v.folder + '</span>']);
-			}
-			if (v.origin === 'template') {
-				rows.push(['Starter', v.template]);
-			}
-			if (v.origin === 'import') {
-				rows.push(['Material', v.importKind]);
-				rows.push(['Read from', '<span class="cell-mono">' + v.importSource + '</span>']);
-			}
-			rows.push(['Outputs', v.targets.join(', ') || 'none']);
-			review.innerHTML = rows.map(function (pair) { return '<dt>' + pair[0] + '</dt><dd>' + pair[1] + '</dd>'; }).join('');
-		}
-	}
-	function go(to) {
-		error.hidden = true;
-		at = to;
-		show();
-		counts();
-	}
-	/** The one rule the middle step has, per origin: a repository project needs a source, a path project its path. */
-	function middleStepSays(v) {
-		if (v.origin === 'repository' && v.sources.length === 0) { return 'Choose at least one source to read.'; }
-		if ((v.origin === 'folder' || v.origin === 'template' || v.origin === 'import') && !v.folder.trim()) { return 'Name a folder on this machine.'; }
-		if (v.origin === 'import' && !v.importSource.trim()) { return 'Say where the material is.'; }
-		return '';
+		const starter = document.querySelector('[data-starter-folder]');
+		if (starter) { starter.hidden = !value('template'); }
+		const existing = document.querySelector('[data-material="existing"]');
+		const convert = document.querySelector('[data-material="convert"]');
+		if (existing) { existing.hidden = material() !== 'existing'; }
+		if (convert) { convert.hidden = material() === 'existing'; }
+		const rail = document.querySelector('.opt[data-type="' + type + '"]');
+		titleEl.textContent = rail ? rail.getAttribute('data-title') : 'The project';
+		hintEl.textContent = HINTS[type] || '';
+		refresh();
 	}
 
-	steps.forEach(function (step) { step.addEventListener('click', function () { go(Number(step.dataset.step)); }); });
-	back.addEventListener('click', function () { go(Math.max(0, at - 1)); });
-	Array.prototype.forEach.call(document.querySelectorAll('[data-field="origin"]'), function (radio) {
-		radio.addEventListener('change', function () { error.hidden = true; show(); });
-	});
-	next.addEventListener('click', function () {
-		const v = values();
-		if (at === 1 && !v.name.trim()) { fail('A project needs a name.'); return; }
-		if (at === 2) { const reason = middleStepSays(v); if (reason) { fail(reason); return; } }
-		if (at === 3 && v.targets.length === 0) { fail('Choose at least one output to build.'); return; }
-		go(at + 1);
-	});
-	finish.addEventListener('click', function () {
-		const v = values();
-		if (!v.name.trim()) { go(1); fail('A project needs a name.'); return; }
-		const reason = middleStepSays(v);
-		if (reason) { go(2); fail(reason); return; }
-		if (v.targets.length === 0) { go(3); fail('Choose at least one output to build.'); return; }
-		api.postMessage({ type: 'create', values: v });
+	rails.forEach(function (rail) {
+		rail.addEventListener('click', function () {
+			type = rail.getAttribute('data-type');
+			error.hidden = true;
+			show();
+		});
 	});
 	document.getElementById('wizard-cancel').addEventListener('click', function () { api.postMessage({ type: 'cancel' }); });
+
+	const template = document.querySelector('[data-field="template"]');
+	if (template) { template.addEventListener('change', show); }
+	const materialSelect = document.querySelector('[data-field="material"]');
+	if (materialSelect) { materialSelect.addEventListener('change', show); }
+
+	document.getElementById('wizard-create').addEventListener('click', function () {
+		const v = values();
+		if (!v.name.trim()) { fail('A project needs a name.'); return; }
+		if (v.origin === 'template' && !v.folder.trim()) { fail('Name the folder to write the starter under.'); return; }
+		if (v.origin === 'folder' && !v.folder.trim()) { fail('Name the folder that holds the pages.'); return; }
+		if (v.origin === 'import' && !v.importSource.trim()) { fail('Say where the material is.'); return; }
+		if (v.origin === 'import' && !v.folder.trim()) { fail('Name the folder to write the project into.'); return; }
+		if (v.origin === 'repository' && v.sources.length === 0) { fail('Choose at least one source to read.'); return; }
+		if (v.targets.length === 0) { fail('Choose at least one output to build.'); return; }
+		api.postMessage({ type: 'create', values: v });
+	});
+
 	const filter = document.querySelector('[data-filter="repos"]');
 	if (filter) {
 		filter.addEventListener('input', function () {
@@ -616,7 +635,7 @@ const WIZARD_SCRIPT = `
 	if (loadAll) {
 		loadAll.addEventListener('click', function () {
 			Array.prototype.forEach.call(document.querySelectorAll('[data-filter-list="repos"] [data-field="sources"]'), function (input) { input.checked = true; });
-			counts();
+			refresh();
 		});
 	}
 	// Cloning lives where sources live: this opens that page rather than growing a second clone form here.
@@ -624,10 +643,8 @@ const WIZARD_SCRIPT = `
 	if (clone) {
 		clone.addEventListener('click', function () { api.postMessage({ type: 'command', command: 'temcoRepositories.page' }); });
 	}
-	document.addEventListener('change', function (event) {
-		if (event.target && event.target.getAttribute && event.target.getAttribute('data-field')) { counts(); }
-	});
+	document.addEventListener('change', refresh);
+	document.addEventListener('input', refresh);
 	show();
-	counts();
 })();
 `;

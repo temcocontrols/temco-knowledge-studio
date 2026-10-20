@@ -2512,6 +2512,281 @@ button.link:hover {
 	line-height: 1.5;
 }
 
+/* ---------------------------------------------------------------- master / detail */
+
+/* A choice rail beside its form — the shape a settings surface has in Fluent and in Material. Two
+   columns rather than two screens: the choice stays visible while the form under it is filled in, so
+   nobody has to go back to remember what the other choices were. */
+.split {
+	display: grid;
+	grid-template-columns: 244px minmax(0, 1fr);
+	gap: 32px;
+	align-items: start;
+	max-width: 1180px;
+}
+
+.split__side {
+	position: sticky;
+	top: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.split__label {
+	margin: 0 0 6px 12px;
+	color: var(--fg-subtle);
+	font-size: var(--fs-xs);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+.opt-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+/* A rail item, not a card: no border, no fill until it is chosen, and a 2px accent bar on the
+   chosen one — the accent does the pointing instead of a box. */
+.opt {
+	position: relative;
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 9px 12px;
+	border: 0;
+	border-radius: var(--radius);
+	background: none;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.opt:hover {
+	background: var(--bg-hover);
+}
+
+.opt.is-on {
+	background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.opt.is-on::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	top: 8px;
+	bottom: 8px;
+	width: 2px;
+	border-radius: 2px;
+	background: var(--accent);
+}
+
+.opt:focus-visible {
+	outline: 1px solid var(--accent);
+	outline-offset: -1px;
+}
+
+.opt__mark {
+	display: flex;
+	flex: none;
+	margin-top: 1px;
+	color: var(--fg-muted);
+}
+
+.opt.is-on .opt__mark {
+	color: var(--accent);
+}
+
+.opt__mark .icon {
+	width: 16px;
+	height: 16px;
+}
+
+.opt__text {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+
+.opt__title {
+	font-size: var(--fs-ui);
+	font-weight: 600;
+	color: var(--fg-strong);
+	line-height: 1.35;
+}
+
+.opt__desc {
+	font-size: var(--fs-xs);
+	color: var(--fg-subtle);
+	line-height: 1.4;
+}
+
+.split__main {
+	min-width: 0;
+}
+
+.split__title {
+	font-size: 19px;
+	font-weight: 600;
+	color: var(--fg-strong);
+}
+
+.split__hint {
+	margin: 6px 0 0;
+	max-width: 70ch;
+	color: var(--fg-muted);
+	font-size: var(--fs-sm);
+	line-height: 1.55;
+}
+
+.split__section {
+	margin-top: 26px;
+}
+
+.split__section-title {
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--fg-strong);
+}
+
+.split__section-note {
+	margin: 4px 0 12px;
+	max-width: 70ch;
+	color: var(--fg-muted);
+	font-size: var(--fs-sm);
+	line-height: 1.55;
+}
+
+@media (max-width: 820px) {
+	.split {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 20px;
+	}
+
+	.split__side {
+		position: static;
+	}
+}
+
+/* ---------------------------------------------------------------- output ticks */
+
+/* Which of these are on is answered at a glance instead of by reading five rows — but compactly:
+   these are five switches, not five panels, so each is one line high and the note under a name is
+   allowed to trail off. The checkbox stays in the DOM and stays focusable — the label is its tile —
+   so a click, a tap and the space bar do the same thing and a screen reader still announces a checkbox. */
+.out-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
+	gap: 6px;
+	max-width: 660px;
+}
+
+.out-tile {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 40px;
+	padding: 6px 9px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: none;
+	cursor: pointer;
+	transition: border-color 90ms linear, background 90ms linear;
+}
+
+.out-tile:hover {
+	border-color: var(--border-strong);
+	background: var(--bg-hover);
+}
+
+.out-tile:has(input:checked) {
+	border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+	background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.out-tile:has(input:focus-visible) {
+	outline: 1px solid var(--accent);
+	outline-offset: 1px;
+}
+
+.out-tile input {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: 0;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.out-tile__mark {
+	display: flex;
+	flex: none;
+	color: var(--fg-subtle);
+}
+
+.out-tile:has(input:checked) .out-tile__mark {
+	color: var(--accent);
+}
+
+.out-tile__mark .icon {
+	width: 14px;
+	height: 14px;
+}
+
+.out-tile__text {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.out-tile__label {
+	font-size: var(--fs-sm);
+	font-weight: 500;
+	color: var(--fg);
+	line-height: 1.3;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.out-tile__note {
+	font-size: var(--fs-xs);
+	color: var(--fg-subtle);
+	line-height: 1.3;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.out-tile__check {
+	display: flex;
+	flex: none;
+	color: var(--accent);
+	opacity: 0;
+	transition: opacity 90ms linear;
+}
+
+.out-tile:has(input:checked) .out-tile__check {
+	opacity: 1;
+}
+
+/* The way back from a choice to the choices: a link, not a button, because it undoes a click rather
+   than doing something. */
+.back-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin-bottom: 10px;
+	font-size: var(--fs-sm);
+}
+
 .checklist {
 	border: 1px solid var(--border);
 	border-radius: var(--radius);
