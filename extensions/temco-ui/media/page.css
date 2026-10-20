@@ -298,7 +298,7 @@ button.link:hover {
 
 .page-head__desc {
 	margin-top: 6px;
-	max-width: 72ch;
+	max-width: none;
 	color: var(--fg-muted);
 	font-size: 13px;
 	line-height: 1.55;
@@ -2635,9 +2635,12 @@ button.link:hover {
 	color: var(--fg-strong);
 }
 
+/* The subtitle under a rail choice is one sentence, not a paragraph: it takes the full column instead
+   of a 70ch measure, which was narrower than the column and broke a single sentence over two lines
+   for no reason. The section notes below keep their measure — they are paragraphs and need one. */
 .split__hint {
 	margin: 6px 0 0;
-	max-width: 70ch;
+	max-width: none;
 	color: var(--fg-muted);
 	font-size: var(--fs-sm);
 	line-height: 1.55;
@@ -2653,9 +2656,11 @@ button.link:hover {
 	color: var(--fg-strong);
 }
 
+/* No measure here either: a section note in a form is one sentence about the fields under it, and it
+   reads better on one line beside them than broken into a narrow column. */
 .split__section-note {
 	margin: 4px 0 12px;
-	max-width: 70ch;
+	max-width: none;
 	color: var(--fg-muted);
 	font-size: var(--fs-sm);
 	line-height: 1.55;
@@ -2672,8 +2677,76 @@ button.link:hover {
 	}
 }
 
-/* ---------------------------------------------------------------- output ticks */
+/* The one control *from existing files* needs: a button that opens the system picker, and the path it
+   answered with — monospaced, because a path read letter by letter is how a person checks they picked the
+   right folder. */
+.pick-row {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 12px;
+}
 
+.pick-row__path {
+	min-width: 0;
+	color: var(--fg-muted);
+	font-family: var(--font-mono);
+	font-size: var(--fs-sm);
+	word-break: break-all;
+}
+
+/* A bounded list, not a truncated one. Search and the kind chips already narrow it; dropping rows to
+   "a few" would hide sources and make the count under it lie again — which is the bug this list was
+   rewritten to fix. The scroll keeps the form's shape when there are forty sources. */
+.src-list {
+	max-height: 300px;
+	overflow-y: auto;
+}
+
+/* A filter chip is a button that narrows a list — distinct from `.chip`, which is a label. The count
+   rides inside it so "how many are there" and "which kind" are one glance. */
+.src-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.src-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	height: 24px;
+	padding: 0 9px;
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	background: none;
+	color: var(--fg-muted);
+	font: inherit;
+	font-size: var(--fs-xs);
+	cursor: pointer;
+}
+
+.src-chip:hover {
+	border-color: var(--border-strong);
+	color: var(--fg);
+}
+
+.src-chip.is-on {
+	border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+	background: color-mix(in srgb, var(--accent) 10%, transparent);
+	color: var(--fg-strong);
+}
+
+.src-chip span {
+	color: var(--fg-subtle);
+	font-variant-numeric: tabular-nums;
+}
+
+.src-chip.is-on span {
+	color: var(--accent);
+}
+
+/* ---------------------------------------------------------------- output ticks */
 /* Which of these are on is answered at a glance instead of by reading five rows — but compactly:
    these are five switches, not five panels, so each is one line high and the note under a name is
    allowed to trail off. The checkbox stays in the DOM and stays focusable — the label is its tile —

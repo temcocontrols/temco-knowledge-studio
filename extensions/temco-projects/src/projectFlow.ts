@@ -53,23 +53,6 @@ const ORIGINS: Origin[] = [
 	{ value: 'import', label: 'Import a document set', sub: 'Word, RTF, HTML, an HTML folder or CHM — converted into docs/ and the registry.', available: true }
 ];
 
-/** What an import can read. The converter lives in the documentation module, behind `temcoDocs.import`. */
-const IMPORT_KINDS = [
-	{ value: 'html', label: 'HTML folder or page', sub: 'One page per .html / .htm / .txt under the folder' },
-	{ value: 'markdown', label: 'Markdown folder', sub: 'Existing .md files, brought into the project shape' },
-	{ value: 'word', label: 'Word, RTF or ODT', sub: 'Converted with pandoc — it must be on the PATH' },
-	{ value: 'chm', label: 'Compiled help (CHM)', sub: 'Decompiled with hh.exe, then converted — Windows only' }
-];
-
-/**
- * What "existing files" can be. `existing` is not a conversion at all: that folder already has a registry, and it is
- * recorded as the source it is. The four kinds under it are the importer's own.
- */
-const MATERIALS = [
-	{ value: 'existing', label: 'An existing docs folder', sub: 'It already has a registry, which is read as it stands' },
-	...IMPORT_KINDS
-];
-
 /** The starters a project can be written from. One, and it is the MSDN shape: area → topics. */
 const TEMPLATES = [{ value: 'user-guide', label: 'User guide', sub: 'docs/help with an Overview area, two topics and a registry' }];
 
@@ -93,7 +76,7 @@ export class ProjectFlowPage {
 			this.sources = [];
 		}
 
-		const body = html(this.sources, unavailable);
+		const body = html(this.sources, unavailable, this.context.workspaceState.get<Draft>(DRAFT_KEY));
 		if (this.panel) {
 			this.panel.reveal(pageColumn());
 			this.panel.webview.html = page(body, { title: 'New Project', script: WIZARD_SCRIPT });
@@ -104,7 +87,7 @@ export class ProjectFlowPage {
 			enableScripts: true,
 			localResourceRoots: []
 		});
-		this.panel.webview.onDidReceiveMessage((message: { type?: string; command?: string; values?: Values }) => void this.receive(message));
+		this.panel.webview.onDidReceiveMessage((message: { type?: string; command?: string; values?: Values; draft?: Draft }) => void this.receive(message));
 		this.panel.webview.html = page(body, { title: 'New Project', script: WIZARD_SCRIPT });
 		this.panel.onDidDispose(() => {
 			this.panel = undefined;
@@ -115,12 +98,42 @@ export class ProjectFlowPage {
 		this.panel?.dispose();
 	}
 
-	private async receive(message: { type?: string; command?: string; values?: Values }): Promise<void> {
+	/**
+	 * The one question *from existing files* asks: which folder or file.
+	 *
+	 * The kind is worked out here rather than asked of the person: they know where their material is, and they should not
+	 * have to know which converter the platform will reach for. The answer goes back to the page as `{ path, kind, note }`,
+	 * and the page derives the origin from `kind` exactly as it did when the kind was a dropdown.
+	 */
+	private async pickMaterial(): Promise<void> {
+		const picked = await vscode.window.showOpenDialog({
+			canSelectFiles: true,
+			canSelectFolders: true,
+			canSelectMany: false,
+			openLabel: 'Use this',
+			title: 'Choose the material to bring in'
+		});
+		const uri = picked?.[0];
+		if (uri === undefined) {
+			return;
+		}
+		await this.panel?.webview.postMessage({ type: 'picked', ...(await describeMaterial(uri)) });
+	}
+
+	private async receive(message: { type?: string; command?: string; values?: Values; draft?: Draft }): Promise<void> {
 		if (message.type === 'cancel') {
 			this.panel?.dispose();
 			return;
 		}
+		if (message.type === 'pick') {
+			await this.pickMaterial();
+			return;
+		}
 		if (message.type === 'command' && typeof message.command === 'string') {
+			// Leaving for another page disposes this tab, so what the form holds is written down first.
+			if (message.draft !== undefined) {
+				await this.context.workspaceState.update(DRAFT_KEY, message.draft);
+			}
 			await vscode.commands.executeCommand(message.command);
 			return;
 		}
@@ -193,6 +206,7 @@ export class ProjectFlowPage {
 
 		// A project you have just made is the one you are working on: it is what the Workspace view and the AI read.
 		await this.selection.select(slug);
+		await this.context.workspaceState.update(DRAFT_KEY, undefined);
 		this.refresh();
 		this.panel?.dispose();
 		void vscode.window.showInformationMessage(`${name} created as a draft.`);
@@ -291,6 +305,92 @@ async function exists(uri: vscode.Uri): Promise<boolean> {
 }
 
 /**
+ * What a picked folder or file is, in the importer's own vocabulary.
+ *
+ * A folder with a registry is cited as it stands; a folder of Markdown or HTML is a conversion; a file is whatever its
+ * extension says. The count is bounded, because this runs to fill in one line of a page and a person may well point it
+ * at a whole drive by accident.
+ */
+async function describeMaterial(uri: vscode.Uri): Promise<{ path: string; kind: string; note: string }> {
+	const at = uri.fsPath;
+	let stat: vscode.FileStat;
+	try {
+		stat = await vscode.workspace.fs.stat(uri);
+	} catch {
+		return { path: at, kind: '', note: 'That path cannot be read.' };
+	}
+
+	if ((stat.type & vscode.FileType.Directory) !== 0) {
+		const registered = await exists(vscode.Uri.joinPath(uri, 'docs', 'help', 'registry.json'))
+			|| await exists(vscode.Uri.joinPath(uri, 'docs', 'registry.json'))
+			|| await exists(vscode.Uri.joinPath(uri, 'registry.json'));
+		if (registered) {
+			return { path: at, kind: 'existing', note: 'A docs folder that already has a registry — its pages are cited as they stand.' };
+		}
+		const counts = await countDocuments(uri);
+		if (counts.markdown > 0) {
+			return { path: at, kind: 'markdown', note: `A Markdown folder — ${counts.markdown} ${counts.markdown === 1 ? 'file' : 'files'} to convert.` };
+		}
+		if (counts.html > 0) {
+			return { path: at, kind: 'html', note: `An HTML folder — ${counts.html} ${counts.html === 1 ? 'file' : 'files'} to convert.` };
+		}
+		return { path: at, kind: '', note: 'That folder holds neither a registry nor Markdown or HTML files.' };
+	}
+
+	const name = at.toLowerCase();
+	if (name.endsWith('.chm')) {
+		return { path: at, kind: 'chm', note: 'A compiled help file — decompiled with hh.exe, then converted.' };
+	}
+	if (name.endsWith('.docx') || name.endsWith('.doc') || name.endsWith('.rtf') || name.endsWith('.odt')) {
+		return { path: at, kind: 'word', note: 'A Word document — converted with pandoc.' };
+	}
+	if (name.endsWith('.md') || name.endsWith('.markdown')) {
+		return { path: at, kind: 'markdown', note: 'A Markdown file — brought in as pages.' };
+	}
+	if (name.endsWith('.html') || name.endsWith('.htm')) {
+		return { path: at, kind: 'html', note: 'An HTML page — brought in as pages.' };
+	}
+	return { path: at, kind: '', note: 'That file is not a document this build can read.' };
+}
+
+/** Markdown and HTML files under a folder, counted to a budget rather than to the end of the drive. */
+async function countDocuments(folder: vscode.Uri): Promise<{ markdown: number; html: number }> {
+	const counts = { markdown: 0, html: 0 };
+	let budget = 2000;
+
+	const walk = async (dir: vscode.Uri): Promise<void> => {
+		if (budget <= 0) {
+			return;
+		}
+		let entries: [string, vscode.FileType][];
+		try {
+			entries = await vscode.workspace.fs.readDirectory(dir);
+		} catch {
+			return;
+		}
+		for (const [name, type] of entries) {
+			if (budget <= 0) {
+				return;
+			}
+			budget--;
+			if ((type & vscode.FileType.Directory) !== 0) {
+				await walk(vscode.Uri.joinPath(dir, name));
+				continue;
+			}
+			const lower = name.toLowerCase();
+			if (lower.endsWith('.md') || lower.endsWith('.markdown')) {
+				counts.markdown++;
+			} else if (lower.endsWith('.html') || lower.endsWith('.htm')) {
+				counts.html++;
+			}
+		}
+	};
+
+	await walk(folder);
+	return counts;
+}
+
+/**
  * Writes the starter tree a `template` project begins from — and nothing over anything.
  *
  * The files are the extension's own assets under `templates/<id>/`, copied rather than written from strings, so the
@@ -356,8 +456,29 @@ const TEMPLATE_FILES = [
 const field = (label: string, control: string, hint?: string): string =>
 	`<div class="field"><label>${esc(label)}</label>${control}${hint ? `<div class="field__hint">${esc(hint)}</div>` : ''}</div>`;
 
-const checklist = (items: { value: string; label: string; sub: string }[], checked: (item: { value: string }) => boolean, fieldName: string): string =>
-	`<div class="checklist">${items.map((item) => `<label class="checklist__row"><input type="checkbox" data-field="${fieldName}" data-multi value="${esc(item.value)}"${checked(item) ? ' checked' : ''}><span class="checklist__text"><span class="checklist__title">${esc(item.label)}</span><span class="checklist__sub">${esc(item.sub)}</span></span></label>`).join('')}</div>`;
+/**
+ * One source, as a row you tick.
+ *
+ * Every row answers the same three things in the same order — what kind of source it is, which branch it is on, and
+ * how many pages it has already given up — so two sources can be compared without opening either. "Not read yet" is
+ * stated rather than hidden: ticking it is allowed, and the project will simply start with none of its pages.
+ */
+const sourceRow = (source: SourceRow, selected: readonly string[]): string => {
+	const kind = source.kind === 'git' ? 'repository' : source.kind === 'folder' ? 'folder' : source.kind;
+	const pages = source.pages === undefined || source.pages === 0
+		? 'not read yet'
+		: `${source.pages} ${source.pages === 1 ? 'page' : 'pages'}`;
+	const facts = [kind];
+	if (source.branch !== undefined) {
+		facts.push(source.branch);
+	}
+	facts.push(pages);
+	if (source.state !== undefined) {
+		facts.push(source.state);
+	}
+	const ticked = selected.includes(source.name) ? ' checked' : '';
+	return `<label class="checklist__row" data-source data-kind="${source.kind === 'git' ? 'git' : 'other'}" data-pages="${source.pages ?? 0}"><input type="checkbox" data-field="sources" value="${esc(source.name)}"${ticked}><span class="checklist__text"><span class="checklist__title">${esc(source.name)}</span><span class="checklist__sub">${facts.map((fact) => esc(fact)).join(' · ')}</span></span></label>`;
+};
 
 /**
  * The outputs, as compact ticks.
@@ -377,25 +498,43 @@ const tiles = (items: { value: string; label: string; sub: string; mark: string 
  * left that stays put, and the right side is the thing itself — no second screen, no step rail, and no box drawn round
  * each choice. The rail also shows every type's one-line identity at once, so a person can compare without going back.
  */
-function typeOptions(): string {
+function typeOptions(initial: string): string {
 	const options = [
 		{ value: 'empty', mark: 'document', label: 'Empty project', note: 'No sources, no pages yet' },
-		{ value: 'repository', mark: 'repo', label: 'From a repository', note: 'Cite what is already read' },
+		{ value: 'source', mark: 'repo', label: 'From a source', note: 'Cite sources already recorded' },
 		{ value: 'files', mark: 'layers', label: 'From existing files', note: 'HTML, Markdown, Word or CHM' }
 	];
 
-	return `<div class="opt-list" role="listbox" aria-label="Starting point">${options.map((option, index) => `<button type="button" class="opt${index === 0 ? ' is-on' : ''}" role="option" aria-selected="${index === 0}" data-type="${option.value}" data-title="${esc(option.label)}">
+	return `<div class="opt-list" role="listbox" aria-label="Starting point">${options.map((option) => {
+		const on = option.value === initial;
+		return `<button type="button" class="opt${on ? ' is-on' : ''}" role="option" aria-selected="${on}" data-type="${option.value}" data-title="${esc(option.label)}">
 	<span class="opt__mark">${icon(option.mark)}</span>
 	<span class="opt__text"><span class="opt__title">${esc(option.label)}</span><span class="opt__desc">${esc(option.note)}</span></span>
-</button>`).join('')}</div>`;
+</button>`;
+	}).join('')}</div>`;
 }
 
-function html(sources: SourceRow[], unavailable?: string): string {
+/**
+ * What the form remembers when a person leaves it for another page.
+ *
+ * The link to the Sources page has to be a link — adding and reading sources is that page's job — but leaving would
+ * otherwise throw away a half-filled form, because a page replaces the tab it is in. So the values the form holds are
+ * written to the workspace's own storage before the jump and read back when the flow opens again.
+ */
+interface Draft {
+	type?: string;
+	name?: string;
+	version?: string;
+	sources?: string[];
+	targets?: string[];
+}
+
+const DRAFT_KEY = 'temcoProjects.newProject.draft';
+
+function html(sources: SourceRow[], unavailable?: string, draft?: Draft): string {
 	const repositories = sources.filter((source) => source.kind === 'git');
 	const files = sources.filter((source) => source.kind !== 'git');
-	const repositoryRows = repositories.map((source) => ({ value: source.name, label: source.name, sub: `${source.kind} · ${source.branch ?? 'no branch'} · ${source.pages ? `${source.pages} pages` : 'not read'}` }));
-	const fileRows = files.map((source) => ({ value: source.name, label: source.name, sub: source.kind }));
-
+	const initial = draft?.type ?? 'empty';
 	const empty = unavailable
 		? `<div class="callout callout--warn">${icon('alert')}<div><b>The store is not available.</b> ${esc(unavailable)}</div></div>`
 		: '';
@@ -411,10 +550,10 @@ function html(sources: SourceRow[], unavailable?: string): string {
 
 ${empty}
 
-<div class="split">
+<div class="split" data-initial-type="${esc(initial)}">
 	<div class="split__side">
 		<div class="split__label">Start from</div>
-		${typeOptions()}
+		${typeOptions(initial)}
 	</div>
 
 	<div class="split__main">
@@ -425,8 +564,8 @@ ${empty}
 			<div class="split__section-title">The project</div>
 			<p class="split__section-note">What it is called, and who answers for it.</p>
 			<div class="form">
-				${field('Name', `<input class="input" data-field="name" value="${esc(DEFAULTS.name)}" aria-label="Project name">`)}
-				${field('Version', `<input class="input" data-field="version" value="${esc(DEFAULTS.version)}" aria-label="Version">`, 'A project publishes one version at a time.')}
+				${field('Name', `<input class="input" data-field="name" value="${esc(draft?.name ?? DEFAULTS.name)}" aria-label="Project name">`)}
+				${field('Version', `<input class="input" data-field="version" value="${esc(draft?.version ?? DEFAULTS.version)}" aria-label="Version">`, 'A project publishes one version at a time.')}
 			</div>
 		</div>
 
@@ -441,40 +580,39 @@ ${empty}
 			</div>
 		</div>
 
-		<div class="split__section" data-form="repository" hidden>
+		<div class="split__section" data-form="source" hidden>
 			<div class="split__section-title">Where the pages come from</div>
-			<p class="split__section-note">Search the repositories, or choose individual files and folders. Both record the pages they declare, and neither is written to.</p>
-			<div class="checklist-group">
-				<div class="checklist-heading">Repositories<span class="checklist-heading__count">${repositories.length}</span></div>
-				<div class="checklist-tools"><input class="input input--sm" data-filter="repos" placeholder="Search repositories" aria-label="Search repositories"><button type="button" class="btn btn--sm btn--ghost" id="clone-source">${icon('repo')}<span>Clone a source…</span></button><button type="button" class="btn btn--sm btn--ghost" id="load-all">${icon('download')}<span>Load all</span></button></div>
-				<div data-filter-list="repos">${checklist(repositoryRows, () => false, 'sources')}</div>
+			<p class="split__section-note">Every source the platform has recorded, in one list. A project cites what it ticks; nothing is written into any of them.</p>
+			<p class="split__section-note"><button type="button" class="link" id="open-sources">Add or read a source on the Sources page</button> — what you have typed here is kept while you are there.</p>
+			<div class="checklist-tools">
+				<input class="input input--sm" data-filter="sources" placeholder="Search sources" aria-label="Search sources">
+				<span class="src-chips">
+					<button type="button" class="src-chip is-on" data-kind="all">All<span>${sources.length}</span></button>
+					<button type="button" class="src-chip" data-kind="git">Repositories<span>${repositories.length}</span></button>
+					<button type="button" class="src-chip" data-kind="other">Files &amp; folders<span>${files.length}</span></button>
+				</span>
 			</div>
-			<div class="checklist-group" data-role="files">
-				<div class="checklist-heading">Files and folders<span class="checklist-heading__count">${files.length}</span></div>
-				<details class="disclosure"><summary>Choose files and folders…<span class="cell-muted" id="file-count">0 of ${files.length} selected</span></summary>${checklist(fileRows, () => false, 'sources')}</details>
-			</div>
-			<p class="split__section-note" style="margin-top:12px"><span id="source-count">0</span> of ${sources.length} selected</p>
+			${sources.length === 0
+			? `<div class="callout">${icon('info')}<div><b>No source is recorded yet.</b> Create the project now, then add a source from <b>Sources</b>; this project can cite it as soon as it is there.</div></div>`
+			: `<div class="checklist src-list" data-source-list>${sources.map((source) => sourceRow(source, draft?.sources ?? [])).join('')}</div>
+		<p class="split__section-note" id="source-empty" hidden>No source matches that.</p>
+		<p class="split__section-note" style="margin-top:10px"><span id="source-summary">No source selected</span><button type="button" class="link" id="source-clear">Clear</button></p>`}
 		</div>
 
 		<div class="split__section" data-form="files" hidden>
 			<div class="split__section-title">What the material is</div>
-			<p class="split__section-note">Everything here is read once and written into <code>docs/</code> and <code>docs/help/registry.json</code>. A folder that already has a registry is refused rather than overwritten.</p>
-			<div class="form">
-				${field('Material', `<select class="select" data-field="material" aria-label="Material">${MATERIALS.map((entry) => `<option value="${esc(entry.value)}">${esc(entry.label)} — ${esc(entry.sub)}</option>`).join('')}</select>`)}
+			<p class="split__section-note">Choose the folder or file. What it is — a docs folder, Markdown, HTML, Word or CHM — is read from what you pick, so there is nothing to classify by hand. A folder that already has a registry is cited as it stands; anything else is converted once into <code>docs/</code> and <code>docs/help/registry.json</code>.</p>
+			<div class="pick-row">
+				<button type="button" class="btn" id="pick-material">${icon('folder')}<span>Choose a folder or file…</span></button>
+				<span class="pick-row__path" id="material-path">Nothing chosen yet</span>
 			</div>
-			<div class="form" data-material="existing">
-				${field('The folder that holds the pages', `<input class="input" data-field="folder" value="${esc(DEFAULTS.folder)}" aria-label="Folder">`, 'A path; ~ is your home folder. Its registry is read as it stands.')}
-			</div>
-			<div class="form" data-material="convert" hidden>
-				${field('Where the material is', `<input class="input" data-field="importSource" placeholder="C:\\docs\\manual or ~/Downloads/help.chm" aria-label="Source">`, 'A file or a folder; ~ is your home folder.')}
-				${field('Write the project into', `<input class="input" data-field="folder" value="${esc(DEFAULTS.folder)}" aria-label="Folder">`, 'A path; ~ is your home folder. The project name becomes the folder under it.')}
-			</div>
+			<p class="split__section-note" id="material-note" style="margin-top:8px"></p>
 		</div>
 
 		<div class="split__section">
 			<div class="split__section-title">What it builds</div>
 			<p class="split__section-note">One build produces every target you tick here — and every one of them can be turned on later in the Build Center.</p>
-			${tiles(TARGETS, DEFAULT_TARGETS)}
+			${tiles(TARGETS, draft?.targets ?? DEFAULT_TARGETS)}
 		</div>
 
 		<div class="wizard__error" id="wizard-error" hidden></div>
@@ -502,12 +640,16 @@ const WIZARD_SCRIPT = `
 	const titleEl = document.getElementById('form-title');
 	const hintEl = document.getElementById('form-hint');
 	const rails = Array.prototype.slice.call(document.querySelectorAll('.opt'));
-	let type = 'empty';
+	const split = document.querySelector('.split');
+	let type = split ? split.getAttribute('data-initial-type') || 'empty' : 'empty';
+	// A draft written by an older build can name a type this build no longer has; the rail is the truth.
+	const known = rails.some(function (rail) { return rail.getAttribute('data-type') === type; });
+	if (!known) { type = 'empty'; }
 
 	const HINTS = {
 		empty: 'Nothing is read and nothing is converted: the project exists, and the first page is yours to write.',
-		repository: 'A repository project points at pages that already exist. Reading a source records the pages it declares; it does not change the repository.',
-		files: 'The material is converted into the project shape once; from then on it is written as pages like any other project.'
+		source: 'Pages come from the sources you tick. Reading a source records its pages and changes nothing in it.',
+		files: 'The material is converted once; from then on it is written as pages like any other project.'
 	};
 
 	function visible(name) {
@@ -526,10 +668,17 @@ const WIZARD_SCRIPT = `
 		return Array.prototype.slice.call(document.querySelectorAll('[data-field="' + name + '"]:checked'))
 			.map(function (input) { return input.value; });
 	}
-	function material() { return value('material') || 'existing'; }
+	function material() {
+		const section = document.querySelector('[data-form="files"]');
+		return section ? section.getAttribute('data-kind') || 'existing' : 'existing';
+	}
+	function picked() {
+		const section = document.querySelector('[data-form="files"]');
+		return section ? section.getAttribute('data-path') || '' : '';
+	}
 	function origin() {
 		if (type === 'empty') { return value('template') ? 'template' : 'blank'; }
-		if (type === 'repository') { return 'repository'; }
+		if (type === 'source') { return 'repository'; }
 		return material() === 'existing' ? 'folder' : 'import';
 	}
 	function values() {
@@ -537,37 +686,58 @@ const WIZARD_SCRIPT = `
 			name: value('name'),
 			version: value('version'),
 			origin: origin(),
-			folder: value('folder'),
+			folder: '',
 			template: '',
 			importKind: '',
 			importSource: '',
 			sources: [],
 			targets: checked('targets')
 		};
-		if (v.origin === 'template') { v.template = value('template'); }
-		if (v.origin === 'import') { v.importKind = material(); v.importSource = value('importSource'); }
+		if (v.origin === 'template') { v.template = value('template'); v.folder = value('folder'); }
+		if (v.origin === 'folder') { v.folder = picked(); v.importSource = picked(); }
+		if (v.origin === 'import') { v.importKind = material(); v.importSource = picked(); }
 		if (v.origin === 'repository') { v.sources = checked('sources'); }
 		return v;
 	}
+	function sourceRows() {
+		return Array.prototype.slice.call(document.querySelectorAll('[data-source]'));
+	}
+	/** What is ticked, as a sentence: the count, and how many pages those sources actually bring. */
 	function counts() {
-		const sourceCount = document.getElementById('source-count');
-		if (sourceCount) { sourceCount.textContent = String(checked('sources').length); }
-		const files = Array.prototype.slice.call(document.querySelectorAll('[data-role="files"] [data-field="sources"]'));
-		const fileCount = document.getElementById('file-count');
-		if (fileCount) {
-			const chosen = files.filter(function (input) { return input.checked; }).length;
-			fileCount.textContent = chosen + ' of ' + files.length + ' selected';
+		const list = document.getElementById('source-summary');
+		if (!list) { return; }
+		const rows = sourceRows().filter(function (row) { return row.querySelector('input').checked; });
+		if (rows.length === 0) {
+			list.textContent = 'No source selected — a project from a source needs at least one.';
+			return;
 		}
+		const pages = rows.reduce(function (total, row) { return total + Number(row.getAttribute('data-pages') || 0); }, 0);
+		list.textContent = rows.length + (rows.length === 1 ? ' source' : ' sources') + ' · ' + pages + (pages === 1 ? ' page' : ' pages') + ' from them';
+	}
+	let kind = 'all';
+	/** One filter for both controls: the search text and the kind chip narrow the same list. */
+	function applyFilter() {
+		const search = document.querySelector('[data-filter="sources"]');
+		const term = search ? search.value.trim().toLowerCase() : '';
+		let shown = 0;
+		sourceRows().forEach(function (row) {
+			const matchesKind = kind === 'all' || row.getAttribute('data-kind') === kind;
+			const matchesTerm = term.length === 0 || row.textContent.toLowerCase().indexOf(term) >= 0;
+			row.hidden = !(matchesKind && matchesTerm);
+			if (!row.hidden) { shown++; }
+		});
+		const empty = document.getElementById('source-empty');
+		if (empty) { empty.hidden = shown > 0; }
 	}
 	function refresh() {
 		counts();
 		if (!summary) { return; }
 		const v = values();
-		const parts = [type === 'repository' ? 'From a repository' : type === 'files' ? 'From existing files' : 'Empty project'];
+		const parts = [type === 'source' ? 'From a source' : type === 'files' ? 'From existing files' : 'Empty project'];
 		if (v.origin === 'template') { parts.push('user-guide starter'); }
 		if (v.origin === 'repository') { parts.push(v.sources.length + (v.sources.length === 1 ? ' source' : ' sources')); }
 		if (v.origin === 'folder') { parts.push('a folder with a registry'); }
-		if (v.origin === 'import') { parts.push(v.importKind + ' import'); }
+		if (v.origin === 'import') { parts.push((v.importKind || 'material') + ' import'); }
 		parts.push(v.targets.length + (v.targets.length === 1 ? ' output' : ' outputs'));
 		summary.textContent = parts.join(' · ');
 	}
@@ -586,10 +756,6 @@ const WIZARD_SCRIPT = `
 		});
 		const starter = document.querySelector('[data-starter-folder]');
 		if (starter) { starter.hidden = !value('template'); }
-		const existing = document.querySelector('[data-material="existing"]');
-		const convert = document.querySelector('[data-material="convert"]');
-		if (existing) { existing.hidden = material() !== 'existing'; }
-		if (convert) { convert.hidden = material() === 'existing'; }
 		const rail = document.querySelector('.opt[data-type="' + type + '"]');
 		titleEl.textContent = rail ? rail.getAttribute('data-title') : 'The project';
 		hintEl.textContent = HINTS[type] || '';
@@ -607,44 +773,67 @@ const WIZARD_SCRIPT = `
 
 	const template = document.querySelector('[data-field="template"]');
 	if (template) { template.addEventListener('change', show); }
-	const materialSelect = document.querySelector('[data-field="material"]');
-	if (materialSelect) { materialSelect.addEventListener('change', show); }
+
+	// The picker opens in the host — a webview cannot show a file dialog — and answers with what it read.
+	const pick = document.getElementById('pick-material');
+	if (pick) { pick.addEventListener('click', function () { api.postMessage({ type: 'pick' }); }); }
+	window.addEventListener('message', function (event) {
+		const message = event.data;
+		const section = document.querySelector('[data-form="files"]');
+		if (!message || message.type !== 'picked' || !section) { return; }
+		section.setAttribute('data-path', message.path || '');
+		section.setAttribute('data-kind', message.kind || '');
+		const shown = document.getElementById('material-path');
+		if (shown) { shown.textContent = message.path || 'Nothing chosen yet'; }
+		const note = document.getElementById('material-note');
+		if (note) { note.textContent = message.note || ''; }
+		error.hidden = true;
+		refresh();
+	});
 
 	document.getElementById('wizard-create').addEventListener('click', function () {
 		const v = values();
 		if (!v.name.trim()) { fail('A project needs a name.'); return; }
 		if (v.origin === 'template' && !v.folder.trim()) { fail('Name the folder to write the starter under.'); return; }
-		if (v.origin === 'folder' && !v.folder.trim()) { fail('Name the folder that holds the pages.'); return; }
-		if (v.origin === 'import' && !v.importSource.trim()) { fail('Say where the material is.'); return; }
-		if (v.origin === 'import' && !v.folder.trim()) { fail('Name the folder to write the project into.'); return; }
+		if ((v.origin === 'folder' || v.origin === 'import') && !v.importSource.trim()) { fail('Choose the folder or file to bring in.'); return; }
 		if (v.origin === 'repository' && v.sources.length === 0) { fail('Choose at least one source to read.'); return; }
 		if (v.targets.length === 0) { fail('Choose at least one output to build.'); return; }
 		api.postMessage({ type: 'create', values: v });
 	});
 
-	const filter = document.querySelector('[data-filter="repos"]');
-	if (filter) {
-		filter.addEventListener('input', function () {
-			const term = filter.value.toLowerCase();
-			Array.prototype.forEach.call(document.querySelectorAll('[data-filter-list="repos"] .checklist__row'), function (row) {
-				row.hidden = term.length > 0 && row.textContent.toLowerCase().indexOf(term) < 0;
+	const filter = document.querySelector('[data-filter="sources"]');
+	if (filter) { filter.addEventListener('input', applyFilter); }
+	Array.prototype.forEach.call(document.querySelectorAll('.src-chip'), function (chip) {
+		chip.addEventListener('click', function () {
+			kind = chip.getAttribute('data-kind');
+			Array.prototype.forEach.call(document.querySelectorAll('.src-chip'), function (other) {
+				other.classList.toggle('is-on', other === chip);
 			});
+			applyFilter();
 		});
-	}
-	const loadAll = document.getElementById('load-all');
-	if (loadAll) {
-		loadAll.addEventListener('click', function () {
-			Array.prototype.forEach.call(document.querySelectorAll('[data-filter-list="repos"] [data-field="sources"]'), function (input) { input.checked = true; });
+	});
+	const clear = document.getElementById('source-clear');
+	if (clear) {
+		clear.addEventListener('click', function () {
+			Array.prototype.forEach.call(document.querySelectorAll('[data-source] input'), function (input) { input.checked = false; });
 			refresh();
 		});
 	}
-	// Cloning lives where sources live: this opens that page rather than growing a second clone form here.
-	const clone = document.getElementById('clone-source');
-	if (clone) {
-		clone.addEventListener('click', function () { api.postMessage({ type: 'command', command: 'temcoRepositories.page' }); });
+	// Adding or reading a source is the Sources page's job. The form's values go with the message, so returning here
+	// finds the same half-filled form rather than an empty one.
+	const openSources = document.getElementById('open-sources');
+	if (openSources) {
+		openSources.addEventListener('click', function () {
+			api.postMessage({
+				type: 'command',
+				command: 'temcoDocs.sources',
+				draft: { type: type, name: value('name'), version: value('version'), sources: checked('sources'), targets: checked('targets') }
+			});
+		});
 	}
 	document.addEventListener('change', refresh);
 	document.addEventListener('input', refresh);
 	show();
+	applyFilter();
 })();
 `;
