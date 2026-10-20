@@ -167,6 +167,7 @@ export class DocsPages {
 					path: clone,
 					cloned: clone !== undefined && fs.existsSync(clone),
 					pages: source.pages ?? 0,
+					state: source.state,
 					reads: catalog.scans(source.slug),
 					pageRows: detail === undefined ? [] : catalog.pagesFor(detail.id),
 					files: clone === undefined ? [] : pageFiles(clone, detail?.docsRoot),
@@ -467,6 +468,8 @@ interface RepositoryFact {
 	path?: string;
 	cloned: boolean;
 	pages: number;
+	/** What the store says about the last read: "318 pages declared", or why a read found nothing. */
+	state?: string;
 	reads: ScanRow[];
 	pageRows: { id: string; title?: string; path?: string }[];
 	/** Markdown under the pages folder of the clone, relative to it. */
@@ -490,7 +493,12 @@ function repositoriesBody(repositories: readonly RepositoryFact[]): string {
 		if (fact.branch !== undefined) {
 			items.push(`on ${fact.branch}`);
 		}
-		items.push(fact.pages === 0 ? 'never read' : `${fact.pages} ${fact.pages === 1 ? 'page' : 'pages'} found`);
+			items.push(fact.reads.length === 0
+			? 'never read'
+			: fact.pages === 0 ? 'no pages found' : `${fact.pages} ${fact.pages === 1 ? 'page' : 'pages'} found`);
+		if (fact.pages === 0 && fact.state !== undefined) {
+			items.push(fact.state);
+		}
 		items.push(fact.cloned ? 'cloned locally' : 'no local copy');
 		return `<div class="record-row" data-command="temcoDocs.repository" data-args="${esc(JSON.stringify([fact.slug]))}">${toneMark('repo', fact.cloned ? 'accent' : undefined)}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">${esc(fact.name)}</span></div><div class="record-row__meta">${facts(items)}</div></div><div class="record-row__state">${badge(fact.cloned ? 'Cloned' : 'Remote only', fact.cloned ? 'ok' : 'neutral')}</div><span class="record-row__go">${icon('chevron-right', 'icon--sm')}</span></div>`;
 	};

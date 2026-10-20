@@ -131,7 +131,7 @@ interface StudioState {
 const button = (
 	label: string,
 	command: string,
-	options: { kind?: 'primary' | 'ghost'; mark?: string; args?: unknown; small?: boolean; title?: string } = {}
+	options: { kind?: 'primary' | 'ghost' | 'danger'; mark?: string; args?: unknown; small?: boolean; title?: string } = {}
 ): string =>
 	`<button type="button" class="btn${options.small ? ' btn--sm' : ''}${options.kind ? ` btn--${options.kind}` : ''}" data-command="${command}"${options.args === undefined ? '' : ` data-args="${esc(JSON.stringify(options.args))}"`}${options.title ? ` title="${esc(options.title)}"` : ''}>${options.mark ? icon(options.mark) : ''}<span>${esc(label)}</span></button>`;
 
@@ -309,7 +309,34 @@ ${message}
 ${results}`;
 }
 
-/** *Data* — one table at a time, a page of rows at a time. */
+/** The Data page's own layout: two columns that scroll inside themselves. */
+const DATA_CSS = `
+/* The page is the window: the head keeps its height and the two columns take everything under it, so neither
+   the page nor the area below the table scrolls. */
+body { min-height: 100vh; display: flex; flex-direction: column; }
+.view { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.view__inner { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding-bottom: 14px; }
+.data-split { flex: 1 1 auto; min-height: 0; display: grid;
+	grid-template-columns: 260px minmax(0, 1fr); gap: 28px; align-items: stretch; }
+.data-side { min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.data-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+/* One head height for both columns, so the table list and the rows begin on the same line. */
+.data-split .group-head,
+.data-split .group-head:first-of-type { min-height: 26px; margin: 0 0 8px; }
+.data-grid { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.data-grid table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 12px; }
+.data-grid th, .data-grid td { padding: 6px 10px; border-bottom: 1px solid var(--border);
+	text-align: left; white-space: nowrap; }
+.data-grid th { position: sticky; top: 0; z-index: 1; font-weight: 600; color: var(--fg-muted);
+	background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.10)); }
+.data-grid tbody tr:last-child td { border-bottom: 0; }
+.data-grid tbody tr:hover td { background: rgba(127, 127, 127, 0.06); }
+@media (max-width: 900px) {
+	.data-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: 240px minmax(0, 1fr); }
+}
+`;
+
+/** *Data* — one table at a time, a page of rows at a time, in two columns that scroll on their own. */
 function dataBody(
 	tables: { name: string; rows: number }[],
 	table: string | undefined,
@@ -331,13 +358,15 @@ function dataBody(
 		title: 'Data',
 		mark: 'list',
 		desc: 'The rows of one table, a page at a time. Read-only here on purpose: a change to a row is a change to what the platform believes, and that belongs in the Query Editor with writes enabled.',
-		actions: button('Query Editor', 'temcoTools.sql.query', { kind: 'primary', mark: 'code' }) + button('Schema', 'temcoTools.sql.schema', { mark: 'list' })
+		actions: button('Query Editor', 'temcoTools.sql.query', { kind: 'primary', mark: 'code' })
+			+ button('Schema', 'temcoTools.sql.schema', { mark: 'list' })
+			+ button('Reset Database', 'temcoTools.sql.reset', { kind: 'danger', mark: 'alert', title: 'Drop every table and write this build’s schema again' })
 	})}
 ${tables.length === 0
-			? `<div class="mt-16">${callout('The database has no tables yet. Reset it from the <b>Database</b> page to write this build’s schema.', 'warn')}</div>`
-			: `<div class="split mt-16" style="grid-template-columns: 260px minmax(0, 1fr); gap: 28px; align-items: start">
-<div>${group({ label: 'Tables', count: n(tables.length, 'table', 'tables'), actions: button('Refresh', 'temcoTools.sql.data', { small: true, kind: 'ghost', mark: 'refresh' }), body: picker })}</div>
-<div>${page === undefined || table === undefined
+			? `<div class="mt-16">${callout('The database has no tables yet. Reset it with <b>Reset Database</b> to write this build’s schema.', 'warn')}</div>`
+			: `<div class="data-split mt-16">
+<div class="data-side">${group({ label: 'Tables', count: n(tables.length, 'table', 'tables'), actions: button('Refresh', 'temcoTools.sql.data', { small: true, kind: 'ghost', mark: 'refresh' }), body: picker })}</div>
+<div class="data-main">${page === undefined || table === undefined
 				? callout('Pick a table on the left.')
 				: `${rule({
 					label: table,
@@ -350,7 +379,7 @@ ${tables.length === 0
 				})}
 ${page.total === 0
 					? callout('This table is empty. A row appears here when something writes one — a read, a draft, a build or a release.')
-					: `<div class="table-wrap table-wrap--plain"><table class="table table--compact"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`}`}</div>
+					: `<div class="data-grid"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`}`}</div>
 </div>`}`;
 }
 
@@ -750,7 +779,7 @@ export class SqlPages {
 				} finally {
 					catalog?.close();
 				}
-				return shell(definition, dataBody(facts.tables, table, page, this.state.offset));
+				return shell(definition, dataBody(facts.tables, table, page, this.state.offset), DATA_CSS);
 			}
 			case 'history':
 				return shell(definition, historyBody(this.state));
@@ -775,8 +804,8 @@ export class SqlPages {
 	}
 }
 
-function shell(definition: SqlPage, body: string): string {
-	return page(body, { title: definition.label, script: commandScript });
+function shell(definition: SqlPage, body: string, extraCss?: string): string {
+	return page(body, { title: definition.label, script: commandScript, extraCss });
 }
 
 /** A file size, the way a person reads one. */
