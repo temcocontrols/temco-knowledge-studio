@@ -16,6 +16,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'node:path';
+import { REPOSITORY_FILE_SCHEME, RepositoryFileProvider, languageOf, repositoryFileUri } from './fileView';
 import { registerReadCommands } from './read';
 import { tokenOf } from './read';
 import { CodeFile, Material, RepositorySource, codeFiles, readMaterials, sourceTree } from './repository';
@@ -47,6 +48,13 @@ export function activate(context: vscode.ExtensionContext): TemcoRepositoriesApi
 	// One signal for the surfaces that show sources: a read finished, a clone arrived, a source was forgotten.
 	const changed = new vscode.EventEmitter<void>();
 	context.subscriptions.push(output, changed);
+	// A repository's file is a text document of its own: the editor's viewer, not a browser tab.
+	context.subscriptions.push(
+		vscode.workspace.registerTextDocumentContentProvider(
+			REPOSITORY_FILE_SCHEME,
+			new RepositoryFileProvider(context)
+		)
+	);
 	const refresh = (): void => changed.fire();
 
 	// The page that lists the organisation: what is there, what has been read, and what has a local copy.
@@ -59,7 +67,9 @@ export function activate(context: vscode.ExtensionContext): TemcoRepositoriesApi
 		{ dispose: () => repositories.dispose() },
 		{ dispose: () => detail.dispose() },
 		{ dispose: () => settings.dispose() },
-		vscode.commands.registerCommand('temcoRepositories.page', () => repositories.open()),
+		vscode.commands.registerCommand('temcoRepositories.page', (project?: unknown) =>
+			repositories.open(undefined, typeof project === 'string' && project.length > 0 ? project : undefined)
+		),
 		vscode.commands.registerCommand('temcoRepositories.settings', () => settings.open()),
 		// The panel's enterprise rows: read that list again, or forget it. A row is one click away from its list,
 		// which is what the page is for.
@@ -160,17 +170,23 @@ function rowName(target: unknown): string {
 async function rowCoordinates(
 	context: vscode.ExtensionContext,
 	name: string
-): Promise<{ cloneUrl?: string; defaultBranch?: string; fullName?: string }> {
+): Promise<{ cloneUrl?: string; defaultBranch?: string; fullName?: string; branch?: string }> {
 	let catalog: Catalog | undefined;
 	try {
 		catalog = await Catalog.open(context);
+		const recorded = catalog.source(slugOf(name))?.branch;
 		for (const organisation of catalog.organisations()) {
 			const row = catalog.repositoriesOf(organisation.slug).find((entry) => entry.name === name);
 			if (row !== undefined) {
-				return { cloneUrl: row.cloneUrl, defaultBranch: row.defaultBranch, fullName: row.fullName };
+				return {
+					cloneUrl: row.cloneUrl,
+					defaultBranch: row.defaultBranch,
+					fullName: row.fullName,
+					branch: recorded,
+				};
 			}
 		}
-		return {};
+		return { branch: recorded };
 	} catch {
 		return {};
 	} finally {
@@ -204,12 +220,17 @@ async function openRepositoryFile(
 		}
 	}
 	const coordinates = await rowCoordinates(context, name);
-	const branch = coordinates.defaultBranch ?? 'main';
+	const branch = coordinates.branch ?? coordinates.defaultBranch ?? 'main';
 	const repository = coordinates.fullName ?? name;
-	const address =
-		`https://github.com/${repository}/blob/${encodeURIComponent(branch)}/` +
-		file.split('/').map((part) => encodeURIComponent(part)).join('/');
-	await vscode.env.openExternal(vscode.Uri.parse(address));
+	// The editor's own viewer, read-only: the same reader as the rest of the module, so the tab shows the revision
+	// being read — not the default branch, and not a page outside the window.
+	const uri = repositoryFileUri(repository, branch, file);
+	const document = await vscode.workspace.openTextDocument(uri);
+	const language = languageOf(file);
+	if (language !== undefined) {
+		await vscode.languages.setTextDocumentLanguage(document, language);
+	}
+	await vscode.window.showTextDocument(document, { preview: true });
 }
 
 /** Fetch a row's local copy, recording it as a source first: a clone belongs to a source. */

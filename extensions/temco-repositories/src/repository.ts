@@ -238,7 +238,35 @@ export async function readCodeFile(
   source: RepositorySource,
   file: string
 ): Promise<{ text: string } | { error: string }> {
-  let text: string | undefined;
+  const read = await fileText(context, source, file);
+  if ('error' in read) {
+    return read;
+  }
+  const text = read.text;
+  if (text.length > MATERIAL_LIMIT) {
+    return {
+      text:
+        `${text.slice(0, MATERIAL_LIMIT)}\n\n… the file continues for ${text.length - MATERIAL_LIMIT} more ` +
+        'characters, which were not given to the model …',
+    };
+  }
+  return { text };
+}
+
+/**
+ * One file's whole text, from the local copy or through the contents API.
+ *
+ * `readCodeFile` answers the model's question and truncates to what a prompt can carry. This answers the *editor's*
+ * question, where a reader wants the file itself — so it is capped only where the editor would struggle with a
+ * generated megabyte.
+ */
+export async function fileText(
+  context: vscode.ExtensionContext,
+  source: RepositorySource,
+  file: string
+): Promise<{ text: string; truncated: boolean } | { error: string }> {
+  const CAP = 2_000_000;
+  let text: string;
 
   if (source.path !== undefined && source.path.length > 0) {
     try {
@@ -271,14 +299,9 @@ export async function readCodeFile(
     text = Buffer.from(body.content, body.encoding === 'base64' ? 'base64' : 'utf8').toString('utf8');
   }
 
-  if (text.length > MATERIAL_LIMIT) {
-    return {
-      text:
-        `${text.slice(0, MATERIAL_LIMIT)}\n\n… the file continues for ${text.length - MATERIAL_LIMIT} more ` +
-        'characters, which were not given to the model …',
-    };
-  }
-  return { text };
+  return text.length > CAP
+    ? { text: text.slice(0, CAP), truncated: true }
+    : { text, truncated: false };
 }
 
 // ------------------------------------------------------------------ the two ways in

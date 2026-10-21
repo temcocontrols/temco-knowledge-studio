@@ -75,6 +75,14 @@ export class RepositoriesPage {
   private listed: RepositoryCacheRow[] = [];
   /** The organisation the page is showing — what `start`, `fetch` and `pull` act on. */
   private showing: string | undefined;
+  /**
+   * The project this page was opened *for*, when it was opened from that project's page.
+   *
+   * Set means citing is a write into that project, right here: the project exists in the catalog, so there is no form
+   * to hand the choice back to. Unset means the list is being browsed on its own, and citing belongs to the new-project
+   * form — the one place a project is still being written.
+   */
+  private citeTarget: string | undefined;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -83,11 +91,13 @@ export class RepositoriesPage {
   ) { }
 
   /** Opens the page, or brings it forward if it is already open. One instance, always. */
-  open(slug?: string): void {
+  open(slug?: string, citeTarget?: string): void {
     // Opened *for* one organisation — the panel asks for its own row, not for whatever was last shown.
     if (slug !== undefined) {
       this.showing = slug;
     }
+    // Always assigned: a plain open is a browse, and a browse must not inherit the last project's target.
+    this.citeTarget = citeTarget;
     if (this.panel) {
       this.panel.reveal(pageColumn());
       void this.render();
@@ -113,7 +123,7 @@ export class RepositoriesPage {
     if (!panel) {
       return;
     }
-    panel.webview.html = html();
+    panel.webview.html = html(this.citeTarget !== undefined);
     await this.send();
   }
 
@@ -129,7 +139,7 @@ export class RepositoriesPage {
     if (!panel) {
       return;
     }
-    const project = this.selection.project();
+    const project = this.citeTarget ?? this.selection.project();
     const cited = project === undefined ? [] : await this.cited(project);
 
     let catalog: Catalog | undefined;
@@ -198,6 +208,9 @@ export class RepositoriesPage {
       organisations,
       project,
       cited,
+      // Citing writes into this project when the page was opened from it; the button says which it is.
+      citeTarget: this.citeTarget,
+      citeTargetName: this.citeTarget === undefined ? undefined : (await this.projectName(this.citeTarget)),
       takenAt: org.lastRead,
       state: org.state,
       // Where a download lands, and what a draft is written beside — the one setting this page acts on.
@@ -279,8 +292,13 @@ export class RepositoriesPage {
         return;
       case 'cite':
         // Handed to the form rather than written here: what a project cites is the form's decision, and it may still
-        // be open with answers in it that a re-render would lose.
-        await vscode.commands.executeCommand('temcoProjects.citeInNewProject', message.names ?? []);
+        // be open with answers in it that a re-render would lose. Opened from a project's own page there is nothing to
+        // hand back to — the project is in the catalog — so citing is the write below.
+        if (this.citeTarget === undefined) {
+          await vscode.commands.executeCommand('temcoProjects.citeInNewProject', message.names ?? []);
+          return;
+        }
+        await this.citeAll(message.names ?? []);
         return;
       case 'read':
         // Choosing another organisation in the strip: its held list is drawn at once, then asked for again.
@@ -435,7 +453,7 @@ export class RepositoriesPage {
   /** Records a repository as a source of the project being worked on, without reading it. */
   private async cite(name: string): Promise<void> {
     const row = this.listed.find((candidate) => candidate.name === name);
-    const project = this.selection.project();
+    const project = this.citeTarget ?? this.selection.project();
     if (row === undefined || project === undefined) {
       return;
     }
@@ -454,6 +472,43 @@ export class RepositoriesPage {
       catalog.setDocumentSources(project, [...new Set([...cited, slug])]);
     } catch {
       // The commands that follow report their own refusals; this only records the coordinates.
+    } finally {
+      catalog?.close();
+    }
+    // A citation is a write, and the panel that lists sources draws from what is recorded.
+    this.refresh();
+  }
+
+  /**
+   * Every ticked repository, cited in the project this page was opened for — then back to that project.
+   *
+   * `cite` records the coordinates one at a time — the same act a row's own button performs — so the bulk form is a
+   * loop rather than a second implementation of what citing means. The write is the whole act: the project exists in
+   * the catalog, so there is nothing left to save, and every surface that reads a project's sources is told to re-read.
+   */
+  private async citeAll(names: readonly string[]): Promise<void> {
+    const target = this.citeTarget;
+    if (target === undefined) {
+      return;
+    }
+    for (const name of names) {
+      await this.cite(name);
+    }
+    this.refresh();
+    // The Library's Projects group and the documentation views read the catalog through their own module.
+    await vscode.commands.executeCommand('temcoDocs.refresh');
+    // And back to the page the citing was asked for: a citation made here is visible there at once.
+    await vscode.commands.executeCommand('temcoProjects.editProject', target);
+  }
+
+  /** The name behind a slug, so the button can say *Cite in T3000 Documentation* rather than in a slug. */
+  private async projectName(slug: string): Promise<string | undefined> {
+    let catalog: Catalog | undefined;
+    try {
+      catalog = await Catalog.open(this.context);
+      return catalog.document(slug)?.name;
+    } catch {
+      return undefined;
     } finally {
       catalog?.close();
     }
@@ -513,15 +568,14 @@ export class RepositoriesPage {
   }
 }
 
-function html(): string {
+function html(citing = false): string {
   const style = `
     /* A dashboard, not a document: the strip of enterprises comes first, the list is the body, the help is the
        foot. No boxes anywhere — a fill, a hairline and spacing carry the hierarchy. */
-    /* Where downloads land: one line above the strip, because it applies to every row below it. */
-    .where { display: flex; gap: .5em; align-items: center; flex-wrap: wrap; margin: 1em 0 0;
-             padding: .55em .8em; border-radius: var(--radius); background: var(--bg-card); font-size: var(--fs-sm); }
-    .where__label { color: var(--fg-muted); }
-    .where__path { color: var(--fg-strong); font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
+    /* The description carries what used to be a second bar above the list: where copies land, and the one link that
+       changes it. The path is mono because it is a path; the link is the kit's link, not a button beside it. */
+    .page-head__desc code { color: var(--fg-strong); font-family: ui-monospace, monospace; font-size: 12.5px;
+                             overflow-wrap: anywhere; }
 
     .strip { display: flex; gap: .4em; flex-wrap: wrap; align-items: center; margin: 1em 0 0; }
 
@@ -600,13 +654,6 @@ function html(): string {
     </div>
   </div>
 
-  <div class="where">
-    <span class="where__label">Local copies and drafts go to</span>
-    <code class="where__path" id="where-path">…</code>
-    <button type="button" class="btn btn--sm" id="change-folder">Change…</button>
-    <button type="button" class="btn btn--sm btn--ghost" id="settings">Settings</button>
-  </div>
-
   <form class="adder" hidden id="adder">
     <input class="input" id="adder-text" aria-label="Enterprise or repository"
       placeholder="temcocontrols — or one repository: github.com/temcocontrols/t3000webview">
@@ -628,7 +675,7 @@ function html(): string {
   <div class="selection" hidden id="selection">
     <span class="count" id="selection-count">0 selected</span>
     <button type="button" class="btn btn--sm btn--primary" id="bulk-start">Start</button>
-    <button type="button" class="btn btn--sm" id="bulk-cite">Cite in the new project</button>
+    <button type="button" class="btn btn--sm" id="bulk-cite">${citing ? 'Cite in this project' : 'Cite in the new project'}</button>
     <button type="button" class="btn btn--sm" id="bulk-fetch">Download</button>
     <button type="button" class="btn btn--sm" id="bulk-pull">Pull</button>
     <button type="button" class="btn btn--sm" id="bulk-remove">Remove the local copy</button>
@@ -684,8 +731,6 @@ $('bulk-cite').addEventListener('click', () => {
   selected.clear();
   draw();
 });
-$('change-folder').addEventListener('click', () => vscode.postMessage({ type: 'changeFolder' }));
-$('settings').addEventListener('click', () => vscode.postMessage({ type: 'command', command: 'temcoRepositories.settings' }));
 $('filter').addEventListener('input', () => draw());
 $('add-toggle').addEventListener('click', () => {
   $('adder').hidden = !$('adder').hidden;
@@ -740,20 +785,51 @@ window.addEventListener('message', (event) => {
   takenAt = message.takenAt;
   state = message.state;
   project = message.project;
+  // Opened from a project's own page: citing writes into it, so the button says which project that is.
+  $('bulk-cite').textContent = message.citeTarget
+    ? 'Cite in ' + (message.citeTargetName || 'this project')
+    : 'Cite in the new project';
   // A row that no longer exists cannot stay selected, and a list from another organisation starts clean.
   if (changed) { selected.clear(); }
   for (const name of Array.from(selected)) {
     if (!repositories.some((repo) => repo.name === name)) { selected.delete(name); }
   }
+  // Opened from a project's own page: what that project already cites is what is already ticked, so the page opens on
+  // the answer it was asked about instead of an empty selection.
+  if (message.citeTarget) {
+    selected.clear();
+    for (const name of cited) {
+      if (repositories.some((repo) => repo.name === name)) { selected.add(name); }
+    }
+  }
 
   $('error').replaceChildren(...(message.warning ? [banner(message.warning)] : []));
   $('bar').hidden = false;
-  if (message.where) { $('where-path').textContent = message.where; }
   drawStrip();
   drawStats();
-  $('lede').textContent = lede(message);
+  renderLede(message);
   draw();
 });
+
+/**
+ * The description, in one line: where the list came from, whose project it feeds, where copies land, and the one link
+ * that changes any of it.
+ *
+ * The folder used to sit in its own filled bar above the list with two buttons beside it. It is one fact about this
+ * list, so it belongs in the sentence that describes this list — and changing it is a settings act, not a page act.
+ */
+function renderLede(message) {
+  const line = $('lede');
+  line.replaceChildren(text('span', '', lede(message)));
+  line.append(document.createTextNode(' · local copies and drafts in '));
+  const path = text('code', '', message.where || 'not chosen yet');
+  path.id = 'where-path';
+  line.append(path);
+  line.append(document.createTextNode(' · '));
+  const settings = button('link', 'Settings', () => vscode.postMessage({ type: 'command', command: 'temcoRepositories.settings' }));
+  settings.title = 'The default enterprise, where local copies are cloned, and the GitHub token';
+  line.append(settings);
+}
 
 /** One line that says where this list came from, and whether its answer is fresh. */
 function lede(message) {

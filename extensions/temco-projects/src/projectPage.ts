@@ -1,8 +1,8 @@
-// The project page: create and edit a project.
+// The project page: one project, opened from the Library's edit action.
 //
-// One layout, two modes. The popups this replaces asked one field at a time and could not show a source list at
-// all; a page can hold everything at once and still be readable — name, version, owner, the sources it is made
-// of, and the outputs it must produce.
+// It answers the same questions the flow that creates a project asks — what it is called, where its pages come from,
+// what it builds — and states the answers it cannot change, so the page reads as a description of the project rather
+// than as a form that happens to be filled in. Creating a project is `projectFlow.ts`; this page only ever edits.
 //
 // The page owns the draft and the extension does the writing: the page posts what the form holds, the extension
 // puts it in the catalog. The only native dialog left is the folder/file picker, because an OS dialog is better
@@ -14,24 +14,23 @@
 import * as vscode from 'vscode';
 import { Catalog, CatalogUnavailable, DocumentDetail, Selection, slugOf } from './store';
 import { PROJECT_VIEW_TYPE } from './surface';
-import { focusLibrary, page, pageColumn } from './ui';
+import { ORIGINS, TARGETS } from './projectFlow';
+import { escapeHtml as esc, focusLibrary, icon, page, pageColumn } from './ui';
 
-/** A source as the page collects it — `url` for a repository, `path` for a folder or archive. */
-interface PageSource {
-  kind: 'git' | 'folder' | 'archive';
+/** A source as the page lists it: what it is called, and where it actually is. */
+interface KnownSource {
+  slug: string;
   name: string;
+  kind: string;
   branch?: string;
-  url?: string;
-  path?: string;
+  pages?: number;
+  where?: string;
 }
 
 interface PageMessage {
-  type: 'ready' | 'pick' | 'submit' | 'cancel' | 'remove' | 'draftWrite' | 'draftCopy' | 'draftDiscard';
-  kind?: 'folder' | 'archive';
-  values?: { name: string; version: string; owner: string; audience: string };
-  /** Sources added on this page, not in the catalog yet. */
-  sources?: PageSource[];
-  /** The slugs of the catalog's sources the page left ticked. */
+  type: 'ready' | 'cite' | 'submit' | 'cancel' | 'remove' | 'draftWrite' | 'draftCopy' | 'draftDiscard';
+  values?: { name: string; version: string };
+  /** The slugs of the catalog's sources this project cites. */
   cited?: string[];
   outputs?: string[];
   /** Which drafted page an act is about. */
@@ -71,6 +70,13 @@ export class ProjectPage {
     );
     this.panel.webview.html = this.html();
     this.panel.webview.onDidReceiveMessage((message: PageMessage) => void this.receive(message));
+    // Shown again after the repositories page has had the focus: read the citations again, so a source cited there
+    // appears here without a reload — and without the form being rebuilt under the person.
+    this.panel.onDidChangeViewState((state) => {
+      if (state.webviewPanel.visible) {
+        void this.seedCitations();
+      }
+    });
     this.panel.onDidDispose(() => {
       this.panel = undefined;
     });
@@ -79,8 +85,10 @@ export class ProjectPage {
   private async receive(message: PageMessage): Promise<void> {
     switch (message.type) {
       case 'ready':
-      case 'pick':
         break;
+      case 'cite':
+        await this.cite();
+        return;
       case 'cancel':
         this.panel?.dispose();
         return;
@@ -105,42 +113,33 @@ export class ProjectPage {
       await this.seed();
       return;
     }
-
-    if (message.type === 'pick') {
-      const kind = message.kind === 'archive' ? 'archive' : 'folder';
-      const picked = await vscode.window.showOpenDialog({
-        title: kind === 'folder' ? 'Which folder?' : 'Which file?',
-        canSelectFolders: kind === 'folder',
-        canSelectFiles: kind === 'archive',
-        canSelectMany: false,
-        openLabel: 'Use this',
-      });
-      if (!picked || picked.length === 0) {
-        return;
-      }
-      const name = picked[0].path.split('/').filter(Boolean).pop() ?? picked[0].fsPath;
-      await this.panel?.webview.postMessage({
-        type: 'picked',
-        kind,
-        name,
-        path: picked[0].fsPath,
-      });
-    }
   }
 
-  /** Hands the page what to fill in — empty for a new document, its own values when editing. */
+  /**
+   * Citing happens where the repositories are.
+   *
+   * This page has no adder of its own — choosing a repository means the list, the download and the files, which is the
+   * repositories page — so the act is: make this project the one being worked on, then open that page *for* it. What is
+   * cited there is written to the catalog, and this page reads its citations again when it is shown.
+   */
+  private async cite(): Promise<void> {
+    await this.selection.select(this.slug);
+    await vscode.commands.executeCommand('temcoRepositories.page', this.slug);
+  }
+
+  /** Hands the page what to fill in — the project, its citations, and the drafts it still holds. */
   private async seed(): Promise<void> {
     if (!this.panel) {
       return;
     }
     let document: DocumentDetail | undefined;
+    let known: KnownSource[] = [];
     let cited: string[] = [];
     let drafts: { id: number; title: string; pageId: string; characters: number; createdAt: string }[] = [];
-    const known: { slug: string; name: string; kind: string; branch?: string; pages?: number; line: string }[] = [];
 
     await this.withCatalog((catalog) => {
       document = catalog.document(this.slug);
-      cited = catalog.documentSourceSlugs(this.slug);
+      ({ known, cited } = this.sourcesFrom(catalog));
       // What was drafted for this project and never written: a page kept in the catalog, not a file.
       drafts = catalog.drafts(this.slug).map((row) => ({
         id: row.id,
@@ -149,33 +148,60 @@ export class ProjectPage {
         characters: row.body.length,
         createdAt: row.createdAt,
       }));
-      // What the catalog already knows, so a source is added once and cited by any number of projects.
-      for (const source of catalog.sources()) {
-        known.push({
-          slug: source.slug,
-          name: source.name,
-          kind: source.kind,
-          branch: source.branch,
-          pages: source.pages,
-          line: [
-            `${source.name} — ${source.kind}`,
-            source.branch,
-            source.pages === undefined ? 'never read' : `${source.pages} pages`,
-          ]
-            .filter((part): part is string => Boolean(part))
-            .join(' · '),
-        });
-      }
     });
 
+    // The tab carries the project's name, so a row of tabs reads as the projects that are open.
+    if (document !== undefined && document.name.length > 0) {
+      this.panel.title = document.name;
+    }
+    const origin = ORIGINS.find((entry) => entry.value === document?.origin);
     await this.panel.webview.postMessage({
       type: 'seed',
       mode: 'edit',
-      document: document ?? { name: '', version: '1.0', owner: 'docs', audience: '', outputs: [], sources: [] },
+      document: document ?? { name: '', version: '1.0', outputs: [], sources: [] },
+      originLabel: origin?.label ?? 'Project',
+      originNote: origin?.sub ?? '',
       known,
       cited,
       drafts,
     });
+  }
+
+  /** The citations again, after the repositories page has written one: the form's answers are left alone. */
+  private async seedCitations(): Promise<void> {
+    if (!this.panel) {
+      return;
+    }
+    let known: KnownSource[] = [];
+    let cited: string[] = [];
+    await this.withCatalog((catalog) => {
+      ({ known, cited } = this.sourcesFrom(catalog));
+    });
+    await this.panel.webview.postMessage({ type: 'cited', known, cited });
+  }
+
+  /**
+   * Every source the catalog records, and which of them this project cites.
+   *
+   * A source is recorded once and cited by any number of projects, so the page needs both: the citations are the rows,
+   * and the recorded list is how a name becomes facts. Each entry also carries where it actually is — a repository's
+   * URL, a folder's or archive's path — because the page states what a citation points at instead of making a person
+   * open another page to find out.
+   */
+  private sourcesFrom(catalog: Catalog): { known: KnownSource[]; cited: string[] } {
+    const known: KnownSource[] = [];
+    for (const source of catalog.sources()) {
+      const detail = catalog.source(source.slug);
+      known.push({
+        slug: source.slug,
+        name: source.name,
+        kind: source.kind,
+        branch: source.branch,
+        pages: source.pages,
+        where: source.kind === 'git' ? detail?.remoteUrl : detail?.path,
+      });
+    }
+    return { known, cited: catalog.documentSourceSlugs(this.slug) };
   }
 
   private async submit(message: PageMessage): Promise<void> {
@@ -186,39 +212,24 @@ export class ProjectPage {
     }
 
     const slug = this.slug.length > 0 ? this.slug : slugOf(values.name);
-    const added = message.sources ?? [];
     const cited = message.cited ?? [];
     const outputs = message.outputs ?? [];
     let citedCount = 0;
 
     const result = await this.withCatalog((catalog) => {
+      // Owner and audience are not asked here — a field nobody has to answer only stops the page — so a save keeps the
+      // values the project already had instead of clearing them.
+      const current = catalog.document(slug);
       catalog.createDocument({
         name: values.name.trim(),
         slug,
         version: values.version.trim() || undefined,
-        audience: values.audience.trim() || undefined,
-        owner: values.owner.trim() || undefined,
+        audience: current?.audience,
+        owner: current?.owner,
       });
 
-      // One list for what the project cites: the ticks, plus whatever was added on this page — recorded first,
-      // then cited, because a source has to exist before a project can point at it.
+      // The whole list, not the additions: dropping a row on the page is how a project stops citing a source.
       const slugs = [...cited];
-      for (const source of added) {
-        const sourceSlug = slugOf(source.name);
-        if (sourceSlug.length === 0) {
-          continue;
-        }
-        catalog.addSource({
-          kind: source.kind,
-          name: source.name,
-          slug: sourceSlug,
-          remoteUrl: source.url,
-          path: source.path,
-          branch: source.branch,
-        });
-        slugs.push(sourceSlug);
-      }
-      // The whole list, not the additions: unticking a source on the page is how a project stops citing it.
       catalog.setDocumentSources(slug, slugs);
       catalog.setRecipe(slug, 'docfx', outputs);
       citedCount = new Set(slugs).size;
@@ -347,271 +358,724 @@ export class ProjectPage {
     }
   }
 
+  /**
+   * The page, in the kit's own vocabulary: a page head, sections with a title and one sentence, and a footer carrying
+   * the one write. It had its own headings, its own bordered rows and its own idea of a field; none of that needed to
+   * differ from every other page in the platform.
+   */
+  /**
+
+   * The page.
+
+   *
+
+   * Same shape as the flow that creates a project: a page head, a rail that states what the project *is*, sections in
+
+   * the same order with the same words, and a footer carrying the one write. Before this it had its own headings, its
+
+   * own bordered rows, its own idea of a field, and — the part that actually hurt — its own names for the outputs: it
+
+   * ticked `chm`, `pdf` and `site` while the flow wrote `website`, `pdf`, `help`, `search` and `ai`, so opening a
+
+   * project made by the flow showed nothing ticked, and saving it replaced its recipe with a vocabulary nothing reads.
+
+   */
+
   private html(): string {
+
     const style = `
-      :root { color-scheme: light dark; }
-      /* The type scale and the controls are the page kit's; this block is the form's own layout. */
-      label { display: block; color: var(--vscode-descriptionForeground); margin-bottom: .15em; }
-      .fields input { width: 100%; max-width: 34em; min-width: 0; }
-      /* min(14em, 100%), not a bare 14em: a track's minimum is a hard floor, so in a narrow column two of them
-         push the right-hand field out of the pane and the page scrolls sideways. With min(), one column
-         becomes one column at any width. */
-      .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(14em, 100%), 1fr));
-                gap: .9em 1.4em; max-width: 60em; }
-      .fields > div { min-width: 0; }
-      .row { display: flex; align-items: baseline; gap: .8em; padding: .25em 0;
-             border-bottom: 1px solid var(--vscode-panel-border); }
-      .row span { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
-      .row button { flex: 0 0 auto; }
-      .row label.tick { display: flex; flex: 1 1 auto; min-width: 0; gap: .5em; align-items: baseline;
-                        margin: 0; color: var(--vscode-foreground); cursor: pointer; }
-      .row label.tick input { flex: 0 0 auto; margin: 0; }
-      .add { display: flex; gap: .5em; flex-wrap: wrap; align-items: flex-end; margin: .6em 0 0; max-width: 60em; }
-      .add > div { min-width: 0; }
-      .outputs { display: flex; gap: 1.6em; flex-wrap: wrap; align-items: center; }
-      .outputs label { display: inline-flex; gap: .4em; align-items: center; margin: 0;
-                       color: var(--vscode-foreground); }
-      .actions { display: flex; gap: .6em; align-items: center; margin-top: 2em;
-                 border-top: 1px solid var(--vscode-panel-border); padding-top: 1em; }
+
+      /* The rail is the narrow column on the left and the form the wide one on the right. The shared \`.split\` sizes
+
+         its columns \`1fr 320px\`, which would put the facts in the wide column and the form in a 320px strip. */
+
+      .split { grid-template-columns: 244px minmax(0, 1fr); align-items: start; }
+
+      .split__side { grid-column: 1; }
+
+      .split__main { grid-column: 2; }
+
+      @media (max-width: 820px) {
+
+        .split { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+
+        .split__side, .split__main { grid-column: 1; }
+
+      }
+
+
+
+      /* What the project is, stated once: a key in the small tier, the value at reading weight, its note under it.
+
+         Nothing here is editable — an origin is not re-answered by an edit — so nothing here looks like a field. */
+
+      .facts { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+
+      .fact { display: flex; flex-direction: column; gap: 1px; }
+
+      .fact__key { font-size: var(--fs-xs); letter-spacing: .04em; text-transform: uppercase; color: var(--fg-subtle); }
+
+      .fact__value { color: var(--fg-strong); font-weight: 600; overflow-wrap: anywhere; }
+
+      .fact__note { color: var(--fg-muted); font-size: var(--fs-sm); line-height: 1.45; }
+
+      .split__note { margin: 18px 0 0; color: var(--fg-subtle); font-size: var(--fs-xs); line-height: 1.5; }
+
+
+
+      /* A row, not a card: a mark, a name with its facts underneath, and the acts at the end. It has to hold a source
+
+         read from the catalog and a draft with three acts, so it is a grid rather than a flex
+
+         line — the acts column stays aligned whatever the row holds. */
+
+      .entries { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 0; }
+
+      .entry { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+
+               padding: 8px 10px; border-radius: var(--radius); }
+
+      .entry:hover { background: var(--bg-hover); }
+
+      .entry__mark { display: flex; align-items: center; color: var(--fg-subtle); }
+
+      .entry__mark .icon { width: 14px; height: 14px; }
+
+      .entry__text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+
+      .entry__name { color: var(--fg-strong); font-weight: 600; overflow-wrap: anywhere; }
+
+      .entry__sub { color: var(--fg-muted); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis;
+
+                    white-space: nowrap; }
+
+      .entry__acts { display: flex; gap: 4px; align-items: center; }
+
+      .entry__act { border: 0; background: none; padding: 2px 6px; font: inherit; font-size: var(--fs-sm);
+
+                    color: var(--fg-subtle); cursor: pointer; border-radius: var(--radius-sm); }
+
+      .entry__act:hover { color: var(--fg); background: var(--bg-inset); }
+
+      .entry__act.is-danger:hover { color: var(--err); background: color-mix(in srgb, var(--err) 12%, transparent); }
+
+      .entry__act:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+
+
+
+      /* Four fields on a line where there is room, two where there is not — the kit's field and the kit's input. */
+
+      .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(16em, 100%), 1fr));
+
+                   gap: 14px 20px; }
+
+      .form-grid .field { min-width: 0; }
+
+      .form-grid .input { width: 100%; }
+
+
+
+      /* Citing is not done on this page — the list, the download and the files are the repositories page's — so the
+         act is one button that goes there. */
+
+      .cite-more { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 14px 0 0; }
+
+      .cite-more .cell-muted { font-size: var(--fs-sm); }
+
+
+
+      .actions { display: flex; gap: 12px; align-items: center; margin: 26px 0 0; padding-top: 14px;
+
+                 border-top: 1px solid var(--border); }
+
       .actions .spacer { flex: 1 1 auto; }
-      .quiet { color: var(--vscode-descriptionForeground); max-width: 60em; }
-      .req { color: var(--vscode-descriptionForeground); font-weight: 400; }
+
     `;
 
+
+
+    const field = (label: string, control: string, hint?: string): string =>
+
+      `<div class="field"><label>${esc(label)}</label>${control}${
+
+        hint === undefined ? '' : `<div class="field__hint">${esc(hint)}</div>`
+
+      }</div>`;
+
+
+
+    // The outputs are the flow's own list, ticked with the flow's own tiles: one vocabulary for what a project builds,
+
+    // read by the same code that writes it.
+
+    const tiles = TARGETS.map((target) =>
+
+      `<label class="out-tile"><input type="checkbox" data-output="${esc(target.value)}">` +
+
+      `<span class="out-tile__mark">${icon(target.mark)}</span>` +
+
+      `<span class="out-tile__text"><span class="out-tile__label">${esc(target.label)}</span>` +
+
+      `<span class="out-tile__note">${esc(target.sub)}</span></span>` +
+
+      `<span class="out-tile__check">${icon('check', 'icon--sm')}</span></label>`
+
+    ).join('');
+
+
+
     const body = `
-  <h1 id="heading">New project</h1>
 
-  <div class="fields">
-    <div>
-      <label for="name">Name <span class="req">— what you will see in the Library</span></label>
-      <input id="name" type="text" placeholder="Product Help" autocomplete="off">
+  <div class="page-head">
+
+    <div class="page-head__main">
+
+      <div class="eyebrow">Project</div>
+
+      <h1 class="page-head__title" id="heading">Project</h1>
+
+      <p class="page-head__desc" id="summary">Reading the project…</p>
+
     </div>
-    <div>
-      <label for="version">Version</label>
-      <input id="version" type="text" placeholder="1.0" autocomplete="off">
+
+    <div class="page-head__actions">
+
+      <button id="remove" class="btn btn--ghost" type="button">Remove…</button>
+
+      <button id="cancel" class="btn btn--ghost" type="button">Close</button>
+
     </div>
-    <div>
-      <label for="owner">Owner</label>
-      <input id="owner" type="text" placeholder="docs" autocomplete="off">
-    </div>
-    <div>
-      <label for="audience">Audience</label>
-      <input id="audience" type="text" placeholder="developers" autocomplete="off">
-    </div>
+
   </div>
 
-  <h2>Sources</h2>
-  <p class="quiet">What the catalog knows is listed below — tick what this project is built from, and add a
-    folder, a repository or an archive if the one you need is not there yet.</p>
-  <p class="quiet" id="noSources">Nothing is recorded yet. A project can be created before its sources are
-    settled.</p>
-  <div id="sources"></div>
-  <p class="quiet" id="cited"></p>
 
-  <div class="add">
-    <div style="flex:1 1 18em">
-      <label for="repoUrl">Repository — owner/name or a full URL</label>
-      <input id="repoUrl" type="text" placeholder="owner/name" autocomplete="off">
+
+  <div class="split">
+
+    <div class="split__side">
+
+      <div class="split__label">This project</div>
+
+      <div class="facts" id="facts"></div>
+
+      <p class="split__note">Where a project began is set when it is created. What it cites, what it builds and what is
+
+        drafted for it can all change here.</p>
+
     </div>
-    <div style="flex:0 1 12em">
-      <label for="repoBranch">Branch</label>
-      <input id="repoBranch" type="text" placeholder="main" autocomplete="off">
+
+
+
+    <div class="split__main">
+
+      <div class="split__section">
+
+        <div class="split__section-title">The project</div>
+
+        <p class="split__section-note">What it is called, and who answers for it.</p>
+
+        <div class="form form-grid">
+
+          ${field('Name', '<input id="name" class="input" type="text" autocomplete="off" aria-label="Project name">', 'Shown in the Library, and the slug its commands use.')}
+
+          ${field('Version', '<input id="version" class="input" type="text" autocomplete="off" aria-label="Version">', 'A project publishes one version at a time.')}
+
+        </div>
+
+      </div>
+
+
+
+      <div class="split__section">
+
+        <div class="split__section-title">Where the pages come from</div>
+
+        <p class="split__section-note">What this project reads: the repositories, folders and archives it cites. A source
+
+          is recorded once and read by any number of projects — dropping a citation here and saving leaves the source
+
+          itself alone.</p>
+
+        <p class="split__section-note" id="noSources">This project cites nothing yet.</p>
+
+        <div class="entries" id="sources"></div>
+
+        <div class="cite-more">
+
+          <button id="cite-more" class="btn btn--sm" type="button">${icon('repo')}<span>Cite a source on the repositories page</span></button>
+
+          <span class="cell-muted">Repositories are listed, downloaded and opened there. One cited from that page lands in
+            this project.</span>
+
+        </div>
+
+      </div>
+
+
+
+      <div class="split__section">
+
+        <div class="split__section-title">What it builds</div>
+
+        <p class="split__section-note">One build produces every target ticked here — and every one of them can be turned
+
+          on later in the Build Center.</p>
+
+        <div class="out-grid" id="outputs">${tiles}</div>
+
+      </div>
+
+
+
+      <div class="split__section">
+
+        <div class="split__section-title">Drafts</div>
+
+        <p class="split__section-note">Pages the AI drafted for this project and nobody has written yet. Writing one puts
+
+          it at the path it names, inside a folder you pick; copying hands it to the clipboard.</p>
+
+        <p class="split__section-note" id="noDrafts" hidden>Nothing is drafted for this project.</p>
+
+        <div class="entries" id="drafts"></div>
+
+      </div>
+
+
+
+      <div class="actions">
+
+        <span class="cell-muted" id="footLine"></span>
+
+        <span class="spacer"></span>
+
+        <button id="submit" class="btn btn--primary" type="button">Save</button>
+
+      </div>
+
     </div>
-    <button id="addRepo" type="button">Add repository</button>
-    <button id="addFolder" type="button">Add folder…</button>
-    <button id="addArchive" type="button">Add archive…</button>
-  </div>
 
-  <h2>Drafts</h2>
-  <p class="quiet">A page the AI drafted for this project and nobody has written yet. Writing it puts it at the path it
-    names, inside the folder you pick; copying it hands it to the clipboard; discarding it leaves the project alone.</p>
-  <p class="quiet" id="noDrafts" hidden>Nothing is drafted for this project.</p>
-  <div id="drafts"></div>
-
-  <h2>Outputs</h2>
-  <div class="outputs">
-    <label><input id="out-chm" type="checkbox"> CHM</label>
-    <label><input id="out-pdf" type="checkbox"> PDF</label>
-    <label><input id="out-site" type="checkbox"> Site</label>
-  </div>
-  <p class="quiet">Choosing an output records the recipe. Building it comes next — this page does not run one.</p>
-
-  <div class="actions">
-    <button id="submit" class="primary" type="button">Save</button>
-    <button id="cancel" type="button">Cancel</button>
-    <span class="spacer"></span>
-    <button id="remove" type="button" hidden>Remove…</button>
   </div>
 
 `;
 
+
+
     return page(body, { title: 'Temco Projects', extraCss: style, script: ProjectPage.client });
+
   }
+
+
 
   private static readonly client = `
+
   const vscode = acquireVsCodeApi();
+
   const $ = (id) => document.getElementById(id);
-  // Two kinds of row, one list: what the catalog knows (a tick) and what this page added (removable).
+
+
+
+  // Everything this page shows comes from one seed: the project, everything the catalog records, the sources it cites
+
+  // and the drafts it still holds. Nothing here reads the disk and nothing writes — Save is the only write.
+
+  let project = null;
+
   let known = [];
-  const cited = new Set();
-  let sources = [];
+
+  let cited = new Set();
+
+
+
+  function svg(name) {
+
+    return '<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><use href="#i-' + name + '"></use></svg>';
+
+  }
+
+  function markFor(kind) {
+
+    return svg(kind === 'git' ? 'repo' : kind === 'archive' ? 'package' : 'folder');
+
+  }
+
+  function join(parts) {
+
+    return parts.filter(function (part) { return part !== undefined && part !== null && part !== ''; }).join(' · ');
+
+  }
+
+  function plural(count, one, many) {
+
+    return count + ' ' + (count === 1 ? one : many);
+
+  }
+
+  function outputs() {
+
+    return Array.prototype.slice.call(document.querySelectorAll('input[data-output]:checked'))
+
+      .map(function (input) { return input.value; });
+
+  }
+
+
+
+  /**
+
+   * One row: a mark, a name with its facts underneath, and the acts it allows.
+
+   *
+
+   * No border and no card. The hover surface says "row", the two lines say which part is the name and which the
+
+   * detail, and the acts sit in a column of their own so a row with one act and a row with three still line up.
+
+   */
+
+  function entry(mark, name, sub, acts) {
+
+    const row = document.createElement('div');
+
+    row.className = 'entry';
+
+    const icon = document.createElement('span');
+
+    icon.className = 'entry__mark';
+
+    icon.innerHTML = mark;
+
+    const text = document.createElement('span');
+
+    text.className = 'entry__text';
+
+    const title = document.createElement('span');
+
+    title.className = 'entry__name';
+
+    title.textContent = name;
+
+    const facts = document.createElement('span');
+
+    facts.className = 'entry__sub';
+
+    facts.textContent = sub;
+
+    text.append(title, facts);
+
+    const tools = document.createElement('span');
+
+    tools.className = 'entry__acts';
+
+    acts.forEach(function (act) {
+
+      const button = document.createElement('button');
+
+      button.type = 'button';
+
+      button.className = 'entry__act' + (act.danger ? ' is-danger' : '');
+
+      button.textContent = act.label;
+
+      button.title = act.title || '';
+
+      button.addEventListener('click', act.run);
+
+      tools.append(button);
+
+    });
+
+    row.append(icon, text, tools);
+
+    return row;
+
+  }
+
+
+
+  /** What this project cites, from the catalog's list — the citations are the list, not a filter over every source. */
+
+  function renderSources() {
+
+    const list = $('sources');
+
+    list.replaceChildren();
+
+    const rows = known.filter(function (source) { return cited.has(source.slug); });
+
+    rows.forEach(function (source) {
+
+      list.append(entry(
+
+        markFor(source.kind),
+
+        source.name,
+
+        join([source.kind, source.branch, source.where,
+
+          source.pages === undefined ? 'never read' : plural(source.pages, 'page', 'pages')]),
+
+        [{
+
+          label: 'Stop citing',
+
+          danger: true,
+
+          title: 'Stop citing ' + source.name,
+
+          run: function () { cited.delete(source.slug); render(); },
+
+        }]
+
+      ));
+
+    });
+
+    $('noSources').hidden = rows.length > 0;
+
+  }
+  function renderDrafts() {
+
+    const list = $('drafts');
+
+    list.replaceChildren();
+
+    $('noDrafts').hidden = project.drafts.length > 0;
+
+    project.drafts.forEach(function (draft) {
+
+      list.append(entry(
+
+        svg('sparkle'),
+
+        draft.title,
+
+        join([draft.pageId, plural(draft.characters, 'character', 'characters'), draft.createdAt.slice(0, 10)]),
+
+        [
+
+          { label: 'Write…', title: 'Write ' + draft.pageId + ' to a folder',
+
+            run: function () { vscode.postMessage({ type: 'draftWrite', id: draft.id }); } },
+
+          { label: 'Copy', title: 'Copy ' + draft.pageId + ' to the clipboard',
+
+            run: function () { vscode.postMessage({ type: 'draftCopy', id: draft.id }); } },
+
+          { label: 'Discard', danger: true, title: 'Discard ' + draft.pageId,
+
+            run: function () { vscode.postMessage({ type: 'draftDiscard', id: draft.id }); } },
+
+        ]
+
+      ));
+
+    });
+
+  }
+
+
+
+  /** What the project is, in the rail: never editable, and never something a person opens another page to learn. */
+
+  function renderFacts() {
+
+    const box = $('facts');
+
+    box.replaceChildren();
+
+    function fact(key, value, note) {
+
+      const row = document.createElement('div');
+
+      row.className = 'fact';
+
+      const name = document.createElement('span');
+
+      name.className = 'fact__key';
+
+      name.textContent = key;
+
+      const text = document.createElement('span');
+
+      text.className = 'fact__value';
+
+      text.textContent = value;
+
+      row.append(name, text);
+
+      if (note) {
+
+        const sub = document.createElement('span');
+
+        sub.className = 'fact__note';
+
+        sub.textContent = note;
+
+        row.append(sub);
+
+      }
+
+      box.append(row);
+
+    }
+
+    fact('Origin', project.originLabel, project.originNote);
+
+    if (project.document.template) { fact('Starter', project.document.template); }
+
+    fact('Engine', project.document.engine || 'docfx');
+
+    fact('Sources', String(cited.size), 'all recorded');
+
+    fact('Outputs', outputs().length + ' of ' + document.querySelectorAll('input[data-output]').length);
+
+    fact('Drafts', project.drafts.length === 0 ? 'none' : plural(project.drafts.length, 'not written', 'not written'));
+
+  }
+
+
+
+  function renderHead() {
+
+    $('heading').textContent = project.document.name || 'Project';
+
+    $('summary').textContent = join([
+
+      project.originLabel,
+
+      plural(cited.size, 'source', 'sources'),
+
+      plural(outputs().length, 'output', 'outputs'),
+
+    ]) + '.';
+
+    $('footLine').textContent = join([
+
+      plural(cited.size, 'source', 'sources'),
+
+      plural(outputs().length, 'output', 'outputs'),
+
+      project.drafts.length === 0 ? 'no drafts' : plural(project.drafts.length, 'draft', 'drafts'),
+
+    ]);
+
+  }
+
+
 
   function render() {
-    const list = $('sources');
-    list.replaceChildren();
 
-    for (const source of known) {
-      const row = document.createElement('div');
-      row.className = 'row';
-      const label = document.createElement('label');
-      label.className = 'tick';
-      const box = document.createElement('input');
-      box.type = 'checkbox';
-      box.checked = cited.has(source.slug);
-      box.addEventListener('change', () => {
-        if (box.checked) { cited.add(source.slug); } else { cited.delete(source.slug); }
-        summary();
-      });
-      const span = document.createElement('span');
-      span.textContent = source.line;
-      label.append(box, span);
-      row.append(label);
-      list.append(row);
-    }
+    renderSources();
 
-    sources.forEach((source, index) => {
-      const row = document.createElement('div');
-      row.className = 'row';
-      const label = document.createElement('span');
-      label.textContent = source.detail + ' — added here';
-      const remove = document.createElement('button');
-      remove.type = 'button';
-      remove.textContent = 'remove';
-      remove.addEventListener('click', () => { sources.splice(index, 1); render(); });
-      row.append(label, remove);
-      list.append(row);
-    });
+    renderDrafts();
 
-    $('noSources').hidden = known.length + sources.length > 0;
-    summary();
+    renderFacts();
+
+    renderHead();
+
   }
 
-  /** What pressing Save will do, in one line, so the ticks are never a guess. */
-  function summary() {
-    const total = cited.size + sources.length;
-    $('cited').textContent =
-      total === 0
-        ? 'This project will cite nothing yet.'
-        : 'This project will cite ' + total + ' source' + (total === 1 ? '' : 's') + '.';
-  }
 
-  /** The drafted pages this project still holds: none written, each with the three acts it allows. */
-  function renderDrafts(drafts) {
-    const list = $('drafts');
-    list.replaceChildren();
-    $('noDrafts').hidden = drafts.length > 0;
-    drafts.forEach((draft) => {
-      const row = document.createElement('div');
-      row.className = 'row';
-      const text = document.createElement('span');
-      text.textContent = draft.title + ' — ' + draft.pageId + ' · ' + draft.characters + ' characters';
-      const write = document.createElement('button');
-      write.type = 'button';
-      write.textContent = 'Write…';
-      write.addEventListener('click', () => vscode.postMessage({ type: 'draftWrite', id: draft.id }));
-      const copy = document.createElement('button');
-      copy.type = 'button';
-      copy.textContent = 'Copy';
-      copy.addEventListener('click', () => vscode.postMessage({ type: 'draftCopy', id: draft.id }));
-      const drop = document.createElement('button');
-      drop.type = 'button';
-      drop.textContent = 'Discard';
-      drop.addEventListener('click', () => vscode.postMessage({ type: 'draftDiscard', id: draft.id }));
-      row.append(text, write, copy, drop);
-      list.append(row);
-    });
-  }
 
-  function label(kind, name, branch) {
-    return name + ' — ' + kind + (branch ? ' · ' + branch : '');
-  }
+  window.addEventListener('message', function (event) {
 
-  // The slug rule, once more on this side: it is how a row in the catalog is found from a name.
-  function slugify(text) {
-    return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  }
-
-  window.addEventListener('message', (event) => {
     const message = event.data;
-    if (message.type === 'seed') {
-      const document = message.document;
-      $('name').value = document.name || '';
-      $('version').value = document.version || '';
-      $('owner').value = document.owner || '';
-      $('audience').value = document.audience || '';
-      for (const output of document.outputs || []) {
-        const box = $('out-' + output);
-        if (box) { box.checked = true; }
-      }
-      sources = (document.sources || []).map((source) => ({
-        kind: source.kind, name: source.name, branch: source.branch,
-        detail: label(source.kind, source.name, source.branch),
-      }));
-      // In edit mode the project's own sources are the ticks, and they are not "added here".
+
+    // The citations again, after the repositories page has written one: the form is not re-seeded under the person.
+
+    if (message.type === 'cited') {
+
       known = message.known || [];
-      cited.clear();
-      for (const slug of message.cited || []) { cited.add(slug); }
-      if (message.mode === 'edit') {
-        const fromCatalog = new Set(known.map((source) => source.slug));
-        sources = sources.filter((source) => !fromCatalog.has(slugify(source.name)));
-      }
-      const editing = message.mode === 'edit';
-      $('heading').textContent = editing ? 'Project' : 'New project';
-      $('submit').textContent = editing ? 'Save' : 'Create project';
-      $('remove').hidden = !editing;
-      renderDrafts(message.drafts || []);
+
+      cited = new Set(message.cited || []);
+
       render();
+
       return;
+
     }
-    if (message.type === 'picked') {
-      sources.push({ kind: message.kind, name: message.name, path: message.path,
-                     detail: label(message.kind, message.name) });
-      render();
-    }
+
+    if (message.type !== 'seed') { return; }
+
+
+
+    project = message;
+
+    project.document = message.document || { name: '', outputs: [] };
+
+    project.drafts = message.drafts || [];
+
+    known = message.known || [];
+
+    cited = new Set(message.cited || []);
+
+
+
+    $('name').value = project.document.name || '';
+
+    $('version').value = project.document.version || '';
+
+
+
+    // The outputs come back as the values the flow writes, so a project made anywhere opens on its own recipe.
+
+    const recipe = project.document.outputs || [];
+
+    Array.prototype.slice.call(document.querySelectorAll('input[data-output]')).forEach(function (input) {
+
+      input.checked = recipe.indexOf(input.value) >= 0;
+
+    });
+
+    render();
+
   });
 
-  $('addRepo').addEventListener('click', () => {
-    const url = $('repoUrl').value.trim();
-    if (url.length < 3) { $('repoUrl').focus(); return; }
-    const branch = $('repoBranch').value.trim();
-    const name = url.replace(/\\.git$/, '').split('/').filter(Boolean).pop() || 'repository';
-    sources.push({ kind: 'git', name, branch: branch || undefined, url, detail: label('git', name, branch) });
-    $('repoUrl').value = '';
-    $('repoBranch').value = '';
-    render();
-  });
-  $('addFolder').addEventListener('click', () => vscode.postMessage({ type: 'pick', kind: 'folder' }));
-  $('addArchive').addEventListener('click', () => vscode.postMessage({ type: 'pick', kind: 'archive' }));
-  $('cancel').addEventListener('click', () => vscode.postMessage({ type: 'cancel' }));
-  $('remove').addEventListener('click', () => vscode.postMessage({ type: 'remove' }));
-  $('submit').addEventListener('click', () => {
+
+
+  $('outputs').addEventListener('change', function () { renderFacts(); renderHead(); });
+
+
+
+  $('cite-more').addEventListener('click', function () { vscode.postMessage({ type: 'cite' }); });
+
+  $('cancel').addEventListener('click', function () { vscode.postMessage({ type: 'cancel' }); });
+
+  $('remove').addEventListener('click', function () { vscode.postMessage({ type: 'remove' }); });
+
+
+
+  $('submit').addEventListener('click', function () {
+
     const name = $('name').value.trim();
+
     if (name.length === 0) { $('name').focus(); return; }
+
     vscode.postMessage({
+
       type: 'submit',
+
       values: {
-        name,
+
+        name: name,
+
         version: $('version').value.trim(),
-        owner: $('owner').value.trim(),
-        audience: $('audience').value.trim(),
+
       },
-      sources,
+
       cited: Array.from(cited),
-      outputs: ['chm', 'pdf', 'site'].filter((kind) => $('out-' + kind).checked),
+
+      outputs: outputs(),
+
     });
+
   });
+
+
 
   vscode.postMessage({ type: 'ready' });
+
 `;
 }
 

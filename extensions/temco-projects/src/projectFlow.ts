@@ -42,7 +42,7 @@ export interface PinnedRepository {
 const DEFAULTS = { name: 'T3000 Documentation', version: '13.0', folder: '~/Temco' };
 
 /** What a project can build. One build produces every one of them, so they are ticks, not a choice. */
-const TARGETS = [
+export const TARGETS = [
 	{ value: 'website', label: 'Website', sub: 'Static pages for Temco Learn', mark: 'globe' },
 	{ value: 'pdf', label: 'PDF', sub: 'One document, printed layout', mark: 'document' },
 	{ value: 'help', label: 'Offline help', sub: 'CHM · needs the help compiler', mark: 'book' },
@@ -54,14 +54,14 @@ const TARGETS = [
 const DEFAULT_TARGETS = ['website', 'pdf', 'help', 'search'];
 
 /** How a project begins. `available: false` is shown, disabled, with the reason — never hidden. */
-interface Origin {
+export interface Origin {
 	value: string;
 	label: string;
 	sub: string;
 	available: boolean;
 }
 
-const ORIGINS: Origin[] = [
+export const ORIGINS: Origin[] = [
 	{ value: 'blank', label: 'Start empty', sub: 'No pages yet; the first one is written in the workspace.', available: true },
 	{ value: 'repository', label: 'From a repository', sub: 'Cite what the platform has already read — repositories, files and folders.', available: true },
 	{ value: 'folder', label: 'From a folder', sub: 'Record a folder on this machine as the pages it reads.', available: true },
