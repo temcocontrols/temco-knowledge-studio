@@ -30,7 +30,6 @@
   "activationEvents": [
     "onView:temcoDocs.pages",
     "onView:temcoDocs.section.projects",
-    "onView:temcoDocs.section.sources",
     "onView:temcoDocs.section.areas",
     "onView:temcoDocs.section.pipeline",
     "onView:temcoDocs.section.working"
@@ -39,16 +38,12 @@
     "views": {
       "temco": [
         {
-          "id": "temcoDocs.pages",
-          "name": "Pages"
-        },
-        {
           "id": "temcoDocs.section.projects",
           "name": "Projects"
         },
         {
-          "id": "temcoDocs.section.sources",
-          "name": "Sources"
+          "id": "temcoDocs.pages",
+          "name": "Pages"
         },
         {
           "id": "temcoDocs.section.areas",
@@ -74,11 +69,6 @@
         "command": "temcoDocs.repository",
         "title": "Open a Repository",
         "icon": "$(repo)"
-      },
-      {
-        "command": "temcoDocs.sources",
-        "title": "Sources",
-        "icon": "$(link)"
       },
       {
         "command": "temcoDocs.documents",

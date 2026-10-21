@@ -10,13 +10,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { DocsRoot, PageEntry, collectPages } from './registry';
-import { BuildRow, Catalog, DocumentRow, DraftRow, ReleaseRow, ScanRow, SourceRow, selection, slugOf } from './store';
+import { BuildRow, Catalog, DocumentRow, DraftRow, ReleaseRow, ScanRow, selection, slugOf } from './store';
 import { commandScript, escapeHtml as esc, icon, page, pageColumn, runCommand, toneMark } from './ui';
 
 /** The view types, one per surface. */
 export const PROJECTS_VIEW_TYPE = 'temcoDocs.projects';
 export const REPOSITORY_VIEW_TYPE = 'temcoDocs.repository';
-export const SOURCES_VIEW_TYPE = 'temcoDocs.sources';
 export const DOCUMENTS_VIEW_TYPE = 'temcoDocs.documents';
 export const PAGE_VIEW_TYPE = 'temcoDocs.page';
 export const SOURCE_VIEW_TYPE = 'temcoDocs.source';
@@ -53,8 +52,8 @@ const card = (options: { title: string; mark?: string; actions?: string; desc?: 
 const badge = (text: string, tone?: string): string =>
 	`<span class="badge${tone && tone !== 'neutral' ? ` badge--${tone}` : ''}">${esc(text)}</span>`;
 
-const list = (items: { mark: string; title: string; sub: string; meta?: string }[]): string =>
-	`<div class="list">${items.map((item) => `<div class="list__item">${icon(item.mark)}<div class="list__main"><div class="list__title">${esc(item.title)}</div><div class="list__sub">${item.sub}</div></div>${item.meta ? `<div class="list__meta">${item.meta}</div>` : ''}</div>`).join('')}</div>`;
+const list = (items: { mark: string; title: string; sub: string; meta?: string; command?: string; args?: unknown }[]): string =>
+	`<div class="list">${items.map((item) => `<div class="list__item${item.command === undefined ? '' : ' list__item--action'}"${item.command === undefined ? '' : ` data-command="${item.command}" data-args="${esc(JSON.stringify(item.args ?? []))}"`}>${icon(item.mark)}<div class="list__main"><div class="list__title">${esc(item.title)}</div><div class="list__sub">${item.sub}</div></div>${item.meta ? `<div class="list__meta">${item.meta}</div>` : ''}</div>`).join('')}</div>`;
 
 const callout = (html: string, kind?: 'warn' | 'ok'): string =>
 	`<div class="callout${kind ? ` callout--${kind}` : ''}">${icon(kind === 'warn' ? 'alert' : kind === 'ok' ? 'check' : 'info')}<div>${html}</div></div>`;
@@ -180,25 +179,6 @@ export class DocsPages {
 		const facts = await this.repositoryFacts();
 		const fact = facts.find((candidate) => candidate.slug === name || candidate.name === name) ?? facts[0];
 		this.open(`repository:${fact?.slug ?? 'none'}`, REPOSITORY_VIEW_TYPE, fact?.name ?? 'Repository', repositoryBody(fact));
-	}
-
-	sources(): void {
-		void this.openSources();
-	}
-
-	/** The sources the catalog holds, which is what a read records and what a clone belongs to. */
-	private async openSources(): Promise<void> {
-		let sources: SourceRow[] = [];
-		let catalog: Catalog | undefined;
-		try {
-			catalog = await Catalog.open(this.context);
-			sources = catalog.sources();
-		} catch {
-			// A catalog that cannot be read shows no sources, which is honest: none is known to exist.
-		} finally {
-			catalog?.close();
-		}
-		this.open('sources', SOURCES_VIEW_TYPE, 'Sources', sourcesBody(sources, this.roots()));
 	}
 
 	documents(area?: string): void {
@@ -330,7 +310,7 @@ function projectsBody(
 			items.unshift(`v${document.version}`);
 		}
 		items.push(document.builtAt === undefined ? 'never built' : `built ${waitingSince(document.builtAt)}`);
-		return `<div class="record-row${isCurrent ? ' record-row--current' : ''}" data-command="temcoDocs.selectProject" data-args="${esc(JSON.stringify([document.slug]))}">${toneMark(isCurrent ? 'layers' : 'folder', isCurrent ? 'accent' : undefined)}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">${esc(document.name)}</span>${isCurrent ? badge('Current', 'accent') : ''}</div><div class="record-row__meta">${facts(items)}</div></div><div class="record-row__state">${isCurrent ? badge('Working on it', 'ok') : badge('Switch to', 'neutral')}</div><span class="record-row__go">${icon('chevron-right', 'icon--sm')}</span></div>`;
+		return `<div class="record-row${isCurrent ? ' record-row--current' : ''}" data-command="temcoDocs.selectProject" data-args="${esc(JSON.stringify([document.slug]))}">${toneMark(isCurrent ? 'layers' : 'folder', isCurrent ? 'accent' : undefined)}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">${esc(document.name)}</span>${isCurrent ? badge('Current', 'accent') : ''}</div><div class="record-row__meta">${facts(items)}</div></div><div class="record-row__state">${button('Edit', 'temcoProjects.editProject', { small: true, kind: 'ghost', args: [document.slug] })}${isCurrent ? badge('Working on it', 'ok') : badge('Switch to', 'neutral')}</div><span class="record-row__go">${icon('chevron-right', 'icon--sm')}</span></div>`;
 	};
 
 	return `${pageHead({
@@ -347,14 +327,16 @@ ${card({
 				title: 'Sources of This Project',
 				mark: 'repo',
 				plain: true,
-				actions: button('All Sources', 'temcoDocs.sources', { small: true, kind: 'ghost' }),
+				actions: button('Add Source', 'temcoProjects.addSource', { small: true, kind: 'ghost', mark: 'plus' }),
 				desc: `What <b>${esc(on.name)}</b> reads. Reading a source is what puts pages in the knowledge base; it never writes to the source.`,
 				body: linked.length === 0
 					? callout('No source is attached to this project yet. Add one, then read it: the pages it declares are what the rest of these pages list.')
 					: list(linked.map((source) => ({
 						mark: source.kind === 'git' ? 'repo' : source.kind === 'folder' ? 'folder' : 'package',
 						title: source.name,
-						sub: `<span class="cell-muted">${esc(source.kind)}${source.branch === undefined ? '' : ` · ${esc(source.branch)}`}</span>`
+						sub: `<span class="cell-muted">${esc(source.kind)}${source.branch === undefined ? '' : ` · ${esc(source.branch)}`}</span>`,
+						command: source.kind === 'git' ? 'temcoDocs.repository' : 'temcoRepositories.revealSource',
+						args: [source.name]
 					})))
 			})}
 </div>`}
@@ -475,7 +457,7 @@ function repositoryBody(fact: RepositoryFact | undefined): string {
 			title: 'Repository',
 			mark: 'repo',
 			desc: 'No repository with that name is recorded in the platform database.',
-			actions: button('All Sources', 'temcoDocs.sources', { kind: 'primary', mark: 'repo' }) + button('Add a Repository', 'temcoProjects.addSource', { mark: 'plus' })
+			actions: button('Edit the Project', 'temcoProjects.editProject', { kind: 'primary', mark: 'edit' }) + button('Add a Repository', 'temcoProjects.addSource', { mark: 'plus' })
 		})}
 <div class="mt-16">${callout('A repository is a source the catalog holds. If it was removed, its row is gone with it — the clone in the working area is not touched.')}</div>`;
 	}
@@ -497,7 +479,7 @@ function repositoryBody(fact: RepositoryFact | undefined): string {
 		desc: `${fact.remoteUrl === undefined ? 'no remote recorded' : `<span class="cell-mono">${esc(fact.remoteUrl)}</span>`} · ${fact.cloned ? `cloned at <span class="cell-mono">${esc(fact.path ?? '')}</span>` : 'no local copy yet'}`,
 		actions: button('Read Source', 'temcoRepositories.readSource', { kind: 'primary', mark: 'refresh', args: [fact.slug] })
 			+ (fact.cloned ? button('Pull', 'temcoRepositories.pullSource', { mark: 'download', args: [fact.slug] }) + button('Open the Copy', 'temcoRepositories.openClone', { mark: 'folder', args: [fact.slug] }) : '')
-			+ button('All Sources', 'temcoDocs.sources', { mark: 'repo' })
+			+ button('Edit the Project', 'temcoProjects.editProject', { mark: 'edit' })
 	})}
 ${tiles([
 		{ value: String(fact.pages), label: fact.pages === 1 ? 'Page found' : 'Pages found' },
@@ -552,63 +534,6 @@ function readSummary(counts: string | undefined): string {
 	} catch {
 		return counts;
 	}
-}
-
-/**
- * *Sources* — the sources the catalog holds, and whether the working tree behind one is here.
- *
- * A source is a row in the database plus, when it is a repository, a clone in the working area: the row says
- * what a read found; the clone is what a draft reads code from.
- */
-function sourcesBody(sources: readonly SourceRow[], roots: readonly DocsRoot[]): string {
-	const reading = new Set(roots.map((root) => root.folder.name));
-	const read = sources.filter((source) => (source.pages ?? 0) > 0);
-	const pages = sources.reduce((total, source) => total + (source.pages ?? 0), 0);
-	const pending = sources.filter((source) => (source.pages ?? 0) === 0);
-
-	const labelOf = (kind: string): string => kind === 'git' ? 'Repository' : kind === 'folder' ? 'Folder' : kind === 'archive' ? 'Archive' : kind;
-	const markFor = (kind: string): string => kind === 'git' ? 'repo' : kind === 'folder' ? 'folder' : 'package';
-
-	const row = (source: SourceRow): string => {
-		const here = reading.has(source.name);
-		const items = [labelOf(source.kind)];
-		if (source.branch !== undefined) {
-			items.push(source.branch);
-		}
-		items.push(source.pages === undefined ? 'never read' : `${source.pages} ${source.pages === 1 ? 'page' : 'pages'} found`);
-		items.push(here ? 'its working tree is open here' : 'not open in this window');
-		if (source.state !== undefined) {
-			items.push(source.state);
-		}
-		return `<div class="record-row"${source.kind === 'git' ? ` data-command="temcoDocs.repository" data-args="${esc(JSON.stringify([source.slug]))}"` : ''}>${toneMark(markFor(source.kind), here ? 'accent' : undefined)}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">${esc(source.name)}</span><span class="tag">${esc(source.slug)}</span></div><div class="record-row__meta">${facts(items)}</div></div><div class="record-row__state">${badge(here ? 'Here' : 'Recorded', here ? 'ok' : 'neutral')}</div>${button('Read', 'temcoRepositories.readSource', { small: true, kind: here ? 'primary' : 'ghost' })}</div>`;
-	};
-
-	const partition = (title: string, note: string, kinds: string[]): string => {
-		const items = sources.filter((source) => kinds.includes(source.kind));
-		if (items.length === 0) {
-			return '';
-		}
-		return `<div class="mt-24">${group({ label: title, count: `${items.length} ${items.length === 1 ? 'source' : 'sources'}`, note, actions: items.length > 1 ? button('Read All', 'temcoRepositories.readAllSources', { small: true, kind: 'ghost', mark: 'refresh' }) : '', body: items.map(row).join('') })}</div>`;
-	};
-
-	return `${pageHead({
-		title: 'Sources',
-		mark: 'repo',
-		desc: 'Everything a project reads: repositories, folders and archives. Reading a source is what puts pages in the knowledge base, and a repository is cloned locally so a draft can read its code.',
-		actions: button('Add Source', 'temcoProjects.addSource', { kind: 'primary', mark: 'plus' }) + button('GitHub Repositories', 'temcoRepositories.page', { mark: 'repo' })
-	})}
-${tiles([
-		{ value: String(sources.length), label: sources.length === 1 ? 'Source' : 'Sources' },
-		{ value: String(read.length), label: 'Read at least once' },
-		{ value: String(pages), label: 'Pages found' },
-		{ value: String(pending.length), label: 'Never read' }
-	])}
-${sources.length === 0
-			? `<div class="mt-16">${callout('<b>No source yet.</b> A project reads sources — a repository, a folder of Markdown, a document. Adding one records it here; reading it fills in the pages it declares.')}</div>`
-			: partition('Repositories', 'Cloned into the working area with full history and read by commit, so a draft can point at the commit it came from.', ['git'])
-			+ partition('Folders', 'Read in place from disk — one read per file, no clone and no history. A folder that changed keeps its old pages until it is read again.', ['folder'])
-			+ partition('Archives', 'Unpacked and read like a folder; the archive stays the only copy of what it held.', ['archive'])}
-<div class="mt-24">${callout('Reading a source never edits it. The pages it finds are recorded in the platform database; the source stays the only copy of its own content.')}</div>`;
 }
 
 /** One area across every root being read, which is how the list draws it. */
@@ -876,7 +801,7 @@ function sourceBody(fact: RepositoryFact | undefined): string {
 			title: 'Source Explorer',
 			mark: 'code',
 			desc: 'No repository with that name is recorded in the platform database.',
-			actions: button('All Sources', 'temcoDocs.sources', { kind: 'primary', mark: 'repo' })
+			actions: button('Edit the Project', 'temcoProjects.editProject', { kind: 'primary', mark: 'edit' })
 		})}
 <div class="mt-16">${callout('The Source Explorer reads a clone. A repository is added as a source and read, which puts a copy on this machine.')}</div>`;
 	}

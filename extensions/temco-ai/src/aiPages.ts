@@ -194,7 +194,7 @@ function citationsBody(): string {
 		title: 'Citations',
 		mark: 'link',
 		desc: 'Every answer names where it came from. A citation opens the page or the file it points at, in the editor column that is already open.',
-		actions: button('Open Source', 'temcoDocs.sources', { mark: 'repo' })
+		actions: button('Open Source', 'temcoProjects.editProject', { mark: 'repo' })
 	})}
 <div class="mt-24">
 ${card({
