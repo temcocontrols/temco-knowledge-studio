@@ -69,17 +69,27 @@ function item(node: Node): NodeItem {
 			const repository = new NodeItem(node, vscode.TreeItemCollapsibleState.None);
 			repository.label = node.row.name;
 			repository.id = `repo:${node.row.fullName}`;
-			repository.iconPath = new vscode.ThemeIcon(node.source === undefined ? 'repo' : 'check');
+			// The mark carries the state, because the description cannot: green for a source of this project, amber for
+			// one nothing has started yet. The words sit at the right edge, where a tree puts its second column.
+			repository.iconPath = node.source === undefined
+				? new vscode.ThemeIcon('circle-outline', new vscode.ThemeColor('charts.yellow'))
+				: new vscode.ThemeIcon('pass-filled', new vscode.ThemeColor('charts.green'));
 			repository.contextValue = node.source === undefined ? 'temcoRepository' : 'temcoSource';
-			const facts = [node.row.language ?? '', node.row.isPrivate ? 'private' : ''].filter((fact) => fact.length > 0);
-			facts.push(node.source === undefined ? 'not started' : 'source of this project');
-			repository.description = facts.join(' · ');
+			// No second column: a tree puts its description straight after the label, where it reads as part of the name,
+			// and the state is already the mark's colour. The facts live in the tooltip.
 			repository.tooltip = new vscode.MarkdownString(
-				`**${node.row.fullName}**\n\n${node.row.description ?? ''}\n\n${repository.description}`
+				`**${node.row.fullName}**\n\n${node.row.description ?? ''}\n\n` +
+				[
+					node.row.language === undefined || node.row.language.length === 0 ? 'repository' : node.row.language,
+					node.row.isPrivate ? 'private' : 'public',
+					node.source === undefined ? 'not started' : 'source of this project',
+				]
+					.filter((part) => part.length > 0)
+					.join(' · ')
 			);
 			repository.command =
 				node.source === undefined
-					? { command: 'temcoRepositories.page', title: 'Open the repositories page' }
+					? { command: 'temcoRepositories.repository', title: 'Open the repository', arguments: [node.row.name] }
 					: { command: 'temcoDocs.repository', title: 'Open the repository', arguments: [node.source] };
 			return repository;
 		}

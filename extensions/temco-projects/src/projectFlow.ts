@@ -34,6 +34,8 @@ export interface PinnedRepository {
 	name: string;
 	cloneUrl?: string;
 	branch?: string;
+	/** The files a person already ticked on the repository's own page, so the form opens on that selection. */
+	files?: readonly string[];
 }
 
 /** What the flow offers when it opens. The mock's defaults, over whatever sources the catalog has. */
@@ -248,7 +250,8 @@ export class ProjectFlowPage {
 			path: file.path,
 			size: file.size,
 			category: isDocumentation(file.path) ? 'docs' : 'code',
-			ticked: defaultTick(file.path)
+			// A selection made on the repository's page wins over the default: it is a person's answer, not a guess.
+			ticked: this.pinned?.files === undefined ? defaultTick(file.path) : this.pinned.files.includes(file.path)
 		}));
 		await this.panel?.webview.postMessage({ type: 'files', files, note: listed.note });
 	}
@@ -367,7 +370,49 @@ export class ProjectFlowPage {
 		this.refresh();
 		this.panel?.dispose();
 		void vscode.window.showInformationMessage(`${name} created as a draft.`);
+		if (values.draft !== undefined && values.draft.trim().length > 0) {
+			void this.writeDraft(name, values.draft);
+		}
 		await vscode.commands.executeCommand('temcoDocs.projects');
+	}
+
+	/**
+	 * Offers to put the drafted page on disk, once the project exists.
+	 *
+	 * The draft is kept with the project either way. This is simply the one moment when "where would it go" has an
+	 * obvious answer, because the person has just decided what the project is; a draft that quietly wrote itself would
+	 * be a file nobody chose the place for.
+	 */
+	private async writeDraft(name: string, body: string): Promise<void> {
+		const answer = await vscode.window.showInformationMessage(
+			`${name} created — the drafted overview is kept with it.`,
+			'Write it to a folder…',
+			'Not now'
+		);
+		if (answer !== 'Write it to a folder…') {
+			return;
+		}
+		const picked = await vscode.window.showOpenDialog({
+			canSelectFiles: false,
+			canSelectFolders: true,
+			canSelectMany: false,
+			openLabel: 'Write docs/help here',
+			title: 'Where should docs/help/overview.md be written?'
+		});
+		const folder = picked?.[0];
+		if (folder === undefined) {
+			return;
+		}
+		const target = vscode.Uri.joinPath(folder, 'docs', 'help', 'overview.md');
+		if (await exists(target)) {
+			void vscode.window.showWarningMessage(
+				`Temco Projects: ${target.fsPath} already exists, so nothing was written.`
+			);
+			return;
+		}
+		await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(folder, 'docs', 'help'));
+		await vscode.workspace.fs.writeFile(target, Buffer.from(body, 'utf8'));
+		await vscode.window.showTextDocument(target);
 	}
 
 	/**
@@ -685,13 +730,18 @@ function typeOptions(initial: string): string {
 		{ value: 'files', mark: 'layers', label: 'From existing files', note: 'HTML, Markdown, Word, CHM — or a docs folder' }
 	];
 
-	return `<div class="opt-list" role="listbox" aria-label="Starting point">${options.map((option) => {
+	// The wrapper is part of the answer, not of the template: a closing `</div>` that sits between two `${…}` holes is
+	// the first thing a later edit drops, and dropping it puts the whole form inside the rail.
+	return `<div class="split__side">
+		<div class="split__label">Start from</div>
+		<div class="opt-list" role="listbox" aria-label="Starting point">${options.map((option) => {
 		const on = option.value === initial;
 		return `<button type="button" class="opt${on ? ' is-on' : ''}" role="option" aria-selected="${on}" data-type="${option.value}" data-title="${esc(option.label)}">
 	<span class="opt__mark">${icon(option.mark)}</span>
 	<span class="opt__text"><span class="opt__title">${esc(option.label)}</span><span class="opt__desc">${esc(option.note)}</span></span>
 </button>`;
-	}).join('')}</div>`;
+	}).join('')}</div>
+	</div>`;
 }
 
 /**
@@ -755,11 +805,7 @@ function html(sources: SourceRow[], pinned: PinnedRepository | undefined, unavai
 ${empty}
 
 <div class="split" data-initial-type="${esc(initial)}">
-	<div class="split__side">
-		<div class="split__label">Start from</div>
-		${typeOptions(initial)}
-	</div>
-
+	${typeOptions(initial)}
 	<div class="split__main">
 		<div class="split__title" id="form-title">Empty project</div>
 		<p class="split__hint" id="form-hint"></p>
@@ -822,6 +868,16 @@ ${empty}
  * it is set in the mono face only because Markdown's indentation is part of what was drafted.
  */
 const FLOW_CSS = `
+/* The rail is the narrow column on the left and the form the wide one on the right, stated here rather than
+   inferred from the DOM order: the shared \`.split\` sizes its columns \`1fr 320px\`, which put this page's rail in
+   the wide column and the form in a 320px strip — so choosing a type changed something nobody was looking at. */
+.split { grid-template-columns: 244px minmax(0, 1fr); }
+.split__side { grid-column: 1; }
+.split__main { grid-column: 2; }
+@media (max-width: 820px) {
+  .split { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .split__side, .split__main { grid-column: 1; }
+}
 .checklist__row.is-fixed { cursor: default; background: transparent; }
 .draft-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
 .draft-preview { margin: 10px 0 0; max-height: 300px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
@@ -944,6 +1000,10 @@ const WIZARD_SCRIPT = `
 		if (v.origin === 'repository') { parts.push(v.sources.length + (v.sources.length === 1 ? ' repository' : ' repositories')); }
 		if (v.origin === 'folder') { parts.push('a folder with a registry'); }
 		if (v.origin === 'import') { parts.push((v.importKind || 'material') + ' import'); }
+		if (v.origin === 'repository' && v.files.length > 0) {
+			parts.push(v.files.length + (v.files.length === 1 ? ' file' : ' files') + ' picked');
+		}
+		parts.push(draftText.length > 0 ? 'draft ready' : 'no draft yet');
 		parts.push(v.targets.length + (v.targets.length === 1 ? ' output' : ' outputs'));
 		summary.textContent = parts.join(' · ');
 	}
@@ -1044,7 +1104,10 @@ const WIZARD_SCRIPT = `
 		if ((v.origin === 'folder' || v.origin === 'import') && !v.importSource.trim()) { fail('Choose the folder or file to bring in.'); return; }
 		if (v.origin === 'repository' && v.sources.length === 0) { fail('Choose at least one repository to cite.'); return; }
 		if (v.targets.length === 0) { fail('Choose at least one output to build.'); return; }
-		api.postMessage({ type: 'create', values: v });
+		// The ticked files are what a *draft* was made from; the project records the draft itself, not the list.
+		const sent = Object.assign({}, v);
+		delete sent.files;
+		api.postMessage({ type: 'create', values: sent });
 	});
 
 	const filter = document.querySelector('[data-filter="sources"]');
@@ -1056,8 +1119,7 @@ const WIZARD_SCRIPT = `
 			refresh();
 		});
 	}
-	// Choosing from a list that is not on this page: the host filters, ticks and answers in one quick pick, so the
-	// form keeps everything typed so far.
+
 	const choose = document.getElementById('choose-repositories');
 	if (choose) {
 		choose.addEventListener('click', function () {

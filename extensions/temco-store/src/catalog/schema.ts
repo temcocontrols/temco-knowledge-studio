@@ -3,8 +3,8 @@
 // Versioned, because the platform's memory outlives any one build of it: a schema bump is a migration, and a
 // database written by a newer version is refused in words rather than half-read.
 //
-// One table per idea — see `docs/platform-design.md`, "The catalog". Nothing here is derived at read time from
-// the network: a row is written by a scan and read by a view.
+// One table per idea — see `docs/temco-platform/catalog.md`. Nothing here is derived at read time from the network:
+// a row is written by a scan and read by a view.
 
 export const SCHEMA_VERSION = 6;
 

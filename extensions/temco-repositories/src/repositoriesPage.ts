@@ -16,7 +16,7 @@ import { Catalog, OrganisationRow, RepositoryCacheRow, Selection, slugOf } from 
 import { REPOSITORIES_VIEW_TYPE } from './surface';
 import { page, pageColumn } from './ui';
 import { listRepositories } from './repository';
-import { cloneSize, hasClone } from './workarea';
+import { cloneSize, hasClone, workRoot } from './workarea';
 
 /** The enterprise the platform ships its own documentation from — written as the first organisation. */
 const DEFAULT_ORGANISATION = 'temcocontrols';
@@ -83,7 +83,11 @@ export class RepositoriesPage {
   ) { }
 
   /** Opens the page, or brings it forward if it is already open. One instance, always. */
-  open(): void {
+  open(slug?: string): void {
+    // Opened *for* one organisation — the panel asks for its own row, not for whatever was last shown.
+    if (slug !== undefined) {
+      this.showing = slug;
+    }
     if (this.panel) {
       this.panel.reveal(pageColumn());
       void this.render();
@@ -196,6 +200,8 @@ export class RepositoriesPage {
       cited,
       takenAt: org.lastRead,
       state: org.state,
+      // Where a download lands, and what a draft is written beside — the one setting this page acts on.
+      where: workRoot(),
       copies: await this.clones(repositories, project),
       repositories,
     };
@@ -237,13 +243,15 @@ export class RepositoriesPage {
         await this.start(message.name ?? '');
         return;
       case 'fetch':
-        // Fetching a repository that was never started makes it a source first: a clone belongs to a source.
+        // Downloading a repository that was never started makes it a source first: a copy belongs to a source.
         await this.cite(message.name ?? '');
         await vscode.commands.executeCommand('temcoRepositories.fetchSource', slugOf(message.name ?? ''));
+        this.refresh();
         await this.send();
         return;
       case 'pull':
         await vscode.commands.executeCommand('temcoRepositories.pullSource', slugOf(message.name ?? ''));
+        this.refresh();
         await this.send();
         return;
       case 'open':
@@ -251,22 +259,11 @@ export class RepositoriesPage {
           await vscode.env.openExternal(vscode.Uri.parse(message.url));
         }
         return;
-      case 'project': {
-        // A project started *from* a repository: the projects module records it as the project's source itself, so
-        // this only hands over the row's own facts.
-        const row = this.listed.find((candidate) => candidate.name === (message.name ?? ''));
-        try {
-          await vscode.commands.executeCommand(
-            'temcoProjects.newProjectFromRepository',
-            message.name,
-            row?.cloneUrl,
-            row?.defaultBranch
-          );
-        } catch {
-          void vscode.window.showInformationMessage(
-            'Temco Repositories: the projects module is not installed, so there is nothing to create a project with.'
-          );
-        }
+      case 'project':
+      case 'detail': {
+        // A row's own page: what it is, whether there is a local copy, and what files are inside it. The project is
+        // created from *there*, with the files a person picked, so this does not jump straight into a form.
+        await vscode.commands.executeCommand('temcoRepositories.repository', message.name, this.showing);
         return;
       }
       case 'openClone':
@@ -274,17 +271,19 @@ export class RepositoriesPage {
         return;
       case 'removeClone':
         await vscode.commands.executeCommand('temcoRepositories.removeClone', slugOf(message.name ?? ''));
+        this.refresh();
         await this.send();
         return;
       case 'bulk':
         await this.bulk(message.action, message.names ?? []);
         return;
-      case 'copy':
-        await vscode.env.clipboard.writeText(message.text ?? '');
-        return;
       case 'read':
         // Choosing another organisation in the strip: its held list is drawn at once, then asked for again.
         await this.send(message.slug);
+        return;
+      case 'changeFolder':
+        await vscode.commands.executeCommand('temcoRepositories.pickWorkspaceFolder');
+        await this.send();
         return;
       case 'add':
         await this.addOrganisation(message.text ?? '');
@@ -386,28 +385,44 @@ export class RepositoriesPage {
       await this.start(names[0]);
       return;
     }
-    for (const name of names) {
-      switch (action) {
-        case 'start':
-          await this.start(name);
-          break;
-        case 'fetch':
-          // Fetching a repository that was never started makes it a source first: a clone belongs to a source.
-          await this.cite(name);
-          await vscode.commands.executeCommand('temcoRepositories.fetchSource', slugOf(name));
-          break;
-        case 'pull':
-          await vscode.commands.executeCommand('temcoRepositories.pullSource', slugOf(name));
-          break;
-        case 'removeClone':
-          await vscode.commands.executeCommand('temcoRepositories.removeClone', slugOf(name));
-          break;
-        case 'project':
-          // Absent from the selection bar on purpose: a selection is what to *do to* these repositories, and a
-          // project is one repository's own beginning.
-          break;
+    const label = action === 'fetch' ? 'Downloading' : action === 'start' ? 'Starting' : action === 'pull' ? 'Pulling' : 'Removing';
+    // One notification for the queue, with a Stop: a clone per row is slow, and ten modal prompts in a row is not a
+    // way to run a command.
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: `Temco Repositories: ${label} ${names.length} ${names.length === 1 ? 'repository' : 'repositories'}`,
+        cancellable: true,
+      },
+      async (progress, cancellation) => {
+        for (let index = 0; index < names.length; index++) {
+          if (cancellation.isCancellationRequested) {
+            return;
+          }
+          const name = names[index];
+          progress.report({ message: `${name} (${index + 1} of ${names.length})`, increment: 100 / names.length });
+          switch (action) {
+            case 'start':
+              await this.start(name);
+              break;
+            case 'fetch':
+              // Downloading a repository that was never started makes it a source first.
+              await this.cite(name);
+              await vscode.commands.executeCommand('temcoRepositories.fetchSource', slugOf(name));
+              break;
+            case 'pull':
+              await vscode.commands.executeCommand('temcoRepositories.pullSource', slugOf(name));
+              break;
+            case 'removeClone':
+              await vscode.commands.executeCommand('temcoRepositories.removeClone', slugOf(name));
+              break;
+            case 'project':
+              // Absent from the selection bar on purpose: a project is one repository's own beginning.
+              break;
+          }
+        }
       }
-    }
+    );
     this.refresh();
     await this.send();
   }
@@ -497,6 +512,12 @@ function html(): string {
   const style = `
     /* A dashboard, not a document: the strip of enterprises comes first, the list is the body, the help is the
        foot. No boxes anywhere — a fill, a hairline and spacing carry the hierarchy. */
+    /* Where downloads land: one line above the strip, because it applies to every row below it. */
+    .where { display: flex; gap: .5em; align-items: center; flex-wrap: wrap; margin: 1em 0 0;
+             padding: .55em .8em; border-radius: var(--radius); background: var(--bg-card); font-size: var(--fs-sm); }
+    .where__label { color: var(--fg-muted); }
+    .where__path { color: var(--fg-strong); font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
+
     .strip { display: flex; gap: .4em; flex-wrap: wrap; align-items: center; margin: 1em 0 0; }
 
     /* An enterprise is a chip: its name, how many it holds, and a way to forget it. The selected one is filled
@@ -536,19 +557,22 @@ function html(): string {
     .row.is-selected { background: color-mix(in srgb, var(--accent) 8%, transparent); }
     .row input[type=checkbox] { margin: .3em 0 0; }
     .row .top { display: flex; gap: .7em; align-items: baseline; flex-wrap: wrap; }
-    .row .name { font-weight: 600; color: var(--fg-strong); }
+    .row .name { font-weight: 600; color: var(--fg-strong); border: 0; background: none; padding: 0;
+                 font-family: inherit; font-size: inherit; cursor: pointer; text-align: left; }
+    .row .name:hover { text-decoration: underline; }
     .row .cited { color: var(--ok); font-size: var(--fs-sm); white-space: nowrap; }
     .row .facts { color: var(--fg-muted); font-size: var(--fs-sm); }
     .row .desc { margin: .1em 0 0; color: var(--fg-muted); font-size: var(--fs-sm); overflow-wrap: anywhere; }
     .row .do { display: flex; gap: .35em; flex-wrap: wrap; justify-content: flex-end; }
 
-    .warn { border-radius: var(--radius); padding: .8em 1em; background: var(--bg-inset); margin: 1em 0; }
+    .warn { border-radius: var(--radius); padding: .8em 1em; margin: 1em 0;
+            background: color-mix(in srgb, var(--warn) 22%, var(--bg-inset)); color: var(--fg); }
     .warn p { margin: 0; color: var(--fg); }
     .warn .do { display: flex; gap: .5em; margin: .7em 0 0; }
     .empty { color: var(--fg-muted); padding: 1em 0; }
 
     /* How the page works, numbered: five acts, in the order a person performs them. */
-    .how { margin: 2em 0 0; max-width: 82ch; }
+    .how { margin: 2em 0 0; max-width: none; }
     .how h2 { font-size: var(--fs-ui); font-weight: 600; color: var(--fg-strong); margin: 0 0 .5em; }
     .how ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: .5em;
               color: var(--fg-muted); font-size: var(--fs-sm); line-height: 1.55; }
@@ -564,9 +588,17 @@ function html(): string {
       <p class="page-head__desc" id="lede">Reading the organisation from GitHub…</p>
     </div>
     <div class="page-head__actions">
+      <button type="button" class="btn btn--ghost" id="new-project">New project</button>
       <button type="button" class="btn" id="add-toggle">Add an enterprise</button>
       <button type="button" class="btn btn--primary" id="reload">Read GitHub again</button>
     </div>
+  </div>
+
+  <div class="where">
+    <span class="where__label">Local copies and drafts go to</span>
+    <code class="where__path" id="where-path">…</code>
+    <button type="button" class="btn btn--sm" id="change-folder">Change…</button>
+    <button type="button" class="btn btn--sm btn--ghost" id="settings">Settings</button>
   </div>
 
   <form class="adder" hidden id="adder">
@@ -590,7 +622,7 @@ function html(): string {
   <div class="selection" hidden id="selection">
     <span class="count" id="selection-count">0 selected</span>
     <button type="button" class="btn btn--sm btn--primary" id="bulk-start">Start</button>
-    <button type="button" class="btn btn--sm" id="bulk-fetch">Fetch the local copy</button>
+    <button type="button" class="btn btn--sm" id="bulk-fetch">Download</button>
     <button type="button" class="btn btn--sm" id="bulk-pull">Pull</button>
     <button type="button" class="btn btn--sm" id="bulk-remove">Remove the local copy</button>
     <button type="button" class="btn btn--sm btn--ghost" id="bulk-clear">Clear</button>
@@ -608,8 +640,9 @@ function html(): string {
         repository.</li>
       <li><b>Project</b> opens a new project <em>from</em> this repository: it is cited as the source, its own
         documentation and classes are listed to pick from, and the AI can draft the first page from what you picked.</li>
-      <li><b>Fetch the local copy</b> clones one branch, with full history, into the working area. That copy is what
-        lets a draft, the AI and its citations read the files and the history behind them.</li>
+      <li><b>Download</b> clones one branch, with full history, into the folder at the top of this page — the
+        working area, which is outside every repository. That copy is what lets a draft, the AI and its citations
+        read the files and the history behind them.</li>
       <li><b>Pull</b> freshens that copy when the repository has moved on. <b>Remove the local copy</b> deletes the
         copy only — the repository is never written to and never pushed to.</li>
       <li>A private repository needs a token: <b>Set a GitHub Token</b>, from the warning above or the palette.</li>
@@ -632,9 +665,13 @@ let cited = [];
 let copies = {};
 let takenAt;
 let state;
+let project;
 const selected = new Set();
 
 $('reload').addEventListener('click', () => vscode.postMessage({ type: 'reload' }));
+$('new-project').addEventListener('click', () => vscode.postMessage({ type: 'command', command: 'temcoProjects.newProject' }));
+$('change-folder').addEventListener('click', () => vscode.postMessage({ type: 'changeFolder' }));
+$('settings').addEventListener('click', () => vscode.postMessage({ type: 'command', command: 'temcoRepositories.settings' }));
 $('filter').addEventListener('input', () => draw());
 $('add-toggle').addEventListener('click', () => {
   $('adder').hidden = !$('adder').hidden;
@@ -688,6 +725,7 @@ window.addEventListener('message', (event) => {
   copies = message.copies || {};
   takenAt = message.takenAt;
   state = message.state;
+  project = message.project;
   // A row that no longer exists cannot stay selected, and a list from another organisation starts clean.
   if (changed) { selected.clear(); }
   for (const name of Array.from(selected)) {
@@ -696,6 +734,7 @@ window.addEventListener('message', (event) => {
 
   $('error').replaceChildren(...(message.warning ? [banner(message.warning)] : []));
   $('bar').hidden = false;
+  if (message.where) { $('where-path').textContent = message.where; }
   drawStrip();
   drawStats();
   $('lede').textContent = lede(message);
@@ -758,6 +797,14 @@ function drawStats() {
     parts.push(text('span', '', 'from the address'));
   }
   $('stats').replaceChildren(...join(parts));
+  // Which project a Start would add to, and the one link that changes it: the decision is the platform's, not a
+  // hidden state of this page.
+  if (!project) {
+    $('stats').append(
+      document.createTextNode(' · '),
+      button('link', 'Choose a project', () => vscode.postMessage({ type: 'command', command: 'temcoDocs.openProjects' }))
+    );
+  }
 }
 
 function draw() {
@@ -781,7 +828,6 @@ function draw() {
     $('list').replaceChildren(empty);
     return;
   }
-
   $('list').replaceChildren(...shown.map((repo) => row(repo)));
 }
 
@@ -804,7 +850,10 @@ function row(repo) {
   const main = document.createElement('div');
   const top = document.createElement('div');
   top.className = 'top';
-  top.append(text('span', 'name', repo.name));
+  // The name is the way into the row's own page: the one place its files and its local copy are described.
+  const name = button('name', repo.name, () => vscode.postMessage({ type: 'detail', name: repo.name }));
+  name.title = 'Open this repository — its files, its local copy, and creating a project from it';
+  top.append(name);
   if (isCited) { top.append(text('span', 'cited', 'source of this project')); }
   const facts = [repo.language || '', repo.pushedAt ? 'pushed ' + shortDate(repo.pushedAt) : '', repo.isPrivate ? 'private' : '']
     .filter(Boolean).join(' · ');
@@ -817,13 +866,14 @@ function row(repo) {
     vscode.postMessage({ type: 'start', name: repo.name }));
   const project = button('btn btn--sm', 'Project', () =>
     vscode.postMessage({ type: 'project', name: repo.name }));
-  project.title = 'Create a project from this repository — its files, then an AI draft';
+  project.title = 'Open this repository — pick its files, then create a project from them';
   const open = button('btn btn--sm btn--ghost', 'Open', () => {
     if (repo.webUrl) { vscode.postMessage({ type: 'open', url: repo.webUrl }); }
   });
   open.title = 'Open the repository on GitHub';
-  const local = button('btn btn--sm', cloned ? 'Pull' : 'Fetch the local copy', () =>
+  const local = button('btn btn--sm', cloned ? 'Pull' : 'Download', () =>
     vscode.postMessage({ type: cloned ? 'pull' : 'fetch', name: repo.name }));
+  local.title = cloned ? 'Download the latest changes into the local copy' : 'Download this repository into the working area';
   do_.append(start, project, open, local);
   if (cloned) {
     const drop = button('btn btn--sm btn--ghost', 'Remove copy', () =>

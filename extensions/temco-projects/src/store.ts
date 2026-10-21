@@ -164,6 +164,20 @@ export interface Catalog {
 		kind?: string;
 		body: string;
 	}): number;
+	/** The drafts a project holds in one state — `draft` unless asked otherwise. */
+	drafts(documentSlug: string, state?: 'draft' | 'accepted' | 'discarded'): {
+		id: number;
+		documentSlug: string;
+		source?: string;
+		pageId: string;
+		title: string;
+		kind: string;
+		body: string;
+		createdAt: string;
+		state: string;
+	}[];
+	/** Marks a draft written or discarded. The row is kept, so the act leaves a trace. */
+	setDraftState(id: number, state: 'accepted' | 'discarded'): void;
 	startBuild(documentSlug: string, revision?: string): number;
 	finishBuild(buildId: number, status: string): void;
 	recordArtifact(

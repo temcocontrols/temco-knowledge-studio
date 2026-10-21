@@ -53,6 +53,36 @@
         "icon": "$(github)"
       },
       {
+        "command": "temcoRepositories.repository",
+        "title": "Open a Repository",
+        "icon": "$(repo)"
+      },
+      {
+        "command": "temcoRepositories.rowFetch",
+        "title": "Fetch the Local Copy",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "temcoRepositories.rowProject",
+        "title": "Create a Project from This Repository",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "temcoRepositories.settings",
+        "title": "Repository Settings",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "temcoRepositories.rowReadOrg",
+        "title": "Read This Enterprise Again",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "temcoRepositories.rowForgetOrg",
+        "title": "Forget This Enterprise",
+        "icon": "$(trash)"
+      },
+      {
         "command": "temcoRepositories.readSource",
         "title": "Read a Source",
         "icon": "$(cloud-download)"
@@ -133,6 +163,26 @@
       ],
       "view/item/context": [
         {
+          "command": "temcoRepositories.rowReadOrg",
+          "when": "view == temcoRepositories.list && viewItem == temcoOrganisation",
+          "group": "inline@0"
+        },
+        {
+          "command": "temcoRepositories.rowForgetOrg",
+          "when": "view == temcoRepositories.list && viewItem == temcoOrganisation",
+          "group": "1_actions@0"
+        },
+        {
+          "command": "temcoRepositories.rowFetch",
+          "when": "view == temcoRepositories.list && viewItem == temcoRepository",
+          "group": "inline@0"
+        },
+        {
+          "command": "temcoRepositories.rowProject",
+          "when": "view == temcoRepositories.list && viewItem == temcoRepository",
+          "group": "inline@1"
+        },
+        {
           "command": "temcoRepositories.readSource",
           "when": "view == temcoRepositories.list && viewItem == temcoSource",
           "group": "inline@0"
@@ -165,12 +215,12 @@
         "temcoRepositories.organisation": {
           "type": "string",
           "default": "temcocontrols",
-          "markdownDescription": "The GitHub organisation the dashboard links to for a starting point. Nothing is read from it automatically."
+          "markdownDescription": "The enterprise the Repositories page opens on, and writes into the platform's database the first time the page opens. Every other enterprise is added on the page itself."
         },
         "temcoRepositories.workspaceFolder": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Where local copies of sources are cloned, and where what we make from them is written. Empty means `~/Temco`. It is outside every repository on purpose: **nothing is ever written to a source, and nothing is ever pushed**."
+          "markdownDescription": "Where local copies of sources are downloaded, and where what we make from them is written. Empty means `~/Temco`. It is outside every repository on purpose: **nothing is ever written to a source, and nothing is ever pushed**."
         }
       }
     }

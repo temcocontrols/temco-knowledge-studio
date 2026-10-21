@@ -24,7 +24,6 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { Catalog, Selection, slugOf } from './store';
 
-const SETTING = 'temcoRepositories.workspaceFolder';
 /** How long a git command may take. A clone of a large repository is slow; an hour is not an answer either. */
 const GIT_TIMEOUT_MS = 30 * 60 * 1000;
 
@@ -87,8 +86,9 @@ export function registerWorkareaCommands(
     vscode.commands.registerCommand('temcoRepositories.removeClone', (target?: unknown) =>
       removeClone(context, selection, refresh, slugOfTarget(target))
     ),
+    // Kept for the palette entry that existed before the folder dialog: one command does the work, the other names it.
     vscode.commands.registerCommand('temcoRepositories.changeWorkspaceFolder', () =>
-      vscode.commands.executeCommand('workbench.action.openSettings', SETTING)
+      vscode.commands.executeCommand('temcoRepositories.pickWorkspaceFolder')
     ),
     vscode.commands.registerCommand('temcoRepositories.openWorkFolder', () => openProjectFolder(selection))
   );

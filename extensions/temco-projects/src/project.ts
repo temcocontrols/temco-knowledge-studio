@@ -39,9 +39,9 @@ export function registerProjectCommands(
     // has to guess which organisation the repository belongs to.
     vscode.commands.registerCommand(
       'temcoProjects.newProjectFromRepository',
-      (name?: string, cloneUrl?: string, branch?: string) =>
+      (name?: string, cloneUrl?: string, branch?: string, files?: string[]) =>
         typeof name === 'string' && name.length > 0
-          ? void flow.open({ name, cloneUrl, branch })
+          ? void flow.open({ name, cloneUrl, branch, files })
           : void flow.open()
     ),
     vscode.commands.registerCommand('temcoProjects.removeProject', (target?: ProjectArgument) =>

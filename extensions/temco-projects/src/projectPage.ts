@@ -26,7 +26,7 @@ interface PageSource {
 }
 
 interface PageMessage {
-  type: 'ready' | 'pick' | 'submit' | 'cancel' | 'remove';
+  type: 'ready' | 'pick' | 'submit' | 'cancel' | 'remove' | 'draftWrite' | 'draftCopy' | 'draftDiscard';
   kind?: 'folder' | 'archive';
   values?: { name: string; version: string; owner: string; audience: string };
   /** Sources added on this page, not in the catalog yet. */
@@ -34,6 +34,8 @@ interface PageMessage {
   /** The slugs of the catalog's sources the page left ticked. */
   cited?: string[];
   outputs?: string[];
+  /** Which drafted page an act is about. */
+  id?: number;
 }
 
 export class ProjectPage {
@@ -88,6 +90,15 @@ export class ProjectPage {
       case 'submit':
         await this.submit(message);
         return;
+      case 'draftWrite':
+        await this.writeDraft(message.id);
+        return;
+      case 'draftCopy':
+        await this.copyDraft(message.id);
+        return;
+      case 'draftDiscard':
+        await this.discardDraft(message.id);
+        return;
     }
 
     if (message.type === 'ready') {
@@ -124,11 +135,20 @@ export class ProjectPage {
     }
     let document: DocumentDetail | undefined;
     let cited: string[] = [];
+    let drafts: { id: number; title: string; pageId: string; characters: number; createdAt: string }[] = [];
     const known: { slug: string; name: string; kind: string; branch?: string; pages?: number; line: string }[] = [];
 
     await this.withCatalog((catalog) => {
       document = catalog.document(this.slug);
       cited = catalog.documentSourceSlugs(this.slug);
+      // What was drafted for this project and never written: a page kept in the catalog, not a file.
+      drafts = catalog.drafts(this.slug).map((row) => ({
+        id: row.id,
+        title: row.title,
+        pageId: row.pageId,
+        characters: row.body.length,
+        createdAt: row.createdAt,
+      }));
       // What the catalog already knows, so a source is added once and cited by any number of projects.
       for (const source of catalog.sources()) {
         known.push({
@@ -154,6 +174,7 @@ export class ProjectPage {
       document: document ?? { name: '', version: '1.0', owner: 'docs', audience: '', outputs: [], sources: [] },
       known,
       cited,
+      drafts,
     });
   }
 
@@ -237,6 +258,77 @@ export class ProjectPage {
     this.refresh(slug);
     await focusLibrary();
     void vscode.window.showInformationMessage('Temco Projects: the project is removed.');
+  }
+
+  /** One drafted page of this project, by the id the page posted — never a body typed into a message. */
+  private async draftOf(id: number | undefined): Promise<{ id: number; pageId: string; body: string } | undefined> {
+    if (id === undefined) {
+      return undefined;
+    }
+    let found: { id: number; pageId: string; body: string } | undefined;
+    await this.withCatalog((catalog) => {
+      const row = catalog.drafts(this.slug).find((draft) => draft.id === id);
+      if (row !== undefined) {
+        found = { id: row.id, pageId: row.pageId, body: row.body };
+      }
+    });
+    return found;
+  }
+
+  /**
+   * Puts a drafted page on disk, at the path the draft names inside a folder the person picks.
+   *
+   * The path is the draft's own `pageId` — a draft records where it is *meant* to live, so writing it is one answer,
+   * not a second design decision. An existing file is refused rather than replaced: a draft must not eat a page.
+   */
+  private async writeDraft(id: number | undefined): Promise<void> {
+    const draft = await this.draftOf(id);
+    if (draft === undefined) {
+      return;
+    }
+    const picked = await vscode.window.showOpenDialog({
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: `Write ${draft.pageId}`,
+      title: `Which folder should ${draft.pageId} be written into?`
+    });
+    const folder = picked?.[0];
+    if (folder === undefined) {
+      return;
+    }
+    const target = vscode.Uri.joinPath(folder, ...draft.pageId.split('/'));
+    if (await there(target)) {
+      void vscode.window.showWarningMessage(
+        `Temco Projects: ${target.fsPath} already exists, so nothing was written.`
+      );
+      return;
+    }
+    await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(target, '..'));
+    await vscode.workspace.fs.writeFile(target, Buffer.from(draft.body, 'utf8'));
+    await this.withCatalog((catalog) => catalog.setDraftState(draft.id, 'accepted'));
+    this.refresh();
+    await this.seed();
+    await vscode.window.showTextDocument(target);
+  }
+
+  private async copyDraft(id: number | undefined): Promise<void> {
+    const draft = await this.draftOf(id);
+    if (draft === undefined) {
+      return;
+    }
+    await vscode.env.clipboard.writeText(draft.body);
+    void vscode.window.showInformationMessage(`Temco Projects: ${draft.pageId} is on the clipboard.`);
+  }
+
+  /** Keeps the row but marks it discarded, so the act leaves a trace instead of silently losing text. */
+  private async discardDraft(id: number | undefined): Promise<void> {
+    if (id === undefined) {
+      return;
+    }
+    await this.withCatalog((catalog) => catalog.setDraftState(id, 'discarded'));
+    this.refresh();
+    await this.seed();
   }
 
   /** Opens the catalog, runs the work, closes it — and reports a refusal in words rather than a stack trace. */
@@ -330,6 +422,12 @@ export class ProjectPage {
     <button id="addArchive" type="button">Add archive…</button>
   </div>
 
+  <h2>Drafts</h2>
+  <p class="quiet">A page the AI drafted for this project and nobody has written yet. Writing it puts it at the path it
+    names, inside the folder you pick; copying it hands it to the clipboard; discarding it leaves the project alone.</p>
+  <p class="quiet" id="noDrafts" hidden>Nothing is drafted for this project.</p>
+  <div id="drafts"></div>
+
   <h2>Outputs</h2>
   <div class="outputs">
     <label><input id="out-chm" type="checkbox"> CHM</label>
@@ -407,6 +505,33 @@ export class ProjectPage {
         : 'This project will cite ' + total + ' source' + (total === 1 ? '' : 's') + '.';
   }
 
+  /** The drafted pages this project still holds: none written, each with the three acts it allows. */
+  function renderDrafts(drafts) {
+    const list = $('drafts');
+    list.replaceChildren();
+    $('noDrafts').hidden = drafts.length > 0;
+    drafts.forEach((draft) => {
+      const row = document.createElement('div');
+      row.className = 'row';
+      const text = document.createElement('span');
+      text.textContent = draft.title + ' — ' + draft.pageId + ' · ' + draft.characters + ' characters';
+      const write = document.createElement('button');
+      write.type = 'button';
+      write.textContent = 'Write…';
+      write.addEventListener('click', () => vscode.postMessage({ type: 'draftWrite', id: draft.id }));
+      const copy = document.createElement('button');
+      copy.type = 'button';
+      copy.textContent = 'Copy';
+      copy.addEventListener('click', () => vscode.postMessage({ type: 'draftCopy', id: draft.id }));
+      const drop = document.createElement('button');
+      drop.type = 'button';
+      drop.textContent = 'Discard';
+      drop.addEventListener('click', () => vscode.postMessage({ type: 'draftDiscard', id: draft.id }));
+      row.append(text, write, copy, drop);
+      list.append(row);
+    });
+  }
+
   function label(kind, name, branch) {
     return name + ' — ' + kind + (branch ? ' · ' + branch : '');
   }
@@ -444,6 +569,7 @@ export class ProjectPage {
       $('heading').textContent = editing ? 'Project' : 'New project';
       $('submit').textContent = editing ? 'Save' : 'Create project';
       $('remove').hidden = !editing;
+      renderDrafts(message.drafts || []);
       render();
       return;
     }
@@ -487,4 +613,14 @@ export class ProjectPage {
 
   vscode.postMessage({ type: 'ready' });
 `;
+}
+
+/** Whether a path is already there — a draft never replaces a file that exists. */
+async function there(uri: vscode.Uri): Promise<boolean> {
+  try {
+    await vscode.workspace.fs.stat(uri);
+    return true;
+  } catch {
+    return false;
+  }
 }
