@@ -25,8 +25,27 @@
     "temcocontrols.temco-store",
     "temcocontrols.temco-ui"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onView:temcoRepositories.list"
+  ],
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "temcoRepos",
+          "title": "Repositories",
+          "icon": "media/repositories.svg"
+        }
+      ]
+    },
+    "views": {
+      "temcoRepos": [
+        {
+          "id": "temcoRepositories.list",
+          "name": "Repositories"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "temcoRepositories.page",
@@ -99,6 +118,47 @@
         "icon": "$(folder-opened)"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "temcoRepositories.page",
+          "when": "view == temcoRepositories.list",
+          "group": "navigation@0"
+        },
+        {
+          "command": "temcoRepositories.readAllSources",
+          "when": "view == temcoRepositories.list",
+          "group": "navigation@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "temcoRepositories.readSource",
+          "when": "view == temcoRepositories.list && viewItem == temcoSource",
+          "group": "inline@0"
+        },
+        {
+          "command": "temcoRepositories.revealSource",
+          "when": "view == temcoRepositories.list && viewItem == temcoSource",
+          "group": "inline@1"
+        },
+        {
+          "command": "temcoRepositories.pullSource",
+          "when": "view == temcoRepositories.list && viewItem == temcoSource",
+          "group": "1_copy@0"
+        },
+        {
+          "command": "temcoRepositories.openClone",
+          "when": "view == temcoRepositories.list && viewItem == temcoSource",
+          "group": "1_copy@1"
+        },
+        {
+          "command": "temcoRepositories.removeSource",
+          "when": "view == temcoRepositories.list && viewItem == temcoSource",
+          "group": "9_forget@0"
+        }
+      ]
+    },
     "configuration": {
       "title": "Temco Repositories",
       "properties": {

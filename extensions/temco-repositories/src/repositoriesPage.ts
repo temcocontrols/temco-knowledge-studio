@@ -23,6 +23,8 @@ interface RepositoriesMessage {
   name?: string;
   url?: string;
   text?: string;
+  /** A command the page asks for by id — the token prompt, so a refusal can be answered where it is read. */
+  command?: string;
 }
 
 /** The organisation the page lists: a setting, with the default the platform was built for. */
@@ -155,6 +157,12 @@ export class RepositoriesPage {
         return;
       case 'reload':
         await this.send();
+        return;
+      case 'command':
+        if (typeof message.command === 'string') {
+          await vscode.commands.executeCommand(message.command);
+          await this.send();
+        }
         return;
       default:
         return;
@@ -317,7 +325,18 @@ window.addEventListener('message', (event) => {
     $('lede').textContent = 'The list could not be read.';
     const box = document.createElement('div');
     box.className = 'warn';
-    box.textContent = message.error;
+    const said = document.createElement('p');
+    said.textContent = message.error;
+    const do_ = document.createElement('div');
+    do_.className = 'do';
+    const token = document.createElement('button');
+    token.textContent = 'Set a GitHub token';
+    token.addEventListener('click', () => vscode.postMessage({ type: 'command', command: 'temcoRepositories.setToken' }));
+    const again = document.createElement('button');
+    again.textContent = 'Read GitHub again';
+    again.addEventListener('click', () => vscode.postMessage({ type: 'reload' }));
+    do_.append(token, again);
+    box.append(said, do_);
     $('error').replaceChildren(box);
     $('bar').hidden = true;
     $('list').replaceChildren();

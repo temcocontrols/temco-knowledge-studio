@@ -18,7 +18,9 @@ export function rowSlug(target: unknown): string | undefined {
 		if (typeof direct === 'string' && direct.length > 0) {
 			return direct;
 		}
-		const first = (target as { command?: { args?: unknown[] } }).command?.args?.[0];
+		// A tree item carries its arguments as `command.arguments`; a page row as `command.args`.
+		const command = (target as { command?: { args?: unknown[]; arguments?: unknown[] } }).command;
+		const first = command?.args?.[0] ?? command?.arguments?.[0];
 		if (typeof first === 'string' && first.length > 0) {
 			return first;
 		}

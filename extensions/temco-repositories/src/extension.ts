@@ -19,6 +19,7 @@ import { registerReadCommands } from './read';
 import { CodeFile, Material, RepositorySource, codeFiles, readMaterials } from './repository';
 import { RepositoriesPage } from './repositoriesPage';
 import { OFFERED_SCRIPTS, OfferedScript } from './scripts';
+import { registerSourcesView } from './sourcesView';
 import { selection } from './store';
 import { registerWorkareaCommands } from './workarea';
 
@@ -52,6 +53,10 @@ export function activate(context: vscode.ExtensionContext): TemcoRepositoriesApi
 	registerReadCommands(context, selection, output, refresh);
 	// The working area: cloning a source so its files can be read, and pulling it when it has moved on.
 	registerWorkareaCommands(context, selection, output, refresh);
+
+	// The panel: what the platform records, with the actions each row offers. It refreshes on the same signal every
+	// other surface does, so a read started from a command shows up here as soon as it finishes.
+	registerSourcesView(context, changed.event);
 
 	return {
 		onDidChange: (listener: () => void) => changed.event(listener),

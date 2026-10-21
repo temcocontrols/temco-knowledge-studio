@@ -69,7 +69,21 @@
         "title": "Build the Project",
         "icon": "$(tools)"
       }
-    ]
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "temcoProjects.editProject",
+          "when": "view == temcoDocs.section.projects",
+          "group": "navigation@0"
+        },
+        {
+          "command": "temcoProjects.addSource",
+          "when": "view == temcoDocs.section.projects",
+          "group": "navigation@1"
+        }
+      ]
+    }
   },
   "scripts": {
     "check-commands": "node --experimental-strip-types scripts/check-commands.mts"

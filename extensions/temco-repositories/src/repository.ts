@@ -96,11 +96,26 @@ export async function listRepositories(
     }
   }
   if (response.status === 401 || response.status === 403) {
-    return {
-      error:
-        'GitHub refused the list — a rate limit, or a token without access to this organisation. ' +
-        'Set a token (Temco Repositories: Set a GitHub Token) and open the page again.',
-    };
+    // The two statuses mean different things, and the sentence has to say which: an expired token that was sent,
+    // an anonymous caller out of allowance, or a token without access. GitHub's own `message` says it best.
+    let said = '';
+    try {
+      const body = (await response.json()) as { message?: unknown };
+      said = typeof body.message === 'string' ? body.message : '';
+    } catch {
+      // The body is a courtesy; the status already decided the branch.
+    }
+    const remaining = response.headers.get('x-ratelimit-remaining');
+    const reset = Number(response.headers.get('x-ratelimit-reset') ?? '0');
+    const parts = [`GitHub refused the list (${response.status}${said.length > 0 ? `: ${said}` : ''}).`];
+    parts.push(token === undefined
+      ? 'No token is set, so the request went out anonymously — that allowance is shared by the whole machine and runs out first.'
+      : 'A token was sent: it may have expired, or it may not reach this organisation.');
+    if (remaining === '0' && reset > 0) {
+      parts.push(`The allowance resets at ${new Date(reset * 1000).toLocaleTimeString()}.`);
+    }
+    parts.push('Set a GitHub token (Temco Repositories: Set a GitHub Token); leaving the box empty clears the stored one.');
+    return { error: parts.join(' ') };
   }
   if (response.status === 404) {
     return { error: `GitHub has no organisation or account called “${org}”.` };

@@ -426,7 +426,7 @@ export class AddSourcePage {
 		} else {
 			void vscode.window.showInformationMessage(`${name} added. Read it from Sources when you are ready.`);
 		}
-		await vscode.commands.executeCommand('temcoDocs.sources');
+		await vscode.commands.executeCommand('temcoProjects.editProject');
 	}
 }
 

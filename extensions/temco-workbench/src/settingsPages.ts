@@ -59,7 +59,7 @@ const settingsStrip = (entries: [string, string, boolean?][]): string =>
 const SURFACE_COMMANDS: { [surface: string]: string } = {
 	overview: 'temcoWorkbench.overview',
 	documents: 'temcoDocs.documents',
-	sources: 'temcoDocs.sources',
+	sources: 'temcoProjects.editProject',
 	projects: 'temcoDocs.projects',
 	chat: 'temcoAi.chat'
 };

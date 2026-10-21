@@ -53,7 +53,7 @@ const ORIGINS: Origin[] = [
 	{ value: 'import', label: 'Import a document set', sub: 'Word, RTF, HTML, an HTML folder or CHM — converted into docs/ and the registry.', available: true }
 ];
 
-/** The starters a project can be written from. One, and it is the MSDN shape: area → topics. */
+/** The starters a project can be written from. One, and it is the MSDN shape: area — topics. */
 const TEMPLATES = [{ value: 'user-guide', label: 'User guide', sub: 'docs/help with an Overview area, two topics and a registry' }];
 
 export class ProjectFlowPage {
@@ -76,7 +76,7 @@ export class ProjectFlowPage {
 			this.sources = [];
 		}
 
-		const body = html(this.sources, unavailable, this.context.workspaceState.get<Draft>(DRAFT_KEY));
+		const body = html(this.sources, unavailable);
 		if (this.panel) {
 			this.panel.reveal(pageColumn());
 			this.panel.webview.html = page(body, { title: 'New Project', script: WIZARD_SCRIPT });
@@ -87,7 +87,7 @@ export class ProjectFlowPage {
 			enableScripts: true,
 			localResourceRoots: []
 		});
-		this.panel.webview.onDidReceiveMessage((message: { type?: string; command?: string; values?: Values; draft?: Draft }) => void this.receive(message));
+		this.panel.webview.onDidReceiveMessage((message: { type?: string; command?: string; values?: Values }) => void this.receive(message));
 		this.panel.webview.html = page(body, { title: 'New Project', script: WIZARD_SCRIPT });
 		this.panel.onDidDispose(() => {
 			this.panel = undefined;
@@ -96,6 +96,44 @@ export class ProjectFlowPage {
 
 	dispose(): void {
 		this.panel?.dispose();
+	}
+
+	/**
+	 * What a project cites, chosen from a multi-select over every repository the catalog records.
+	 *
+	 * A quick pick rather than a page: choosing is one field in a form, and the form must not be thrown away to
+	 * answer it. Typing filters, space ticks, Enter answers — the ticks then land back in the list on the page.
+	 */
+	private async chooseRepositories(picked: readonly string[]): Promise<void> {
+		let catalog: Catalog | undefined;
+		let rows: { label: string; description: string; picked: boolean }[] = [];
+		try {
+			catalog = await Catalog.open(this.context);
+			rows = catalog.sources().filter((source) => source.kind === 'git').map((source) => ({
+				label: source.name,
+				description: `${source.branch ?? 'no branch'} · ${source.pages === undefined || source.pages === 0 ? 'not read yet' : `${source.pages} ${source.pages === 1 ? 'page' : 'pages'}`}`,
+				picked: picked.includes(source.name),
+			}));
+		} catch {
+			// No catalog, nothing to choose: the page already says so.
+		} finally {
+			catalog?.close();
+		}
+
+		if (rows.length === 0) {
+			void vscode.window.showInformationMessage('Temco Projects: no repository is recorded yet. Add one from the Repositories panel.');
+			return;
+		}
+
+		const chosen = await vscode.window.showQuickPick(rows, {
+			canPickMany: true,
+			matchOnDescription: true,
+			placeHolder: 'Repositories this project cites',
+		});
+		if (chosen === undefined) {
+			return;
+		}
+		await this.panel?.webview.postMessage({ type: 'chosen', sources: chosen.map((row) => row.label) });
 	}
 
 	/**
@@ -120,7 +158,7 @@ export class ProjectFlowPage {
 		await this.panel?.webview.postMessage({ type: 'picked', ...(await describeMaterial(uri)) });
 	}
 
-	private async receive(message: { type?: string; command?: string; values?: Values; draft?: Draft }): Promise<void> {
+	private async receive(message: { type?: string; command?: string; values?: Values; picked?: string[] }): Promise<void> {
 		if (message.type === 'cancel') {
 			this.panel?.dispose();
 			return;
@@ -129,11 +167,11 @@ export class ProjectFlowPage {
 			await this.pickMaterial();
 			return;
 		}
+		if (message.type === 'choose') {
+			await this.chooseRepositories(message.picked ?? []);
+			return;
+		}
 		if (message.type === 'command' && typeof message.command === 'string') {
-			// Leaving for another page disposes this tab, so what the form holds is written down first.
-			if (message.draft !== undefined) {
-				await this.context.workspaceState.update(DRAFT_KEY, message.draft);
-			}
 			await vscode.commands.executeCommand(message.command);
 			return;
 		}
@@ -206,7 +244,6 @@ export class ProjectFlowPage {
 
 		// A project you have just made is the one you are working on: it is what the Workspace view and the AI read.
 		await this.selection.select(slug);
-		await this.context.workspaceState.update(DRAFT_KEY, undefined);
 		this.refresh();
 		this.panel?.dispose();
 		void vscode.window.showInformationMessage(`${name} created as a draft.`);
@@ -477,7 +514,7 @@ const sourceRow = (source: SourceRow, selected: readonly string[]): string => {
 		facts.push(source.state);
 	}
 	const ticked = selected.includes(source.name) ? ' checked' : '';
-	return `<label class="checklist__row" data-source data-kind="${source.kind === 'git' ? 'git' : 'other'}" data-pages="${source.pages ?? 0}"><input type="checkbox" data-field="sources" value="${esc(source.name)}"${ticked}><span class="checklist__text"><span class="checklist__title">${esc(source.name)}</span><span class="checklist__sub">${facts.map((fact) => esc(fact)).join(' · ')}</span></span></label>`;
+	return `<label class="checklist__row" data-source data-pages="${source.pages ?? 0}"><input type="checkbox" data-field="sources" value="${esc(source.name)}"${ticked}><span class="checklist__text"><span class="checklist__title">${esc(source.name)}</span><span class="checklist__sub">${facts.map((fact) => esc(fact)).join(' · ')}</span></span></label>`;
 };
 
 /**
@@ -501,8 +538,8 @@ const tiles = (items: { value: string; label: string; sub: string; mark: string 
 function typeOptions(initial: string): string {
 	const options = [
 		{ value: 'empty', mark: 'document', label: 'Empty project', note: 'No sources, no pages yet' },
-		{ value: 'source', mark: 'repo', label: 'From a source', note: 'Cite sources already recorded' },
-		{ value: 'files', mark: 'layers', label: 'From existing files', note: 'HTML, Markdown, Word or CHM' }
+		{ value: 'repository', mark: 'repo', label: 'From a repository', note: 'Cite repositories already recorded' },
+		{ value: 'files', mark: 'layers', label: 'From existing files', note: 'HTML, Markdown, Word, CHM — or a docs folder' }
 	];
 
 	return `<div class="opt-list" role="listbox" aria-label="Starting point">${options.map((option) => {
@@ -515,26 +552,15 @@ function typeOptions(initial: string): string {
 }
 
 /**
- * What the form remembers when a person leaves it for another page.
+ * The flow's markup.
  *
- * The link to the Sources page has to be a link — adding and reading sources is that page's job — but leaving would
- * otherwise throw away a half-filled form, because a page replaces the tab it is in. So the values the form holds are
- * written to the workspace's own storage before the jump and read back when the flow opens again.
+ * Everything the flow needs is on this one page: a starting point on the left, its form on the right. It never sends a
+ * person to another page to finish an answer — a wizard that jumps away and comes back loses both the thread and the
+ * half-filled form.
  */
-interface Draft {
-	type?: string;
-	name?: string;
-	version?: string;
-	sources?: string[];
-	targets?: string[];
-}
-
-const DRAFT_KEY = 'temcoProjects.newProject.draft';
-
-function html(sources: SourceRow[], unavailable?: string, draft?: Draft): string {
+function html(sources: SourceRow[], unavailable?: string): string {
 	const repositories = sources.filter((source) => source.kind === 'git');
-	const files = sources.filter((source) => source.kind !== 'git');
-	const initial = draft?.type ?? 'empty';
+	const initial = 'empty';
 	const empty = unavailable
 		? `<div class="callout callout--warn">${icon('alert')}<div><b>The store is not available.</b> ${esc(unavailable)}</div></div>`
 		: '';
@@ -564,8 +590,8 @@ ${empty}
 			<div class="split__section-title">The project</div>
 			<p class="split__section-note">What it is called, and who answers for it.</p>
 			<div class="form">
-				${field('Name', `<input class="input" data-field="name" value="${esc(draft?.name ?? DEFAULTS.name)}" aria-label="Project name">`)}
-				${field('Version', `<input class="input" data-field="version" value="${esc(draft?.version ?? DEFAULTS.version)}" aria-label="Version">`, 'A project publishes one version at a time.')}
+				${field('Name', `<input class="input" data-field="name" value="${esc(DEFAULTS.name)}" aria-label="Project name">`)}
+				${field('Version', `<input class="input" data-field="version" value="${esc(DEFAULTS.version)}" aria-label="Version">`, 'A project publishes one version at a time.')}
 			</div>
 		</div>
 
@@ -580,28 +606,24 @@ ${empty}
 			</div>
 		</div>
 
-		<div class="split__section" data-form="source" hidden>
+		<div class="split__section" data-form="repository" hidden>
 			<div class="split__section-title">Where the pages come from</div>
-			<p class="split__section-note">Every source the platform has recorded, in one list. A project cites what it ticks; nothing is written into any of them.</p>
-			<p class="split__section-note"><button type="button" class="link" id="open-sources">Add or read a source on the Sources page</button> — what you have typed here is kept while you are there.</p>
+			<p class="split__section-note">Repositories the platform already records. A project cites the pages they declare; reading and cloning happen on the Sources page.</p>
 			<div class="checklist-tools">
-				<input class="input input--sm" data-filter="sources" placeholder="Search sources" aria-label="Search sources">
-				<span class="src-chips">
-					<button type="button" class="src-chip is-on" data-kind="all">All<span>${sources.length}</span></button>
-					<button type="button" class="src-chip" data-kind="git">Repositories<span>${repositories.length}</span></button>
-					<button type="button" class="src-chip" data-kind="other">Files &amp; folders<span>${files.length}</span></button>
-				</span>
+				<input class="input input--sm" data-filter="sources" placeholder="Search repositories" aria-label="Search repositories">
+				<button type="button" class="btn btn--sm" id="choose-repositories">${icon('list')}<span>Choose…</span></button>
 			</div>
-			${sources.length === 0
-			? `<div class="callout">${icon('info')}<div><b>No source is recorded yet.</b> Create the project now, then add a source from <b>Sources</b>; this project can cite it as soon as it is there.</div></div>`
-			: `<div class="checklist src-list" data-source-list>${sources.map((source) => sourceRow(source, draft?.sources ?? [])).join('')}</div>
-		<p class="split__section-note" id="source-empty" hidden>No source matches that.</p>
-		<p class="split__section-note" style="margin-top:10px"><span id="source-summary">No source selected</span><button type="button" class="link" id="source-clear">Clear</button></p>`}
+			${repositories.length === 0
+			? `<div class="callout">${icon('info')}<div><b>No repository is recorded yet.</b> Create the project now — its own page is where sources are added and read, and this project can cite them from then on.</div></div>`
+			: `<div class="checklist src-list" data-source-list>${repositories.map((source) => sourceRow(source, [])).join('')}</div>
+		<p class="split__section-note" id="source-empty" hidden>No repository matches that.</p>
+		<p class="split__section-note" style="margin-top:10px"><span id="source-summary">No repository selected</span><button type="button" class="link" id="source-clear">Clear</button></p>`}
+			<p class="split__section-note"><button type="button" class="link" id="manage-repositories">Manage repositories</button> — the panel where they are added, cloned and read. This form stays as it is.</p>
 		</div>
 
 		<div class="split__section" data-form="files" hidden>
 			<div class="split__section-title">What the material is</div>
-			<p class="split__section-note">Choose the folder or file. What it is — a docs folder, Markdown, HTML, Word or CHM — is read from what you pick, so there is nothing to classify by hand. A folder that already has a registry is cited as it stands; anything else is converted once into <code>docs/</code> and <code>docs/help/registry.json</code>.</p>
+			<p class="split__section-note">Choose the folder or file. A folder that already has a registry is cited as it stands; anything else — Markdown, HTML, Word or CHM — is converted once into <code>docs/</code> and <code>docs/help/registry.json</code>.</p>
 			<div class="pick-row">
 				<button type="button" class="btn" id="pick-material">${icon('folder')}<span>Choose a folder or file…</span></button>
 				<span class="pick-row__path" id="material-path">Nothing chosen yet</span>
@@ -612,7 +634,7 @@ ${empty}
 		<div class="split__section">
 			<div class="split__section-title">What it builds</div>
 			<p class="split__section-note">One build produces every target you tick here — and every one of them can be turned on later in the Build Center.</p>
-			${tiles(TARGETS, draft?.targets ?? DEFAULT_TARGETS)}
+			${tiles(TARGETS, DEFAULT_TARGETS)}
 		</div>
 
 		<div class="wizard__error" id="wizard-error" hidden></div>
@@ -648,7 +670,7 @@ const WIZARD_SCRIPT = `
 
 	const HINTS = {
 		empty: 'Nothing is read and nothing is converted: the project exists, and the first page is yours to write.',
-		source: 'Pages come from the sources you tick. Reading a source records its pages and changes nothing in it.',
+		repository: 'A repository project cites pages that already exist. Reading a repository records the pages it declares; it never changes the repository.',
 		files: 'The material is converted once; from then on it is written as pages like any other project.'
 	};
 
@@ -678,7 +700,7 @@ const WIZARD_SCRIPT = `
 	}
 	function origin() {
 		if (type === 'empty') { return value('template') ? 'template' : 'blank'; }
-		if (type === 'source') { return 'repository'; }
+		if (type === 'repository') { return 'repository'; }
 		return material() === 'existing' ? 'folder' : 'import';
 	}
 	function values() {
@@ -708,22 +730,19 @@ const WIZARD_SCRIPT = `
 		if (!list) { return; }
 		const rows = sourceRows().filter(function (row) { return row.querySelector('input').checked; });
 		if (rows.length === 0) {
-			list.textContent = 'No source selected — a project from a source needs at least one.';
+			list.textContent = 'No repository selected — a repository project needs at least one.';
 			return;
 		}
 		const pages = rows.reduce(function (total, row) { return total + Number(row.getAttribute('data-pages') || 0); }, 0);
-		list.textContent = rows.length + (rows.length === 1 ? ' source' : ' sources') + ' · ' + pages + (pages === 1 ? ' page' : ' pages') + ' from them';
+		list.textContent = rows.length + (rows.length === 1 ? ' repository' : ' repositories') + ' · ' + pages + (pages === 1 ? ' page' : ' pages') + ' from them';
 	}
-	let kind = 'all';
-	/** One filter for both controls: the search text and the kind chip narrow the same list. */
+	/** The search narrows the list; with one kind in it there is nothing else to filter by. */
 	function applyFilter() {
 		const search = document.querySelector('[data-filter="sources"]');
 		const term = search ? search.value.trim().toLowerCase() : '';
 		let shown = 0;
 		sourceRows().forEach(function (row) {
-			const matchesKind = kind === 'all' || row.getAttribute('data-kind') === kind;
-			const matchesTerm = term.length === 0 || row.textContent.toLowerCase().indexOf(term) >= 0;
-			row.hidden = !(matchesKind && matchesTerm);
+			row.hidden = term.length > 0 && row.textContent.toLowerCase().indexOf(term) < 0;
 			if (!row.hidden) { shown++; }
 		});
 		const empty = document.getElementById('source-empty');
@@ -733,9 +752,9 @@ const WIZARD_SCRIPT = `
 		counts();
 		if (!summary) { return; }
 		const v = values();
-		const parts = [type === 'source' ? 'From a source' : type === 'files' ? 'From existing files' : 'Empty project'];
+		const parts = [type === 'repository' ? 'From a repository' : type === 'files' ? 'From existing files' : 'Empty project'];
 		if (v.origin === 'template') { parts.push('user-guide starter'); }
-		if (v.origin === 'repository') { parts.push(v.sources.length + (v.sources.length === 1 ? ' source' : ' sources')); }
+		if (v.origin === 'repository') { parts.push(v.sources.length + (v.sources.length === 1 ? ' repository' : ' repositories')); }
 		if (v.origin === 'folder') { parts.push('a folder with a registry'); }
 		if (v.origin === 'import') { parts.push((v.importKind || 'material') + ' import'); }
 		parts.push(v.targets.length + (v.targets.length === 1 ? ' output' : ' outputs'));
@@ -779,8 +798,17 @@ const WIZARD_SCRIPT = `
 	if (pick) { pick.addEventListener('click', function () { api.postMessage({ type: 'pick' }); }); }
 	window.addEventListener('message', function (event) {
 		const message = event.data;
+		if (!message) { return; }
+		if (message.type === 'chosen') {
+			const names = message.sources || [];
+			Array.prototype.forEach.call(document.querySelectorAll('[data-source] input'), function (input) {
+				input.checked = names.indexOf(input.value) >= 0;
+			});
+			refresh();
+			return;
+		}
 		const section = document.querySelector('[data-form="files"]');
-		if (!message || message.type !== 'picked' || !section) { return; }
+		if (message.type !== 'picked' || !section) { return; }
 		section.setAttribute('data-path', message.path || '');
 		section.setAttribute('data-kind', message.kind || '');
 		const shown = document.getElementById('material-path');
@@ -796,22 +824,13 @@ const WIZARD_SCRIPT = `
 		if (!v.name.trim()) { fail('A project needs a name.'); return; }
 		if (v.origin === 'template' && !v.folder.trim()) { fail('Name the folder to write the starter under.'); return; }
 		if ((v.origin === 'folder' || v.origin === 'import') && !v.importSource.trim()) { fail('Choose the folder or file to bring in.'); return; }
-		if (v.origin === 'repository' && v.sources.length === 0) { fail('Choose at least one source to read.'); return; }
+		if (v.origin === 'repository' && v.sources.length === 0) { fail('Choose at least one repository to cite.'); return; }
 		if (v.targets.length === 0) { fail('Choose at least one output to build.'); return; }
 		api.postMessage({ type: 'create', values: v });
 	});
 
 	const filter = document.querySelector('[data-filter="sources"]');
 	if (filter) { filter.addEventListener('input', applyFilter); }
-	Array.prototype.forEach.call(document.querySelectorAll('.src-chip'), function (chip) {
-		chip.addEventListener('click', function () {
-			kind = chip.getAttribute('data-kind');
-			Array.prototype.forEach.call(document.querySelectorAll('.src-chip'), function (other) {
-				other.classList.toggle('is-on', other === chip);
-			});
-			applyFilter();
-		});
-	});
 	const clear = document.getElementById('source-clear');
 	if (clear) {
 		clear.addEventListener('click', function () {
@@ -819,16 +838,19 @@ const WIZARD_SCRIPT = `
 			refresh();
 		});
 	}
-	// Adding or reading a source is the Sources page's job. The form's values go with the message, so returning here
-	// finds the same half-filled form rather than an empty one.
-	const openSources = document.getElementById('open-sources');
-	if (openSources) {
-		openSources.addEventListener('click', function () {
-			api.postMessage({
-				type: 'command',
-				command: 'temcoDocs.sources',
-				draft: { type: type, name: value('name'), version: value('version'), sources: checked('sources'), targets: checked('targets') }
-			});
+	// Choosing from a list that is not on this page: the host filters, ticks and answers in one quick pick, so the
+	// form keeps everything typed so far.
+	const choose = document.getElementById('choose-repositories');
+	if (choose) {
+		choose.addEventListener('click', function () {
+			api.postMessage({ type: 'choose', picked: checked('sources') });
+		});
+	}
+	const manage = document.getElementById('manage-repositories');
+	if (manage) {
+		// A side-bar panel, not an editor: focusing it does not replace this tab, so nothing has to be remembered.
+		manage.addEventListener('click', function () {
+			api.postMessage({ type: 'command', command: 'workbench.view.extension.temcoRepos' });
 		});
 	}
 	document.addEventListener('change', refresh);

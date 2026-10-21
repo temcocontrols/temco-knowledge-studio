@@ -127,7 +127,7 @@ function overviewBody(facts: DashboardFacts): string {
 		</button>`;
 
 	const pipeline = [
-		stage('01', 'Sources', facts.sources === 1 ? '1 read' : `${facts.sources} read`, 'temcoDocs.sources'),
+		stage('01', 'Sources', facts.sources === 1 ? '1 read' : `${facts.sources} read`, 'temcoProjects.editProject'),
 		stage('02', 'Documents', `${facts.pages} pages`, 'temcoDocs.documents'),
 		stage('03', 'Review', `${facts.drafts.length} waiting`, 'temcoDocs.review'),
 		stage('04', 'Build', `${facts.faults} problems`, 'temcoDocs.builds'),
