@@ -40,6 +40,11 @@
         "icon": "$(new-folder)"
       },
       {
+        "command": "temcoProjects.returnToNewProject",
+        "title": "Back to the New Project Form",
+        "icon": "$(arrow-left)"
+      },
+      {
         "command": "temcoProjects.openProject",
         "title": "Open a Project",
         "icon": "$(book)"

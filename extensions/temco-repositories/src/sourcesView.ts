@@ -1,35 +1,60 @@
-// The Repositories panel: the enterprises this window asks about, and the repositories under each.
+// The Repositories panel: the enterprises this window asks about, the repositories under each, and — inside a
+// repository — its files, the way a file browser shows them.
 //
-// Two things live here, and they are two levels of one idea. An **enterprise** is where a list comes from — the
-// platform's default, one a person adds, or a single repository named by its address. A **repository** is a row of
-// that list, which becomes a source when the project being worked on starts it.
+// Three levels, three answers. An **enterprise** is where a list comes from. A **repository** is a row of that list,
+// which becomes a source when the project being worked on starts it; its mark is the language it is written in, and
+// the only word beside it is `source` when this project already cites it. A **folder or file** is what is inside it —
+// read from the local copy when there is one, and over the API when there is not.
 //
-// So the tree is the same shape as the page: enterprise, then repository. A repository that is already a source
-// says so, and clicking it opens the page that shows what its read recorded; one that is not says so, and the page
-// starts it. Anything recorded that no enterprise claims — a folder, an archive, a clone of an address nobody
-// added — is listed under *Other sources* rather than disappearing.
+// Anything recorded that no enterprise claims — a folder, an archive, a clone of an address nobody added — is listed
+// under *Other sources* rather than disappearing.
 
 import * as vscode from 'vscode';
-import {
-	Catalog,
-	OrganisationRow,
-	RepositoryCacheRow,
-	SourceRow,
-	slugOf,
-} from './store';
+import { sourceTree, RepositorySource } from './repository';
+import { Catalog, OrganisationRow, RepositoryCacheRow, SourceRow, slugOf } from './store';
 
 /** The view the panel draws into. */
 export const SOURCES_VIEW_ID = 'temcoRepositories.list';
 
 const MARK: { [kind: string]: string } = { git: 'repo', folder: 'folder', archive: 'package' };
 
+/**
+ * The mark a repository carries: a glyph for the kind of code, and the colour GitHub gives that language.
+ *
+ * A tree row has one icon and one word, so the icon does the work the dashboard's left column did. Languages without
+ * a glyph of their own fall back to `repo`, which is honest about what is known and quiet about what is not.
+ */
+function languageMark(language: string | undefined): vscode.ThemeIcon {
+	const key = (language ?? '').trim().toLowerCase();
+	const marks: { [name: string]: [string, string] } = {
+		'c': ['symbol-struct', 'charts.blue'],
+		'c++': ['symbol-class', 'charts.red'],
+		'c#': ['symbol-class', 'charts.green'],
+		'typescript': ['file-code', 'charts.blue'],
+		'javascript': ['file-code', 'charts.yellow'],
+		'python': ['file-code', 'charts.blue'],
+		'java': ['symbol-class', 'charts.orange'],
+		'rust': ['settings-gear', 'charts.orange'],
+		'go': ['symbol-method', 'charts.blue'],
+		'html': ['code', 'charts.orange'],
+		'css': ['symbol-color', 'charts.blue'],
+		'powershell': ['terminal', 'charts.blue'],
+		'shell': ['terminal', 'charts.green'],
+		'vue': ['code', 'charts.green'],
+	};
+	const mark = marks[key];
+	return mark === undefined ? new vscode.ThemeIcon('repo') : new vscode.ThemeIcon(mark[0], new vscode.ThemeColor(mark[1]));
+}
+
 /** One row of the tree, kept as data so a child can be found from its parent. */
 type Node =
 	| { kind: 'organisation'; row: OrganisationRow }
 	| { kind: 'repository'; row: RepositoryCacheRow; source?: string }
+	| { kind: 'folder'; key: string; repository: string; path: string }
+	| { kind: 'file'; key: string; repository: string; path: string; size: number }
 	| { kind: 'other'; label: string; note: string }
 	| { kind: 'source'; row: SourceRow }
-	| { kind: 'empty'; label: string; note: string; command: vscode.Command };
+	| { kind: 'empty'; label: string; note: string; command?: vscode.Command };
 
 /** A tree item that remembers which node it came from. */
 class NodeItem extends vscode.TreeItem {
@@ -47,51 +72,71 @@ function when(stamp: string | undefined): string {
 	return isNaN(date.getTime()) ? 'read' : `read ${date.toLocaleDateString()}`;
 }
 
+function kilo(bytes: number): string {
+	return bytes >= 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${bytes} B`;
+}
+
 function item(node: Node): NodeItem {
 	switch (node.kind) {
 		case 'organisation': {
-			const row = node.row;
 			const organisation = new NodeItem(node, vscode.TreeItemCollapsibleState.Expanded);
-			organisation.label = row.name;
-			organisation.id = `org:${row.slug}`;
-			organisation.iconPath = new vscode.ThemeIcon(row.kind === 'repository' ? 'repo' : 'organization');
+			organisation.label = node.row.name;
+			organisation.id = `org:${node.row.slug}`;
+			organisation.iconPath = new vscode.ThemeIcon(node.row.kind === 'repository' ? 'repo' : 'organization');
 			organisation.contextValue = 'temcoOrganisation';
 			organisation.description =
-				`${row.repositories} ${row.repositories === 1 ? 'repository' : 'repositories'} · ${when(row.lastRead)}`;
+				`${node.row.repositories} ${node.row.repositories === 1 ? 'repository' : 'repositories'} · ${when(node.row.lastRead)}`;
 			organisation.tooltip = new vscode.MarkdownString(
-				`**${row.name}**\n\n${row.kind === 'repository' ? 'One repository, named by its address' : 'An enterprise or account on GitHub'}\n\n${organisation.description}`
+				`**${node.row.name}**\n\n${node.row.kind === 'repository' ? 'One repository, named by its address' : 'An enterprise or account on GitHub'}\n\n${organisation.description}`
 			);
 			// The page is where a list is read again; the panel names what exists and where to go.
 			organisation.command = { command: 'temcoRepositories.page', title: 'Open the repositories page' };
 			return organisation;
 		}
 		case 'repository': {
-			const repository = new NodeItem(node, vscode.TreeItemCollapsibleState.None);
+			// A repository opens: what is inside it is the next thing anyone wants.
+			const repository = new NodeItem(node, vscode.TreeItemCollapsibleState.Collapsed);
 			repository.label = node.row.name;
 			repository.id = `repo:${node.row.fullName}`;
-			// The mark carries the state, because the description cannot: green for a source of this project, amber for
-			// one nothing has started yet. The words sit at the right edge, where a tree puts its second column.
-			repository.iconPath = node.source === undefined
-				? new vscode.ThemeIcon('circle-outline', new vscode.ThemeColor('charts.yellow'))
-				: new vscode.ThemeIcon('pass-filled', new vscode.ThemeColor('charts.green'));
+			repository.iconPath = languageMark(node.row.language);
 			repository.contextValue = node.source === undefined ? 'temcoRepository' : 'temcoSource';
-			// No second column: a tree puts its description straight after the label, where it reads as part of the name,
-			// and the state is already the mark's colour. The facts live in the tooltip.
+			// The only word a row carries: whether this project already cites it. Everything else is the tooltip's.
+			repository.description = node.source === undefined ? '' : 'source';
 			repository.tooltip = new vscode.MarkdownString(
 				`**${node.row.fullName}**\n\n${node.row.description ?? ''}\n\n` +
-				[
-					node.row.language === undefined || node.row.language.length === 0 ? 'repository' : node.row.language,
-					node.row.isPrivate ? 'private' : 'public',
-					node.source === undefined ? 'not started' : 'source of this project',
-				]
-					.filter((part) => part.length > 0)
-					.join(' · ')
+					[
+						node.row.language ?? 'repository',
+						node.row.isPrivate ? 'private' : 'public',
+						node.source === undefined ? 'not started' : 'source of this project',
+						node.row.cloneUrl ?? '',
+					]
+						.filter((part) => part.length > 0)
+						.join(' · ')
 			);
-			repository.command =
-				node.source === undefined
-					? { command: 'temcoRepositories.repository', title: 'Open the repository', arguments: [node.row.name] }
-					: { command: 'temcoDocs.repository', title: 'Open the repository', arguments: [node.source] };
 			return repository;
+		}
+		case 'folder': {
+			const folder = new NodeItem(node, vscode.TreeItemCollapsibleState.Collapsed);
+			folder.label = node.path.split('/').pop() ?? node.path;
+			folder.id = `dir:${node.key}/${node.path}`;
+			folder.iconPath = new vscode.ThemeIcon('folder');
+			folder.tooltip = node.path;
+			return folder;
+		}
+		case 'file': {
+			const file = new NodeItem(node, vscode.TreeItemCollapsibleState.None);
+			file.label = node.path.split('/').pop() ?? node.path;
+			file.id = `file:${node.key}/${node.path}`;
+			file.iconPath = new vscode.ThemeIcon(isDocumentation(node.path) ? 'markdown' : 'file-code');
+			file.contextValue = 'temcoFile';
+			file.description = kilo(node.size);
+			file.tooltip = `${node.path} — ${kilo(node.size)}`;
+			file.command = {
+				command: 'temcoRepositories.openRepositoryFile',
+				title: 'Open the file',
+				arguments: [node.repository, node.path],
+			};
+			return file;
 		}
 		case 'other': {
 			const group = new NodeItem(node, vscode.TreeItemCollapsibleState.Expanded);
@@ -102,30 +147,26 @@ function item(node: Node): NodeItem {
 			return group;
 		}
 		case 'source': {
-			const source = node.row;
 			const row = new NodeItem(node, vscode.TreeItemCollapsibleState.None);
-			const facts = [source.kind === 'git' ? 'repository' : source.kind];
-			if (source.branch !== undefined) {
-				facts.push(source.branch);
+			const facts = [node.row.kind === 'git' ? 'repository' : node.row.kind];
+			if (node.row.branch !== undefined) {
+				facts.push(node.row.branch);
 			}
 			facts.push(
-				source.pages === undefined || source.pages === 0
+				node.row.pages === undefined || node.row.pages === 0
 					? 'not read'
-					: `${source.pages} ${source.pages === 1 ? 'page' : 'pages'}`
+					: `${node.row.pages} ${node.row.pages === 1 ? 'page' : 'pages'}`
 			);
-			if (source.state !== undefined) {
-				facts.push(source.state);
-			}
-			row.label = source.name;
-			row.id = `source:${source.slug}`;
-			row.iconPath = new vscode.ThemeIcon(MARK[source.kind] ?? 'package');
+			row.label = node.row.name;
+			row.id = `source:${node.row.slug}`;
+			row.iconPath = new vscode.ThemeIcon(MARK[node.row.kind] ?? 'package');
 			row.contextValue = 'temcoSource';
 			row.description = facts.join(' · ');
-			row.tooltip = new vscode.MarkdownString(`**${source.name}**\n\n${row.description}`);
+			row.tooltip = new vscode.MarkdownString(`**${node.row.name}**\n\n${row.description}`);
 			row.command = {
-				command: source.kind === 'git' ? 'temcoDocs.repository' : 'temcoRepositories.revealSource',
-				title: source.kind === 'git' ? 'Open the repository' : 'Open where it lives',
-				arguments: [source.slug],
+				command: node.row.kind === 'git' ? 'temcoDocs.repository' : 'temcoRepositories.revealSource',
+				title: node.row.kind === 'git' ? 'Open the repository' : 'Open where it lives',
+				arguments: [node.row.slug],
 			};
 			return row;
 		}
@@ -140,13 +181,51 @@ function item(node: Node): NodeItem {
 	}
 }
 
+/** A file of the repository under `docs/`, in one of the shapes a page is written in. */
+function isDocumentation(file: string): boolean {
+	const lower = file.toLowerCase();
+	return /\.(md|markdown)$/.test(lower) || /(^|\/)docs\//.test(lower);
+}
+
+/** One entry of a repository's flat listing, folded into the folder it belongs to. */
+interface TreeEntry {
+	files: { path: string; size: number }[];
+	folders: Map<string, TreeEntry>;
+}
+
+function emptyEntry(): TreeEntry {
+	return { files: [], folders: new Map() };
+}
+
+/** Fold `/`-separated paths into a tree, so a folder is a row and its contents are children. */
+function foldTree(files: readonly { path: string; size: number }[]): TreeEntry {
+	const root = emptyEntry();
+	for (const file of files) {
+		const parts = file.path.split('/');
+		let entry = root;
+		for (const part of parts.slice(0, -1)) {
+			let next = entry.folders.get(part);
+			if (next === undefined) {
+				next = emptyEntry();
+				entry.folders.set(part, next);
+			}
+			entry = next;
+		}
+		entry.files.push({ path: file.path, size: file.size });
+	}
+	return root;
+}
+
 class SourcesView implements vscode.TreeDataProvider<vscode.TreeItem> {
 	private readonly changed = new vscode.EventEmitter<void>();
 	readonly onDidChangeTreeData = this.changed.event;
+	/** One listing per repository, so expanding a folder does not ask GitHub again. */
+	private readonly trees = new Map<string, TreeEntry | { error: string }>();
 
 	constructor(private readonly context: vscode.ExtensionContext) { }
 
 	refresh(): void {
+		this.trees.clear();
 		this.changed.fire();
 	}
 
@@ -161,27 +240,8 @@ class SourcesView implements vscode.TreeDataProvider<vscode.TreeItem> {
 			catalog = await Catalog.open(this.context);
 
 			if (parent === undefined) {
-				const organisations = catalog.organisations();
-				const nodes: Node[] = organisations.map((row) => ({ kind: 'organisation', row }));
-				const other = this.unclaimed(catalog).length;
-				if (other > 0) {
-					nodes.push({
-						kind: 'other',
-						label: 'Other sources',
-						note: `${other} recorded ${other === 1 ? 'source' : 'sources'} no enterprise lists`,
-					});
-				}
-				if (nodes.length === 0) {
-					nodes.push({
-						kind: 'empty',
-						label: 'No repository yet',
-						note: 'add one on the page',
-						command: { command: 'temcoRepositories.page', title: 'Add a repository' },
-					});
-				}
-				return nodes.map(item);
+				return this.roots(catalog);
 			}
-
 			if (parent.kind === 'organisation') {
 				const sources = new Set(catalog.sources().map((row) => row.slug));
 				const rows = catalog.repositoriesOf(parent.row.slug);
@@ -199,11 +259,25 @@ class SourcesView implements vscode.TreeDataProvider<vscode.TreeItem> {
 					item({ kind: 'repository', row, source: sources.has(slugOf(row.name)) ? slugOf(row.name) : undefined })
 				);
 			}
-
 			if (parent.kind === 'other') {
 				return this.unclaimed(catalog).map((row) => item({ kind: 'source', row }));
 			}
-
+			if (parent.kind === 'repository') {
+				return this.repositoryChildren(catalog, parent.row);
+			}
+			if (parent.kind === 'folder') {
+				const tree = this.trees.get(parent.key);
+				let entry: TreeEntry | undefined;
+				if (tree !== undefined && !('error' in tree)) {
+					entry = tree;
+					for (const part of parent.path.split('/')) {
+						entry = entry?.folders.get(part);
+					}
+				}
+				return entry === undefined
+					? []
+					: this.entriesOf(parent.key, parent.repository, entry, parent.path);
+			}
 			return [];
 		} catch {
 			// No catalog, no list: the panel says nothing rather than inventing a repository.
@@ -211,6 +285,90 @@ class SourcesView implements vscode.TreeDataProvider<vscode.TreeItem> {
 		} finally {
 			catalog?.close();
 		}
+	}
+
+	/** The enterprises, then whatever is recorded but named by none of them. */
+	private roots(catalog: Catalog): vscode.TreeItem[] {
+		const nodes: Node[] = catalog.organisations().map((row) => ({ kind: 'organisation', row }));
+		const other = this.unclaimed(catalog).length;
+		if (other > 0) {
+			nodes.push({
+				kind: 'other',
+				label: 'Other sources',
+				note: `${other} recorded ${other === 1 ? 'source' : 'sources'} no enterprise lists`,
+			});
+		}
+		if (nodes.length === 0) {
+			nodes.push({
+				kind: 'empty',
+				label: 'No repository yet',
+				note: 'add one on the page',
+				command: { command: 'temcoRepositories.page', title: 'Add a repository' },
+			});
+		}
+		return nodes.map(item);
+	}
+
+	/**
+	 * What is inside a repository, as folders and files.
+	 *
+	 * Read from the local copy when there is one and over the API when there is not, so the tree works before
+	 * anything is downloaded — it just costs GitHub's allowance instead of the disk.
+	 */
+	private async repositoryChildren(catalog: Catalog, row: RepositoryCacheRow): Promise<vscode.TreeItem[]> {
+		const held = this.trees.get(`repo:${row.fullName}`);
+		let tree: TreeEntry | { error: string } | undefined = held;
+
+		if (tree === undefined) {
+			const record = catalog.source(slugOf(row.name));
+			const source: RepositorySource = {
+				name: row.name,
+				path: record?.path,
+				remoteUrl: record?.remoteUrl ?? row.cloneUrl,
+				branch: record?.branch,
+				defaultBranch: record?.defaultBranch ?? row.defaultBranch,
+			};
+			const listed = await sourceTree(this.context, source);
+			tree = 'error' in listed
+				? { error: listed.error }
+				: foldTree(listed.files);
+			this.trees.set(`repo:${row.fullName}`, tree);
+		}
+
+		if ('error' in tree) {
+			return [
+				item({
+					kind: 'empty',
+					label: 'Its files could not be listed',
+					note: tree.error,
+					command: { command: 'temcoRepositories.repository', title: 'Open the repository', arguments: [row.name] },
+				}),
+			];
+		}
+		const children = this.entriesOf(`repo:${row.fullName}`, row.name, tree, '');
+		if (children.length === 0) {
+			return [
+				item({
+					kind: 'empty',
+					label: 'No file to show',
+					note: 'download the local copy',
+					command: { command: 'temcoRepositories.repository', title: 'Open the repository', arguments: [row.name] },
+				}),
+			];
+		}
+		return children;
+	}
+
+	/** Folders first, then files — the order every file browser uses, for the same reason. */
+	private entriesOf(key: string, repository: string, entry: TreeEntry, prefix: string): vscode.TreeItem[] {
+		const folders = [...entry.folders.keys()].sort((left, right) => left.localeCompare(right));
+		const files = [...entry.files].sort((left, right) => left.path.localeCompare(right.path));
+		return [
+			...folders.map((name) =>
+				item({ kind: 'folder', key, repository, path: prefix === '' ? name : `${prefix}/${name}` })
+			),
+			...files.map((file) => item({ kind: 'file', key, repository, path: file.path, size: file.size })),
+		];
 	}
 
 	/** What is recorded but named by no enterprise: a folder, an archive, or a repository nobody added. */

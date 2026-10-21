@@ -277,6 +277,11 @@ export class RepositoriesPage {
       case 'bulk':
         await this.bulk(message.action, message.names ?? []);
         return;
+      case 'cite':
+        // Handed to the form rather than written here: what a project cites is the form's decision, and it may still
+        // be open with answers in it that a re-render would lose.
+        await vscode.commands.executeCommand('temcoProjects.citeInNewProject', message.names ?? []);
+        return;
       case 'read':
         // Choosing another organisation in the strip: its held list is drawn at once, then asked for again.
         await this.send(message.slug);
@@ -472,7 +477,7 @@ export class RepositoriesPage {
         'Projects'
       ).then((answer) => {
         if (answer === 'Projects') {
-          void vscode.commands.executeCommand('temcoDocs.openProjects');
+          void vscode.commands.executeCommand('temcoDocs.projects');
         }
       });
       return;
@@ -588,6 +593,7 @@ function html(): string {
       <p class="page-head__desc" id="lede">Reading the organisation from GitHub…</p>
     </div>
     <div class="page-head__actions">
+      <button type="button" class="btn btn--ghost" id="back-to-form">Back to the New Project form</button>
       <button type="button" class="btn btn--ghost" id="new-project">New project</button>
       <button type="button" class="btn" id="add-toggle">Add an enterprise</button>
       <button type="button" class="btn btn--primary" id="reload">Read GitHub again</button>
@@ -622,6 +628,7 @@ function html(): string {
   <div class="selection" hidden id="selection">
     <span class="count" id="selection-count">0 selected</span>
     <button type="button" class="btn btn--sm btn--primary" id="bulk-start">Start</button>
+    <button type="button" class="btn btn--sm" id="bulk-cite">Cite in the new project</button>
     <button type="button" class="btn btn--sm" id="bulk-fetch">Download</button>
     <button type="button" class="btn btn--sm" id="bulk-pull">Pull</button>
     <button type="button" class="btn btn--sm" id="bulk-remove">Remove the local copy</button>
@@ -670,6 +677,13 @@ const selected = new Set();
 
 $('reload').addEventListener('click', () => vscode.postMessage({ type: 'reload' }));
 $('new-project').addEventListener('click', () => vscode.postMessage({ type: 'command', command: 'temcoProjects.newProject' }));
+$('back-to-form').addEventListener('click', () => vscode.postMessage({ type: 'command', command: 'temcoProjects.returnToNewProject' }));
+$('bulk-cite').addEventListener('click', () => {
+  if (selected.size === 0) { return; }
+  vscode.postMessage({ type: 'cite', names: Array.from(selected) });
+  selected.clear();
+  draw();
+});
 $('change-folder').addEventListener('click', () => vscode.postMessage({ type: 'changeFolder' }));
 $('settings').addEventListener('click', () => vscode.postMessage({ type: 'command', command: 'temcoRepositories.settings' }));
 $('filter').addEventListener('input', () => draw());
@@ -802,7 +816,7 @@ function drawStats() {
   if (!project) {
     $('stats').append(
       document.createTextNode(' · '),
-      button('link', 'Choose a project', () => vscode.postMessage({ type: 'command', command: 'temcoDocs.openProjects' }))
+      button('link', 'Choose a project', () => vscode.postMessage({ type: 'command', command: 'temcoDocs.projects' }))
     );
   }
 }

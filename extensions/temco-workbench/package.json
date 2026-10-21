@@ -303,26 +303,6 @@
           "icon": "media/learn.svg"
         },
         {
-          "id": "temcoDevices",
-          "title": "Devices",
-          "icon": "media/devices.svg"
-        },
-        {
-          "id": "temcoIo",
-          "title": "I/O Studio",
-          "icon": "media/io.svg"
-        },
-        {
-          "id": "temcoBacnet",
-          "title": "BACnet Studio",
-          "icon": "media/bacnet.svg"
-        },
-        {
-          "id": "temcoNetwork",
-          "title": "Network",
-          "icon": "media/network.svg"
-        },
-        {
           "id": "temcoSql",
           "title": "SQL Studio",
           "icon": "media/sql.svg"

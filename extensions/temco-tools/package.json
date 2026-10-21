@@ -39,46 +39,6 @@
   ],
   "contributes": {
     "views": {
-      "temcoDevices": [
-        {
-          "id": "temcoTools.devicesFleet",
-          "name": "Fleet"
-        },
-        {
-          "id": "temcoTools.devicesData",
-          "name": "Data"
-        }
-      ],
-      "temcoIo": [
-        {
-          "id": "temcoTools.ioEngineering",
-          "name": "Engineering"
-        },
-        {
-          "id": "temcoTools.ioLive",
-          "name": "Live"
-        }
-      ],
-      "temcoBacnet": [
-        {
-          "id": "temcoTools.bacnetNetwork",
-          "name": "Network"
-        },
-        {
-          "id": "temcoTools.bacnetHistory",
-          "name": "History"
-        }
-      ],
-      "temcoNetwork": [
-        {
-          "id": "temcoTools.networkTools",
-          "name": "Tools"
-        },
-        {
-          "id": "temcoTools.networkTraffic",
-          "name": "Traffic"
-        }
-      ],
       "temcoSql": [
         {
           "id": "temcoTools.sqlWorkbench",

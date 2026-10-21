@@ -44,6 +44,12 @@ export function registerProjectCommands(
           ? void flow.open({ name, cloneUrl, branch, files })
           : void flow.open()
     ),
+    // Coming back from the repositories page: the form is brought forward, never rebuilt — a return is not a refresh.
+    vscode.commands.registerCommand('temcoProjects.returnToNewProject', () => flow.reveal()),
+    // Repositories ticked on the repositories page, cited in the form that is already open.
+    vscode.commands.registerCommand('temcoProjects.citeInNewProject', (names?: unknown) =>
+      void flow.cite(Array.isArray(names) ? names.filter((name): name is string => typeof name === 'string') : [])
+    ),
     vscode.commands.registerCommand('temcoProjects.removeProject', (target?: ProjectArgument) =>
       removeProject(context, selection, () => refresh(), rowSlug(target))
     ),

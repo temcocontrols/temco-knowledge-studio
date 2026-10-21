@@ -178,6 +178,29 @@ export interface Catalog {
 	}[];
 	/** Marks a draft written or discarded. The row is kept, so the act leaves a trace. */
 	setDraftState(id: number, state: 'accepted' | 'discarded'): void;
+	/** Where repositories come from — an enterprise, an account, or one repository's address. */
+	organisations(): {
+		id: number;
+		kind: string;
+		name: string;
+		slug: string;
+		url?: string;
+		lastRead?: string;
+		state?: string;
+		repositories: number;
+	}[];
+	/** The repositories an organisation holds, as the last good read found them — the cache, not the truth. */
+	repositoriesOf(slug: string): {
+		name: string;
+		fullName: string;
+		description?: string;
+		language?: string;
+		pushedAt?: string;
+		isPrivate: boolean;
+		webUrl?: string;
+		cloneUrl?: string;
+		defaultBranch?: string;
+	}[];
 	startBuild(documentSlug: string, revision?: string): number;
 	finishBuild(buildId: number, status: string): void;
 	recordArtifact(

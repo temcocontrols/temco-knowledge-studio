@@ -15,6 +15,7 @@
 // every clone, pull and removal starts from a command a person ran.
 
 import * as vscode from 'vscode';
+import * as path from 'node:path';
 import { registerReadCommands } from './read';
 import { tokenOf } from './read';
 import { CodeFile, Material, RepositorySource, codeFiles, readMaterials, sourceTree } from './repository';
@@ -25,6 +26,7 @@ import { OFFERED_SCRIPTS, OfferedScript } from './scripts';
 import { registerSourcesView } from './sourcesView';
 import { Catalog, selection, slugOf } from './store';
 import { registerWorkareaCommands } from './workarea';
+import { cloneFolder, hasClone } from './workarea';
 
 /** What this module offers the rest of the platform. */
 export interface TemcoRepositoriesApi {
@@ -69,6 +71,11 @@ export function activate(context: vscode.ExtensionContext): TemcoRepositoriesApi
 		}),
 		vscode.commands.registerCommand('temcoRepositories.rowForgetOrg', (target?: unknown) =>
 			void rowForget(context, refresh, target)
+		),
+		// A file in the panel's tree: the local copy when there is one, GitHub when there is not. Its own id —
+		// `temcoRepositories.openFile` is the documentation page opener in `read.ts`.
+		vscode.commands.registerCommand('temcoRepositories.openRepositoryFile', (name?: unknown, file?: unknown) =>
+			void openRepositoryFile(context, selection, name, file)
 		),
 		vscode.commands.registerCommand('temcoRepositories.repository', (name?: string, organisation?: string) => {
 			if (typeof name === 'string' && name.length > 0) {
@@ -153,14 +160,14 @@ function rowName(target: unknown): string {
 async function rowCoordinates(
 	context: vscode.ExtensionContext,
 	name: string
-): Promise<{ cloneUrl?: string; defaultBranch?: string }> {
+): Promise<{ cloneUrl?: string; defaultBranch?: string; fullName?: string }> {
 	let catalog: Catalog | undefined;
 	try {
 		catalog = await Catalog.open(context);
 		for (const organisation of catalog.organisations()) {
 			const row = catalog.repositoriesOf(organisation.slug).find((entry) => entry.name === name);
 			if (row !== undefined) {
-				return { cloneUrl: row.cloneUrl, defaultBranch: row.defaultBranch };
+				return { cloneUrl: row.cloneUrl, defaultBranch: row.defaultBranch, fullName: row.fullName };
 			}
 		}
 		return {};
@@ -169,6 +176,40 @@ async function rowCoordinates(
 	} finally {
 		catalog?.close();
 	}
+}
+
+/**
+ * Open one file of a repository, from where it actually exists.
+ *
+ * The local copy is the real file and opens as the editor's own text document; without one, GitHub's blob page is the
+ * honest place to send a person — on the branch the platform would read, so the page shows the revision being read.
+ */
+async function openRepositoryFile(
+	context: vscode.ExtensionContext,
+	selection: { project(): string | undefined },
+	name?: unknown,
+	file?: unknown
+): Promise<void> {
+	if (typeof name !== 'string' || typeof file !== 'string' || name.length === 0 || file.length === 0) {
+		return;
+	}
+	const project = selection.project();
+	if (project !== undefined && (await hasClone(project, name))) {
+		const target = path.join(cloneFolder(project, name), ...file.split('/'));
+		try {
+			await vscode.window.showTextDocument(vscode.Uri.file(target));
+			return;
+		} catch {
+			// An old listing and the copy can disagree; the browser still has the file.
+		}
+	}
+	const coordinates = await rowCoordinates(context, name);
+	const branch = coordinates.defaultBranch ?? 'main';
+	const repository = coordinates.fullName ?? name;
+	const address =
+		`https://github.com/${repository}/blob/${encodeURIComponent(branch)}/` +
+		file.split('/').map((part) => encodeURIComponent(part)).join('/');
+	await vscode.env.openExternal(vscode.Uri.parse(address));
 }
 
 /** Fetch a row's local copy, recording it as a source first: a clone belongs to a source. */
@@ -240,8 +281,7 @@ async function rowForget(context: vscode.ExtensionContext, refresh: () => void, 
 	refresh();
 }
 
-/** Whether the stored token is accepted, and what allowance is left — the two things a refusal is made of. */
-async function testToken(context: vscode.ExtensionContext): Promise<void> {
+/** Whether the stored token is accepted, and what allowance is left — the two things a refusal is made of. */async function testToken(context: vscode.ExtensionContext): Promise<void> {
 const token = await tokenOf(context);
 let response: Response;
 try {

@@ -118,7 +118,7 @@ async function fetchSource(
       'Projects'
     ).then((answer) => {
       if (answer === 'Projects') {
-        void vscode.commands.executeCommand('temcoDocs.openProjects');
+        void vscode.commands.executeCommand('temcoDocs.projects');
       }
     });
     return;

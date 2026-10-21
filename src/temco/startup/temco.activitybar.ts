@@ -6,7 +6,7 @@
 import { Disposable } from '../../vs/base/common/lifecycle.js';
 import { Registry } from '../../vs/platform/registry/common/platform.js';
 import { IStorageService, StorageScope } from '../../vs/platform/storage/common/storage.js';
-import { Extensions, IViewContainersRegistry } from '../../vs/workbench/common/views.js';
+import { Extensions, IViewContainersRegistry, ViewContainer } from '../../vs/workbench/common/views.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../vs/workbench/common/contributions.js';
 
 /** The key the activity bar keeps its own order in: an array of container ids, written as icons are pinned. */
@@ -19,10 +19,6 @@ const ORDER = [
 	'temcoRepos',
 	'temcoAiHub',
 	'temcoLearn',
-	'temcoDevices',
-	'temcoIo',
-	'temcoBacnet',
-	'temcoNetwork',
 	'temcoSql',
 	'temcoSettings',
 	'temcoHelp'
@@ -55,7 +51,13 @@ class TemcoActivityBar extends Disposable {
 	private static readonly HIDDEN = [
 		'workbench.view.scm',
 		'workbench.view.debug',
-		'workbench.view.extensions'
+		'workbench.view.extensions',
+		// The module containers that are shelved for now. Deregistering a container takes it off the bar and leaves
+		// every command of it in the palette: nothing is deleted, and putting one back is one line here.
+		'temcoDevices',
+		'temcoIo',
+		'temcoBacnet',
+		'temcoNetwork'
 	];
 
 	constructor(@IStorageService storageService: IStorageService) {
@@ -63,10 +65,13 @@ class TemcoActivityBar extends Disposable {
 
 		// The remembered order, before anything reads it.
 		const raw = storageService.get(PINNED_VIEWLETS_KEY, StorageScope.PROFILE, '[]');
+		const hidden = new Set(TemcoActivityBar.HIDDEN);
 		try {
 			const stored = (JSON.parse(raw) as { id?: string }[]).map((entry) => entry.id).filter((id): id is string => typeof id === 'string');
 			const ours = stored.filter((id) => ORDER.includes(id));
-			if (ours.join('|') !== ORDER.join('|')) {
+			// Dropped when the remembered list disagrees with ORDER *or* still names a shelved container: a remembered
+			// id keeps an icon on the bar by itself, long after the container behind it has gone.
+			if (ours.join('|') !== ORDER.join('|') || stored.some((id) => hidden.has(id))) {
 				storageService.remove(PINNED_VIEWLETS_KEY, StorageScope.PROFILE);
 			}
 		} catch {
@@ -74,12 +79,24 @@ class TemcoActivityBar extends Disposable {
 		}
 
 		const registry = Registry.as<IViewContainersRegistry>(Extensions.ViewContainersRegistry);
-		for (const id of TemcoActivityBar.HIDDEN) {
-			const container = registry.get(id);
-			if (container !== undefined) {
+		const remove = (container: ViewContainer): void => {
+			if (hidden.has(container.id)) {
 				registry.deregisterViewContainer(container);
 			}
+		};
+
+		// Whatever is already registered when this phase runs — VS Code's own containers: SCM, Run, Extensions.
+		for (const id of hidden) {
+			const container = registry.get(id);
+			if (container !== undefined) {
+				remove(container);
+			}
 		}
+
+		// And whatever arrives later. A container contributed by an extension is registered when the extension host
+		// registers it — *after* this phase — so a single sweep at startup only ever saw VS Code's own containers,
+		// which is why the module icons stayed on the bar. Watching the registry catches both cases.
+		this._register(registry.onDidRegister(({ viewContainer }) => remove(viewContainer)));
 	}
 }
 

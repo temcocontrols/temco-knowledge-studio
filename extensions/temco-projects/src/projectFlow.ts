@@ -77,6 +77,8 @@ export class ProjectFlowPage {
 	private sources: SourceRow[] = [];
 	/** The repository this flow was opened from, when it was opened from one. */
 	private pinned: PinnedRepository | undefined;
+	/** Repositories chosen while this form did not exist yet: applied when the form says it is ready. */
+	private pending: string[] = [];
 
 	constructor(
 		private readonly context: vscode.ExtensionContext,
@@ -106,7 +108,7 @@ export class ProjectFlowPage {
 			this.sources = [];
 		}
 
-		const body = html(this.sources, pinned, unavailable);
+		const body = html(pinned, unavailable);
 		if (this.panel) {
 			this.panel.reveal(pageColumn());
 			this.panel.webview.html = page(body, { title: 'New Project', script: WIZARD_SCRIPT, extraCss: FLOW_CSS });
@@ -129,41 +131,98 @@ export class ProjectFlowPage {
 	}
 
 	/**
-	 * What a project cites, chosen from a multi-select over every repository the catalog records.
+	 * Brings the form forward **without rebuilding it**.
 	 *
-	 * A quick pick rather than a page: choosing is one field in a form, and the form must not be thrown away to
-	 * answer it. Typing filters, space ticks, Enter answers — the ticks then land back in the list on the page.
+	 * The form is a live document: re-rendering it would throw away everything typed and ticked. Coming back from the
+	 * repositories page is a return, not a refresh.
 	 */
-	private async chooseRepositories(picked: readonly string[]): Promise<void> {
+	reveal(): void {
+		this.panel?.reveal(pageColumn());
+	}
+
+	/**
+	 * Ticks repositories this form should cite, chosen elsewhere — the repositories page's selection.
+	 *
+	 * Choosing a repository *is* what records it: it becomes a source of the platform (the same row `Start` writes,
+	 * without a read), so the form has a row to tick. Then the rail moves to *From a repository* — a list nobody can
+	 * see is not an answer.
+	 */
+	async cite(names: readonly string[]): Promise<void> {
+		if (names.length === 0) {
+			return;
+		}
+		if (this.panel === undefined) {
+			// No form to hand it to yet: the sources are recorded now, and the answer is applied when the new form is
+			// ready — posting to a webview that has not loaded a document yet is posting into nothing.
+			this.pending = names.slice();
+			await this.open();
+			return;
+		}
+		await this.applyCite(names);
+	}
+
+	/** Tells the open form what was chosen, after recording the sources it is going to cite. */
+	private async applyCite(names: readonly string[]): Promise<void> {
+		const known = await this.ensureKnown(names);
+		this.refresh();
+		this.panel?.reveal(pageColumn());
+		await this.panel?.webview.postMessage({ type: 'known', known });
+		await this.panel?.webview.postMessage({ type: 'chosen', sources: names });
+		await this.panel?.webview.postMessage({ type: 'rail', rail: 'repository' });
+	}
+
+	/**
+	 * Records the named repositories as sources if they are not already, and answers the form's own list of known
+	 * sources. A source is recorded once and cited by any number of projects, so this only ever adds.
+	 */
+	private async ensureKnown(
+		names: readonly string[]
+	): Promise<{ slug: string; name: string; kind: string; branch?: string; pages?: number; line: string }[]> {
 		let catalog: Catalog | undefined;
-		let rows: { label: string; description: string; picked: boolean }[] = [];
 		try {
 			catalog = await Catalog.open(this.context);
-			rows = catalog.sources().filter((source) => source.kind === 'git').map((source) => ({
-				label: source.name,
-				description: `${source.branch ?? 'no branch'} · ${source.pages === undefined || source.pages === 0 ? 'not read yet' : `${source.pages} ${source.pages === 1 ? 'page' : 'pages'}`}`,
-				picked: picked.includes(source.name),
-			}));
+			const cached = new Map<string, { cloneUrl?: string; defaultBranch?: string }>();
+			for (const organisation of catalog.organisations()) {
+				for (const row of catalog.repositoriesOf(organisation.slug)) {
+					cached.set(row.name, { cloneUrl: row.cloneUrl, defaultBranch: row.defaultBranch });
+				}
+			}
+			for (const name of names) {
+				if (catalog.source(slugOf(name)) !== undefined) {
+					continue;
+				}
+				const row = cached.get(name);
+				catalog.addSource({
+					kind: 'git',
+					name,
+					slug: slugOf(name),
+					remoteUrl: row?.cloneUrl,
+					defaultBranch: row?.defaultBranch,
+				});
+			}
+			this.sources = catalog.sources();
 		} catch {
-			// No catalog, nothing to choose: the page already says so.
+			return [];
 		} finally {
 			catalog?.close();
 		}
 
-		if (rows.length === 0) {
-			void vscode.window.showInformationMessage('Temco Projects: no repository is recorded yet. Add one from the Repositories panel.');
-			return;
-		}
-
-		const chosen = await vscode.window.showQuickPick(rows, {
-			canPickMany: true,
-			matchOnDescription: true,
-			placeHolder: 'Repositories this project cites',
-		});
-		if (chosen === undefined) {
-			return;
-		}
-		await this.panel?.webview.postMessage({ type: 'chosen', sources: chosen.map((row) => row.label) });
+		return this.sources
+			.filter((source) => source.kind === 'git')
+			.map((source) => ({
+				slug: source.slug,
+				name: source.name,
+				kind: source.kind,
+				branch: source.branch,
+				pages: source.pages,
+				line: [
+					source.kind === 'git' ? 'repository' : source.kind,
+					source.branch,
+					source.pages === undefined ? 'never read' : `${source.pages} pages`,
+				]
+					.filter((part): part is string => Boolean(part))
+					.join(' · '),
+			}));
 	}
 
 	/**
@@ -201,12 +260,17 @@ export class ProjectFlowPage {
 			await this.sendFiles();
 			return;
 		}
-		if (message.type === 'draft') {
-			await this.draft(message.files ?? []);
+		if (message.type === 'ready') {
+			// A choice made before this form existed: applied now that there is a document to apply it to.
+			if (this.pending.length > 0) {
+				const names = this.pending;
+				this.pending = [];
+				await this.applyCite(names);
+			}
 			return;
 		}
-		if (message.type === 'choose') {
-			await this.chooseRepositories(message.picked ?? []);
+		if (message.type === 'draft') {
+			await this.draft(message.files ?? []);
 			return;
 		}
 		if (message.type === 'command' && typeof message.command === 'string') {
@@ -422,7 +486,7 @@ export class ProjectFlowPage {
 	 * project must not reach into another module's sources. Answers `undefined` when nothing should be recorded,
 	 * after saying why on screen.
 	 */
-	private async importInto(folder: vscode.Uri, values: Values): Promise<undefined> {
+	private async importInto(folder: vscode.Uri, values: Values): Promise<true | undefined> {
 		const source = expand(values.importSource);
 		if (source.length === 0) {
 			void vscode.window.showErrorMessage('Temco Projects: an import needs a file or a folder to read.');
@@ -453,7 +517,9 @@ export class ProjectFlowPage {
 		if ((outcome.pages ?? 0) > 0) {
 			void vscode.window.showInformationMessage(`Temco Projects: ${outcome.pages} page(s) imported into ${folder.fsPath}.`);
 		}
-		return undefined;
+		// `true`, not `undefined`: the caller reads `undefined` as "nothing was imported, stop", and returning it after
+		// a *successful* import ended the flow right before the project was recorded.
+		return true;
 	}
 }
 
@@ -682,30 +748,6 @@ const field = (label: string, control: string, hint?: string): string =>
 	`<div class="field"><label>${esc(label)}</label>${control}${hint ? `<div class="field__hint">${esc(hint)}</div>` : ''}</div>`;
 
 /**
- * One source, as a row you tick.
- *
- * Every row answers the same three things in the same order — what kind of source it is, which branch it is on, and
- * how many pages it has already given up — so two sources can be compared without opening either. "Not read yet" is
- * stated rather than hidden: ticking it is allowed, and the project will simply start with none of its pages.
- */
-const sourceRow = (source: SourceRow, selected: readonly string[]): string => {
-	const kind = source.kind === 'git' ? 'repository' : source.kind === 'folder' ? 'folder' : source.kind;
-	const pages = source.pages === undefined || source.pages === 0
-		? 'not read yet'
-		: `${source.pages} ${source.pages === 1 ? 'page' : 'pages'}`;
-	const facts = [kind];
-	if (source.branch !== undefined) {
-		facts.push(source.branch);
-	}
-	facts.push(pages);
-	if (source.state !== undefined) {
-		facts.push(source.state);
-	}
-	const ticked = selected.includes(source.name) ? ' checked' : '';
-	return `<label class="checklist__row" data-source data-pages="${source.pages ?? 0}"><input type="checkbox" data-field="sources" value="${esc(source.name)}"${ticked}><span class="checklist__text"><span class="checklist__title">${esc(source.name)}</span><span class="checklist__sub">${facts.map((fact) => esc(fact)).join(' · ')}</span></span></label>`;
-};
-
-/**
  * The outputs, as compact ticks.
  *
  * A column of five ticks has to be read line by line to learn which are on; a tile carries its own state in its
@@ -751,8 +793,7 @@ function typeOptions(initial: string): string {
  * person to another page to finish an answer — a wizard that jumps away and comes back loses both the thread and the
  * half-filled form.
  */
-function html(sources: SourceRow[], pinned: PinnedRepository | undefined, unavailable?: string): string {
-	const repositories = sources.filter((source) => source.kind === 'git');
+function html(pinned: PinnedRepository | undefined, unavailable?: string): string {
 	const initial = pinned === undefined ? 'empty' : 'repository';
 	const empty = unavailable
 		? `<div class="callout callout--warn">${icon('alert')}<div><b>The store is not available.</b> ${esc(unavailable)}</div></div>`
@@ -760,19 +801,19 @@ function html(sources: SourceRow[], pinned: PinnedRepository | undefined, unavai
 
 	// Opened from a repository: it is already the answer to *where the pages come from*, so the chooser is replaced by
 	// the one repository and the section continues into what is inside it.
+	//
+	// Otherwise this section **chooses nothing**: picking a repository happens on the repositories page — where the list,
+	// the download and the files are — and the form only states what was picked. A checkbox in a form that shows a
+	// filtered copy of another page is a checkbox that lies about what it is choosing from.
 	const sourceSection = pinned === undefined
 		? `<div class="split__section-title">Where the pages come from</div>
-			<p class="split__section-note">Repositories the platform already records. A project cites the pages they declare; reading and cloning happen on the Sources page.</p>
+			<p class="split__section-note">Chosen on the repositories page: browse it, pick the repositories this project is built from, then come back with <b>Cite in the new project</b>. What you picked is listed here.</p>
+			<div class="chosen" id="chosen-list"></div>
+			<p class="split__section-note" id="source-summary">No repository chosen yet — open the repositories page and pick one.</p>
 			<div class="checklist-tools">
-				<input class="input input--sm" data-filter="sources" placeholder="Search repositories" aria-label="Search repositories">
-				<button type="button" class="btn btn--sm" id="choose-repositories">${icon('list')}<span>Choose…</span></button>
-			</div>
-			${repositories.length === 0
-				? `<div class="callout">${icon('info')}<div><b>No repository is recorded yet.</b> Create the project now — its own page is where sources are added and read, and this project can cite them from then on.</div></div>`
-				: `<div class="checklist src-list" data-source-list>${repositories.map((source) => sourceRow(source, [])).join('')}</div>
-		<p class="split__section-note" id="source-empty" hidden>No repository matches that.</p>
-		<p class="split__section-note" style="margin-top:10px"><span id="source-summary">No repository selected</span><button type="button" class="link" id="source-clear">Clear</button></p>`}
-			<p class="split__section-note"><button type="button" class="link" id="manage-repositories">Manage repositories</button> — the page where they are added, cloned and read. This form stays as it is, in its own tab.</p>`
+				<button type="button" class="btn btn--sm" id="manage-repositories">${icon('repo')}<span>Open the repositories page</span></button>
+				<button type="button" class="link" id="source-clear">Clear the choice</button>
+			</div>`
 		: `<div class="split__section-title">Where the pages come from</div>
 			<p class="split__section-note">This project starts from <b>${esc(pinned.name)}</b>: it is added as the project's source, and nothing is written into the repository.</p>
 			<div class="checklist"><label class="checklist__row is-fixed"><input type="checkbox" data-field="sources" value="${esc(pinned.name)}" checked disabled><span class="checklist__text"><span class="checklist__title">${esc(pinned.name)}</span><span class="checklist__sub">repository${pinned.branch === undefined ? '' : ` · ${esc(pinned.branch)}`} · added by this project</span></span></label></div>
@@ -868,6 +909,21 @@ ${empty}
  * it is set in the mono face only because Markdown's indentation is part of what was drafted.
  */
 const FLOW_CSS = `
+/* The chose-outside list: a mark, the name, its facts right-aligned, and one quiet action. No borders and no boxes —
+   a hover surface says "row", the alignment says "table", and the weight difference says which part is the name. */
+.chosen { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 10px; }
+.chosen__row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto auto; align-items: center;
+  gap: 0 12px; padding: 8px 10px; border-radius: var(--radius); }
+.chosen__row:hover { background: var(--bg-hover); }
+.chosen__mark { display: flex; align-items: center; color: var(--fg-subtle); }
+.chosen__mark .icon { width: 14px; height: 14px; }
+.chosen__name { color: var(--fg-strong); font-weight: 600; overflow-wrap: anywhere; }
+.chosen__facts { color: var(--fg-muted); font-size: var(--fs-sm); white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
+.chosen__remove { border: 0; background: none; padding: 2px 4px; font: inherit; font-size: var(--fs-sm);
+  color: var(--fg-subtle); cursor: pointer; border-radius: var(--radius-sm); }
+.chosen__remove:hover { color: var(--err); background: color-mix(in srgb, var(--err) 12%, transparent); }
+.chosen__remove:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 /* The rail is the narrow column on the left and the form the wide one on the right, stated here rather than
    inferred from the DOM order: the shared \`.split\` sizes its columns \`1fr 320px\`, which put this page's rail in
    the wide column and the form in a 320px strip — so choosing a type changed something nobody was looking at. */
@@ -904,8 +960,11 @@ const WIZARD_SCRIPT = `
 	// The page the AI wrote for this project, kept here until *Create Project* records it.
 	let draftText = '';
 	// A draft written by an older build can name a type this build no longer has; the rail is the truth.
-	const known = rails.some(function (rail) { return rail.getAttribute('data-type') === type; });
-	if (!known) { type = 'empty'; }
+	const railKnown = rails.some(function (rail) { return rail.getAttribute('data-type') === type; });
+	if (!railKnown) { type = 'empty'; }
+	// The repositories this project cites, and the facts behind each name — both handed in from elsewhere.
+	let chosen = [];
+	let sourcesKnown = [];
 
 	const HINTS = {
 		empty: 'Nothing is read and nothing is converted: the project exists, and the first page is yours to write.',
@@ -958,41 +1017,54 @@ const WIZARD_SCRIPT = `
 		if (v.origin === 'folder') { v.folder = picked(); v.importSource = picked(); }
 		if (v.origin === 'import') { v.importKind = material(); v.importSource = picked(); }
 		if (v.origin === 'repository') {
-			v.sources = checked('sources');
+			v.sources = chosen.slice();
 			v.files = tickedFiles();
 			v.draft = draftText;
 		}
 		return v;
 	}
-	function sourceRows() {
-		return Array.prototype.slice.call(document.querySelectorAll('[data-source]'));
-	}
-	/** What is ticked, as a sentence: the count, and how many pages those sources actually bring. */
-	function counts() {
-		const list = document.getElementById('source-summary');
+
+	/**
+	 * What the project will cite, stated rather than offered.
+	 *
+	 * The choosing happened on the repositories page — the list, the download and the files are there — so this is a
+	 * receipt: one row per repository picked, each removable, and a sentence that says how many.
+	 */
+	function renderChosen() {
+		const list = document.getElementById('chosen-list');
 		if (!list) { return; }
-		const rows = sourceRows().filter(function (row) { return row.querySelector('input').checked; });
-		if (rows.length === 0) {
-			list.textContent = 'No repository selected — a repository project needs at least one.';
-			return;
-		}
-		const pages = rows.reduce(function (total, row) { return total + Number(row.getAttribute('data-pages') || 0); }, 0);
-		list.textContent = rows.length + (rows.length === 1 ? ' repository' : ' repositories') + ' · ' + pages + (pages === 1 ? ' page' : ' pages') + ' from them';
-	}
-	/** The search narrows the list; with one kind in it there is nothing else to filter by. */
-	function applyFilter() {
-		const search = document.querySelector('[data-filter="sources"]');
-		const term = search ? search.value.trim().toLowerCase() : '';
-		let shown = 0;
-		sourceRows().forEach(function (row) {
-			row.hidden = term.length > 0 && row.textContent.toLowerCase().indexOf(term) < 0;
-			if (!row.hidden) { shown++; }
+		list.replaceChildren();
+		chosen.forEach(function (name, index) {
+			const row = document.createElement('div');
+			row.className = 'chosen__row';
+			const mark = document.createElement('span');
+			mark.className = 'chosen__mark';
+			mark.innerHTML = '<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><use href="#i-repo"></use></svg>';
+			const title = document.createElement('span');
+			title.className = 'chosen__name';
+			title.textContent = name;
+			const found = sourcesKnown.filter(function (entry) { return entry.name === name; })[0];
+			const facts = document.createElement('span');
+			facts.className = 'chosen__facts';
+			facts.textContent = found ? found.line : 'repository';
+			const drop = document.createElement('button');
+			drop.type = 'button';
+			drop.className = 'chosen__remove';
+			drop.textContent = 'remove';
+			drop.setAttribute('aria-label', 'Stop citing ' + name);
+			drop.addEventListener('click', function () { chosen.splice(index, 1); renderChosen(); });
+			row.append(mark, title, facts, drop);
+			list.append(row);
 		});
-		const empty = document.getElementById('source-empty');
-		if (empty) { empty.hidden = shown > 0; }
+		const line = document.getElementById('source-summary');
+		if (line) {
+			line.textContent = chosen.length === 0
+				? 'No repository chosen yet — open the repositories page and pick one.'
+				: 'This project will cite ' + chosen.length + (chosen.length === 1 ? ' repository.' : ' repositories.');
+		}
+		refresh();
 	}
 	function refresh() {
-		counts();
 		if (!summary) { return; }
 		const v = values();
 		const parts = [type === 'repository' ? 'From a repository' : type === 'files' ? 'From existing files' : 'Empty project'];
@@ -1077,12 +1149,20 @@ const WIZARD_SCRIPT = `
 			refresh();
 			return;
 		}
+		if (message.type === 'known') {
+			// The catalog gained sources while this form was open: the facts behind each name are freshened.
+			sourcesKnown = message.known || [];
+			renderChosen();
+			return;
+		}
+		if (message.type === 'rail') {
+			type = message.rail || type;
+			show();
+			return;
+		}
 		if (message.type === 'chosen') {
-			const names = message.sources || [];
-			Array.prototype.forEach.call(document.querySelectorAll('[data-source] input'), function (input) {
-				input.checked = names.indexOf(input.value) >= 0;
-			});
-			refresh();
+			chosen = (message.sources || []).slice();
+			renderChosen();
 			return;
 		}
 		const section = document.querySelector('[data-form="files"]');
@@ -1110,20 +1190,11 @@ const WIZARD_SCRIPT = `
 		api.postMessage({ type: 'create', values: sent });
 	});
 
-	const filter = document.querySelector('[data-filter="sources"]');
-	if (filter) { filter.addEventListener('input', applyFilter); }
 	const clear = document.getElementById('source-clear');
 	if (clear) {
 		clear.addEventListener('click', function () {
-			Array.prototype.forEach.call(document.querySelectorAll('[data-source] input'), function (input) { input.checked = false; });
-			refresh();
-		});
-	}
-
-	const choose = document.getElementById('choose-repositories');
-	if (choose) {
-		choose.addEventListener('click', function () {
-			api.postMessage({ type: 'choose', picked: checked('sources') });
+			chosen = [];
+			renderChosen();
 		});
 	}
 	const manage = document.getElementById('manage-repositories');
@@ -1236,8 +1307,10 @@ const WIZARD_SCRIPT = `
 	document.addEventListener('change', refresh);
 	document.addEventListener('input', refresh);
 	show();
-	applyFilter();
+	renderChosen();
 	// The pinned repository's files are a listing the host owns; the page asks for them once it is drawn.
 	if (document.getElementById('file-list')) { api.postMessage({ type: 'files' }); }
+	// Ready for anything the host was holding: repositories chosen before this form existed.
+	api.postMessage({ type: 'ready' });
 })();
 `;
