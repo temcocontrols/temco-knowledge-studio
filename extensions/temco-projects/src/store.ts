@@ -150,6 +150,20 @@ export interface Catalog {
 		branch?: string;
 	}): number;
 	setRecipe(slug: string, engine: string, outputs: string[]): void;
+	/**
+	 * Records a page's text without writing it anywhere: the row a project's first page starts as.
+	 *
+	 * `pageId` is the id the page *will* have (`area/chapter/slug`), so a draft is recognisable before it exists on
+	 * disk and two drafts for one page can be told apart.
+	 */
+	saveDraft(draft: {
+		documentSlug: string;
+		source?: string;
+		pageId: string;
+		title: string;
+		kind?: string;
+		body: string;
+	}): number;
 	startBuild(documentSlug: string, revision?: string): number;
 	finishBuild(buildId: number, status: string): void;
 	recordArtifact(

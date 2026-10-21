@@ -309,6 +309,151 @@ export class Catalog {
     this.db.prepare('DELETE FROM sources WHERE slug = ?').run(slug);
   }
 
+  /**
+   * Where repositories come from, with how many of each the cache holds — the first thing the Repositories page draws.
+   *
+   * Ordered by when they were added, so the default organisation (written first) stays first, and an enterprise a
+   * person adds afterwards arrives at the end of the strip rather than in the middle of it.
+   */
+  organisations(): OrganisationRow[] {
+    const rows = this.db
+      .prepare(
+        `SELECT o.id, o.kind, o.name, o.slug, o.url, o.last_read AS lastRead, o.state,
+                (SELECT COUNT(*) FROM repositories r WHERE r.org_id = o.id) AS repositories
+           FROM organisations o
+          ORDER BY o.id`
+      )
+      .all() as Record<string, unknown>[];
+
+    return rows.map((row) => ({
+      id: Number(row.id ?? 0),
+      kind: String(row.kind ?? 'organisation'),
+      name: String(row.name ?? ''),
+      slug: String(row.slug ?? ''),
+      url: row.url === null || row.url === undefined ? undefined : String(row.url),
+      lastRead: row.lastRead === null || row.lastRead === undefined ? undefined : String(row.lastRead),
+      state: row.state === null || row.state === undefined ? undefined : String(row.state),
+      repositories: Number(row.repositories ?? 0),
+    }));
+  }
+
+  /**
+   * Remembers where repositories come from — an organisation, an account, or one repository's address.
+   *
+   * Keyed by slug and only ever *clarifying* an existing row: the name and the address are written again, while
+   * `added_at`, `last_read` and the cached list are left alone. So seeding the default organisation on every open
+   * cannot undo a read.
+   */
+  addOrganisation(input: OrganisationInput): number {
+    this.db
+      .prepare(
+        `INSERT INTO organisations (kind, name, slug, url, added_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(slug) DO UPDATE SET kind = excluded.kind, name = excluded.name, url = excluded.url`
+      )
+      .run(input.kind, input.name, input.slug, input.url ?? null, new Date().toISOString());
+
+    const row = this.db.prepare('SELECT id FROM organisations WHERE slug = ?').get(input.slug) as
+      | { id?: unknown }
+      | undefined;
+    return Number(row?.id ?? 0);
+  }
+
+  /** Forgets where a list came from, and the list with it — the repositories go by foreign key. */
+  removeOrganisation(slug: string): void {
+    this.db.prepare('DELETE FROM organisations WHERE slug = ?').run(slug);
+  }
+
+  /** What the last read of one of these lists concluded, and when. */
+  recordOrganisationRead(slug: string, state: string): void {
+    this.db
+      .prepare('UPDATE organisations SET last_read = ?, state = ? WHERE slug = ?')
+      .run(new Date().toISOString(), state, slug);
+  }
+
+  /** The repositories an organisation holds, as the last good read found them — most recently pushed first. */
+  repositoriesOf(slug: string): RepositoryCacheRow[] {
+    const rows = this.db
+      .prepare(
+        `SELECT r.name, r.full_name AS fullName, r.description, r.language, r.pushed_at AS pushedAt,
+                r.is_private AS isPrivate, r.web_url AS webUrl, r.clone_url AS cloneUrl,
+                r.default_branch AS defaultBranch
+           FROM repositories r JOIN organisations o ON o.id = r.org_id
+          WHERE o.slug = ?
+          ORDER BY r.pushed_at DESC, r.name`
+      )
+      .all(slug) as Record<string, unknown>[];
+
+    return rows.map((row) => ({
+      name: String(row.name ?? ''),
+      fullName: String(row.fullName ?? ''),
+      description: row.description === null || row.description === undefined ? undefined : String(row.description),
+      language: row.language === null || row.language === undefined ? undefined : String(row.language),
+      pushedAt: row.pushedAt === null || row.pushedAt === undefined ? undefined : String(row.pushedAt),
+      isPrivate: Number(row.isPrivate ?? 0) !== 0,
+      webUrl: row.webUrl === null || row.webUrl === undefined ? undefined : String(row.webUrl),
+      cloneUrl: row.cloneUrl === null || row.cloneUrl === undefined ? undefined : String(row.cloneUrl),
+      defaultBranch:
+        row.defaultBranch === null || row.defaultBranch === undefined ? undefined : String(row.defaultBranch),
+    }));
+  }
+
+  /**
+   * Keeps a good read whole: the rows in the statement replace whatever the organisation held before.
+   *
+   * Delete-then-insert inside a transaction, because a list is one answer from GitHub rather than a stream of
+   * edits — a repository that disappeared from the organisation must disappear here too.
+   */
+  replaceRepositories(slug: string, repositories: readonly RepositoryCacheRow[]): void {
+    const row = this.db.prepare('SELECT id FROM organisations WHERE slug = ?').get(slug) as
+      | { id?: unknown }
+      | undefined;
+    const orgId = Number(row?.id ?? 0);
+    if (orgId === 0) {
+      return;
+    }
+    const takenAt = new Date().toISOString();
+    const insert = this.db.prepare(
+      `INSERT INTO repositories
+         (org_id, name, full_name, description, language, pushed_at, is_private, web_url, clone_url,
+          default_branch, taken_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(org_id, name) DO UPDATE SET
+         full_name = excluded.full_name, description = excluded.description, language = excluded.language,
+         pushed_at = excluded.pushed_at, is_private = excluded.is_private, web_url = excluded.web_url,
+         clone_url = excluded.clone_url, default_branch = excluded.default_branch, taken_at = excluded.taken_at`
+    );
+
+    this.db.exec('BEGIN');
+    try {
+      const keep = new Set(repositories.map((repository) => repository.name));
+      for (const existing of this.repositoriesOf(slug)) {
+        if (!keep.has(existing.name)) {
+          this.db.prepare('DELETE FROM repositories WHERE org_id = ? AND name = ?').run(orgId, existing.name);
+        }
+      }
+      for (const repository of repositories) {
+        insert.run(
+          orgId,
+          repository.name,
+          repository.fullName,
+          repository.description ?? null,
+          repository.language ?? null,
+          repository.pushedAt ?? null,
+          repository.isPrivate ? 1 : 0,
+          repository.webUrl ?? null,
+          repository.cloneUrl ?? null,
+          repository.defaultBranch ?? null,
+          takenAt
+        );
+      }
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
   /** Records what a read of a source found, so the next read can say what changed. */
   recordScan(sourceId: number, mode: string, revision: string | undefined, counts: unknown): void {
     this.db
@@ -1009,6 +1154,43 @@ export interface SourceRow {
   /** What the last read concluded, in one line. */
   state?: string;
   lastReadMode?: string;
+}
+
+/** Where repositories come from: an organisation, a personal account, or one repository's address. */
+export type OrganisationKind = 'organisation' | 'account' | 'repository';
+
+/** What `addOrganisation` needs. */
+export interface OrganisationInput {
+  kind: OrganisationKind;
+  name: string;
+  slug: string;
+  url?: string;
+}
+
+/** An organisation as the Repositories page lists it, with the size of its cached list. */
+export interface OrganisationRow {
+  id: number;
+  kind: string;
+  name: string;
+  slug: string;
+  url?: string;
+  /** When its repositories were last read, and what that read concluded. */
+  lastRead?: string;
+  state?: string;
+  repositories: number;
+}
+
+/** One repository as the cache holds it — the facts a row shows, and the two addresses an action needs. */
+export interface RepositoryCacheRow {
+  name: string;
+  fullName: string;
+  description?: string;
+  language?: string;
+  pushedAt?: string;
+  isPrivate: boolean;
+  webUrl?: string;
+  cloneUrl?: string;
+  defaultBranch?: string;
 }
 
 /** The database file for a storage folder, whether or not it exists yet — used for reporting and for a click. */

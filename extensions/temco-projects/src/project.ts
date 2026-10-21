@@ -34,6 +34,16 @@ export function registerProjectCommands(
 
   context.subscriptions.push(
     vscode.commands.registerCommand('temcoProjects.newProject', () => void flow.open()),
+    // *New project* from a repository row carries the repository in: the flow opens already answering "where do the
+    // pages come from", and asks only what is inside it. The arguments are the row's own facts, so no lookup by name
+    // has to guess which organisation the repository belongs to.
+    vscode.commands.registerCommand(
+      'temcoProjects.newProjectFromRepository',
+      (name?: string, cloneUrl?: string, branch?: string) =>
+        typeof name === 'string' && name.length > 0
+          ? void flow.open({ name, cloneUrl, branch })
+          : void flow.open()
+    ),
     vscode.commands.registerCommand('temcoProjects.removeProject', (target?: ProjectArgument) =>
       removeProject(context, selection, () => refresh(), rowSlug(target))
     ),

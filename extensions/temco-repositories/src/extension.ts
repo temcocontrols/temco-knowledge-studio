@@ -16,7 +16,7 @@
 
 import * as vscode from 'vscode';
 import { registerReadCommands } from './read';
-import { CodeFile, Material, RepositorySource, codeFiles, readMaterials } from './repository';
+import { CodeFile, Material, RepositorySource, codeFiles, readMaterials, sourceTree } from './repository';
 import { RepositoriesPage } from './repositoriesPage';
 import { OFFERED_SCRIPTS, OfferedScript } from './scripts';
 import { registerSourcesView } from './sourcesView';
@@ -29,6 +29,8 @@ export interface TemcoRepositoriesApi {
 	onDidChange(listener: () => void): vscode.Disposable;
 	/** The code files a source carries, relative to its own root — on disk, or through the API. */
 	codeFiles(source: RepositorySource): Promise<{ files: CodeFile[]; note?: string }>;
+	/** Every file a source carries — documentation as well as code — for a project starting from a repository. */
+	tree(source: RepositorySource): Promise<{ files: CodeFile[]; note?: string } | { error: string }>;
 	/** The text of the files a person ticked, within one budget. */
 	readMaterials(source: RepositorySource, files: readonly string[], limit?: number): Promise<Material>;
 	/** The repository's own documentation scripts: a vocabulary, not a runner. */
@@ -61,6 +63,7 @@ export function activate(context: vscode.ExtensionContext): TemcoRepositoriesApi
 	return {
 		onDidChange: (listener: () => void) => changed.event(listener),
 		codeFiles: (source) => codeFiles(context, source),
+		tree: (source) => sourceTree(context, source),
 		readMaterials: (source, files, limit) => readMaterials(context, source, files, limit),
 		offeredScripts: OFFERED_SCRIPTS,
 	};

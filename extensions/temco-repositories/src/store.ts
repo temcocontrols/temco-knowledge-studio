@@ -100,6 +100,42 @@ export interface SourceRow {
 	lastReadMode?: string;
 }
 
+/** Where repositories come from: an organisation, a personal account, or one repository's address. */
+export type OrganisationKind = 'organisation' | 'account' | 'repository';
+
+/** What adding one writes — the copy of `OrganisationInput` in the store. */
+export interface OrganisationInput {
+	kind: OrganisationKind;
+	name: string;
+	slug: string;
+	url?: string;
+}
+
+/** An organisation as the page and the panel list it. */
+export interface OrganisationRow {
+	id: number;
+	kind: string;
+	name: string;
+	slug: string;
+	url?: string;
+	lastRead?: string;
+	state?: string;
+	repositories: number;
+}
+
+/** One repository as the cache holds it — the facts a row shows, and the two addresses an action needs. */
+export interface RepositoryCacheRow {
+	name: string;
+	fullName: string;
+	description?: string;
+	language?: string;
+	pushedAt?: string;
+	isPrivate: boolean;
+	webUrl?: string;
+	cloneUrl?: string;
+	defaultBranch?: string;
+}
+
 /** The platform's database, as this module uses it — the copy of `Catalog` in the store. */
 export interface Catalog {
 	readonly file: vscode.Uri;
@@ -120,6 +156,14 @@ export interface Catalog {
 		state: { pages?: number; docsRoot?: string; registryPath?: string; state?: string }
 	): void;
 	recordScan(sourceId: number, mode: string, revision: string | undefined, counts: unknown): void;
+	/** Where repositories come from — an organisation, an account, or one repository's address. */
+	organisations(): OrganisationRow[];
+	addOrganisation(input: OrganisationInput): number;
+	removeOrganisation(slug: string): void;
+	recordOrganisationRead(slug: string, state: string): void;
+	/** The repositories an organisation holds, as the last good read found them. */
+	repositoriesOf(slug: string): RepositoryCacheRow[];
+	replaceRepositories(slug: string, repositories: readonly RepositoryCacheRow[]): void;
 	replacePages(sourceId: number, pages: PageInput[]): void;
 	close(): void;
 }

@@ -17,10 +17,24 @@
 import * as vscode from 'vscode';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { draftProjectPage } from './aiModule';
+import { RepositoryFile, RepositorySource, repositoryFiles, repositoryMaterial } from './repositories';
 import { Catalog, CatalogUnavailable, Selection, slugOf, SourceRow } from './store';
 import { escapeHtml as esc, icon, page, pageColumn } from './ui';
 
 export const NEW_PROJECT_VIEW_TYPE = 'temcoProjects.newProject';
+
+/**
+ * The repository a project is being created *from*, when the flow was opened from one.
+ *
+ * Present means the repository is already the answer to "where do the pages come from": the flow does not ask, it
+ * starts from that repository and asks only what is inside it.
+ */
+export interface PinnedRepository {
+	name: string;
+	cloneUrl?: string;
+	branch?: string;
+}
 
 /** What the flow offers when it opens. The mock's defaults, over whatever sources the catalog has. */
 const DEFAULTS = { name: 'T3000 Documentation', version: '13.0', folder: '~/Temco' };
@@ -59,6 +73,8 @@ const TEMPLATES = [{ value: 'user-guide', label: 'User guide', sub: 'docs/help w
 export class ProjectFlowPage {
 	private panel: vscode.WebviewPanel | undefined;
 	private sources: SourceRow[] = [];
+	/** The repository this flow was opened from, when it was opened from one. */
+	private pinned: PinnedRepository | undefined;
 
 	constructor(
 		private readonly context: vscode.ExtensionContext,
@@ -66,20 +82,32 @@ export class ProjectFlowPage {
 		private readonly refresh: () => void
 	) { }
 
-	async open(): Promise<void> {
+	async open(pinned?: PinnedRepository): Promise<void> {
+		this.pinned = pinned;
 		let unavailable: string | undefined;
 		try {
 			const catalog = await Catalog.open(this.context);
+			// A project created *from* a repository cites it, so the source exists before the form does — the same
+			// row `Start` writes on the repositories page, reached from the other end.
+			if (pinned !== undefined) {
+				catalog.addSource({
+					kind: 'git',
+					name: pinned.name,
+					slug: slugOf(pinned.name),
+					remoteUrl: pinned.cloneUrl,
+					defaultBranch: pinned.branch,
+				});
+			}
 			this.sources = catalog.sources();
 		} catch (error) {
 			unavailable = error instanceof CatalogUnavailable ? error.message : String(error);
 			this.sources = [];
 		}
 
-		const body = html(this.sources, unavailable);
+		const body = html(this.sources, pinned, unavailable);
 		if (this.panel) {
 			this.panel.reveal(pageColumn());
-			this.panel.webview.html = page(body, { title: 'New Project', script: WIZARD_SCRIPT });
+			this.panel.webview.html = page(body, { title: 'New Project', script: WIZARD_SCRIPT, extraCss: FLOW_CSS });
 			return;
 		}
 
@@ -87,8 +115,8 @@ export class ProjectFlowPage {
 			enableScripts: true,
 			localResourceRoots: []
 		});
-		this.panel.webview.onDidReceiveMessage((message: { type?: string; command?: string; values?: Values }) => void this.receive(message));
-		this.panel.webview.html = page(body, { title: 'New Project', script: WIZARD_SCRIPT });
+		this.panel.webview.onDidReceiveMessage((message: { type?: string; command?: string; values?: Values; picked?: string[]; files?: string[] }) => void this.receive(message));
+		this.panel.webview.html = page(body, { title: 'New Project', script: WIZARD_SCRIPT, extraCss: FLOW_CSS });
 		this.panel.onDidDispose(() => {
 			this.panel = undefined;
 		});
@@ -158,13 +186,21 @@ export class ProjectFlowPage {
 		await this.panel?.webview.postMessage({ type: 'picked', ...(await describeMaterial(uri)) });
 	}
 
-	private async receive(message: { type?: string; command?: string; values?: Values; picked?: string[] }): Promise<void> {
+	private async receive(message: { type?: string; command?: string; values?: Values; picked?: string[]; files?: string[] }): Promise<void> {
 		if (message.type === 'cancel') {
 			this.panel?.dispose();
 			return;
 		}
 		if (message.type === 'pick') {
 			await this.pickMaterial();
+			return;
+		}
+		if (message.type === 'files') {
+			await this.sendFiles();
+			return;
+		}
+		if (message.type === 'draft') {
+			await this.draft(message.files ?? []);
 			return;
 		}
 		if (message.type === 'choose') {
@@ -178,6 +214,79 @@ export class ProjectFlowPage {
 		if (message.type === 'create' && message.values) {
 			await this.create(message.values);
 		}
+	}
+
+	/** The pinned repository as a source, as the repositories module reads one. */
+	private pinnedSource(): RepositorySource | undefined {
+		if (this.pinned === undefined) {
+			return undefined;
+		}
+		const branch = this.pinned.branch;
+		return {
+			name: this.pinned.name,
+			remoteUrl: this.pinned.cloneUrl,
+			branch,
+			defaultBranch: branch
+		};
+	}
+
+	/**
+	 * What the pinned repository carries, classified: the documentation it already has, and the files a page could be
+	 * written from. One listing, two answers, and the documentation's own registry and overview are ticked for you.
+	 */
+	private async sendFiles(): Promise<void> {
+		const source = this.pinnedSource();
+		if (source === undefined) {
+			return;
+		}
+		const listed = await repositoryFiles(source);
+		if ('error' in listed) {
+			await this.panel?.webview.postMessage({ type: 'files', error: listed.error });
+			return;
+		}
+		const files = listed.files.map((file: RepositoryFile) => ({
+			path: file.path,
+			size: file.size,
+			category: isDocumentation(file.path) ? 'docs' : 'code',
+			ticked: defaultTick(file.path)
+		}));
+		await this.panel?.webview.postMessage({ type: 'files', files, note: listed.note });
+	}
+
+	/** One page of the project, drafted from the files a person ticked — returned, never written. */
+	private async draft(names: readonly string[]): Promise<void> {
+		const source = this.pinnedSource();
+		if (source === undefined || names.length === 0) {
+			await this.panel?.webview.postMessage({ type: 'drafted', error: 'Choose at least one file to draft from.' });
+			return;
+		}
+		const material = await repositoryMaterial(source, names);
+		if (material.text.trim().length === 0) {
+			await this.panel?.webview.postMessage({
+				type: 'drafted',
+				error: 'Those files are empty or could not be read, so there is nothing to draft from.'
+			});
+			return;
+		}
+		const answer = await draftProjectPage({ title: this.pinned?.name ?? 'The project', material: material.text });
+		if (answer === undefined) {
+			await this.panel?.webview.postMessage({
+				type: 'drafted',
+				error: 'The AI module is not installed, so nothing was drafted. The project can still be created without one.'
+			});
+			return;
+		}
+		if ('error' in answer) {
+			await this.panel?.webview.postMessage({ type: 'drafted', error: answer.error });
+			return;
+		}
+		await this.panel?.webview.postMessage({
+			type: 'drafted',
+			text: answer.text,
+			characters: material.characters,
+			included: material.included.length,
+			skipped: material.skipped
+		});
 	}
 
 	/**
@@ -234,6 +343,17 @@ export class ProjectFlowPage {
 			});
 			catalog.setDocumentSources(slug, [...new Set(cited)]);
 			catalog.setRecipe(slug, 'docfx', outputs);
+			// A drafted page is kept with the project, not written beside it: the project's own page is where text
+			// becomes a file, and a draft that wrote itself would be a file nobody asked for yet.
+			if (values.draft !== undefined && values.draft.trim().length > 0) {
+				catalog.saveDraft({
+					documentSlug: slug,
+					pageId: 'docs/help/overview.md',
+					title: `${name} — overview`,
+					kind: 'overview',
+					body: values.draft
+				});
+			}
 		} catch (error) {
 			const message = error instanceof CatalogUnavailable ? error.message : String(error);
 			void vscode.window.showErrorMessage(`Temco Projects: ${message}`);
@@ -302,6 +422,29 @@ interface Values {
 	importSource: string;
 	sources: string[];
 	targets: string[];
+	/** The files of the pinned repository the person ticked, and the page the AI drafted from them. */
+	files?: string[];
+	draft?: string;
+}
+
+/** A file of the pinned repository under `docs/`, in one of the shapes a page is written in. */
+function isDocumentation(file: string): boolean {
+	const lower = file.toLowerCase();
+	if (!/\.(md|markdown|html|htm|json)$/.test(lower)) {
+		return false;
+	}
+	return /(^|\/)docs\//.test(lower) || lower.endsWith('registry.json');
+}
+
+/**
+ * What starts ticked: the repository's own registry and its overview, when it has them.
+ *
+ * The two files that *are* the documentation's shape. Everything else — every topic, every class — starts unticked,
+ * so a person adds what a draft should read rather than removing most of a repository from it.
+ */
+function defaultTick(file: string): boolean {
+	const lower = file.toLowerCase();
+	return /(^|\/)docs\/help\/registry\.json$/.test(lower) || /(^|\/)docs\/help\/overview\.md$/.test(lower);
 }
 
 /** What `temcoDocs.import` answers: the pages it wrote, or the sentence that stopped it. */
@@ -558,12 +701,47 @@ function typeOptions(initial: string): string {
  * person to another page to finish an answer — a wizard that jumps away and comes back loses both the thread and the
  * half-filled form.
  */
-function html(sources: SourceRow[], unavailable?: string): string {
+function html(sources: SourceRow[], pinned: PinnedRepository | undefined, unavailable?: string): string {
 	const repositories = sources.filter((source) => source.kind === 'git');
-	const initial = 'empty';
+	const initial = pinned === undefined ? 'empty' : 'repository';
 	const empty = unavailable
 		? `<div class="callout callout--warn">${icon('alert')}<div><b>The store is not available.</b> ${esc(unavailable)}</div></div>`
 		: '';
+
+	// Opened from a repository: it is already the answer to *where the pages come from*, so the chooser is replaced by
+	// the one repository and the section continues into what is inside it.
+	const sourceSection = pinned === undefined
+		? `<div class="split__section-title">Where the pages come from</div>
+			<p class="split__section-note">Repositories the platform already records. A project cites the pages they declare; reading and cloning happen on the Sources page.</p>
+			<div class="checklist-tools">
+				<input class="input input--sm" data-filter="sources" placeholder="Search repositories" aria-label="Search repositories">
+				<button type="button" class="btn btn--sm" id="choose-repositories">${icon('list')}<span>Choose…</span></button>
+			</div>
+			${repositories.length === 0
+				? `<div class="callout">${icon('info')}<div><b>No repository is recorded yet.</b> Create the project now — its own page is where sources are added and read, and this project can cite them from then on.</div></div>`
+				: `<div class="checklist src-list" data-source-list>${repositories.map((source) => sourceRow(source, [])).join('')}</div>
+		<p class="split__section-note" id="source-empty" hidden>No repository matches that.</p>
+		<p class="split__section-note" style="margin-top:10px"><span id="source-summary">No repository selected</span><button type="button" class="link" id="source-clear">Clear</button></p>`}
+			<p class="split__section-note"><button type="button" class="link" id="manage-repositories">Manage repositories</button> — the page where they are added, cloned and read. This form stays as it is, in its own tab.</p>`
+		: `<div class="split__section-title">Where the pages come from</div>
+			<p class="split__section-note">This project starts from <b>${esc(pinned.name)}</b>: it is added as the project's source, and nothing is written into the repository.</p>
+			<div class="checklist"><label class="checklist__row is-fixed"><input type="checkbox" data-field="sources" value="${esc(pinned.name)}" checked disabled><span class="checklist__text"><span class="checklist__title">${esc(pinned.name)}</span><span class="checklist__sub">repository${pinned.branch === undefined ? '' : ` · ${esc(pinned.branch)}`} · added by this project</span></span></label></div>
+
+			<div class="split__section-title mt-16">What inside it</div>
+			<p class="split__section-note">The documentation it already has, and the files a page could be written from. Nothing is copied: the draft is kept with the project.</p>
+			<div class="checklist-tools">
+				<input class="input input--sm" data-filter="files" placeholder="Search files" aria-label="Search files">
+				<button type="button" class="btn btn--sm" id="file-all">Select all</button>
+				<button type="button" class="btn btn--sm" id="file-none">Clear</button>
+			</div>
+			<div class="checklist src-list" id="file-list"><p class="cell-muted" style="font-size:12px;margin:8px 0">Reading the file list…</p></div>
+			<p class="split__section-note" id="file-summary" style="margin-top:10px">No file selected yet.</p>
+			<div class="draft-row">
+				<button type="button" class="btn" id="draft-run">AI draft from these</button>
+				<button type="button" class="btn btn--ghost" id="draft-clear" hidden>Clear the draft</button>
+				<span class="cell-muted" style="font-size:12px" id="draft-note"></span>
+			</div>
+			<pre class="draft-preview" id="draft-preview" hidden></pre>`;
 
 	return `<div class="page-head">
 	<div class="page-head__main">
@@ -607,18 +785,7 @@ ${empty}
 		</div>
 
 		<div class="split__section" data-form="repository" hidden>
-			<div class="split__section-title">Where the pages come from</div>
-			<p class="split__section-note">Repositories the platform already records. A project cites the pages they declare; reading and cloning happen on the Sources page.</p>
-			<div class="checklist-tools">
-				<input class="input input--sm" data-filter="sources" placeholder="Search repositories" aria-label="Search repositories">
-				<button type="button" class="btn btn--sm" id="choose-repositories">${icon('list')}<span>Choose…</span></button>
-			</div>
-			${repositories.length === 0
-			? `<div class="callout">${icon('info')}<div><b>No repository is recorded yet.</b> Create the project now — its own page is where sources are added and read, and this project can cite them from then on.</div></div>`
-			: `<div class="checklist src-list" data-source-list>${repositories.map((source) => sourceRow(source, [])).join('')}</div>
-		<p class="split__section-note" id="source-empty" hidden>No repository matches that.</p>
-		<p class="split__section-note" style="margin-top:10px"><span id="source-summary">No repository selected</span><button type="button" class="link" id="source-clear">Clear</button></p>`}
-			<p class="split__section-note"><button type="button" class="link" id="manage-repositories">Manage repositories</button> — the panel where they are added, cloned and read. This form stays as it is.</p>
+			${sourceSection}
 		</div>
 
 		<div class="split__section" data-form="files" hidden>
@@ -649,6 +816,20 @@ ${empty}
 }
 
 /**
+ * The flow's own layout: the file list as a bounded area, and a draft that reads like text rather than like code.
+ *
+ * A `pre` is the honest element for text that already has line breaks and must not be re-wrapped by markup rules, and
+ * it is set in the mono face only because Markdown's indentation is part of what was drafted.
+ */
+const FLOW_CSS = `
+.checklist__row.is-fixed { cursor: default; background: transparent; }
+.draft-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.draft-preview { margin: 10px 0 0; max-height: 300px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+  background: var(--bg-inset); border-radius: var(--radius); padding: 12px 14px;
+  font-family: ui-monospace, monospace; font-size: 12.5px; line-height: 1.6; color: var(--fg); }
+`;
+
+/**
  * The flow's behaviour: one screen, a rail of three starting points, and a form that follows the rail.
  *
  * The origin the host receives is derived here — `empty` plus a starter is a `template`, a folder that already has a
@@ -664,6 +845,8 @@ const WIZARD_SCRIPT = `
 	const rails = Array.prototype.slice.call(document.querySelectorAll('.opt'));
 	const split = document.querySelector('.split');
 	let type = split ? split.getAttribute('data-initial-type') || 'empty' : 'empty';
+	// The page the AI wrote for this project, kept here until *Create Project* records it.
+	let draftText = '';
 	// A draft written by an older build can name a type this build no longer has; the rail is the truth.
 	const known = rails.some(function (rail) { return rail.getAttribute('data-type') === type; });
 	if (!known) { type = 'empty'; }
@@ -718,7 +901,11 @@ const WIZARD_SCRIPT = `
 		if (v.origin === 'template') { v.template = value('template'); v.folder = value('folder'); }
 		if (v.origin === 'folder') { v.folder = picked(); v.importSource = picked(); }
 		if (v.origin === 'import') { v.importKind = material(); v.importSource = picked(); }
-		if (v.origin === 'repository') { v.sources = checked('sources'); }
+		if (v.origin === 'repository') {
+			v.sources = checked('sources');
+			v.files = tickedFiles();
+			v.draft = draftText;
+		}
 		return v;
 	}
 	function sourceRows() {
@@ -799,6 +986,37 @@ const WIZARD_SCRIPT = `
 	window.addEventListener('message', function (event) {
 		const message = event.data;
 		if (!message) { return; }
+		if (message.type === 'files') {
+			const list = document.getElementById('file-list');
+			if (message.error) {
+				if (list) { list.textContent = message.error; }
+				return;
+			}
+			renderFiles(message.files || []);
+			if (message.note && list) { list.setAttribute('title', message.note); }
+			return;
+		}
+		if (message.type === 'drafted') {
+			const note = document.getElementById('draft-note');
+			const preview = document.getElementById('draft-preview');
+			const clear = document.getElementById('draft-clear');
+			if (draftRun) { draftRun.disabled = false; }
+			if (message.error) {
+				if (note) { note.textContent = message.error; }
+				return;
+			}
+			draftText = message.text || '';
+			if (preview) { preview.hidden = draftText.length === 0; preview.textContent = draftText; }
+			if (clear) { clear.hidden = draftText.length === 0; }
+			if (note) {
+				const skipped = (message.skipped || []).length;
+				note.textContent = 'Drafted ' + draftText.length + ' characters from ' + (message.included || 0)
+					+ (message.included === 1 ? ' file' : ' files')
+					+ (skipped > 0 ? ' — ' + skipped + ' left out of the 12 000-character budget' : '');
+			}
+			refresh();
+			return;
+		}
 		if (message.type === 'chosen') {
 			const names = message.sources || [];
 			Array.prototype.forEach.call(document.querySelectorAll('[data-source] input'), function (input) {
@@ -848,14 +1066,116 @@ const WIZARD_SCRIPT = `
 	}
 	const manage = document.getElementById('manage-repositories');
 	if (manage) {
-		// A side-bar panel, not an editor: focusing it does not replace this tab, so nothing has to be remembered.
+		// The page itself, not the side-bar panel: the panel lists the sources already added, while adding, cloning
+		// and reading happen on the page. A page of ours is a tab in the strip beside this one, so this form is
+		// still whole when the person comes back to it.
 		manage.addEventListener('click', function () {
-			api.postMessage({ type: 'command', command: 'workbench.view.extension.temcoRepos' });
+			api.postMessage({ type: 'command', command: 'temcoRepositories.page' });
 		});
 	}
+
+	/* What is inside the pinned repository: listed by the host, ticked here, and the material for one draft. */
+
+	function escape(value) {
+		return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+	}
+	function fileInputs() {
+		return Array.prototype.slice.call(document.querySelectorAll('[data-file]'));
+	}
+	function tickedFiles() {
+		return fileInputs().filter(function (input) { return input.checked; })
+			.map(function (input) { return input.value; });
+	}
+	function kilo(bytes) {
+		return bytes >= 1024 ? (bytes / 1024).toFixed(1) + ' KB' : bytes + ' B';
+	}
+	/** The count of what is ticked, and what it costs to read — the same budget the host applies. */
+	function filesSummary() {
+		const list = document.getElementById('file-summary');
+		if (!list) { return; }
+		const ticked = fileInputs().filter(function (input) { return input.checked; });
+		if (ticked.length === 0) { list.textContent = 'No file selected yet.'; return; }
+		const bytes = ticked.reduce(function (total, input) { return total + Number(input.getAttribute('data-size') || 0); }, 0);
+		list.textContent = ticked.length + (ticked.length === 1 ? ' file' : ' files') + ' · ' + kilo(bytes)
+			+ ' · the draft reads up to 12 000 characters';
+	}
+	function renderFiles(files) {
+		const list = document.getElementById('file-list');
+		if (!list) { return; }
+		const group = function (title, rows) {
+			if (rows.length === 0) { return ''; }
+			return '<div class="checklist-heading">' + title + '</div>' + rows.map(function (file) {
+				return '<label class="checklist__row" data-file-row><input type="checkbox" data-file value="'
+					+ escape(file.path) + '" data-size="' + file.size + '"' + (file.ticked ? ' checked' : '') + '>'
+					+ '<span class="checklist__text"><span class="checklist__title">' + escape(file.path)
+					+ '</span><span class="checklist__sub">' + kilo(file.size) + '</span></span></label>';
+			}).join('');
+		};
+		const docs = files.filter(function (file) { return file.category === 'docs'; });
+		const code = files.filter(function (file) { return file.category !== 'docs'; });
+		list.innerHTML = group('Documentation in this repository', docs) + group('Classes and source', code)
+			|| '<p class="cell-muted" style="font-size:12px;margin:8px 0">This repository has no file a draft could read.</p>';
+		filesSummary();
+	}
+
+	const fileAll = document.getElementById('file-all');
+	if (fileAll) {
+		fileAll.addEventListener('click', function () {
+			fileInputs().forEach(function (input) { input.checked = true; });
+			filesSummary();
+		});
+	}
+	const fileNone = document.getElementById('file-none');
+	if (fileNone) {
+		fileNone.addEventListener('click', function () {
+			fileInputs().forEach(function (input) { input.checked = false; });
+			filesSummary();
+		});
+	}
+	document.addEventListener('change', function (event) {
+		if (event.target && event.target.hasAttribute && event.target.hasAttribute('data-file')) { filesSummary(); }
+	});
+	const fileFilter = document.querySelector('[data-filter="files"]');
+	if (fileFilter) {
+		fileFilter.addEventListener('input', function () {
+			const term = fileFilter.value.trim().toLowerCase();
+			Array.prototype.slice.call(document.querySelectorAll('[data-file-row]')).forEach(function (row) {
+				row.hidden = term.length > 0 && row.textContent.toLowerCase().indexOf(term) < 0;
+			});
+		});
+	}
+
+	const draftRun = document.getElementById('draft-run');
+	if (draftRun) {
+		draftRun.addEventListener('click', function () {
+			const ticked = tickedFiles();
+			const note = document.getElementById('draft-note');
+			if (ticked.length === 0) {
+				if (note) { note.textContent = 'Choose at least one file to draft from.'; }
+				return;
+			}
+			if (note) { note.textContent = 'Drafting from ' + ticked.length + (ticked.length === 1 ? ' file…' : ' files…'); }
+			draftRun.disabled = true;
+			api.postMessage({ type: 'draft', files: ticked });
+		});
+	}
+	const draftClear = document.getElementById('draft-clear');
+	if (draftClear) {
+		draftClear.addEventListener('click', function () {
+			draftText = '';
+			const preview = document.getElementById('draft-preview');
+			if (preview) { preview.hidden = true; preview.textContent = ''; }
+			const note = document.getElementById('draft-note');
+			if (note) { note.textContent = ''; }
+			draftClear.hidden = true;
+		});
+	}
+
 	document.addEventListener('change', refresh);
 	document.addEventListener('input', refresh);
 	show();
 	applyFilter();
+	// The pinned repository's files are a listing the host owns; the page asks for them once it is drawn.
+	if (document.getElementById('file-list')) { api.postMessage({ type: 'files' }); }
 })();
 `;

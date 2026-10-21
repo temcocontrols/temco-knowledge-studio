@@ -35,6 +35,11 @@
         "icon": "$(new-folder)"
       },
       {
+        "command": "temcoProjects.newProjectFromRepository",
+        "title": "Create a Project from a Repository",
+        "icon": "$(new-folder)"
+      },
+      {
         "command": "temcoProjects.openProject",
         "title": "Open a Project",
         "icon": "$(book)"

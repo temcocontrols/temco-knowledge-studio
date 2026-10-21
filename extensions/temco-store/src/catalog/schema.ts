@@ -6,7 +6,7 @@
 // One table per idea — see `docs/platform-design.md`, "The catalog". Nothing here is derived at read time from
 // the network: a row is written by a scan and read by a view.
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 6;
 
 /**
  * Every statement is `IF NOT EXISTS`, so applying the schema is idempotent — it is how an older database is
@@ -17,6 +17,37 @@ CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- Where repositories come from: an organisation, a personal account, or one repository named by its address.
+-- The default organisation is written on first use, so the list is never empty and nothing has to be typed first.
+CREATE TABLE IF NOT EXISTS organisations (
+  id        INTEGER PRIMARY KEY,
+  kind      TEXT NOT NULL CHECK (kind IN ('organisation', 'account', 'repository')),
+  name      TEXT NOT NULL,
+  slug      TEXT NOT NULL UNIQUE,
+  url       TEXT,
+  added_at  TEXT NOT NULL,
+  last_read TEXT,
+  state     TEXT
+);
+
+-- The repositories an enterprise holds, as GitHub last gave them: a child table, replaced whole on every good
+-- read and kept when a read is refused. A cache, not the truth about a repository — the truth is the source.
+CREATE TABLE IF NOT EXISTS repositories (
+  org_id         INTEGER NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+  name           TEXT NOT NULL,
+  full_name      TEXT NOT NULL,
+  description    TEXT,
+  language       TEXT,
+  pushed_at      TEXT,
+  is_private     INTEGER NOT NULL DEFAULT 0,
+  web_url        TEXT,
+  clone_url      TEXT,
+  default_branch TEXT,
+  taken_at       TEXT NOT NULL,
+  PRIMARY KEY (org_id, name)
+);
+CREATE INDEX IF NOT EXISTS repositories_by_push ON repositories (org_id, pushed_at DESC);
 
 -- Where content comes from: a git remote at a chosen branch, a local folder, or a read-only archive.
 CREATE TABLE IF NOT EXISTS sources (
@@ -201,4 +232,7 @@ export const MIGRATIONS: Readonly<Record<number, readonly string[]>> = {
     "ALTER TABLE documents ADD COLUMN origin TEXT NOT NULL DEFAULT 'blank'",
     'ALTER TABLE documents ADD COLUMN template TEXT',
   ],
+  // The list was one JSON blob per organisation for one turn of this build; a table per idea replaces it, so the
+  // blob goes rather than being migrated — it held nothing that a read cannot fetch again.
+  6: ['DROP TABLE IF EXISTS repo_lists'],
 };

@@ -138,16 +138,35 @@ export async function codeFiles(
   context: vscode.ExtensionContext,
   source: RepositorySource
 ): Promise<{ files: CodeFile[]; note?: string }> {
+  const all = await sourceTree(context, source);
+  if ('error' in all) {
+    return { files: [], note: all.error };
+  }
+  const code = all.files.filter((file) => isCode(file.path));
+  return {
+    files: code,
+    note: all.note,
+  };
+}
+
+/**
+ * Every file a source carries, relative to its own root — documentation as well as code.
+ *
+ * `codeFiles` is the narrow question a draft used to ask. A project being created *from* a repository asks the
+ * wider one: what documentation does it already have, and which files could a page be written from. Both come from
+ * one listing, so a page can classify it without a second round trip.
+ */
+export async function sourceTree(
+  context: vscode.ExtensionContext,
+  source: RepositorySource
+): Promise<{ files: CodeFile[]; note?: string } | { error: string }> {
   if (source.path !== undefined && source.path.length > 0) {
-    return localCodeFiles(source.path);
+    const local = await localCodeFiles(source.path);
+    return { files: local.files, note: local.note };
   }
   const coordinates = source.remoteUrl !== undefined ? coordinatesOf(source.remoteUrl) : undefined;
   if (!coordinates) {
-    return {
-      files: [],
-      note:
-        'this source is neither a folder on this machine nor a GitHub repository, so its files cannot be listed',
-    };
+    return { error: 'this source is neither a folder on this machine nor a GitHub repository, so its files cannot be listed' };
   }
 
   const token = await tokenOf(context);
@@ -157,15 +176,16 @@ export async function codeFiles(
     requestHeaders(token)
   );
   if ('error' in response) {
-    return { files: [], note: response.error };
+    return { error: response.error };
   }
   if (!response.ok) {
-    return { files: [], note: `GitHub answered ${response.status} ${response.statusText} for the file list` };
+    return { error: `GitHub answered ${response.status} ${response.statusText} for the file list` };
   }
 
   const body = (await response.json()) as { tree?: { path?: string; size?: number; type?: string }[] };
   const found = (body.tree ?? [])
-    .filter((entry) => entry.type === 'blob' && typeof entry.path === 'string' && isCode(entry.path))
+    .filter((entry) => entry.type === 'blob' && typeof entry.path === 'string')
+    .filter((entry) => !NOT_CODE.test(entry.path as string))
     .map((entry) => ({ path: entry.path as string, size: Math.max(0, Number(entry.size ?? 0)) }))
     .sort((left, right) => left.path.localeCompare(right.path));
 
