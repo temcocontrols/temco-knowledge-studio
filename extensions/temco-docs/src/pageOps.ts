@@ -23,12 +23,13 @@
 // **It never deletes a page.** Retirement is a registry act — `deprecated` and the replacement — and the file
 // stays where it is so the generated redirect keeps old links working (`14-governance.md`, *Deprecation and retirement*).
 
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { runScript, scriptsIn } from './builds';
-import { DocsRoot, PageEntry, ROOT_CHAPTER, collectPages } from './registry';
+import { DocsRoot, PageEntry, ROOT_CHAPTER, collectPages, contentUri, fileExists } from './registry';
 import { RegistryEdit, describeChange } from './registryEdit';
 import { fileColumn } from './surface';
-import { DocsNode } from './tree';
+import { DocsNode, pageFromNode } from './tree';
 
 /** The MIME a dragged page carries. One kind of thing can be dragged into a chapter: a page. */
 const PAGE_MIME = 'application/vnd.code.tree.temcoDocs.page';
@@ -163,6 +164,89 @@ export class PageOperations implements vscode.TreeDragAndDropController<DocsNode
   }
 }
 
+/**
+ * Rename a page's **file**, which is also its id — Explorer's F2, on the thing a path is.
+ *
+ * `05-content-and-registry.md` rule 1 allows this only as a *named act with an `aliases` entry*: the page id is the
+ * path, so every inbound link, the app's own routes and the MCP input are built on the old one. The old id is
+ * therefore written into the new entry's `aliases` before the generator is believed, and a project with no
+ * generator is refused: without one there is no entry to carry the alias, and a rename would orphan the links.
+ *
+ * The **title** is not touched. It is prose; this is a path.
+ */
+async function renameFile(deps: PageDeps, node: DocsNode | undefined): Promise<void> {
+  const page = pageFromNode(node ?? deps.selected())?.page;
+  if (page === undefined) {
+    void vscode.window.showInformationMessage('Temco Docs: select the page whose file you want to rename.');
+    return;
+  }
+  if (!page.exists) {
+    void vscode.window.showWarningMessage(`Temco Docs: “${page.title}” has no file yet, so there is nothing to rename.`);
+    return;
+  }
+  const root = deps.roots().find((candidate) => page.uri.fsPath.startsWith(candidate.rootUri.fsPath));
+  if (root === undefined) {
+    void vscode.window.showWarningMessage('Temco Docs: that page is not inside a folder this window is reading.');
+    return;
+  }
+  if (!scriptsIn([root]).has('docs:registry')) {
+    void vscode.window.showWarningMessage(
+      `Temco Docs: ${root.folder.name} has no \`docs:registry\` script, so a renamed file would leave its registry ` +
+      'entry pointing at nothing. Rename the title instead — it is the value the registry holds.'
+    );
+    return;
+  }
+
+  const current = path.basename(page.uri.fsPath, path.extname(page.uri.fsPath));
+  const typed = await vscode.window.showInputBox({
+    title: `Rename the file of “${page.title}”`,
+    prompt: 'The file name, without .md. It is also the page id — the old one is kept as an alias.',
+    value: current,
+    valueSelection: [0, current.length],
+    validateInput: (value) => {
+      const slug = value.trim();
+      if (slug.length === 0) {
+        return 'A page needs a file name.';
+      }
+      if (/[\\/:*?"<>|]/.test(slug)) {
+        return 'A file name cannot contain \\ / : * ? " < > |';
+      }
+      if (slug === current) {
+        return 'That is the current name.';
+      }
+      return undefined;
+    },
+  });
+  if (typed === undefined) {
+    return;
+  }
+  const slug = typed.trim();
+  const target = vscode.Uri.joinPath(vscode.Uri.file(path.dirname(page.uri.fsPath)), `${slug}.md`);
+  if (await fileExists(target)) {
+    void vscode.window.showWarningMessage(`Temco Docs: ${slug}.md already exists beside this page.`);
+    return;
+  }
+
+  await vscode.workspace.fs.rename(page.uri, target, { overwrite: false });
+  // The entry the id names does not exist yet: the generator writes it, then the alias is added to it.
+  await runScript(deps.roots(), deps.output, 'docs:registry');
+
+  const base = contentUri(root.rootUri).fsPath;
+  const newId = path.relative(base, target.fsPath).replace(/\\/g, '/').replace(/\.md$/i, '');
+  const edit = await RegistryEdit.open(root.registryUri);
+  const aliased = edit === undefined ? false : edit.set(newId, 'aliases', [page.id]);
+  if (edit !== undefined && aliased) {
+    await edit.save();
+  }
+  deps.redraw();
+
+  void vscode.window.showInformationMessage(
+    aliased
+      ? `Temco Docs: ${slug}.md is the page now, and ${page.id} is kept as an alias so old links still resolve.`
+      : `Temco Docs: ${slug}.md is the page now. The alias could not be written — add \`${page.id}\` to its \`aliases\` by hand.`
+  );
+}
+
 export function registerPageCommands(context: vscode.ExtensionContext, deps: PageDeps): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('temcoDocs.newPage', (node?: DocsNode) =>
@@ -191,6 +275,7 @@ export function registerPageCommands(context: vscode.ExtensionContext, deps: Pag
       startNewPage(deps, node, { kind: 'Release note' })
     ),
     vscode.commands.registerCommand('temcoDocs.renamePage', (node?: DocsNode) => renamePage(deps, node)),
+    vscode.commands.registerCommand('temcoDocs.renameFile', (node?: DocsNode) => renameFile(deps, node)),
     vscode.commands.registerCommand('temcoDocs.movePageUp', (node?: DocsNode) => movePage(deps, node, -1)),
     vscode.commands.registerCommand('temcoDocs.movePageDown', (node?: DocsNode) => movePage(deps, node, 1)),
     vscode.commands.registerCommand('temcoDocs.retirePage', (node?: DocsNode) => retirePage(deps, node))

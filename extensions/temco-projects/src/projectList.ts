@@ -49,7 +49,9 @@ export class ProjectList implements vscode.TreeDataProvider<vscode.TreeItem> {
 				].filter((part) => part.length > 0).join(' · ');
 				project.tooltip = `${row.name}\n${row.slug}${row.origin === undefined ? '' : ` · ${row.origin}`}`;
 				project.contextValue = 'project';
-				project.command = { command: 'temcoProjects.openProject', title: 'Edit the Pages', arguments: [row.name] };
+				// A click opens the project *page* — what it cites and produces — not the tree: the two inline actions
+				// beside it are how the pages are reached.
+				project.command = { command: 'temcoDocs.projectPage', title: 'Open the Project', arguments: [row.slug] };
 				return project;
 			});
 		} catch {

@@ -42,8 +42,16 @@
     "views": {
       "temcoDashboard": [
         {
+          "id": "temcoProjects.projects",
+          "name": "Projects"
+        },
+        {
           "id": "temcoWorkbench.platformView",
           "name": "Overview"
+        },
+        {
+          "id": "temcoDocs.queue",
+          "name": "Needs You"
         },
         {
           "id": "temcoWorkbench.activityView",

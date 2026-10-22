@@ -31,10 +31,20 @@
     "onView:temcoDocs.pages",
     "onView:temcoDocs.project",
     "onView:temcoDocs.queue",
+    "onView:temcoDocs.draft",
     "onView:temcoDocs.section.pipeline",
     "onView:temcoDocs.section.working"
   ],
   "contributes": {
+    "viewsContainers": {
+      "auxiliarybar": [
+        {
+          "id": "temcoDraft",
+          "title": "Draft",
+          "icon": "media/docs.svg"
+        }
+      ]
+    },
     "views": {
       "temco": [
         {
@@ -54,10 +64,11 @@
           "name": "Working Set"
         }
       ],
-      "temcoDashboard": [
+      "temcoDraft": [
         {
-          "id": "temcoDocs.queue",
-          "name": "Needs You"
+          "id": "temcoDocs.draft",
+          "name": "Draft",
+          "type": "webview"
         }
       ]
     },
@@ -66,6 +77,16 @@
         "command": "temcoDocs.projects",
         "title": "Projects",
         "icon": "$(folder)"
+      },
+      {
+        "command": "temcoDocs.projectPage",
+        "title": "Open the Project Page",
+        "icon": "$(folders)"
+      },
+      {
+        "command": "temcoDocs.needsPage",
+        "title": "Open Needs You",
+        "icon": "$(tasklist)"
       },
       {
         "command": "temcoDocs.repository",
@@ -361,6 +382,11 @@
         "icon": "$(edit)"
       },
       {
+        "command": "temcoDocs.renameFile",
+        "title": "Rename the File…",
+        "icon": "$(file)"
+      },
+      {
         "command": "temcoDocs.movePageUp",
         "title": "Move the Page Up",
         "icon": "$(arrow-up)"
@@ -408,8 +434,13 @@
         "when": "editorLangId == markdown"
       },
       {
-        "command": "temcoDocs.renamePage",
+        "command": "temcoDocs.renameFile",
         "key": "f2",
+        "when": "focusedView == temcoDocs.pages"
+      },
+      {
+        "command": "temcoDocs.renamePage",
+        "key": "shift+f2",
         "when": "focusedView == temcoDocs.pages"
       }
     ],
@@ -587,19 +618,24 @@
           "group": "navigation@1"
         },
         {
-          "command": "temcoDocs.captureImage",
+          "command": "temcoProjects.addSource",
           "when": "view == temcoDocs.pages",
           "group": "navigation@2"
         },
         {
-          "command": "temcoDocs.pasteImage",
+          "command": "temcoDocs.captureImage",
           "when": "view == temcoDocs.pages",
           "group": "navigation@3"
         },
         {
-          "command": "temcoDocs.refresh",
+          "command": "temcoDocs.pasteImage",
           "when": "view == temcoDocs.pages",
           "group": "navigation@4"
+        },
+        {
+          "command": "temcoDocs.refresh",
+          "when": "view == temcoDocs.pages",
+          "group": "navigation@5"
         },
         {
           "command": "temcoDocs.refresh",
@@ -732,6 +768,11 @@
           "command": "temcoDocs.copyRelativePath",
           "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|page|missingPage)$/",
           "group": "2_show@4"
+        },
+        {
+          "command": "temcoDocs.renameFile",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(page|missingPage)$/",
+          "group": "3_edit@0"
         },
         {
           "command": "temcoDocs.renamePage",

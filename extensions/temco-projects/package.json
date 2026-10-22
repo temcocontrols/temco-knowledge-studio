@@ -30,14 +30,6 @@
     "onView:temcoProjects.projects"
   ],
   "contributes": {
-    "views": {
-      "temcoDashboard": [
-        {
-          "id": "temcoProjects.projects",
-          "name": "Projects"
-        }
-      ]
-    },
     "commands": [
       {
         "command": "temcoProjects.newProject",

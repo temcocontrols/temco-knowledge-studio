@@ -16,6 +16,7 @@ import { registerFeedbackCommands } from './feedback';
 import { registerFormatCommands } from './format';
 import { registerImportCommand } from './importer';
 import { DocsPages } from './docsPages';
+import { DraftView } from './draftView';
 import { registerMediaCommands } from './media';
 import { NewPagePage } from './newPagePage';
 import { OverviewPage } from './overview';
@@ -23,6 +24,7 @@ import { AREA_CHAPTER, KINDS, PageDeps, PageOperations, registerPageCommands, wr
 import { PageProperties } from './pageProperties';
 import { ProjectSection } from './projectSection';
 import { projects } from './projects';
+import { codeFiles } from './repositories';
 import { QueueTreeProvider } from './queue';
 import { registerReportCommands } from './report';
 import { registerRowCommands } from './rowOps';
@@ -31,7 +33,7 @@ import { registerSectionViews, SidebarModel, WorkingEntry } from './sections';
 import { PublishedSite } from './siteServer';
 import { Catalog, DraftRow, Selection, selection, slugOf } from './store';
 import { fileColumn, pageColumn } from './surface';
-import { DocsRoot, DeclaredPage, RegistryError, collectPages, countStale, fileExists, folderForPath, loadDocsRoot, pageForUri, registryUriFor, rootFromDeclared, totals } from './registry';
+import { DocsRoot, DeclaredPage, PageEntry, RegistryError, collectPages, countStale, fileExists, folderForPath, loadDocsRoot, pageForUri, registryUriFor, rootFromDeclared, totals } from './registry';
 import { DocsNode, DocsTreeProvider, TreeNote, pageFromNode } from './tree';
 
 const OUTPUT_NAME = 'Temco Docs';
@@ -175,6 +177,22 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   const projectSection = new ProjectSection(() => roots);
   const projectView = vscode.window.createTreeView('temcoDocs.project', { treeDataProvider: projectSection });
   context.subscriptions.push(queueView, projectView);
+
+  /** The page a command means: the row the tree last had, or the page in the editor — one rule, everywhere. */
+  const currentPage = (): PageEntry | undefined => {
+    if (lastTouched === 'tree') {
+      const row = pageFromNode(selectedRow());
+      if (row !== undefined) {
+        return row.page;
+      }
+    }
+    const editor = vscode.window.activeTextEditor;
+    return editor === undefined ? undefined : pageForUri(roots, editor.document.uri);
+  };
+
+  // The right-hand panel: the page in front, what the model may read, and the drafts waiting on a person.
+  const draftView = new DraftView(context, { page: () => currentPage() });
+  context.subscriptions.push(vscode.window.registerWebviewViewProvider(DraftView.TYPE, draftView));
 
   // The tree is this module's own view. The Library, the dashboard and the needs page are the workbench's, and
   // they read this module's model through the API at the bottom of `activate()`.
@@ -323,6 +341,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     sidebar.refresh();
     projectSection.refresh();
     queue.refresh();
+    draftView.refresh();
     queue.refresh();
     // The view says which project it is showing: it answers about a project, never about the window, and a view
     // that silently answers a different question is worse than an empty one.
@@ -461,6 +480,12 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     }
 
     const current = new TextDecoder().decode(await vscode.workspace.fs.readFile(page.uri));
+    // What the model may read, chosen by the person — the page travels with every choice, because a revision that
+    // cannot see what it is revising is a rewrite.
+    const material = await draftMaterial(page, owned?.root, current, note);
+    if (material === undefined) {
+      return;
+    }
     const kind = KINDS.find((candidate) => candidate.label === 'Article') ?? KINDS[0];
     let written = '';
     try {
@@ -473,7 +498,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
             headings: kind.headings,
             path: page.uri.fsPath,
             area: page.area,
-            material: `# ${page.title}\n\nWhat has changed: ${note}\n\n${current}`,
+            material,
             onToken: (text) => {
               written += text;
             },
@@ -592,6 +617,12 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     // The Documentation container's surfaces, rebuilt from the mock: projects, repositories, sources,
     // documents, a page, a source, review, builds and releases.
     vscode.commands.registerCommand('temcoDocs.projects', () => docsPages.projects()),
+    // The project as a page: what it cites, what it produces, and the acts on it.
+    vscode.commands.registerCommand('temcoDocs.projectPage', (slug?: unknown) =>
+      docsPages.project(typeof slug === 'string' ? slug : undefined)
+    ),
+    // The queue as a page: the three kinds of work, each with the act that settles it.
+    vscode.commands.registerCommand('temcoDocs.needsPage', () => docsPages.needsYou()),
     vscode.commands.registerCommand('temcoDocs.repository', (name?: unknown) => docsPages.repository(typeof name === 'string' ? name : undefined)),
     vscode.commands.registerCommand('temcoDocs.documents', (area?: unknown) => docsPages.documents(typeof area === 'string' ? area : undefined)),
     // The side bar's project row, which is the mock's `tree-project`: *become* that project, then show the
@@ -873,16 +904,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   );
   registerMediaCommands(context, {
     roots: () => roots,
-    targetPage: () => {
-      if (lastTouched === 'tree') {
-        const row = pageFromNode(selectedRow());
-        if (row !== undefined) {
-          return row.page;
-        }
-      }
-      const editor = vscode.window.activeTextEditor;
-      return editor === undefined ? undefined : pageForUri(roots, editor.document.uri);
-    },
+    targetPage: () => currentPage(),
     redraw: () => redraw(),
     output,
   });
@@ -1054,6 +1076,65 @@ async function chooseProject(
   } finally {
     catalog?.close();
   }
+}
+
+/**
+ * The material one revision may read: the page as it stands, plus **one** of the three things a person asks for.
+ *
+ * `undefined` means they backed out — a revision is never started on a guess about what it may read, which is the
+ * same rule the new-page form follows for code.
+ */
+async function draftMaterial(page: PageEntry, root: DocsRoot | undefined, current: string, note: string): Promise<string | undefined> {
+  if (root === undefined) {
+    void vscode.window.showWarningMessage('Temco Docs: that page is not inside a folder this window is reading.');
+    return undefined;
+  }
+  const source = await vscode.window.showQuickPick(
+    [
+      { label: 'This page’s history', description: 'the commit range the generator recorded', value: 'history' },
+      { label: 'A source file…', description: 'one file of the repository, as material', value: 'file' },
+      { label: 'Another page…', description: 'the text of a page in this set', value: 'page' },
+    ],
+    { title: `Draft “${page.title}” from…` }
+  );
+  if (source === undefined) {
+    return undefined;
+  }
+  const parts = [current];
+
+  if (source.value === 'file') {
+    const listed = await codeFiles({ name: root.folder.name, path: root.folder.uri.fsPath });
+    const picked = await vscode.window.showQuickPick(listed.files.map((file) => file.path), {
+      title: 'Which file may the model read?',
+      placeHolder: listed.note ?? 'a file of the repository',
+    });
+    if (picked === undefined) {
+      return undefined;
+    }
+    try {
+      parts.push(new TextDecoder().decode(await vscode.workspace.fs.readFile(vscode.Uri.file(picked))));
+    } catch {
+      // A file that cannot be read is not a reason to stop: the page and the note are still material.
+    }
+  }
+
+  if (source.value === 'page') {
+    const others = collectPages(root).filter((entry) => entry.exists && entry.id !== page.id);
+    const picked = await vscode.window.showQuickPick(
+      others.map((entry) => ({ label: entry.title, description: entry.id, entry })),
+      { title: 'Which page may the model read?' }
+    );
+    if (picked === undefined) {
+      return undefined;
+    }
+    try {
+      parts.push(new TextDecoder().decode(await vscode.workspace.fs.readFile(picked.entry.uri)));
+    } catch {
+      // As above: the page in front is the material that matters.
+    }
+  }
+
+  return `# ${page.title}\n\nWhat has changed: ${note}\n\n${parts.join('\n\n---\n\n')}`;
 }
 
 /** A new page starts as a title and nothing else — the structure lives in the registry, not in front matter. */

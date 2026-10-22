@@ -15,6 +15,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { capturesOf } from './media';
 import { DocsRoot, collectPages } from './registry';
+import { firstVersionReport } from './versionReport';
 
 /** How many stale pages are worth listing before the report is the better answer. */
 const STALE_SHOWN = 12;
@@ -28,6 +29,8 @@ class QueueGroup extends vscode.TreeItem {
 	constructor(label: string, private readonly load: () => Promise<vscode.TreeItem[]>) {
 		super(label, vscode.TreeItemCollapsibleState.Expanded);
 		this.contextValue = 'queueGroup';
+		// The group itself opens the queue as a page: the tree is the summary, the page is where the acts are read.
+		this.command = { command: 'temcoDocs.needsPage', title: 'Open Needs You' };
 	}
 
 	getChildren(): Promise<vscode.TreeItem[]> {
@@ -62,8 +65,33 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<vscode.TreeIte
 		const pages = roots.flatMap((root) => collectPages(root));
 		const stale = pages.filter((page) => page.provenance?.stale === true);
 		const unreviewed = pages.filter((page) => page.reviewed === null).length;
+		const version = await firstVersionReport(roots);
+		const changed = version?.report.changed ?? [];
+		const retake = version?.report.retake ?? [];
 
 		const groups: QueueGroup[] = [];
+
+		if (changed.length > 0 || retake.length > 0) {
+			// One shape for both halves of the report: a page, and the sentence that says why it is here.
+			const reportRows = [
+				...retake.map((row) => ({ page: row.page, title: row.title, note: row.note ?? 'retake the screenshot' })),
+				...changed.map((row) => ({ page: row.page, title: row.title, note: (row.code ?? []).join(' · ') || 'the code moved' })),
+			];
+			groups.push(new QueueGroup(
+				`Changed by ${version?.report.version ?? 'the new version'}`,
+				async () => reportRows.slice(0, STALE_SHOWN).map((row) => {
+					const page = row.page === undefined ? undefined : pages.find((entry) => entry.id === row.page);
+					const item = new vscode.TreeItem(row.title ?? page?.title ?? row.page ?? 'a page', vscode.TreeItemCollapsibleState.None);
+					item.iconPath = new vscode.ThemeIcon('versions');
+					item.description = row.note;
+					item.tooltip = 'Named by the release workflow, not inferred here.';
+					if (page !== undefined) {
+						item.command = { command: 'temcoDocs.openFile', title: String(item.label), arguments: [page.uri.fsPath] };
+					}
+					return item;
+				})
+			));
+		}
 
 		if (captures.length > 0) {
 			groups.push(new QueueGroup(

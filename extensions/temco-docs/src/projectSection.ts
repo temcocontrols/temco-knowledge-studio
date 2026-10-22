@@ -30,11 +30,10 @@ export class ProjectSection implements vscode.TreeDataProvider<vscode.TreeItem> 
 				row.iconPath = new vscode.ThemeIcon(root.origin === 'catalog' ? 'cloud' : 'folder');
 				row.description = `${root.pages} pages${root.origin === 'catalog' ? ' · read from the remote' : ''}`;
 				row.tooltip = root.folder.uri.fsPath;
-				row.command = {
-					command: 'temcoDocs.source',
-					title: root.folder.name,
-					arguments: [root.folder.name],
-				};
+				// A source read over the API has a page of its own; a folder is a folder, so the row opens the folder.
+				row.command = root.origin === 'catalog'
+					? { command: 'temcoDocs.source', title: root.folder.name, arguments: [root.folder.name] }
+					: { command: 'revealFileInOS', title: root.folder.name, arguments: [root.folder.uri] };
 				return row;
 			});
 		}

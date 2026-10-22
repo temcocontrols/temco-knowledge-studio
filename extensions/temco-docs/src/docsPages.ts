@@ -10,6 +10,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { DocsRoot, PageEntry, collectPages } from './registry';
+import { capturesOf } from './media';
+import { firstVersionReport } from './versionReport';
 import { BuildRow, Catalog, DocumentRow, DraftRow, ReleaseRow, ScanRow, selection, slugOf } from './store';
 import { commandScript, escapeHtml as esc, icon, page, pageColumn, runCommand, toneMark } from './ui';
 
@@ -134,6 +136,156 @@ export class DocsPages {
 			catalog?.close();
 		}
 		this.open('projects', PROJECTS_VIEW_TYPE, 'Projects', projectsBody(documents, selection.project(), linked));
+	}
+
+	/** The project the window is on, as a page: what it is made of, what it produces, and the acts on it. */
+	project(slug?: string): void {
+		void this.openProjectPage(slug);
+	}
+
+	private async openProjectPage(wanted?: string): Promise<void> {
+		let name = wanted ?? '';
+		let sources: { name: string; kind: string; branch?: string }[] = [];
+		let outputs: string[] = [];
+		let catalog: Catalog | undefined;
+		try {
+			catalog = await Catalog.open(this.context);
+			const documents = catalog.documents();
+			const slug = wanted ?? selection.project() ?? documents[0]?.slug;
+			if (slug !== undefined) {
+				const detail = catalog.document(slug);
+				name = detail?.name ?? slug;
+				sources = catalog.documentSources(slug);
+				outputs = Array.isArray(detail?.outputs) ? detail.outputs : [];
+			}
+		} catch {
+			// A catalog that cannot be read still leaves the sets being read, and this page shows those.
+		} finally {
+			catalog?.close();
+		}
+
+		const pages = this.roots().flatMap((root) => collectPages(root));
+		const stale = pages.filter((page) => page.provenance?.stale === true).length;
+		const never = pages.filter((page) => page.reviewed === null).length;
+		const version = await firstVersionReport(this.roots());
+		const changed = version?.report.changed ?? [];
+
+		const body = `${pageHead({
+			eyebrow: 'Project',
+			title: name === '' ? 'No project yet' : name,
+			mark: 'folders',
+			desc: 'What this project cites, what it produces, and the acts on it. Nothing is published from here.',
+			actions: name === ''
+				? button('Create a Project', 'temcoProjects.newProject', { kind: 'primary', mark: 'plus' })
+				: button('Edit the Pages', 'temcoDocs.pages.focus', { kind: 'primary', mark: 'list-tree' }) + button('Edit the Project', 'temcoProjects.editProject', { mark: 'gear', args: [name] })
+		})}
+${pages.length === 0 ? '' : `<div class="mt-16">${tiles([
+			{ value: String(pages.length), label: 'pages' },
+			{ value: String(pages.length - never), label: 'reviewed' },
+			{ value: String(stale), label: 'stale' },
+			{ value: String(sources.length), label: 'sources' },
+		])}</div>`}
+<div class="mt-24">${group({
+			label: 'Sources',
+			count: String(sources.length),
+			body: sources.length === 0
+				? `<div class="record-row record-row--action" data-command="temcoProjects.addSource" data-args="[]">${icon('plus')}<span class="record-row__title">Add a source</span><span class="record-row__facts">a folder on this machine, or a repository</span></div>`
+				: list(sources.map((source) => ({
+					mark: source.kind === 'repository' ? 'repo' : 'folder',
+					title: source.name,
+					sub: `${source.kind}${source.branch === undefined ? '' : ` · ${source.branch}`}`,
+					command: 'temcoDocs.source',
+					args: [source.name],
+				}))),
+		})}</div>
+<div class="mt-24">${group({
+			label: 'Outputs',
+			note: outputs.length === 0 ? 'This project has not said what it produces yet.' : `It produces: ${outputs.join(' · ')}.`,
+			actions: button('Build the Site', 'temcoDocs.buildSite', { mark: 'play' }) + button('Build the Offline Help', 'temcoDocs.buildHelp', { mark: 'package' }),
+			body: list([
+				{ mark: 'package', title: 'Site', sub: 'the rendered copy a reader browses', command: 'temcoDocs.builds' },
+				{ mark: 'archive', title: 'Offline help', sub: 'the CHM that ships inside the installer', command: 'temcoDocs.builds' },
+			]),
+		})}</div>
+${changed.length === 0 ? '' : `<div class="mt-24">${group({
+			label: `Changed in ${version?.report.version ?? 'the new version'}`,
+			count: String(changed.length),
+			note: 'Named by the workflow that produced this version. Nothing here is inferred by this application.',
+			body: list(changed.slice(0, 20).map((change) => {
+				const page = change.page === undefined ? undefined : pages.find((entry) => entry.id === change.page);
+				return {
+					mark: 'diff',
+					title: change.title ?? page?.title ?? change.page ?? 'a page',
+					sub: (change.code ?? []).join(' · ') || 'the code moved',
+					command: page === undefined ? undefined : 'temcoDocs.openFile',
+					args: page === undefined ? undefined : [page.uri.fsPath],
+				};
+			})),
+		})}</div>`}`;
+
+		this.open('project', 'temcoDocs.projectPage', name === '' ? 'Project' : name, body, 'folders');
+	}
+
+	/** The queue as a page: the three kinds of work, each with the act that settles it. */
+	needsYou(): void {
+		void this.openNeedsPage();
+	}
+
+	private async openNeedsPage(): Promise<void> {
+		const roots = this.roots();
+		const pages = roots.flatMap((root) => collectPages(root));
+		const captures = await capturesOf(roots);
+		const stale = pages.filter((page) => page.provenance?.stale === true);
+		const never = pages.filter((page) => page.reviewed === null);
+
+		const empty = captures.length === 0 && stale.length === 0 && never.length === 0;
+		const body = `${pageHead({
+			eyebrow: 'Dashboard',
+			title: 'Needs You',
+			mark: 'tasklist',
+			desc: 'What is waiting on a person. A row opens the page that needs the work; nothing is written from here.',
+			actions: button('Capture a Screenshot', 'temcoDocs.captureImage', { kind: 'primary', mark: 'device-camera' })
+		})}
+${empty ? `<div class="mt-16">${callout('Nothing is waiting: no screenshot without a page, no page the code moved away from, no page unreviewed.')}</div>` : ''}
+${captures.length === 0 ? '' : `<div class="mt-24">${group({
+			label: 'Screenshots to place',
+			count: String(captures.length),
+			note: 'Taken with no page in front. Attaching one moves it into that page’s media/ and inserts the reference.',
+			body: list(captures.map((capture) => ({
+				mark: 'device-camera',
+				title: path.basename(capture.uri.fsPath),
+				sub: 'not in a page yet',
+				command: 'temcoDocs.attachCapture',
+				args: [capture.uri.fsPath],
+			}))),
+		})}</div>`}
+${stale.length === 0 ? '' : `<div class="mt-24">${group({
+			label: 'Retake these',
+			count: String(stale.length),
+			note: 'The code these pages claim has changed since they were last reviewed.',
+			body: list(stale.slice(0, 20).map((page) => ({
+				mark: 'warning',
+				title: page.title,
+				sub: `${page.area}${page.chapter === '' ? '' : ` › ${page.chapter}`} · its code moved`,
+				command: 'temcoDocs.openFile',
+				args: [page.uri.fsPath],
+			}))),
+		})}</div>`}
+${never.length === 0 ? '' : `<div class="mt-24">${group({
+			label: 'Never reviewed',
+			count: String(never.length),
+			note: 'No review date is recorded. The report groups them by owner.',
+			actions: button('Open the Report', 'temcoDocs.stalenessReport', { mark: 'list-unordered' }),
+			body: list(never.slice(0, 20).map((page) => ({
+				mark: 'circle-outline',
+				title: page.title,
+				sub: `${page.area}${page.chapter === '' ? '' : ` › ${page.chapter}`}`,
+				command: 'temcoDocs.openFile',
+				args: [page.uri.fsPath],
+			}))),
+		})}</div>`}`;
+
+		this.open('needs', 'temcoDocs.needsPage', 'Needs You', body, 'tasklist');
 	}
 
 	repository(name?: string): void {

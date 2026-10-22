@@ -34,14 +34,6 @@ interface Group {
 
 const GROUPS: Group[] = [
 	{
-		id: 'temcoWorkbench.platformView',
-		title: 'Overview',
-		rows: [
-			{ label: 'Overview', note: 'what the platform holds, in one screen', icon: 'home', command: 'temcoWorkbench.overview' },
-			{ label: 'Needs Review', note: 'what wants a person, said in full', icon: 'warning', command: 'temcoWorkbench.openNeeds', countKey: 'needs' }
-		]
-	},
-	{
 		id: 'temcoWorkbench.activityView',
 		title: 'Recent activity',
 		rows: [

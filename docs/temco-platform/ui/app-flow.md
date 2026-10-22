@@ -23,12 +23,12 @@ The shell's `ORDER` holds the eight module containers (`temcoDashboard · temco 
 
 ## Dashboard — four views
 
-| View | The question | Data |
+| View | What the panel shows | The page behind it |
 |---|---|---|
-| **Projects** (`temcoProjects.projects`) | which project, and how healthy | the catalog |
-| **Overview** (`temcoWorkbench.platformView`) | what the platform and this project hold | catalog + the registry read |
-| **Needs You** (`temcoDocs.queue`) | what is waiting on a person | capture inbox · `stale` · never reviewed |
-| **Recent activity** (`temcoWorkbench.activityView`) | what happened, and when | `catalog.events()` |
+| **Projects** (`temcoProjects.projects`) | a row per project: sources · built · current, with `✎` and `ⓘ` | clicking a row opens the **project page** (`temcoDocs.projectPage`): counts, sources, outputs, build buttons |
+| **Overview** (`temcoWorkbench.platformView`) | **the facts as rows** — Pages · Reviewed · Stale · Issues · Sources · Outputs · Build | each row opens its page (the tree, the report, Problems, the project form, Build Center) |
+| **Needs You** (`temcoDocs.queue`) | the queue's groups; a group opens its page | the **queue page** (`temcoDocs.needsPage`): screenshots to place, retake these, never reviewed — each with its act |
+| **Recent activity** (`temcoWorkbench.activityView`) | the activity row | the **activity page** (`temcoWorkbench.activity`): every recorded event, newest first |
 
 ```
  DASHBOARD                                        ⟳
@@ -40,17 +40,20 @@ The shell's `ORDER` holds the eight module containers (`temcoDashboard · temco 
  │   Legacy Import                1 source · built 09:12          │
  ├────────────────────────────────────────────────────────────────┤
  │ OVERVIEW                                                       │
- │   Overview · Needs Review (count)                              │
+ │   Pages      318       Reviewed  304                           │
+ │   Stale       14       Issues    0 · 3                          │
+ │   Sources      3       Outputs   Site · help                    │
+ │   Build      Build Center                                       │
  ├────────────────────────────────────────────────────────────────┤
  │ NEEDS YOU                                               (7)    │
- │   screenshots to place · retake these · never reviewed          │
+ │   ▸ Screenshots to place (1) · Retake these (4) · Never… (2)    │
  ├────────────────────────────────────────────────────────────────┤
  │ RECENT ACTIVITY                                                │
- │   Recent Activity                                              │
+ │   Recent Activity                        20 events              │
  └────────────────────────────────────────────────────────────────┘
 ```
 
-`✎` = *Edit the Pages* (`temcoProjects.openProject`) → the project becomes the one being worked on and the Documentation panel shows it.
+`✎` = *Edit the Pages* (`temcoProjects.openProject`) → the project becomes the one being worked on and the Documentation panel shows its tree.
 `ⓘ` = *Show the Project* (`temcoProjects.showProject`) → the Documentation panel comes forward at its **Project** section.
 
 ## Documentation — four views, the tree first
@@ -108,10 +111,10 @@ Title bar: `＋` New Page · `🗀` New Chapter · `⇩` Add a Source · `📷` 
 
 | Left panel row | Page in the middle |
 |---|---|
-| a project row | the project, opened for work (its pages load) |
-| Overview · Overview | the platform overview page |
-| Overview · Needs Review | the needs page |
-| Needs You · a capture | the page it should go on, capture at hand |
+| a project row | the **project page** — counts, sources, outputs, build buttons |
+| Overview · a fact row | the page it counts: tree · report · Problems · project form · Build Center |
+| Needs You · a group | the **queue page** |
+| Needs You · a capture | the attach prompt: which page takes it |
 | Needs You · retake / never reviewed | the page, with its image |
 | Recent activity · a row | the activity page |
 | a tree page | the page, in the editor, DRAFT on the right |
@@ -140,12 +143,13 @@ Title bar: `＋` New Page · `🗀` New Chapter · `⇩` Add a Source · `📷` 
 
 ## Two decisions worth naming
 
-**A row's F2 renames the *title*, not the file.** The page id *is* the file path (`05-content-and-registry.md`, rule 1): every inbound link, the app's own routes and the MCP input are built on it. A file rename is therefore a named act that also writes an `aliases` entry so the old path keeps resolving — and that alias writer does not exist yet. Binding F2 to the rename that is safe (the label, which is the title) is what is built; the file rename waits for the alias work.
+**A row's F2 renames the *file*, and keeps the old id as an alias.** The page id *is* the path (`05-content-and-registry.md`, rule 1), so the rename is the named act that rule allows: the file moves, the repository's own `docs:registry` writes the new entry, and the old id is written into that entry's `aliases` before anything else happens. Shift+F2 renames the title instead, which is the registry value. A project with no generator is refused — without one there is no entry to carry the alias, so the rename would orphan every inbound link.
+
+**The right-hand panel is `DRAFT`.** It lives in the auxiliary bar and is about the page in front: *Draft a Change* asks what the model may read (this page's history · a source file · another page), and the drafts waiting for that page are applied or rejected there — the same commands the Review Center runs.
 
 **Needs You replaced the workbench's Needs Work view.** They were the same question asked twice; the queue has real rows (captures with no page, stale pages, never reviewed) and the old view had one link.
 
 ## Still open
 
-- Inline file rename with an `aliases` entry (above).
-- `version-report.json` → the "retake these" rows get a source beyond `stale`.
-- Annotation, which waits on the callout decision in `authoring-flow.md`.
+- **Annotation**, which waits on the callout decision in `authoring-flow.md` (a webview's DOM, Windows UI Automation, or by hand).
+- A **`version-report.json` writer** in the product repository's release workflow: this application reads the file, and shows its pages on the project page and in **Needs You**, but nothing writes it yet.
