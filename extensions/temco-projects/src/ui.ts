@@ -53,6 +53,6 @@ export const toneMark = ui.toneMark;
 export async function focusLibrary(): Promise<void> {
 	const available = await vscode.commands.getCommands(true);
 	await vscode.commands.executeCommand(
-		available.includes('temcoDocs.section.projects.focus') ? 'temcoDocs.section.projects.focus' : 'workbench.view.explorer'
+		available.includes('temcoProjects.projects.focus') ? 'temcoProjects.projects.focus' : 'workbench.view.explorer'
 	);
 }

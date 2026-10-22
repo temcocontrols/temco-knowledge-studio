@@ -21,6 +21,7 @@ import { NewPagePage } from './newPagePage';
 import { OverviewPage } from './overview';
 import { AREA_CHAPTER, KINDS, PageDeps, PageOperations, registerPageCommands, writePage } from './pageOps';
 import { PageProperties } from './pageProperties';
+import { ProjectSection } from './projectSection';
 import { projects } from './projects';
 import { QueueTreeProvider } from './queue';
 import { registerReportCommands } from './report';
@@ -35,9 +36,7 @@ import { DocsNode, DocsTreeProvider, TreeNote, pageFromNode } from './tree';
 
 const OUTPUT_NAME = 'Temco Docs';
 const VIEW_ID = 'temcoDocs.pages';
-/** The tree's second home: its own container on the activity bar. */
-const TREE_ID = 'temcoDocs.tree';
-/** The queue that lives with the tree: what the tool knows needs doing and the person does not. */
+/** The queue lives on the Dashboard, next to the project list it is about. */
 const QUEUE_ID = 'temcoDocs.queue';
 
 /**
@@ -153,16 +152,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     // A chapter is somewhere a page can be put, and the drop is a registry write — see `src/pageOps.ts`.
     dragAndDropController: pageOps,
   });
-  // The same tree, in its own container on the activity bar. One provider behind both views, so there is one answer
-  // to "what is the documentation": the panel keeps the groups it had, and the tree is one icon away.
-  const treeInOwnContainer = vscode.window.createTreeView(TREE_ID, {
-    treeDataProvider: provider,
-    showCollapseAll: true,
-    dragAndDropController: pageOps,
-  });
-  context.subscriptions.push(treeInOwnContainer);
-  // Whichever tree the person used last supplies the row a command was started without one from.
-  selectedRow = () => treeView.selection[0] ?? treeInOwnContainer.selection[0];
+  selectedRow = () => treeView.selection[0];
 
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   status.command = 'temcoDocs.validate';
@@ -177,46 +167,24 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
    */
   let picked = false;
 
-  // **Needs You** — the queue under the tree: screenshots with no page yet, pages the code moved away from, pages
-  // never reviewed. It reads the same roots the tree reads, so the two can never disagree.
+  // **Needs You** — the queue that lives on the Dashboard: screenshots with no page yet, pages the code moved away
+  // from, pages never reviewed. It reads the same roots the tree reads, so the two can never disagree.
   const queue = new QueueTreeProvider({ roots: () => roots });
   const queueView = vscode.window.createTreeView(QUEUE_ID, { treeDataProvider: queue });
-  context.subscriptions.push(queueView);
+  // The Documentation panel's second section: what the project is made of, above the pipeline it feeds.
+  const projectSection = new ProjectSection(() => roots);
+  const projectView = vscode.window.createTreeView('temcoDocs.project', { treeDataProvider: projectSection });
+  context.subscriptions.push(queueView, projectView);
 
   // The tree is this module's own view. The Library, the dashboard and the needs page are the workbench's, and
   // they read this module's model through the API at the bottom of `activate()`.
 
   // The page behind the *Documentation Owed* row, and the form that creates a page.
 
-  // The side bar's groups, as the mock draws them: Projects, Sources, Areas, Pipeline and the Working Set of the
-  // pages opened in this window. The Docs Explorer is the tree of pages, registered above.
-  //
-  // The groups read the module rather than a copy of it: the projects the catalog holds, the areas of the project
-  // being worked on, and the pages this window has shown. `sidebar` is filled in below, before the first read.
+  // The side bar's two remaining groups — the pipeline and the working set. The project list moved to the
+  // Dashboard, and the areas went with it: the tree's roots are the areas.
   const working: WorkingEntry[] = [];
-  let projectRows: { name: string; current: boolean }[] = [];
-  let sidebar: { refresh(): void } | undefined;
   const sidebarModel: SidebarModel = {
-    projects: () => projectRows,
-    areas: () => {
-      // One row per area across the project's sources, the area of the open page first. A page names its area in
-      // the first segment of its id, which is the same key the registry uses.
-      const open = selection.page()?.id.split('/')[0];
-      const seen = new Map<string, { area: string; title: string; pages: number; current: boolean }>();
-      for (const root of roots) {
-        for (const area of root.areas) {
-          const row = seen.get(area.area);
-          if (row) {
-            row.pages += area.pages;
-          } else {
-            seen.set(area.area, { area: area.area, title: area.title, pages: area.pages, current: area.area === open });
-          }
-        }
-      }
-      return [...seen.values()].sort(
-        (one, other) => Number(other.current) - Number(one.current) || one.title.localeCompare(other.title)
-      );
-    },
     working: () => working,
     counts: () => ({
       // A source that is a folder here is a repository with a working tree; the rest are what a read recorded.
@@ -225,7 +193,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
       review: roots.reduce((total, root) => total + root.neverReviewed, 0),
     }),
   };
-  sidebar = registerSectionViews(context, sidebarModel);
+  const sidebar = registerSectionViews(context, sidebarModel);
 
   // The Working Set, the mock's `M.state.working`: the pages this window has shown, newest first, six at most.
   //
@@ -247,7 +215,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     }
     working.unshift(entry);
     working.splice(6);
-    sidebar?.refresh();
+    sidebar.refresh();
   };
 
   context.subscriptions.push(
@@ -261,7 +229,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
       const at = working.findIndex((item) => item.path === document.uri.fsPath);
       if (at >= 0) {
         working.splice(at, 1);
-        sidebar?.refresh();
+        sidebar.refresh();
       }
     })
   );
@@ -338,7 +306,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
             ? {
               label: 'No project is being worked on',
               detail: 'choose one in the Library',
-              command: { command: 'temcoDocs.section.projects.focus' },
+              command: { command: 'temcoProjects.projects.focus' },
             }
             : {
               label: 'No project yet',
@@ -352,9 +320,9 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     }
 
     provider.setRoots(roots, notes);
-    // The projects the side bar lists, the one being worked on first.
-    projectRows = await readProjects(context, selection.project());
-    sidebar?.refresh();
+    sidebar.refresh();
+    projectSection.refresh();
+    queue.refresh();
     queue.refresh();
     // The view says which project it is showing: it answers about a project, never about the window, and a view
     // that silently answers a different question is worse than an empty one.
@@ -901,7 +869,6 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   let lastTouched: 'tree' | 'page' = 'page';
   context.subscriptions.push(
     treeView.onDidChangeSelection(() => { lastTouched = 'tree'; }),
-    treeInOwnContainer.onDidChangeSelection(() => { lastTouched = 'tree'; }),
     vscode.window.onDidChangeTextEditorSelection(() => { lastTouched = 'page'; })
   );
   registerMediaCommands(context, {
@@ -1084,31 +1051,6 @@ async function chooseProject(
     // A catalog that cannot be opened is reported where it is used — the Library, a read — and activation must
     // not depend on it. Selecting nothing leaves the Workspace view saying there is nothing to show.
     return undefined;
-  } finally {
-    catalog?.close();
-  }
-}
-
-/**
- * The projects the side bar lists, the one being worked on first.
- *
- * The mock's Projects group shows the current project and hides the rest behind "… N more"; this is the list it
- * counts. A catalog that cannot be opened yields an empty list rather than an error: the side bar is a way in, not
- * the record of what exists.
- */
-async function readProjects(
-  context: vscode.ExtensionContext,
-  current: string | undefined
-): Promise<{ name: string; current: boolean }[]> {
-  let catalog: Catalog | undefined;
-  try {
-    catalog = await Catalog.open(context);
-    return catalog
-      .documents()
-      .map((row) => ({ name: row.name, current: slugOf(row.name) === current }))
-      .sort((one, other) => Number(other.current) - Number(one.current) || one.name.localeCompare(other.name));
-  } catch {
-    return [];
   } finally {
     catalog?.close();
   }

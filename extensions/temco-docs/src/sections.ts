@@ -17,7 +17,6 @@
 // for them: a surface is discovered by being listed, not by being remembered.
 
 import * as vscode from 'vscode';
-import { slugOf } from './store';
 
 /** A page opened in this window, newest first: what the Working Set lists. */
 export interface WorkingEntry {
@@ -30,10 +29,6 @@ export interface WorkingEntry {
 
 /** What the side bar reads: live questions, so a refresh is one call rather than a snapshot to keep in step. */
 export interface SidebarModel {
-	/** The projects the catalog knows, the one being worked on first. */
-	projects(): { name: string; current: boolean }[];
-	/** The areas of the project being worked on, the area of the open page first. */
-	areas(): { area: string; title: string; pages: number; current: boolean }[];
 	/** The pages opened in this window. */
 	working(): readonly WorkingEntry[];
 	counts(): { repositories: number; sources: number; review: number };
@@ -51,20 +46,7 @@ interface Row {
 	current?: boolean;
 }
 
-const TOGGLE = 'temcoDocs.sidebar.toggle';
-
-/**
- * A row's number, as a decoration rather than as text beside the label.
- *
- * A tree row has two text slots: the label and the description, and the description sits *after* the label, not at
- * the end of the row. The one thing a row pushes to the right edge is its decoration — the slot the Explorer uses
- * for "M"/"U" and the Source Control view uses for its counts. So the number goes there: the count travels in the
- * URI and one provider for the whole module turns it into a badge.
- */
 const COUNT_SCHEME = 'temco-count';
-
-/** The scheme a link-coloured row travels in. */
-const LINK_SCHEME = 'temco-link';
 
 /** A right-aligned badge: a number, or the word "current" when the row is the one being worked on. */
 function badge(text: string, key: string, current = false): vscode.Uri {
@@ -72,19 +54,11 @@ function badge(text: string, key: string, current = false): vscode.Uri {
 	return current ? uri.with({ query: 'current' }) : uri;
 }
 
-/** Every provider keeps its own "… N more" state, and the toggle command finds it through this table. */
-const TOGGLES = new Map<string, () => void>();
-
 abstract class Group implements vscode.TreeDataProvider<vscode.TreeItem> {
 	private readonly changed = new vscode.EventEmitter<void>();
 	readonly onDidChangeTreeData = this.changed.event;
 
-	constructor(readonly groupId: string) {
-		TOGGLES.set(groupId, () => {
-			this.toggle();
-			this.changed.fire();
-		});
-	}
+	constructor(readonly groupId: string) { }
 
 	refresh(): void {
 		this.changed.fire();
@@ -92,10 +66,6 @@ abstract class Group implements vscode.TreeDataProvider<vscode.TreeItem> {
 
 	getTreeItem(item: vscode.TreeItem): vscode.TreeItem {
 		return item;
-	}
-
-	protected toggle(): void {
-		/* Only the groups that fold long lists override this. */
 	}
 
 	protected item(row: Row): vscode.TreeItem {
@@ -113,59 +83,7 @@ abstract class Group implements vscode.TreeDataProvider<vscode.TreeItem> {
 		return item;
 	}
 
-	/** The row that opens or closes the rest of a long list: the mock's "… N more" / "Show less". */
-	protected more(hidden: number, expanded: boolean): vscode.TreeItem {
-		const item = new vscode.TreeItem(
-			expanded ? 'Show less' : `… ${hidden} more`,
-			vscode.TreeItemCollapsibleState.None
-		);
-		item.iconPath = new vscode.ThemeIcon(expanded ? 'chevron-down' : 'chevron-right');
-		// A link, as far as a tree row can be one: the label is drawn in the theme's link colour by the same
-		// decoration slot the counts use. A row's font size is the list's, and no item can change it.
-		item.resourceUri = vscode.Uri.parse(`${LINK_SCHEME}:/toggle/${this.groupId}`);
-		item.tooltip = expanded
-			? 'Show only the one being worked on.'
-			: `${hidden} more behind this row — the full list is one click away.`;
-		item.command = { command: TOGGLE, title: 'Show the rest', arguments: [this.groupId] };
-		return item;
-	}
-
 	abstract getChildren(element?: vscode.TreeItem): vscode.TreeItem[];
-}
-
-/**
- * A group that lists the things inside it: the current one, then "… N more".
- *
- * The mock truncates these two lists — the projects and the areas — to the one being worked on, because a side bar
- * says *where you are*; the full list is the page's own job. The toggle is the same row the mock draws.
- */
-class LongList extends Group {
-	private expanded = false;
-
-	constructor(groupId: string, private readonly rows: () => Row[]) {
-		super(groupId);
-	}
-
-	protected override toggle(): void {
-		this.expanded = !this.expanded;
-	}
-
-	getChildren(): vscode.TreeItem[] {
-		const rows = this.rows();
-		const current = rows.filter((row) => row.current === true)[0] ?? rows[0];
-		if (current === undefined) {
-			return [];
-		}
-		const rest = rows.filter((row) => row !== current);
-		const items = [this.item(current)];
-		if (this.expanded) {
-			items.push(...rest.map((row) => this.item(row)));
-		}
-		if (rest.length > 0) {
-			items.push(this.more(rest.length, this.expanded));
-		}
-		return items;
-	}
 }
 
 /** A group whose rows are short and fixed: a heading's own surfaces, each with its count. */
@@ -244,57 +162,9 @@ export interface DocsSidebar {
 	refresh(): void;
 }
 
-/** Registers the six group views and the one command their long lists share. */
+/** Registers the two group views that remain: the pipeline and the working set. */
 export function registerSectionViews(context: vscode.ExtensionContext, model: SidebarModel): DocsSidebar {
 	const groups: Group[] = [];
-
-	const project = (): Row[] => {
-		const rows = model.projects();
-		if (rows.length === 0) {
-			// Nothing recorded is not nothing to say: the row carries the reason and the one act that fills it.
-			return [
-				{
-					label: 'No project yet',
-					note: 'a project is what you manage — create one, then give it a source',
-					command: 'temcoProjects.newProject',
-					icon: 'plus',
-				},
-			];
-		}
-		return rows.map((entry) => ({
-			label: entry.name,
-			note: entry.current ? 'the project this window is on' : 'make it the project this window is on',
-			// The mock's project row *becomes* the project and opens the projects page (`tree-project`); it does
-			// not open a project's own editor. One command does both, so the side bar has one click, not two.
-			command: 'temcoDocs.selectProject',
-			args: [slugOf(entry.name)],
-			icon: 'folder',
-			current: entry.current,
-		}));
-	};
-
-	const area = (): Row[] => {
-		const rows = model.areas();
-		if (rows.length === 0) {
-			return [
-				{
-					label: 'No area to show',
-					note: 'the project has no registry yet, or none of its sources has been read',
-					command: 'temcoProjects.editProject',
-					icon: 'info',
-				},
-			];
-		}
-		return rows.map((entry) => ({
-			label: entry.title || entry.area,
-			note: 'the registry, area by area',
-			command: 'temcoDocs.documents',
-			args: [entry.area],
-			icon: 'book',
-			count: entry.pages,
-			current: entry.current,
-		}));
-	};
 
 	const pipeline = (): Row[] => [
 		{
@@ -308,11 +178,9 @@ export function registerSectionViews(context: vscode.ExtensionContext, model: Si
 		{ label: 'Releases', note: 'published versions, and the one in flight', command: 'temcoDocs.releases', icon: 'cloud-upload' },
 	];
 
-	const projects = new LongList('projects', project);
-	const areas = new LongList('areas', area);
 	const flatPipeline = new Flat('pipeline', pipeline);
 	const working = new WorkingSet(model);
-	groups.push(projects, areas, flatPipeline, working);
+	groups.push(flatPipeline, working);
 
 	const view = (id: string, group: Group): void => {
 		context.subscriptions.push(
@@ -320,17 +188,12 @@ export function registerSectionViews(context: vscode.ExtensionContext, model: Si
 		);
 	};
 
-	view('projects', projects);
-	view('areas', areas);
 	view('pipeline', flatPipeline);
 	view('working', working);
 
 	context.subscriptions.push(
 		vscode.window.registerFileDecorationProvider({
 			provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
-				if (uri.scheme === LINK_SCHEME) {
-					return { color: new vscode.ThemeColor('textLink.foreground') };
-				}
 				if (uri.scheme !== COUNT_SCHEME) {
 					return undefined;
 				}
@@ -339,9 +202,6 @@ export function registerSectionViews(context: vscode.ExtensionContext, model: Si
 					? undefined
 					: { badge: text, tooltip: text, color: uri.query === 'current' ? new vscode.ThemeColor('textLink.foreground') : undefined };
 			},
-		}),
-		vscode.commands.registerCommand(TOGGLE, (groupId?: unknown) => {
-			TOGGLES.get(typeof groupId === 'string' ? groupId : '')?.();
 		})
 	);
 

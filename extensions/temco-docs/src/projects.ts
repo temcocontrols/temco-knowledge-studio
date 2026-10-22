@@ -2,7 +2,7 @@
 //
 // One thing, and it is a signal rather than a call: the Documentation surfaces re-read when a project is created,
 // edited or removed. Everything else this module does with a project it does by command (`temcoProjects.openProject`,
-// `temcoProjects.newProject`, and `temcoDocs.section.projects.focus` to show the list) — a row opens a page, and
+// `temcoProjects.newProject`, and `temcoProjects.projects.focus` to show the list) — a row opens a page, and
 // opening a page is the projects module's own command.
 //
 // The projects module is a declared dependency, so it is activated before this module's entry runs.

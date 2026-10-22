@@ -9,6 +9,7 @@
 
 import * as vscode from 'vscode';
 import { ProjectFlowPage } from './projectFlow';
+import { ProjectList } from './projectList';
 import { ProjectPage } from './projectPage';
 import { AddSourcePage } from './sourceFlow';
 import { Catalog, CatalogUnavailable, Selection, slugOf } from './store';
@@ -31,6 +32,17 @@ export function registerProjectCommands(
   // Add Source is the mock's `flow/add-source`: three steps, and the same store call the dialog made.
   const source = new AddSourcePage(context);
   context.subscriptions.push(source);
+
+  // The Dashboard's list of projects. A row opens the pages; the two inline actions are on the row's context menu.
+  const list = new ProjectList(context);
+  context.subscriptions.push(
+    vscode.window.createTreeView('temcoProjects.projects', { treeDataProvider: list }),
+    vscode.commands.registerCommand('temcoProjects.showProject', async () => {
+      // The Project section is the documentation module's view: ask that panel forward, then that view.
+      await vscode.commands.executeCommand('workbench.view.extension.temco.focus');
+      await vscode.commands.executeCommand('temcoDocs.project.focus');
+    })
+  );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('temcoProjects.newProject', () => void flow.open()),
