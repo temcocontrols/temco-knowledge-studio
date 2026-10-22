@@ -24,7 +24,6 @@ const EXTENSION_PREFIX = 'workbench.view.extension.';
 const ORDER = [
 	'temcoDashboard',
 	'temco',
-	'temcoDocsTree',
 	'temcoRepos',
 	'temcoAiHub',
 	'temcoLearn',

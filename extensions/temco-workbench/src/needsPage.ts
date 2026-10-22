@@ -259,7 +259,7 @@ export class NeedsPage {
 	</div>
 	<div class="page-head__actions">
 		<button type="button" class="btn btn--primary" data-command="temcoDocs.stalenessReport"><span>Documentation Owed</span></button>
-		<button type="button" class="btn" data-command="temcoDocs.section.projects.focus"><span>Projects</span></button>
+		<button type="button" class="btn" data-command="temcoProjects.projects.focus"><span>Projects</span></button>
 	</div>
 </div>
 

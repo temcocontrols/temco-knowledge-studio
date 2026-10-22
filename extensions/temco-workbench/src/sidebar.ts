@@ -35,17 +35,17 @@ interface Group {
 const GROUPS: Group[] = [
 	{
 		id: 'temcoWorkbench.platformView',
-		title: 'Platform',
+		title: 'Overview',
 		rows: [
 			{ label: 'Overview', note: 'what the platform holds, in one screen', icon: 'home', command: 'temcoWorkbench.overview' },
-			{ label: 'Recent Activity', note: 'everything every module recorded', icon: 'history', command: 'temcoWorkbench.activity' }
+			{ label: 'Needs Review', note: 'what wants a person, said in full', icon: 'warning', command: 'temcoWorkbench.openNeeds', countKey: 'needs' }
 		]
 	},
 	{
-		id: 'temcoWorkbench.needsWorkView',
-		title: 'Needs Work',
+		id: 'temcoWorkbench.activityView',
+		title: 'Recent activity',
 		rows: [
-			{ label: 'Needs Review', note: 'what wants a person, said in full', icon: 'warning', command: 'temcoWorkbench.openNeeds', countKey: 'needs' }
+			{ label: 'Recent Activity', note: 'everything every module recorded, newest first', icon: 'history', command: 'temcoWorkbench.activity' }
 		]
 	},
 	{

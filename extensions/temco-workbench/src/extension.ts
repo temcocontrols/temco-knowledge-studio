@@ -145,7 +145,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		selection.onDidChange(async () => {
 			if (started) {
 				await vscode.commands.executeCommand(
-					selection.project() === undefined ? 'temcoDocs.section.projects.focus' : 'temcoDocs.pages.focus'
+					selection.project() === undefined ? 'temcoProjects.projects.focus' : 'temcoDocs.pages.focus'
 				);
 			}
 		})

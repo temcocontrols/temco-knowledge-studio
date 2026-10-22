@@ -36,18 +36,18 @@
     "onView:temcoWorkbench.helpLearn",
     "onView:temcoWorkbench.helpSupport",
     "onView:temcoWorkbench.platformView",
-    "onView:temcoWorkbench.needsWorkView"
+    "onView:temcoWorkbench.activityView"
   ],
   "contributes": {
     "views": {
       "temcoDashboard": [
         {
           "id": "temcoWorkbench.platformView",
-          "name": "Platform"
+          "name": "Overview"
         },
         {
-          "id": "temcoWorkbench.needsWorkView",
-          "name": "Needs Work"
+          "id": "temcoWorkbench.activityView",
+          "name": "Recent activity"
         }
       ],
       "temcoLearn": [
