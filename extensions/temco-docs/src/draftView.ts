@@ -50,7 +50,22 @@ export class DraftView implements vscode.WebviewViewProvider {
 		}
 		const page = this.deps.page();
 		view.description = page?.title;
-		view.webview.html = html(page, page === undefined ? [] : await waiting(this.context, page));
+		const start = page === undefined ? false : await isBlank(page);
+		view.webview.html = html(page, page === undefined ? [] : await waiting(this.context, page), start);
+	}
+}
+
+/** Whether the page has nothing but its headings — the state a page is in the moment it is created. */
+async function isBlank(page: PageEntry): Promise<boolean> {
+	try {
+		const text = Buffer.from(await vscode.workspace.fs.readFile(page.uri)).toString('utf8');
+		const prose = text
+			.split(/\r?\n/)
+			.filter((line) => line.trim().length > 0 && !line.trim().startsWith('#'))
+			.join('');
+		return prose.length === 0;
+	} catch {
+		return false;
 	}
 }
 
@@ -72,10 +87,19 @@ async function waiting(context: vscode.ExtensionContext, page: PageEntry): Promi
 	}
 }
 
-function html(page: PageEntry | undefined, drafts: readonly DraftRow[]): string {
+function html(page: PageEntry | undefined, drafts: readonly DraftRow[], start: boolean): string {
 	const body = page === undefined
 		? `<p class="note">No page is in front. Open one from <b>Pages</b> and its draft panel appears here.</p>`
 		: `<div class="head"><div class="title">${esc(page.title)}</div><div class="note">${esc(page.id)}</div></div>
+${start ? `<div class="label">Start it</div>
+<p class="note">The page has its title and its headings. Three ways in:</p>
+<div class="row">
+  <button data-command="temcoDocs.captureImage">Capture a screen</button>
+  <button class="ghost" data-command="temcoDocs.chooseImage">Insert an image…</button>
+</div>
+<div class="row">
+  <button data-command="temcoDocs.revisePage" data-args="${esc(JSON.stringify([{ id: page.id, title: page.title }]))}">Draft it from a source</button>
+</div>` : ''}
 <p class="note">Draft from this page’s history, a source file, or another page. The model reads the page as it
 stands, and nothing is written until you apply the result.</p>
 <div class="row">

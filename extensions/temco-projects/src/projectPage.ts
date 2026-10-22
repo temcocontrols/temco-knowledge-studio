@@ -12,6 +12,7 @@
 // means a schema migration, and a project is what that row is.
 
 import * as vscode from 'vscode';
+import { discardWorkFolder, folderConsequence, workFolderOf } from './removal';
 import { Catalog, CatalogUnavailable, DocumentDetail, Selection, slugOf } from './store';
 import { PROJECT_VIEW_TYPE } from './surface';
 import { ORIGINS, TARGETS } from './projectFlow';
@@ -250,8 +251,16 @@ export class ProjectPage {
   }
 
   private async remove(): Promise<void> {
+    // The folder is named before anything goes: it is the part of this act that is not recoverable from the catalog.
+    const workFolder = await workFolderOf(this.slug);
     const answer = await vscode.window.showWarningMessage(
-      'Remove this project from the Library? Its sources are kept; the project and its artifacts are not.',
+      [
+        'Remove this project from the Library? Its sources stay in the catalog — they are shared — and no origin ' +
+        'is touched.',
+        folderConsequence(workFolder),
+      ]
+        .filter((line) => line.length > 0)
+        .join('\n'),
       { modal: true },
       'Remove'
     );
@@ -262,13 +271,18 @@ export class ProjectPage {
     if (!ok) {
       return;
     }
+    // The row is gone, so the folder is what is left of the project — its clones and what we made from them.
+    const discarded = await discardWorkFolder(this.slug, workFolder);
     // Its own page goes (this one), the projects page comes back: nothing is left pointing at a project that
     // is no longer there.
     const slug = this.slug;
     this.panel?.dispose();
     this.refresh(slug);
     await focusLibrary();
-    void vscode.window.showInformationMessage('Temco Projects: the project is removed.');
+    void vscode.window.showInformationMessage(
+      'Temco Projects: the project is removed' +
+      (discarded && workFolder !== undefined ? `, and ${workFolder.folder} is deleted.` : '.')
+    );
   }
 
   /** One drafted page of this project, by the id the page posted — never a body typed into a message. */

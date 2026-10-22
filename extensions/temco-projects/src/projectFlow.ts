@@ -39,7 +39,7 @@ export interface PinnedRepository {
 }
 
 /** What the flow offers when it opens. The mock's defaults, over whatever sources the catalog has. */
-const DEFAULTS = { name: 'T3000 Documentation', version: '13.0', folder: '~/Temco' };
+const DEFAULTS = { name: 'Test1', version: '1.0', folder: '~/Temco' };
 
 /** What a project can build. One build produces every one of them, so they are ticks, not a choice. */
 export const TARGETS = [
@@ -430,6 +430,11 @@ export class ProjectFlowPage {
 		}
 
 		// A project you have just made is the one you are working on: it is what the Workspace view and the AI read.
+		// A project with no source has no folder to write a page into either, so one is made for it first — under the
+		// working folder, with the smallest registry the generator accepts, and cited to the project.
+		if (cited.length === 0) {
+			await vscode.commands.executeCommand('temcoDocs.createProjectFolder', slug, name);
+		}
 		await this.selection.select(slug);
 		this.refresh();
 		this.panel?.dispose();

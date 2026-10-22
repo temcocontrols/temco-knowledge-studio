@@ -11,6 +11,7 @@ import * as vscode from 'vscode';
 import { ProjectFlowPage } from './projectFlow';
 import { ProjectList } from './projectList';
 import { ProjectPage } from './projectPage';
+import { discardWorkFolder, folderConsequence, workFolderOf } from './removal';
 import { AddSourcePage } from './sourceFlow';
 import { Catalog, CatalogUnavailable, Selection, slugOf } from './store';
 import { focusLibrary, rowSlug } from './ui';
@@ -25,21 +26,32 @@ export function registerProjectCommands(
   selection: Selection,
   refresh: () => void
 ): void {
-  const page = new ProjectPage(context, selection, () => refresh());
+  // The Dashboard's list of projects. A row opens the page; the two inline actions are on the row's context menu.
+  const list = new ProjectList(context);
+  /**
+   * One redraw for every surface this module owns: its own signal — which the documentation panel listens to — and
+   * the list it draws itself. A project created, edited or removed has to leave both, or the Dashboard keeps a row
+   * for a project that no longer exists.
+   */
+  const redraw = (): void => {
+    refresh();
+    list.refresh();
+  };
+
+  const page = new ProjectPage(context, selection, redraw);
   // New Project is the mock's `flow/new-project`: a wizard rather than the edit form opened empty.
-  const flow = new ProjectFlowPage(context, selection, () => refresh());
+  const flow = new ProjectFlowPage(context, selection, redraw);
   context.subscriptions.push(flow);
   // Add Source is the mock's `flow/add-source`: three steps, and the same store call the dialog made.
   const source = new AddSourcePage(context);
   context.subscriptions.push(source);
 
-  // The Dashboard's list of projects. A row opens the pages; the two inline actions are on the row's context menu.
-  const list = new ProjectList(context);
   context.subscriptions.push(
     vscode.window.createTreeView('temcoProjects.projects', { treeDataProvider: list }),
     vscode.commands.registerCommand('temcoProjects.showProject', async () => {
-      // The Project section is the documentation module's view: ask that panel forward, then that view.
-      await vscode.commands.executeCommand('workbench.view.extension.temco.focus');
+      // Focusing the view is what brings its panel forward — VS Code registers `<viewId>.focus` for every
+      // contributed view and opens the container with it. Naming the container's own command would have to guess an
+      // id that no API promises, which is exactly what failed here.
       await vscode.commands.executeCommand('temcoDocs.project.focus');
     })
   );
@@ -63,7 +75,7 @@ export function registerProjectCommands(
       void flow.cite(Array.isArray(names) ? names.filter((name): name is string => typeof name === 'string') : [])
     ),
     vscode.commands.registerCommand('temcoProjects.removeProject', (target?: ProjectArgument) =>
-      removeProject(context, selection, () => refresh(), rowSlug(target))
+      removeProject(context, selection, redraw, rowSlug(target))
     ),
     // Adding a source is the mock's own flow: kind, location, read. A source is recorded once and cited by any
     // number of projects, so the flow is about the source itself rather than about the project it is added to.
@@ -101,10 +113,13 @@ async function openDocuments(selection: Selection, slug: string): Promise<void> 
 }
 
 /**
- * Removes a project.
+ * Removes a project — and the folder it owns on this machine.
  *
- * Sources are kept: they are recorded once and cited by any number of projects, so forgetting one because the
- * project that used it has gone would quietly take a page away from every other project that cites it.
+ * Sources stay in the catalog: they are recorded once and cited by any number of projects, so forgetting one because
+ * the project that used it has gone would quietly take a page away from every other project that cites it. What *is*
+ * deleted is the project's own folder in the working area — the clones it fetched, what we made from them, and the
+ * `docs/` a blank project started with. The folder is named in the confirmation first, because that is the part of
+ * this act that cannot be undone from inside the application.
  */
 async function removeProject(
   context: vscode.ExtensionContext,
@@ -126,13 +141,18 @@ async function removeProject(
     return;
   }
 
+  const workFolder = await workFolderOf(chosen.slug);
   const answer = await vscode.window.showWarningMessage(
     `Remove “${chosen.name}”?`,
     {
       modal: true,
-      detail:
-        'The project, how it is built and the artifacts recorded against it are forgotten. Its sources are ' +
-        'kept, and nothing is changed or deleted at a source.',
+      detail: [
+        'The project, how it is built and the artifacts recorded against it are forgotten. Its sources stay in ' +
+        'the catalog — they are shared — and no origin is touched.',
+        folderConsequence(workFolder),
+      ]
+        .filter((line) => line.length > 0)
+        .join('\n'),
     },
     'Remove'
   );
@@ -152,12 +172,19 @@ async function removeProject(
     catalog?.close();
   }
 
+  // The row is gone, so the folder is what is left of the project. A folder that cannot be deleted is said out
+  // loud rather than swallowed: what the person then finds on their disk is a folder nothing names.
+  const discarded = await discardWorkFolder(chosen.slug, workFolder);
+
   // A project being worked on cannot be removed and still be what everything reads.
   if (selection.project() === chosen.slug) {
     await selection.select(undefined);
   }
   notify(chosen.slug);
-  void vscode.window.showInformationMessage(`Temco Projects: “${chosen.name}” is removed.`);
+  void vscode.window.showInformationMessage(
+    `Temco Projects: “${chosen.name}” is removed` +
+    (discarded && workFolder !== undefined ? `, and ${workFolder.folder} is deleted.` : '.')
+  );
   // Land where the removal happened, in the one useful sense: the list of what is left. The page about the
   // project that has just gone is not a page — it closes itself, and the Library takes its place.
   await focusLibrary();

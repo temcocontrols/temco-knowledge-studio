@@ -6,6 +6,7 @@
 // read, so the view can never answer about a folder nobody named. Nothing is written to a page without an
 // explicit command, and nothing is published from here at all.
 
+import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ai, aiInstalled } from './aiModule';
@@ -15,12 +16,13 @@ import { publishDiagnostics } from './diagnostics';
 import { registerFeedbackCommands } from './feedback';
 import { registerFormatCommands } from './format';
 import { registerImportCommand } from './importer';
+import { looseByRoot } from './loose';
 import { DocsPages } from './docsPages';
 import { DraftView } from './draftView';
 import { registerMediaCommands } from './media';
 import { NewPagePage } from './newPagePage';
 import { OverviewPage } from './overview';
-import { AREA_CHAPTER, KINDS, PageDeps, PageOperations, registerPageCommands, writePage } from './pageOps';
+import { AREA_CHAPTER, KINDS, PageDeps, PageOperations, registerPageCommands, sourceAt, writePage } from './pageOps';
 import { PageProperties } from './pageProperties';
 import { ProjectSection } from './projectSection';
 import { projects } from './projects';
@@ -145,6 +147,14 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     redraw: () => redraw(),
     selected: () => selectedRow(),
     newPagePage: (seed) => newPagePage?.open(seed),
+    // An act that makes a folder shows the folder: the row is read back from the panel itself, so the tree can
+    // expand whatever was hiding it and put the keyboard on it — a folder nobody can see is not a folder yet.
+    reveal: (place) => {
+      const node = provider.placeNode(place.rootUri, place.area, place.chapter);
+      if (node !== undefined) {
+        void treeView.reveal(node, { expand: true, select: true, focus: true }).then(undefined, () => undefined);
+      }
+    },
   };
   const pageOps = new PageOperations(pageDeps);
 
@@ -252,9 +262,15 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     })
   );
 
+  // Two reads can be in flight at once — a file event while the window is still coming up, one save firing two
+  // watchers, the workspace folders changing under a read that has already started. Each read builds its own answer
+  // and only the newest may publish it: an older read finishing late would put back the tree the newer one just
+  // replaced, and the two would repaint the same rows in turn.
+  let reads = 0;
   const refresh = async (): Promise<void> => {
+    const run = ++reads;
     const broken: BrokenRegistry[] = [];
-    roots = [];
+    const next: DocsRoot[] = [];
 
     // The catalog is read before anything else, for the two facts the rest of this depends on: **which project
     // is being worked on** — with exactly one recorded there is nothing to choose between, so it chooses itself
@@ -293,7 +309,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
       try {
         const root = await loadDocsRoot(folder);
         if (root) {
-          roots.push(root);
+          next.push(root);
         } else if (source !== undefined && source.pages.length > 0) {
           // A source with no registry is not a hole: what the read recorded is what the view shows.
           recorded.push(rootFromDeclared(source.name, source.pages));
@@ -305,14 +321,27 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
         });
       }
     }
-    roots.push(...recorded);
+    next.push(...recorded);
+
+    // One folder is one root. Two sources can point at the same place — a folder cited before and after it had a
+    // registry, and a path recorded with a separator it no longer has — and two roots draw the same tree twice.
+    // The key is the *resolved* place, so `…\test1` and `…\test1\` are one folder and not two.
+    const seenFolders = new Set<string>();
+    const unique = next.filter((root) => {
+      const key = rootKey(root);
+      if (seenFolders.has(key)) {
+        return false;
+      }
+      seenFolders.add(key);
+      return true;
+    });
 
     // Why the list is empty, said *in* the list, so the view is never a blank pane and the row carries the one
     // act that fills it. `viewsWelcome` was tried first and dropped: its `when` clause is resolved at the view's
     // first paint, which is before the refresh has read anything, so it kept saying "nothing recorded yet" over a
     // catalog that had five projects in it.
     const notes: TreeNote[] = [];
-    if (roots.length === 0) {
+    if (unique.length === 0) {
       notes.push(
         selected !== undefined
           ? {
@@ -323,7 +352,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
           : (projects ?? 0) > 0
             ? {
               label: 'No project is being worked on',
-              detail: 'choose one in the Library',
+              detail: 'choose one on the Dashboard',
               command: { command: 'temcoProjects.projects.focus' },
             }
             : {
@@ -337,12 +366,17 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
       notes.push({ label: 'A source could not be read', detail: message });
     }
 
-    provider.setRoots(roots, notes);
+    const loose = await looseByRoot(unique);
+    // A newer read started while this one was reading: its answer is the one that counts, and this one is already old.
+    if (run !== reads) {
+      return;
+    }
+    roots = unique;
+    provider.setRoots(unique, notes, loose);
     sidebar.refresh();
     projectSection.refresh();
     queue.refresh();
     draftView.refresh();
-    queue.refresh();
     // The view says which project it is showing: it answers about a project, never about the window, and a view
     // that silently answers a different question is worse than an empty one.
     treeView.description = projectName
@@ -623,6 +657,11 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     ),
     // The queue as a page: the three kinds of work, each with the act that settles it.
     vscode.commands.registerCommand('temcoDocs.needsPage', () => docsPages.needsYou()),
+    // A new project with no source has nowhere to write: this makes the folder, the registry and the first area,
+    // then cites the folder to the project. Called by the project form, and never by hand.
+    vscode.commands.registerCommand('temcoDocs.createProjectFolder', async (slug?: unknown, name?: unknown) => {
+      await createProjectFolder(context, typeof slug === 'string' ? slug : undefined, typeof name === 'string' ? name : undefined);
+    }),
     vscode.commands.registerCommand('temcoDocs.repository', (name?: unknown) => docsPages.repository(typeof name === 'string' ? name : undefined)),
     vscode.commands.registerCommand('temcoDocs.documents', (area?: unknown) => docsPages.documents(typeof area === 'string' ? area : undefined)),
     // The side bar's project row, which is the mock's `tree-project`: *become* that project, then show the
@@ -855,6 +894,15 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     vscode.workspace.onDidChangeWorkspaceFolders(() => void refresh())
   );
 
+  // Explorer is where files are made and renamed — inline, natively, the way no extension tree can be. Its edits
+  // have to reach this panel without a reload: a folder created there is a loose row here, a page is a loose page,
+  // and a registry change is the generator's, which the watcher below already covers.
+  context.subscriptions.push(
+    vscode.workspace.onDidCreateFiles(() => void refresh()),
+    vscode.workspace.onDidRenameFiles(() => void refresh()),
+    vscode.workspace.onDidDeleteFiles(() => void refresh())
+  );
+
   // Three files change what the view shows: the registry — the shape of the tree — and the two generated
   // neighbours, which carry the provenance and headings the items display. Everything else, including
   // saving a page, does not refresh: the tree describes structure, not prose.
@@ -1016,11 +1064,11 @@ async function projectSources(
     if (!detail) {
       return { name: slug, sources: [], missing: true };
     }
-    const cited = new Set(detail.sources.map((source) => source.name));
+    const cited = new Set(catalog.documentSourceSlugs(slug));
     const sources: ReadableSource[] = [];
 
     for (const row of catalog.sources()) {
-      if (!cited.has(row.name)) {
+      if (!cited.has(row.slug)) {
         continue;
       }
       const source = catalog.source(row.slug);
@@ -1137,6 +1185,90 @@ async function draftMaterial(page: PageEntry, root: DocsRoot | undefined, curren
   return `# ${page.title}\n\nWhat has changed: ${note}\n\n${parts.join('\n\n---\n\n')}`;
 }
 
+/**
+ * Where a project's own documentation lives.
+ *
+ * The working folder the Settings page offers, then the open folder, then `~/Temco` — the same order a person would
+ * answer "where should this go?" in. Nothing is created outside it.
+ */
+function workingFolder(): string {
+  const configured = vscode.workspace.getConfiguration('temcoWorkbench').get<string>('workingFolder');
+  if (typeof configured === 'string' && configured.trim().length > 0) {
+    return configured.trim();
+  }
+  return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? path.join(os.homedir(), 'Temco');
+}
+
+/**
+ * The folder a project with no source writes into: `<working folder>/<slug>/docs`, one area, and the smallest
+ * registry the generator accepts — then cited as the project's source.
+ *
+ * This is what makes "create a project" end somewhere: without it the first folder or page had no parent, and every
+ * one of those commands ended in a message about a missing source.
+ */
+async function createProjectFolder(
+  context: vscode.ExtensionContext,
+  slug: string | undefined,
+  name: string | undefined
+): Promise<void> {
+  if (slug === undefined || name === undefined) {
+    return;
+  }
+  const base = path.join(workingFolder(), slug);
+  const area = slugOf(name) || 'docs';
+  const registry = vscode.Uri.file(path.join(base, 'docs', 'help', 'registry.json'));
+  try {
+    await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.join(base, 'docs', 'help')));
+    await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.join(base, 'docs', area)));
+    if (!(await fileExists(registry))) {
+      const minimal = { version: 1, areas: { [area]: { title: name } }, pages: {} };
+      await vscode.workspace.fs.writeFile(registry, Buffer.from(`${JSON.stringify(minimal, null, 2)}\n`, 'utf8'));
+    }
+  } catch (error) {
+    void vscode.window.showErrorMessage(
+      `Temco Docs: the documentation folder for ${name} could not be created in ${base} — ` +
+      `${error instanceof Error ? error.message : String(error)}`
+    );
+    return;
+  }
+
+  let catalog: Catalog | undefined;
+  try {
+    catalog = await Catalog.open(context);
+    const sourceName = `${name} docs`;
+    const existing = sourceAt(catalog, base);
+    const sourceSlug = existing ?? slugOf(sourceName);
+    if (existing === undefined) {
+      try {
+        catalog.addSource({ kind: 'folder', name: sourceName, slug: sourceSlug, path: base, docsRoot: 'docs' });
+      } catch {
+        // The row is already recorded — citing it is what this call is for.
+      }
+    }
+    catalog.attachSource(slug, sourceSlug);
+  } catch (error) {
+    void vscode.window.showWarningMessage(
+      `Temco Docs: ${base} was created, but it could not be cited to the project — ` +
+      `${error instanceof Error ? error.message : String(error)}`
+    );
+    return;
+  } finally {
+    catalog?.close();
+  }
+  await vscode.commands.executeCommand('temcoDocs.refresh');
+
+  // The folder joins the workspace, so **Explorer** shows the documentation itself: New File, New Folder, inline
+  // rename and drag, all native. This panel keeps the meaning — registered or not, stale, reviewed — and the two
+  // read the same files.
+  const folderUri = vscode.Uri.file(base);
+  const known = vscode.workspace.workspaceFolders?.some(
+    (folder) => folder.uri.fsPath.toLowerCase() === base.toLowerCase()
+  );
+  if (known !== true) {
+    vscode.workspace.updateWorkspaceFolders(vscode.workspace.workspaceFolders?.length ?? 0, 0, { uri: folderUri });
+  }
+}
+
 /** A new page starts as a title and nothing else — the structure lives in the registry, not in front matter. */
 async function createPage(uri: vscode.Uri, title: string): Promise<void> {
   const content = Buffer.from(`# ${title}\n\n`, 'utf8');
@@ -1151,6 +1283,20 @@ function rootOf(node: DocsNode | undefined, roots: readonly DocsRoot[]): DocsRoo
     return candidate.root;
   }
   return roots[0];
+}
+
+/**
+ * What makes two roots the same root: the place, not the label.
+ *
+ * Two sources can name one folder, and one name can sit over two places — so a root is keyed by where it is. A
+ * `file` root is resolved, which is what makes `…\test1` and `…\test1\` one key; anything else (a source read over
+ * the API, which has no folder on this machine) is keyed by its scheme and title, so it can never collide with a
+ * folder that happens to share its name.
+ */
+function rootKey(root: DocsRoot): string {
+  const uri = root.folder.uri;
+  const place = uri.scheme === 'file' ? path.resolve(uri.fsPath) : `${uri.scheme}:${uri.path}`;
+  return place.replace(/[\\/]+$/, '').toLowerCase();
 }
 
 function updateStatus(

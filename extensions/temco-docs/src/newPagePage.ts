@@ -170,7 +170,9 @@ export class NewPagePage {
         await this.download(message.source ?? '');
         return;
       case 'cite':
-        await vscode.commands.executeCommand('temcoRepositories.page');
+        // A project with no source is one *source* short, not one page short: the source flow is the act that
+        // fills the form, and it is what the dead end should open.
+        await vscode.commands.executeCommand('temcoProjects.addSource');
         return;
       default:
         return;
@@ -1045,8 +1047,8 @@ const CLIENT = `
 					esc(missing[0]) + '</b> — the page is written there.</div></div>' +
 					'<div class="row mt-16"><button type="button" class="btn btn--primary" id="download-copy">Download a local copy</button></div>'
 				: '<div class="callout callout--warn"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><use href="#i-alert"></use></svg>' +
-					'<div>This project cites no source yet, so there is nowhere to write a page. Cite one on the repositories page, then come back.</div></div>' +
-					'<div class="row mt-16"><button type="button" class="btn btn--primary" id="cite-source">Cite a source</button></div>';
+					'<div>This project cites no source yet, so there is nowhere to write a page. Add a source folder (or a repository) and this form fills in.</div></div>' +
+					'<div class="row mt-16"><button type="button" class="btn btn--primary" id="cite-source">Add a Source</button></div>';
 			const download = $('download-copy');
 			if (download) { download.addEventListener('click', function () { api.postMessage({ type: 'download', source: missing[0] }); }); }
 			const cite = $('cite-source');

@@ -34,6 +34,8 @@ export interface RegistryChange {
   to: unknown;
   /** True when the change added the whole entry rather than one field of it. */
   entry?: boolean;
+  /** True when the change took the whole entry away — the page's file is gone with it. */
+  removed?: boolean;
 }
 
 function isEntry(value: unknown): value is RegistryEntry {
@@ -122,6 +124,24 @@ export class RegistryEdit {
     return true;
   }
 
+  /**
+   * Takes an entry away, for the one case where the page itself is gone.
+   *
+   * Removal and retirement are different acts and this is the blunt one: a retired page keeps its address (the
+   * redirect is generated from the registry), while an entry that is removed — like the file it names — leaves
+   * nothing behind. It is here because a deleted page whose entry stayed would be a page that cannot exist.
+   */
+  remove(id: string): boolean {
+    const pages = this.pages();
+    const entry = pages?.[id];
+    if (pages === undefined || entry === undefined) {
+      return false;
+    }
+    delete pages[id];
+    this.changes.push({ id, field: '(entry)', from: entry, to: undefined, entry: true, removed: true });
+    return true;
+  }
+
   get changed(): readonly RegistryChange[] {
     return this.changes;
   }
@@ -180,7 +200,7 @@ export class RegistryEdit {
 /** Names a change the way a person reads it: `pages["a/b"].order 20 → 30`, or `pages["a/b"] (new entry)`. */
 export function describeChange(change: RegistryChange): string {
   if (change.entry === true) {
-    return `pages["${change.id}"]  (new entry)`;
+    return `pages["${change.id}"]  ${change.removed === true ? '(entry removed)' : '(new entry)'}`;
   }
   const from = change.from === undefined ? '(not set)' : JSON.stringify(change.from);
   return `pages["${change.id}"].${change.field}  ${from} → ${JSON.stringify(change.to)}`;

@@ -16,3 +16,4 @@ import './branding/temco.about.js';
 import './menus/temco.menus.js';
 import './startup/temco.startup.js';
 import './startup/temco.activitybar.js';
+import './startup/temco.layout.js';

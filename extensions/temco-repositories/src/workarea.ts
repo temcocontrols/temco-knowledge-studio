@@ -90,7 +90,15 @@ export function registerWorkareaCommands(
     vscode.commands.registerCommand('temcoRepositories.changeWorkspaceFolder', () =>
       vscode.commands.executeCommand('temcoRepositories.pickWorkspaceFolder')
     ),
-    vscode.commands.registerCommand('temcoRepositories.openWorkFolder', () => openProjectFolder(selection))
+    vscode.commands.registerCommand('temcoRepositories.openWorkFolder', () => openProjectFolder(selection)),
+    // For other modules — a project owns a folder, so removing the project removes the folder with it. The two are
+    // separate calls because the act that removes a project asks what it is about to delete *before* it deletes it.
+    vscode.commands.registerCommand('temcoRepositories.projectWorkFolder', (target?: unknown) =>
+      projectWorkFolder(selection, slugOfTarget(target))
+    ),
+    vscode.commands.registerCommand('temcoRepositories.deleteProjectFolder', (target?: unknown) =>
+      deleteProjectFolder(context, selection, refresh, slugOfTarget(target))
+    )
   );
 }
 
@@ -355,6 +363,82 @@ async function openProjectFolder(selection: Selection): Promise<void> {
   const folder = projectFolder(project);
   await fs.mkdir(folder, { recursive: true });
   await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(folder));
+}
+
+/**
+ * The folder a project owns, and whether it is there — nothing is made and nothing is deleted.
+ *
+ * This is the half another module asks for before it removes a project, so the confirmation can name the folder a
+ * person is about to lose instead of saying "its files" and leaving them to guess where those are.
+ */
+async function projectWorkFolder(
+  selection: Selection,
+  wanted?: string
+): Promise<{ folder: string; exists: boolean } | undefined> {
+  const project = wanted ?? selection.project();
+  if (project === undefined) {
+    return undefined;
+  }
+  const folder = projectFolder(project);
+  return { folder, exists: await isThere(folder) };
+}
+
+/**
+ * Deleting a project deletes the folder it owns: its clones and what we made from them.
+ *
+ * Two kinds of recorded source lived in that folder, and each is dealt with as what it is. A **clone** is what a
+ * source with an origin has instead of a copy we made: the source stays in the catalog and its path is cleared, so it
+ * is read over the API again — exactly what removing one copy on its own means. A **folder** source is nothing *but*
+ * its path (it is how a project's own `docs/` is cited), so a folder source whose folder has just been deleted is
+ * removed with it rather than left standing over nothing. No origin is ever touched: this deletes copies we own.
+ */
+async function deleteProjectFolder(
+  context: vscode.ExtensionContext,
+  selection: Selection,
+  refresh: () => void,
+  wanted?: string
+): Promise<boolean> {
+  const project = wanted ?? selection.project();
+  if (project === undefined) {
+    return false;
+  }
+  const folder = projectFolder(project);
+  if (!(await isThere(folder))) {
+    return false;
+  }
+
+  await fs.rm(folder, { recursive: true, force: true });
+  await withCatalog(context, (catalog) => {
+    for (const row of catalog.sources()) {
+      const detail = catalog.source(row.slug);
+      if (detail?.path === undefined || !isInside(detail.path, folder)) {
+        continue;
+      }
+      if (detail.kind === 'folder') {
+        catalog.removeSource(row.slug);
+      } else {
+        catalog.setSourcePath(row.slug, undefined);
+      }
+    }
+  });
+  refresh();
+  return true;
+}
+
+/** Whether a folder is really there. */
+async function isThere(folder: string): Promise<boolean> {
+  try {
+    await fs.stat(folder);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether a recorded path is inside a folder — a clone that lived in a project's own folder. */
+function isInside(file: string, folder: string): boolean {
+  const parent = `${path.resolve(folder)}${path.sep}`;
+  return path.resolve(file).toLowerCase().startsWith(parent.toLowerCase());
 }
 
 // ------------------------------------------------------------------ helpers

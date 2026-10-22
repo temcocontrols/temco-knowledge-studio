@@ -29,6 +29,8 @@ The organisation and the local copies of it: the repository list, the working ar
 
 `temcoRepositories.page` · `readSource` · `readAllSources` · `removeSource` · `revealSource` · `setSourceBranch` · `openFile` · `setToken` · `fetchSource` · `pullSource` · `openClone` · `removeClone` · `changeWorkspaceFolder` · `openWorkFolder` — the working area and reading, each with its own command rather than a mode.
 
+Two of those are for other modules rather than for the palette, and are deliberately not declared: `projectWorkFolder` answers where a project's folder is and whether it exists, and `deleteProjectFolder` deletes it. `temco-projects` asks both when a project is removed, so the confirmation can name the folder before it goes — the working area is this module's, and the project row is that one's.
+
 ## Boundary rules
 
 - **Nothing is written to a repository, and nothing is ever pushed.** Every write this module makes is to the catalog; git is used for `clone` and `pull --ff-only` and for reading history, and never for a change to a tracked file.

@@ -49,19 +49,26 @@
       "temco": [
         {
           "id": "temcoDocs.pages",
-          "name": "Pages"
+          "name": "Pages",
+          "initialSize": 3
         },
         {
           "id": "temcoDocs.project",
-          "name": "Project"
+          "name": "Project",
+          "initialSize": 1,
+          "visibility": "collapsed"
         },
         {
           "id": "temcoDocs.section.pipeline",
-          "name": "Pipeline"
+          "name": "Pipeline",
+          "initialSize": 1,
+          "visibility": "collapsed"
         },
         {
           "id": "temcoDocs.section.working",
-          "name": "Working Set"
+          "name": "Working Set",
+          "initialSize": 1,
+          "visibility": "collapsed"
         }
       ],
       "temcoDraft": [
@@ -87,6 +94,11 @@
         "command": "temcoDocs.needsPage",
         "title": "Open Needs You",
         "icon": "$(tasklist)"
+      },
+      {
+        "command": "temcoDocs.createProjectFolder",
+        "title": "Create the Project's Documentation Folder",
+        "icon": "$(new-folder)"
       },
       {
         "command": "temcoDocs.repository",
@@ -353,8 +365,30 @@
       },
       {
         "command": "temcoDocs.newChapter",
-        "title": "New Chapter",
+        "title": "New Folder…",
         "icon": "$(new-folder)"
+      },
+      {
+        "command": "temcoDocs.rename",
+        "title": "Rename…",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "temcoDocs.delete",
+        "title": "Delete",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "temcoDocs.cut",
+        "title": "Cut"
+      },
+      {
+        "command": "temcoDocs.copy",
+        "title": "Copy"
+      },
+      {
+        "command": "temcoDocs.paste",
+        "title": "Paste"
       },
       {
         "command": "temcoDocs.newPage.article",
@@ -380,11 +414,6 @@
         "command": "temcoDocs.renamePage",
         "title": "Rename the Page Title",
         "icon": "$(edit)"
-      },
-      {
-        "command": "temcoDocs.renameFile",
-        "title": "Rename the File…",
-        "icon": "$(file)"
       },
       {
         "command": "temcoDocs.movePageUp",
@@ -434,7 +463,7 @@
         "when": "editorLangId == markdown"
       },
       {
-        "command": "temcoDocs.renameFile",
+        "command": "temcoDocs.rename",
         "key": "f2",
         "when": "focusedView == temcoDocs.pages"
       },
@@ -442,6 +471,30 @@
         "command": "temcoDocs.renamePage",
         "key": "shift+f2",
         "when": "focusedView == temcoDocs.pages"
+      },
+      {
+        "command": "temcoDocs.delete",
+        "key": "delete",
+        "mac": "cmd+backspace",
+        "when": "focusedView == temcoDocs.pages && listFocus && !inputFocus"
+      },
+      {
+        "command": "temcoDocs.cut",
+        "key": "ctrl+x",
+        "mac": "cmd+x",
+        "when": "focusedView == temcoDocs.pages && listFocus && !inputFocus"
+      },
+      {
+        "command": "temcoDocs.copy",
+        "key": "ctrl+c",
+        "mac": "cmd+c",
+        "when": "focusedView == temcoDocs.pages && listFocus && !inputFocus"
+      },
+      {
+        "command": "temcoDocs.paste",
+        "key": "ctrl+v",
+        "mac": "cmd+v",
+        "when": "focusedView == temcoDocs.pages && listFocus && !inputFocus && temcoDocs.hasClipboard"
       }
     ],
     "submenus": [
@@ -731,72 +784,92 @@
         },
         {
           "command": "temcoDocs.newPage",
-          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter)$/",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|looseChapter)$/",
           "group": "1_new@1"
         },
         {
           "command": "temcoDocs.newChapter",
-          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter)$/",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|looseChapter)$/",
           "group": "1_new@2"
         },
         {
           "submenu": "temcoDocs.pageKinds",
-          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter)$/",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|looseChapter)$/",
           "group": "1_new@3"
         },
         {
           "command": "temcoDocs.openPage",
-          "when": "view == temcoDocs.pages && viewItem =~ /^(page|missingPage)$/",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(page|missingPage|loosePage)$/",
           "group": "1_open@1"
         },
         {
           "command": "temcoDocs.reveal",
-          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|page|missingPage)$/",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|page|missingPage|looseChapter|loosePage)$/",
           "group": "2_show@1"
         },
         {
           "command": "temcoDocs.openTerminal",
-          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|page|missingPage)$/",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|page|missingPage|looseChapter|loosePage)$/",
           "group": "2_show@2"
         },
         {
           "command": "temcoDocs.copyPath",
-          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|page|missingPage)$/",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|page|missingPage|looseChapter|loosePage)$/",
           "group": "2_show@3"
         },
         {
           "command": "temcoDocs.copyRelativePath",
-          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|page|missingPage)$/",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|page|missingPage|looseChapter|loosePage)$/",
           "group": "2_show@4"
         },
         {
-          "command": "temcoDocs.renameFile",
-          "when": "view == temcoDocs.pages && viewItem =~ /^(page|missingPage)$/",
-          "group": "3_edit@0"
-        },
-        {
-          "command": "temcoDocs.renamePage",
-          "when": "view == temcoDocs.pages && viewItem =~ /^(page|missingPage)$/",
+          "command": "temcoDocs.cut",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(page|loosePage|chapter|looseChapter)$/",
           "group": "3_edit@1"
         },
         {
-          "command": "temcoDocs.movePageUp",
-          "when": "view == temcoDocs.pages && viewItem =~ /^(page|missingPage)$/",
+          "command": "temcoDocs.copy",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(page|loosePage|chapter|looseChapter)$/",
           "group": "3_edit@2"
         },
         {
-          "command": "temcoDocs.movePageDown",
-          "when": "view == temcoDocs.pages && viewItem =~ /^(page|missingPage)$/",
+          "command": "temcoDocs.paste",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(page|loosePage|chapter|looseChapter|area)$/ && temcoDocs.hasClipboard",
           "group": "3_edit@3"
         },
         {
+          "command": "temcoDocs.rename",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(page|loosePage|chapter|looseChapter)$/",
+          "group": "3_edit@4"
+        },
+        {
+          "command": "temcoDocs.renamePage",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(page|missingPage|loosePage)$/",
+          "group": "3_edit@5"
+        },
+        {
+          "command": "temcoDocs.movePageUp",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(page|missingPage|loosePage)$/",
+          "group": "3_edit@6"
+        },
+        {
+          "command": "temcoDocs.movePageDown",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(page|missingPage|loosePage)$/",
+          "group": "3_edit@7"
+        },
+        {
           "command": "temcoDocs.retirePage",
-          "when": "view == temcoDocs.pages && viewItem =~ /^(page|missingPage)$/",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(page|missingPage|loosePage)$/",
           "group": "4_retire@1"
         },
         {
+          "command": "temcoDocs.delete",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(page|missingPage|loosePage|chapter|looseChapter)$/",
+          "group": "5_delete@1"
+        },
+        {
           "command": "temcoDocs.openRegistry",
-          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|page|missingPage)$/",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|page|missingPage|looseChapter|loosePage)$/",
           "group": "9_registry@1"
         }
       ]

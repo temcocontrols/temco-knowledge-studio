@@ -10,29 +10,36 @@
 //     are the fields a person curated, the generator keeps them (`existing values win`), and each write names
 //     the value it replaces in the confirmation before it happens.
 //
-// Three things this deliberately never does.
+// Two things this deliberately never does.
 //
-// **It never renames or moves a file.** `05-content-and-registry.md` rule 1: no page is moved or renamed,
-// because the page id *is* the path and the app's routes, the MCP input and every inbound link are built on it.
-// A move is therefore a named act with an `aliases` entry, never a shortcut — and it is not built here yet.
+// **It never moves a page's file as a side effect.** `05-content-and-registry.md` rule 1: a page's id *is* its path,
+// and the app's routes, the MCP input and every inbound link are built on it. So a move is only ever a *named* act —
+// *Rename…*, a *Cut* pasted somewhere else — and every one of them writes the old id into the entry's `aliases` so
+// the old address keeps resolving. A drag inside the tree re-files a page by writing its `chapter` and leaves the file
+// where it is; only an explicit move pastes a file.
 //
 // **It never renumbers a chapter.** Placing a page between two others by rewriting every `order` in the chapter
 // is the generator's own job (it hands out 10, 20, 30… to whatever nobody curated); a two-page swap is what a
 // move means here, so the diff is two numbers.
 //
-// **It never deletes a page.** Retirement is a registry act — `deprecated` and the replacement — and the file
-// stays where it is so the generated redirect keeps old links working (`14-governance.md`, *Deprecation and retirement*).
+// *Delete* exists, and it is told apart from retirement in words every time it is offered: retirement is a registry
+// act — `deprecated` and the replacement — and the file stays where it is so the generated redirect keeps old links
+// working (`14-governance.md`, *Deprecation and retirement*).
 
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { runScript, scriptsIn } from './builds';
+import { ClipEntry, clipboard, setClipboard } from './clipboard';
 import { DocsRoot, PageEntry, ROOT_CHAPTER, collectPages, contentUri, fileExists } from './registry';
 import { RegistryEdit, describeChange } from './registryEdit';
+import { Catalog, slugOf } from './store';
 import { fileColumn } from './surface';
 import { DocsNode, pageFromNode } from './tree';
 
-/** The MIME a dragged page carries. One kind of thing can be dragged into a chapter: a page. */
+/** The MIME a dragged page carries: the page id. */
 const PAGE_MIME = 'application/vnd.code.tree.temcoDocs.page';
+/** The MIME a dragged folder carries: where it sits, because a folder is a place rather than a page. */
+const FOLDER_MIME = 'application/vnd.code.tree.temcoDocs.folder';
 
 export interface Kind {
   label: string;
@@ -75,6 +82,13 @@ export interface PageDeps {
    * module and the page do not depend on each other.
    */
   newPagePage: (seed: NewPageSeed) => void;
+  /**
+   * Put the panel on a row that was just made: expand whatever hides it, select it, and give it the keyboard.
+   *
+   * An act that writes a folder *has* to do this — the row appears under a folder the person may have collapsed, and
+   * a folder that exists and cannot be seen is indistinguishable from one that was never made.
+   */
+  reveal: (place: { rootUri: string; area: string; chapter: string }) => void;
 }
 
 /** Where a new page is going, in the names the form shows: the source, the area, the chapter and the kind. */
@@ -106,25 +120,49 @@ interface Place {
 }
 
 export class PageOperations implements vscode.TreeDragAndDropController<DocsNode> {
-  readonly dragMimeTypes = [PAGE_MIME];
-  readonly dropMimeTypes = [PAGE_MIME];
+  readonly dragMimeTypes = [PAGE_MIME, FOLDER_MIME];
+  readonly dropMimeTypes = [PAGE_MIME, FOLDER_MIME];
 
   constructor(private readonly deps: PageDeps) { }
 
   handleDrag(source: readonly DocsNode[], data: vscode.DataTransfer): void {
     const page = source.find((node) => node.kind === 'page');
-    if (page?.kind === 'page') {
+    if (page?.kind === 'page' && page.page.exists && page.root.origin !== 'catalog') {
       data.set(PAGE_MIME, new vscode.DataTransferItem(page.page.id));
+      return;
+    }
+    // A folder drags too, because moving one into another area is an ordinary act — and the only thing a folder
+    // needs carried is the place it sits in; its name is its own.
+    const folder = source.find((node) => node.kind === 'chapter' && node.root.origin !== 'catalog');
+    if (folder?.kind === 'chapter') {
+      data.set(
+        FOLDER_MIME,
+        new vscode.DataTransferItem(
+          JSON.stringify({
+            rootUri: folder.root.rootUri.toString(),
+            area: folder.area.area,
+            chapter: folder.chapter.chapter,
+          })
+        )
+      );
     }
   }
 
   /**
-   * Dropping a page on a chapter moves it there; dropping it on a page puts it in that page's place.
+   * Dropping a page on a chapter moves it there; dropping it on a page puts it in that page's place; dropping a folder
+   * on an area moves the folder into that area.
    *
-   * Both are registry writes, and both are confirmed first — the one place where dragging something in a tree
-   * changes a file in a product repository, so it says what it will write before it writes it.
+   * The page's own drop is a registry write and is confirmed first — the one place where dragging something in a tree
+   * changes a value in a product repository, so it says what it will write before it writes it. A folder moves on
+   * disk, which changes the id of every page inside it, and that is confirmed the same way.
    */
   async handleDrop(target: DocsNode | undefined, data: vscode.DataTransfer): Promise<void> {
+    const folderItem = data.get(FOLDER_MIME);
+    if (folderItem !== undefined) {
+      const carried = JSON.parse(await folderItem.asString()) as { rootUri: string; area: string; chapter: string };
+      await this.dropFolder(target, carried);
+      return;
+    }
     const item = data.get(PAGE_MIME);
     if (item === undefined || target === undefined) {
       return;
@@ -141,7 +179,6 @@ export class PageOperations implements vscode.TreeDragAndDropController<DocsNode
       );
       return;
     }
-
     const edit = await RegistryEdit.open(root.registryUri);
     if (!edit || edit.entry(page.id) === undefined) {
       void vscode.window.showInformationMessage(
@@ -157,11 +194,510 @@ export class PageOperations implements vscode.TreeDragAndDropController<DocsNode
     }
     const place = placeOf(target);
     if (!place) {
-      void vscode.window.showInformationMessage('Temco Docs: drop a page on a chapter, or on another page.');
+      void vscode.window.showInformationMessage('Temco Docs: drop a page on an area, a folder, or another page.');
       return;
     }
     await moveToChapter(this.deps, edit, page, place.area, place.chapter);
   }
+
+  /** A folder dropped on an area moves there — the same act *Cut* and *Paste* perform, with the folder as the row. */
+  private async dropFolder(
+    target: DocsNode | undefined,
+    carried: { rootUri: string; area: string; chapter: string }
+  ): Promise<void> {
+    const root = this.deps.roots().find((candidate) => candidate.rootUri.toString() === carried.rootUri);
+    if (root === undefined || target?.kind !== 'area' || target.root.rootUri.toString() !== carried.rootUri) {
+      void vscode.window.showInformationMessage('Temco Docs: drop a folder on an area — that is what a folder moves into.');
+      return;
+    }
+    if (target.area.area === carried.area) {
+      void vscode.window.showInformationMessage(
+        `Temco Docs: “${carried.chapter}” is already in ${target.area.title}.`
+      );
+      return;
+    }
+    await carryEntries(
+      this.deps,
+      root,
+      {
+        uri: contentUri(root.rootUri, carried.area, carried.chapter),
+        folder: true,
+        rootUri: carried.rootUri,
+      },
+      contentUri(root.rootUri, target.area.area),
+      true
+    );
+  }
+}
+
+/**
+ * A folder in the documentation tree, made the way Explorer makes one: a name, a directory, and a row at once.
+ *
+ * A chapter is a folder, and until now it arrived with its first page — which meant "add a folder" wrote prose
+ * nobody had asked for. The directory is made empty, the tree shows it on the next refresh as a **loose** row,
+ * and the pages put inside it are ordinary pages that the generator will register.
+ */
+/**
+ * A folder in the documentation tree, made the way Explorer makes one: it appears, then you name it.
+ *
+ * Explorer can put the new row straight into an edit field, because it owns its tree; an extension cannot — no API
+ * creates a row in edit mode. So the two halves are swapped: the folder is created **at once** with a name that is
+ * only a placeholder, the row is in the tree before the message closes, and naming it is F2 on that row (which
+ * prefills the current name, exactly what the old dialog did — only now it is optional and after the fact).
+ */
+async function createFolder(context: vscode.ExtensionContext, deps: PageDeps, node: DocsNode | undefined): Promise<void> {
+  const place = areaOf(node ?? deps.selected(), deps.roots()) ?? await citeAFolder(context, deps);
+  if (place === undefined) {
+    return;
+  }
+
+  // A name nobody typed still has to be unique: new-folder, new-folder-2, …
+  let suggestion = 'new-folder';
+  for (let suffix = 2; await fileExists(contentUri(place.root.rootUri, place.area, suggestion)) && suffix < 100; suffix++) {
+    suggestion = `new-folder-${suffix}`;
+  }
+
+  // The name comes first and the folder second. The title names the folder it goes **into**, because the panel is a
+  // tree of several folders and "a new one" is not an answer to where it went.
+  const typed = await vscode.window.showInputBox({
+    title: `New folder in “${place.area}”`,
+    prompt: 'A folder inside this area — what the generator calls a chapter. Pages are put in folders.',
+    value: suggestion,
+    valueSelection: [0, suggestion.length],
+    validateInput: (value) => nameProblem(value),
+  });
+  if (typed === undefined) {
+    return;
+  }
+  const name = typed.trim();
+  const folder = contentUri(place.root.rootUri, place.area, name);
+  if (await fileExists(folder)) {
+    void vscode.window.showWarningMessage(`Temco Docs: ${name} already exists in ${place.area}.`);
+    return;
+  }
+
+  await vscode.workspace.fs.createDirectory(folder);
+  // The read is awaited rather than fired: the reveal below is a promise about a row that only exists after it.
+  await vscode.commands.executeCommand('temcoDocs.refresh');
+  deps.reveal({ rootUri: place.root.folder.uri.toString(), area: place.area, chapter: name });
+}
+
+/**
+ * Removing a folder — the file system act, and the registry act that follows it.
+ *
+ * A folder the registry does not name is deleted and nothing else happens: no entry exists, so nothing has to be
+ * forgotten. A registered chapter is different — its pages have entries, and an entry whose file is gone is a page
+ * that cannot exist — so the source's own generator is run afterwards, or, in a source that has none, the entries
+ * are removed here one by one.
+ *
+ * The folder goes to the Recycle Bin rather than into nothing: this is the one act in this module that takes work
+ * away, so it asks first and it can be undone from outside.
+ */
+async function removeFolder(deps: PageDeps, node: DocsNode | undefined): Promise<void> {
+  const row = targeted(deps, node);
+  if (row?.kind !== 'chapter') {
+    void vscode.window.showInformationMessage(
+      'Temco Docs: this removes one folder — pick a folder inside an area in the Documentation panel first.'
+    );
+    return;
+  }
+  if (row.root.origin === 'catalog') {
+    void vscode.window.showInformationMessage(
+      `Temco Docs: “${row.chapter.chapter}” was read from a source that is not on this machine, so there is nothing here to remove.`
+    );
+    return;
+  }
+  const folder = contentUri(row.root.rootUri, row.area.area, row.chapter.chapter);
+  const files = await markdownUnder(folder);
+  const registered = row.loose ? 0 : row.chapter.pages.length;
+  const answer = await vscode.window.showWarningMessage(
+    `Remove the folder “${row.chapter.chapter}”?`,
+    {
+      modal: true,
+      detail: [
+        `${folder.fsPath} moves to the Recycle Bin, with ${files} page${files === 1 ? '' : 's'} in it.`,
+        registered > 0
+          ? `${registered} of those page${registered === 1 ? ' is' : 's are'} registered, and the registry is updated after it.`
+          : '',
+        'To keep a page reachable at its old address, retire it instead — a removed page leaves a link with nothing behind it.',
+      ].filter((line) => line.length > 0).join('\n'),
+    },
+    'Remove',
+    'Cancel'
+  );
+  if (answer !== 'Remove') {
+    return;
+  }
+
+  await vscode.workspace.fs.delete(folder, { recursive: true, useTrash: true });
+  if (registered > 0) {
+    if (scriptsIn([row.root]).has('docs:registry')) {
+      await runScript(deps.roots(), deps.output, 'docs:registry');
+    } else {
+      const edit = await RegistryEdit.open(row.root.registryUri);
+      if (edit !== undefined) {
+        let written = false;
+        for (const page of row.chapter.pages) {
+          written = edit.remove(page.id) || written;
+        }
+        if (written) {
+          await edit.save();
+        }
+      }
+    }
+  }
+  deps.redraw();
+}
+
+/**
+ * Removing a page — its file, and the entry that names it.
+ *
+ * Both halves go in one step, because a file without an entry is a file no tree lists, and an entry without a file is
+ * a page that cannot exist. The confirmation says the difference out loud: *Retire* is what keeps a page's address
+ * working, and removal is what does not.
+ */
+async function removeFile(deps: PageDeps, node: DocsNode | undefined): Promise<void> {
+  const row = targeted(deps, node);
+  const page = pageFromNode(row)?.page;
+  const found = page === undefined ? undefined : findPage(deps.roots(), page.id);
+  if (row?.kind !== 'page' || page === undefined || found === undefined) {
+    void vscode.window.showInformationMessage(
+      'Temco Docs: this removes one page — pick a page in the Documentation panel first.'
+    );
+    return;
+  }
+  if (found.root.origin === 'catalog') {
+    void vscode.window.showInformationMessage(
+      `Temco Docs: “${page.title}” was read from a source that is not on this machine, so there is nothing here to remove.`
+    );
+    return;
+  }
+  const onDisk = await fileExists(page.uri);
+  const answer = await vscode.window.showWarningMessage(
+    `Delete “${page.title}”?`,
+    {
+      modal: true,
+      detail: [
+        onDisk ? `${page.uri.fsPath} moves to the Recycle Bin.` : 'Its file is already gone.',
+        row.loose
+          ? 'It has no registry entry yet, so nothing else changes.'
+          : `Its entry in ${path.basename(found.root.registryUri.fsPath)} is removed with it.`,
+        onDisk ? 'To keep its address working, retire it instead — a retired page keeps its redirect.' : '',
+      ].filter((line) => line.length > 0).join('\n'),
+    },
+    'Delete',
+    'Cancel'
+  );
+  if (answer !== 'Delete') {
+    return;
+  }
+
+  if (onDisk) {
+    await vscode.workspace.fs.delete(page.uri, { recursive: false, useTrash: true });
+  }
+  if (!row.loose) {
+    const edit = await RegistryEdit.open(found.root.registryUri);
+    const removed = edit !== undefined && edit.remove(page.id);
+    if (edit !== undefined && removed) {
+      await edit.save();
+    }
+  }
+  deps.redraw();
+}
+
+/** How many Markdown pages a folder holds, at any depth — what a removal is about to take. */
+async function markdownUnder(uri: vscode.Uri): Promise<number> {
+  return (await markdownFilesUnder(uri)).length;
+}
+
+/** Every Markdown page under a folder, at any depth — what a move has to carry with it. */
+async function markdownFilesUnder(uri: vscode.Uri): Promise<vscode.Uri[]> {
+  let entries: [string, vscode.FileType][] = [];
+  try {
+    entries = await vscode.workspace.fs.readDirectory(uri);
+  } catch {
+    return [];
+  }
+  const files: vscode.Uri[] = [];
+  for (const [name, kind] of entries) {
+    const child = vscode.Uri.joinPath(uri, name);
+    if (kind === vscode.FileType.Directory) {
+      files.push(...await markdownFilesUnder(child));
+    } else if (/\.md$/i.test(name)) {
+      files.push(child);
+    }
+  }
+  return files;
+}
+
+/**
+ * Renaming a folder in the tree — one act, two sizes.
+ *
+ * A folder the registry does not name is a directory move and nothing else: no id exists yet, so nothing can break.
+ * A registered chapter is the heavier act, and the one people actually ask for: the page id **is** the path, so
+ * moving the folder changes the id of every page inside it. It is allowed here — as a named act — and it carries the
+ * three things that make it safe: the curated values move with the pages, every old id is written into the new
+ * entry's `aliases` so inbound links still resolve, and the confirmation says how many ids will change first.
+ */
+async function renameFolder(deps: PageDeps, node: DocsNode | undefined): Promise<void> {
+  const row = targeted(deps, node);
+  const chapter = row?.kind === 'chapter' ? row : undefined;
+  if (chapter === undefined) {
+    void vscode.window.showInformationMessage(
+      'Temco Docs: this renames one folder — pick a folder inside an area in the Documentation panel first.'
+    );
+    return;
+  }
+  if (chapter.root.origin === 'catalog') {
+    void vscode.window.showInformationMessage(
+      `Temco Docs: “${chapter.chapter.chapter}” was read from a source that is not on this machine, so there is ` +
+      'nothing here to rename.'
+    );
+    return;
+  }
+
+  const { root, area } = chapter;
+  const current = chapter.chapter.chapter;
+  const pages = chapter.loose ? [] : chapter.chapter.pages;
+  const typed = await vscode.window.showInputBox({
+    title: `Rename the folder “${current}”`,
+    prompt: pages.length === 0
+      ? 'A directory move. Nothing in the registry names this folder yet, so no page id changes.'
+      : `${pages.length} page${pages.length === 1 ? '' : 's'} move with it — their ids change, and each old id is ` +
+        'kept as an alias so links still resolve.',
+    value: current,
+    valueSelection: [0, current.length],
+    validateInput: (value) => nameProblem(value),
+  });
+  if (typed === undefined) {
+    return;
+  }
+  const next = typed.trim();
+  if (next === current) {
+    return;
+  }
+  const from = contentUri(root.rootUri, area.area, current);
+  const to = contentUri(root.rootUri, area.area, next);
+  if (await fileExists(to)) {
+    void vscode.window.showWarningMessage(`Temco Docs: ${next} already exists in ${area.title}.`);
+    return;
+  }
+
+  // The registry is read *before* anything moves: it is the only place these pages' curated values are written down,
+  // and after the move the ids that name them no longer exist.
+  const edit = pages.length === 0 ? undefined : await RegistryEdit.open(root.registryUri);
+  if (pages.length > 0 && edit === undefined) {
+    return;
+  }
+  const moves = pages.map((page) => ({
+    from: page.id,
+    to: `${area.area}/${next}/${page.id.split('/').pop() ?? ''}`,
+  }));
+
+  const answer = await vscode.window.showWarningMessage(
+    `Rename “${current}” to “${next}”?`,
+    {
+      modal: true,
+      detail: [
+        `${from.fsPath} → ${to.fsPath}`,
+        moves.length === 0
+          ? 'No page id changes: nothing in the registry names this folder yet.'
+          : `${moves.length} page id${moves.length === 1 ? '' : 's'} change, and each old one is kept as an alias: ` +
+            moves.map((move) => move.from).join(', '),
+      ].join('\n'),
+    },
+    'Rename',
+    'Cancel'
+  );
+  if (answer !== 'Rename') {
+    return;
+  }
+
+  await vscode.workspace.fs.rename(from, to, { overwrite: false });
+
+  let aliased = 0;
+  if (edit !== undefined) {
+    for (const move of moves) {
+      const old = edit.entry(move.from);
+      if (old === undefined) {
+        continue;
+      }
+      // Everything the registry curates travels: title, order, owner, audience, ship, tags, keywords. Only the two
+      // parts that are the *path* are rewritten, plus the alias that keeps the old address alive.
+      const fields: Record<string, unknown> = { ...old, chapter: next };
+      const kept = Array.isArray(fields['aliases']) ? fields['aliases'].map(String) : [];
+      if (!kept.includes(move.from)) {
+        kept.push(move.from);
+      }
+      fields['aliases'] = kept;
+      edit.remove(move.from);
+      if (edit.addPage(move.to, fields)) {
+        aliased += 1;
+      }
+    }
+    await edit.save();
+  }
+
+  deps.redraw();
+  void vscode.window.showInformationMessage(
+    moves.length === 0
+      ? `Temco Docs: the folder is “${next}” now.`
+      : `Temco Docs: the folder is “${next}” now, and ${aliased} page id${aliased === 1 ? ' is' : 's are'} ` +
+        'aliased to where they came from.'
+  );
+}
+
+/**
+ * A project with no documentation folder yet, made usable in one step — the way Explorer always has a folder to
+ * make another one in.
+ *
+ * The application reads *the project's sources*, so with none cited there is no `docs/` to write into: that is why
+ * the first New Folder used to end in a message. Here it asks for the folder, records it as a source of the project,
+ * cites it, re-reads, and hands back its first area — so the folder is created in the same click.
+ */
+async function citeAFolder(
+  context: vscode.ExtensionContext,
+  deps: PageDeps
+): Promise<{ root: DocsRoot; area: string } | undefined> {
+  const project = deps.project();
+  if (project === undefined) {
+    void vscode.window.showWarningMessage(
+      'Temco Docs: no project is being worked on. Choose one on the Dashboard, then add a folder.'
+    );
+    return undefined;
+  }
+  const picked = await vscode.window.showOpenDialog({
+    canSelectFiles: false,
+    canSelectFolders: true,
+    canSelectMany: false,
+    openLabel: 'Use This Documentation Folder',
+    title: 'Which folder holds the documentation (the one with docs/help/registry.json)?',
+  });
+  const folder = picked?.[0];
+  if (folder === undefined) {
+    return undefined;
+  }
+  const registry = vscode.Uri.joinPath(folder, 'docs', 'help', 'registry.json');
+  if (!(await fileExists(registry))) {
+    // A folder with no registry has no area, and an area is what a folder is created inside. Making the smallest
+    // valid one here is what turns "pick a folder" into "you can start": docs/help/registry.json, one area named
+    // after the folder, and the area's directory. The repository's own generator owns everything after that.
+    const answer = await vscode.window.showWarningMessage(
+      `${folder.fsPath} holds no documentation yet. Create docs/help/registry.json here, with one area, so pages ` +
+      'can be written into it?',
+      { modal: true },
+      'Create the Documentation Folder'
+    );
+    if (answer !== 'Create the Documentation Folder') {
+      return undefined;
+    }
+    const areaName = slugOf(path.basename(folder.fsPath)) || 'docs';
+    try {
+      await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(folder, 'docs', 'help'));
+      await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(folder, 'docs', areaName));
+      const registry = { version: 1, areas: { [areaName]: { title: path.basename(folder.fsPath) } }, pages: {} };
+      await vscode.workspace.fs.writeFile(
+        vscode.Uri.joinPath(folder, 'docs', 'help', 'registry.json'),
+        Buffer.from(`${JSON.stringify(registry, null, 2)}\n`, 'utf8')
+      );
+    } catch (error) {
+      void vscode.window.showErrorMessage(
+        `Temco Docs: the documentation folder could not be created — ${error instanceof Error ? error.message : String(error)}`
+      );
+      return undefined;
+    }
+  }
+
+  const name = path.basename(folder.fsPath);
+  const slug = slugOf(name);
+  let catalog: Catalog | undefined;
+  try {
+    catalog = await Catalog.open(context);
+    const existing = sourceAt(catalog, folder.fsPath);
+    const cite = existing ?? slug;
+    if (existing === undefined) {
+      try {
+        catalog.addSource({
+          kind: 'folder',
+          name,
+          slug,
+          path: folder.fsPath,
+          docsRoot: 'docs',
+        });
+      } catch {
+        // Already known: the row was recorded by an earlier visit, and citing it is what this call is for.
+      }
+    }
+    catalog.attachSource(project, cite);
+  } catch (error) {
+    void vscode.window.showErrorMessage(
+      `Temco Docs: the folder could not be cited — ${error instanceof Error ? error.message : String(error)}`
+    );
+    return undefined;
+  } finally {
+    catalog?.close();
+  }
+
+  // The command waits for the read, so the roots below are the ones the new source produced.
+  await vscode.commands.executeCommand('temcoDocs.refresh');
+  const root = deps.roots().find(
+    (candidate) => candidate.folder.uri.fsPath.toLowerCase() === folder.fsPath.toLowerCase()
+  );
+  const area = root?.areas[0];
+  if (root === undefined || area === undefined) {
+    void vscode.window.showWarningMessage(
+      `Temco Docs: ${name} is cited, but its registry declares no area yet — nothing can be created inside it ` +
+      'until docs/help/registry.json names one.'
+    );
+    return undefined;
+  }
+  return { root, area: area.area };
+}
+
+/**
+ * The source that already points at this folder, if one is recorded.
+ *
+ * A source is a row about a place; two rows about the same place are two roots in the tree, which is how the same
+ * folder was drawn twice. Anywhere this module is about to record a folder it asks this first and cites the row that
+ * is already there.
+ */
+export function sourceAt(catalog: Catalog, folder: string): string | undefined {
+  const wanted = path.resolve(folder).toLowerCase();
+  for (const row of catalog.sources()) {
+    const detail = catalog.source(row.slug);
+    if (detail?.path !== undefined && path.resolve(detail.path).toLowerCase() === wanted) {
+      return row.slug;
+    }
+  }
+  return undefined;
+}
+
+/** Why a folder name cannot be used — the same rule a page's file name follows. */
+function nameProblem(value: string): string | undefined {
+  const name = value.trim();
+  if (name.length === 0) {
+    return 'A folder needs a name.';
+  }
+  if (/[\\/:*?"<>|\s]/.test(name)) {
+    return 'No spaces or \\ / : * ? " < > | — a folder name is a segment of a page id.';
+  }
+  return undefined;
+}
+
+/** The area a row belongs to: what a new folder is created inside. */
+function areaOf(node: DocsNode | undefined, roots: readonly DocsRoot[]): { root: DocsRoot; area: string } | undefined {
+  if (node?.kind === 'area') {
+    return { root: node.root, area: node.area.area };
+  }
+  if (node?.kind === 'chapter') {
+    return { root: node.root, area: node.area.area };
+  }
+  if (node?.kind === 'page') {
+    return { root: node.root, area: node.page.area };
+  }
+  const root = roots.find((candidate) => candidate.areas.length > 0);
+  const area = root?.areas[0];
+  return root === undefined || area === undefined ? undefined : { root, area: area.area };
 }
 
 /**
@@ -169,14 +705,24 @@ export class PageOperations implements vscode.TreeDragAndDropController<DocsNode
  *
  * `05-content-and-registry.md` rule 1 allows this only as a *named act with an `aliases` entry*: the page id is the
  * path, so every inbound link, the app's own routes and the MCP input are built on the old one. The old id is
- * therefore written into the new entry's `aliases` before the generator is believed, and a project with no
- * generator is refused: without one there is no entry to carry the alias, and a rename would orphan the links.
+ * therefore written into the new entry's `aliases` before the generator is believed, and a *registered* page in a
+ * project with no generator is refused: without one there is no entry to carry the alias, and a rename would orphan
+ * the links. A page the registry does not name yet has nothing to orphan, so it renames its file anywhere.
  *
  * The **title** is not touched. It is prose; this is a path.
  */
 async function renameFile(deps: PageDeps, node: DocsNode | undefined): Promise<void> {
-  const page = pageFromNode(node ?? deps.selected())?.page;
-  if (page === undefined) {
+  // A folder row takes the same key: F2 is "rename what is selected", whichever kind of row that is. The command
+  // arrives without a node when it comes from the keyboard, so the selection has to be resolved first.
+  const subject = node ?? deps.selected();
+  if (subject?.kind === 'chapter' && subject.loose) {
+    await renameFolder(deps, subject);
+    return;
+  }
+  const pageNode = pageFromNode(subject);
+  const page = pageNode?.page;
+  const loose = pageNode?.loose === true;
+  if (pageNode === undefined || page === undefined) {
     void vscode.window.showInformationMessage('Temco Docs: select the page whose file you want to rename.');
     return;
   }
@@ -189,7 +735,10 @@ async function renameFile(deps: PageDeps, node: DocsNode | undefined): Promise<v
     void vscode.window.showWarningMessage('Temco Docs: that page is not inside a folder this window is reading.');
     return;
   }
-  if (!scriptsIn([root]).has('docs:registry')) {
+  // A page the registry does not name yet has no entry to orphan, so the file can be renamed with or without a
+  // generator. A registered page cannot: the id *is* the path, so a new path needs an entry that carries the old one.
+  const generated = scriptsIn([root]).has('docs:registry');
+  if (!generated && !loose) {
     void vscode.window.showWarningMessage(
       `Temco Docs: ${root.folder.name} has no \`docs:registry\` script, so a renamed file would leave its registry ` +
       'entry pointing at nothing. Rename the title instead — it is the value the registry holds.'
@@ -200,18 +749,20 @@ async function renameFile(deps: PageDeps, node: DocsNode | undefined): Promise<v
   const current = path.basename(page.uri.fsPath, path.extname(page.uri.fsPath));
   const typed = await vscode.window.showInputBox({
     title: `Rename the file of “${page.title}”`,
-    prompt: 'The file name, without .md. It is also the page id — the old one is kept as an alias.',
+    prompt: loose
+      ? 'The file name, without .md. It is also the page id the generator will read.'
+      : 'The file name, without .md. It is also the page id — the old one is kept as an alias.',
     value: current,
     valueSelection: [0, current.length],
     validateInput: (value) => {
-      const slug = value.trim();
-      if (slug.length === 0) {
+      const name = value.trim();
+      if (name.length === 0) {
         return 'A page needs a file name.';
       }
-      if (/[\\/:*?"<>|]/.test(slug)) {
+      if (/[\\/:*?"<>|]/.test(name)) {
         return 'A file name cannot contain \\ / : * ? " < > |';
       }
-      if (slug === current) {
+      if (name === current) {
         return 'That is the current name.';
       }
       return undefined;
@@ -221,6 +772,9 @@ async function renameFile(deps: PageDeps, node: DocsNode | undefined): Promise<v
     return;
   }
   const slug = typed.trim();
+  if (slug === current) {
+    return;
+  }
   const target = vscode.Uri.joinPath(vscode.Uri.file(path.dirname(page.uri.fsPath)), `${slug}.md`);
   if (await fileExists(target)) {
     void vscode.window.showWarningMessage(`Temco Docs: ${slug}.md already exists beside this page.`);
@@ -228,6 +782,16 @@ async function renameFile(deps: PageDeps, node: DocsNode | undefined): Promise<v
   }
 
   await vscode.workspace.fs.rename(page.uri, target, { overwrite: false });
+  if (loose) {
+    // Nothing names this file yet, so there is no entry to keep an alias in: the generator registers it at the new
+    // path, and there was no old address to keep alive.
+    if (generated) {
+      await runScript(deps.roots(), deps.output, 'docs:registry');
+    }
+    deps.redraw();
+    void vscode.window.showInformationMessage(`Temco Docs: the file is ${slug}.md now.`);
+    return;
+  }
   // The entry the id names does not exist yet: the generator writes it, then the alias is added to it.
   await runScript(deps.roots(), deps.output, 'docs:registry');
 
@@ -253,7 +817,7 @@ export function registerPageCommands(context: vscode.ExtensionContext, deps: Pag
       startNewPage(deps, node, {})
     ),
     vscode.commands.registerCommand('temcoDocs.newChapter', (node?: DocsNode) =>
-      startNewPage(deps, node, { chapterMode: true })
+      createFolder(context, deps, node)
     ),
     // The kinds, one command each. A menu entry cannot carry an argument, so the submenu in `package.json` is the
     // list of kinds and each entry names the command that already knows its own. They are written out rather than
@@ -275,7 +839,13 @@ export function registerPageCommands(context: vscode.ExtensionContext, deps: Pag
       startNewPage(deps, node, { kind: 'Release note' })
     ),
     vscode.commands.registerCommand('temcoDocs.renamePage', (node?: DocsNode) => renamePage(deps, node)),
-    vscode.commands.registerCommand('temcoDocs.renameFile', (node?: DocsNode) => renameFile(deps, node)),
+    // Explorer's own three names, because that is what a file tree is read with: *Rename…* and *Delete* are one act
+    // each, whichever kind of row is selected, and *Cut*, *Copy* and *Paste* carry a row to another folder.
+    vscode.commands.registerCommand('temcoDocs.rename', (node?: DocsNode) => renameRow(deps, node)),
+    vscode.commands.registerCommand('temcoDocs.delete', (node?: DocsNode) => deleteRow(deps, node)),
+    vscode.commands.registerCommand('temcoDocs.cut', (node?: DocsNode) => carry(deps, node, true)),
+    vscode.commands.registerCommand('temcoDocs.copy', (node?: DocsNode) => carry(deps, node, false)),
+    vscode.commands.registerCommand('temcoDocs.paste', (node?: DocsNode) => paste(deps, node)),
     vscode.commands.registerCommand('temcoDocs.movePageUp', (node?: DocsNode) => movePage(deps, node, -1)),
     vscode.commands.registerCommand('temcoDocs.movePageDown', (node?: DocsNode) => movePage(deps, node, 1)),
     vscode.commands.registerCommand('temcoDocs.retirePage', (node?: DocsNode) => retirePage(deps, node))
@@ -292,6 +862,251 @@ export function registerPageCommands(context: vscode.ExtensionContext, deps: Pag
  */
 function targeted(deps: PageDeps, node?: DocsNode): DocsNode | undefined {
   return node ?? deps.selected();
+}
+
+/**
+ * *Rename…* — one command for the thing a path is, whichever row it is.
+ *
+ * A file tree asks one question of F2 ("rename what is selected"), so the tree answers it with one entry: a page
+ * renames its file, a folder renames itself. They are different acts behind the name — a page's file name is its id,
+ * a folder's is the chapter every page inside it is filed under — and each says what it will move before it moves it.
+ */
+async function renameRow(deps: PageDeps, node: DocsNode | undefined): Promise<void> {
+  const row = targeted(deps, node);
+  if (row?.kind === 'chapter') {
+    await renameFolder(deps, row);
+    return;
+  }
+  await renameFile(deps, row);
+}
+
+/** *Delete* — the same one entry, over the two acts that take a row away. */
+async function deleteRow(deps: PageDeps, node: DocsNode | undefined): Promise<void> {
+  const row = targeted(deps, node);
+  if (row?.kind === 'chapter') {
+    await removeFolder(deps, row);
+    return;
+  }
+  await removeFile(deps, row);
+}
+
+// ------------------------------------------------------------------ cutting, copying, pasting
+
+/** What a *Cut* or a *Copy* carries about one row, or nothing when the row is not a file on this machine. */
+function clipEntryOf(row: DocsNode): ClipEntry | undefined {
+  if (row.kind === 'page') {
+    if (!row.page.exists || row.page.uri.scheme !== 'file' || row.root.origin === 'catalog') {
+      return undefined;
+    }
+    return { uri: row.page.uri, folder: false, id: row.page.id, rootUri: row.root.rootUri.toString() };
+  }
+  if (row.kind === 'chapter') {
+    if (row.root.origin === 'catalog') {
+      return undefined;
+    }
+    return {
+      uri: contentUri(row.root.rootUri, row.area.area, row.chapter.chapter),
+      folder: true,
+      rootUri: row.root.rootUri.toString(),
+    };
+  }
+  return undefined;
+}
+
+/**
+ * *Cut* and *Copy*: the act that carries a row somewhere else, without writing anything yet.
+ *
+ * Nothing is remembered between windows and nothing is written to the system clipboard — a tree row is not text, and
+ * deciding what a pasted row means needs the source it came from. What *does* happen at once is the visible half: the
+ * row is dimmed while it is cut, so the person can see what is on its way out.
+ */
+async function carry(deps: PageDeps, node: DocsNode | undefined, moving: boolean): Promise<void> {
+  const row = targeted(deps, node);
+  const entry = row === undefined ? undefined : clipEntryOf(row);
+  if (entry === undefined) {
+    void vscode.window.showInformationMessage(
+      `Temco Docs: ${moving ? 'Cut' : 'Copy'} works on a page or a folder on this machine — ` +
+      'pick one in the Documentation panel first.'
+    );
+    return;
+  }
+
+  await setClipboard([entry], moving);
+  // The tree paints a cut row dim, so it has to be re-read for the act to be visible before anything is pasted.
+  deps.redraw();
+  vscode.window.setStatusBarMessage(
+    moving
+      ? `Temco Docs: “${labelOf(entry)}” is ready to move — Paste it on a folder.`
+      : `Temco Docs: “${labelOf(entry)}” copied — Paste it on a folder.`,
+    5000
+  );
+}
+
+/**
+ * *Paste*: what was cut or copied arrives in the folder of the selected row.
+ *
+ * A page is a file, and a folder is a folder, so the file system is the thing that moves: a copy leaves a second page
+ * beside the original (`-copy`, then `-copy-2`), a cut carries the page — and every page id is the path, so a moved
+ * page arrives under a new id, with the old one written into its `aliases` so inbound links still resolve. Both are
+ * named in the confirmation before either happens.
+ */
+async function paste(deps: PageDeps, node: DocsNode | undefined): Promise<void> {
+  const { entries, moving } = clipboard();
+  const entry = entries[0];
+  if (entry === undefined) {
+    void vscode.window.showInformationMessage(
+      'Temco Docs: there is nothing to paste — Cut or Copy a page or a folder first.'
+    );
+    return;
+  }
+
+  const row = targeted(deps, node);
+  const place = row === undefined ? undefined : placeOf(row);
+  if (place === undefined) {
+    void vscode.window.showInformationMessage(
+      'Temco Docs: paste goes into a folder — select an area, a folder or a page in the Documentation panel first.'
+    );
+    return;
+  }
+  if (place.root.rootUri.toString() !== entry.rootUri) {
+    void vscode.window.showWarningMessage(
+      'Temco Docs: that row belongs to another source — a paste stays inside one repository.'
+    );
+    return;
+  }
+  if (!writable(place.root)) {
+    return;
+  }
+
+  const folder = contentUri(
+    place.root.rootUri,
+    place.area,
+    ...(place.chapter === ROOT_CHAPTER ? [] : [place.chapter])
+  );
+  await carryEntries(deps, place.root, entry, folder, moving);
+}
+
+/**
+ * The one act that *Paste* and a drop both end in: a page or a folder arrives in another folder.
+ *
+ * It is the only place in this module that copies or moves a file, so it is also the only place that has to keep the
+ * registry true afterwards: a copy is a page the registry does not name yet (the generator names it, or, without one,
+ * this writes the entry), and a move is a page whose id changed with its path (the curated values travel and every old
+ * id is kept as an alias).
+ */
+async function carryEntries(
+  deps: PageDeps,
+  root: DocsRoot,
+  entry: ClipEntry,
+  folder: vscode.Uri,
+  moving: boolean
+): Promise<void> {
+  const name = path.basename(entry.uri.fsPath);
+  // A move into the folder a thing is already in would be a no-op; a copy into it is how a second page is made
+  // beside the first, so only the move is refused here.
+  if (moving && path.dirname(entry.uri.fsPath).toLowerCase() === folder.fsPath.toLowerCase()) {
+    void vscode.window.showInformationMessage(`Temco Docs: “${name}” is already there.`);
+    return;
+  }
+  const destination = await freeName(folder, name, moving);
+  if (destination === undefined) {
+    void vscode.window.showWarningMessage(
+      `Temco Docs: “${name}” is already in that folder, and a move never replaces one. Nothing was moved or copied.`
+    );
+    return;
+  }
+
+  const files = entry.folder ? await markdownFilesUnder(entry.uri) : [entry.uri];
+  const relocations = files.map((file) => ({
+    from: file,
+    to: entry.folder ? childOf(entry.uri, file, destination) : destination,
+  }));
+  const where = vscode.workspace.asRelativePath(path.dirname(destination.fsPath));
+
+  const answer = await vscode.window.showWarningMessage(
+    `${moving ? 'Move' : 'Copy'} “${name}” into ${where}?`,
+    {
+      modal: true,
+      detail: [
+        `${entry.uri.fsPath} → ${destination.fsPath}`,
+        moving
+          ? relocations.length === 0
+            ? 'No page id changes: the folder holds no page yet.'
+            : `${relocations.length} page id${relocations.length === 1 ? '' : 's'} change with the path, and each ` +
+              'old one is kept as an alias so links still resolve.'
+          : 'The copied page is a new page: it is named once the registry is regenerated.',
+      ].join('\n'),
+    },
+    moving ? 'Move' : 'Copy',
+    'Cancel'
+  );
+  if (answer !== (moving ? 'Move' : 'Copy')) {
+    return;
+  }
+
+  // Read before anything moves: after the move the ids that name these pages no longer exist anywhere.
+  const edit = moving && relocations.length > 0 ? await RegistryEdit.open(root.registryUri) : undefined;
+  if (moving && relocations.length > 0 && edit === undefined) {
+    return;
+  }
+
+  try {
+    if (moving) {
+      await vscode.workspace.fs.rename(entry.uri, destination, { overwrite: false });
+    } else {
+      await vscode.workspace.fs.copy(entry.uri, destination, { overwrite: false });
+    }
+  } catch (error) {
+    void vscode.window.showErrorMessage(
+      `Temco Docs: ${path.basename(destination.fsPath)} could not be written — ` +
+      `${error instanceof Error ? error.message : String(error)}`
+    );
+    return;
+  }
+
+  let aliased = 0;
+  if (moving && edit !== undefined) {
+    for (const relocation of relocations) {
+      const place = placeOfFile(root, relocation.to);
+      const old = place === undefined ? undefined : edit.entry(idOf(root, relocation.from));
+      if (place === undefined || old === undefined) {
+        continue;
+      }
+      // Everything the registry curates travels — title, order, owner, audience, tags — and only the two parts that
+      // are the *path* are rewritten, plus the alias that keeps the old address alive.
+      const fields: Record<string, unknown> = { ...old, area: place.area, chapter: place.chapter };
+      const kept = Array.isArray(fields['aliases']) ? fields['aliases'].map(String) : [];
+      const previous = idOf(root, relocation.from);
+      if (!kept.includes(previous)) {
+        kept.push(previous);
+      }
+      fields['aliases'] = kept;
+      edit.remove(previous);
+      if (edit.addPage(idOf(root, relocation.to), fields)) {
+        aliased += 1;
+      }
+    }
+    await edit.save();
+  } else if (!moving) {
+    if (scriptsIn([root]).has('docs:registry')) {
+      await runScript(deps.roots(), deps.output, 'docs:registry');
+    } else {
+      await registerCopies(root, relocations.map((relocation) => relocation.to));
+    }
+  }
+
+  // A move is finished with once it has been pasted; a copy is not, so it can be pasted again.
+  if (moving) {
+    await setClipboard([], false);
+  }
+  deps.redraw();
+
+  void vscode.window.showInformationMessage(
+    moving
+      ? `Temco Docs: “${name}” is in ${where} now` +
+        (aliased > 0 ? `, and ${aliased} old page id${aliased === 1 ? ' is' : 's are'} kept as an alias.` : '.')
+      : `Temco Docs: “${path.basename(destination.fsPath)}” is copied into ${where}.`
+  );
 }
 
 // ------------------------------------------------------------------ creating
@@ -394,6 +1209,9 @@ export async function writePage(deps: PageDeps, spec: NewPageSpec): Promise<{ re
   await vscode.workspace.fs.writeFile(uri, Buffer.from(text, 'utf8'));
   const document = await vscode.workspace.openTextDocument(uri);
   await vscode.window.showTextDocument(document, { preview: false, viewColumn: fileColumn() });
+  // The right-hand panel comes forward with the page: it is where the ways to start one are, and a new page with
+  // nothing in it is exactly when somebody wants them.
+  void vscode.commands.executeCommand('temcoDocs.draft.focus');
   deps.redraw();
 
   // The entry is what makes it a page rather than a file: index.json, the table of contents, the CHM manifest and
@@ -503,7 +1321,7 @@ async function renamePage(deps: PageDeps, node?: DocsNode): Promise<void> {
   }
   edit.set(page.id, 'title', title.trim());
 
-  const heading = page.exists ? await firstHeading(page) : undefined;
+  const heading = page.exists ? await firstHeading(page.uri) : undefined;
   const withHeading = heading !== undefined && heading === page.title;
   const lines = edit.changed.map(describeChange);
   if (withHeading && page.uri.scheme === 'file') {
@@ -740,6 +1558,95 @@ function placeOf(node: DocsNode): Place | undefined {
   return undefined;
 }
 
+/** The name a person gave a carried row: the folder's own, or the page file's without its extension. */
+function labelOf(entry: ClipEntry): string {
+  return entry.folder
+    ? path.basename(entry.uri.fsPath)
+    : path.basename(entry.uri.fsPath, path.extname(entry.uri.fsPath));
+}
+
+/**
+ * A name nothing in this folder carries yet.
+ *
+ * A copy is allowed to arrive beside its original — that is what copying is for — so a taken name becomes `-copy`,
+ * then `-copy-2`, and so on. A move is not: a destination that is already there is a different page, and replacing it
+ * is not what dragging a row means.
+ */
+async function freeName(folder: vscode.Uri, name: string, moving: boolean): Promise<vscode.Uri | undefined> {
+  const direct = vscode.Uri.joinPath(folder, name);
+  if (!(await fileExists(direct))) {
+    return direct;
+  }
+  if (moving) {
+    return undefined;
+  }
+  const extension = path.extname(name);
+  const stem = name.slice(0, name.length - extension.length);
+  for (let suffix = 1; suffix < 100; suffix++) {
+    const candidate = vscode.Uri.joinPath(
+      folder,
+      `${stem}-copy${suffix === 1 ? '' : `-${suffix}`}${extension}`
+    );
+    if (!(await fileExists(candidate))) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+/** Where a file lands when its folder is carried to `destination`: the same place inside it, one name deeper. */
+function childOf(folder: vscode.Uri, file: vscode.Uri, destination: vscode.Uri): vscode.Uri {
+  const relative = path.relative(folder.fsPath, file.fsPath).split(path.sep);
+  return vscode.Uri.joinPath(destination, ...relative);
+}
+
+/** The id a page's file already has, or will have once it is written: its path under `docs/`, without `.md`. */
+function idOf(root: DocsRoot, file: vscode.Uri): string {
+  return path
+    .relative(contentUri(root.rootUri).fsPath, file.fsPath)
+    .replace(/\\/g, '/')
+    .replace(/\.md$/i, '');
+}
+
+/** The place a page's file sits in, in the registry's words — the same two segments the generator reads. */
+function placeOfFile(root: DocsRoot, file: vscode.Uri): { area: string; chapter: string } | undefined {
+  const parts = idOf(root, file).split('/');
+  if (parts.length < 2) {
+    return undefined;
+  }
+  return { area: parts[0], chapter: parts.length > 2 ? parts[1] : ROOT_CHAPTER };
+}
+
+/**
+ * The registry entries for pages that were just copied, in a project that carries no generator.
+ *
+ * A project with one runs it instead and this is never called: the generator derives an entry from the file. Where
+ * there is none, the copy would be a file no tree lists — so the entry is written here, at the end of the chapter,
+ * which is where the generator would have put it.
+ */
+async function registerCopies(root: DocsRoot, files: readonly vscode.Uri[]): Promise<number> {
+  const edit = await RegistryEdit.open(root.registryUri);
+  if (edit === undefined) {
+    return 0;
+  }
+  let added = 0;
+  for (const file of files) {
+    const place = placeOfFile(root, file);
+    const id = idOf(root, file);
+    if (place === undefined || edit.entry(id) !== undefined) {
+      continue;
+    }
+    const title = (await firstHeading(file)) ?? path.basename(file.fsPath, path.extname(file.fsPath));
+    const siblings = edit.chapterPages(place.area, place.chapter);
+    const order = siblings.length === 0 ? 10 : Math.max(...siblings.map((sibling) => sibling.order)) + 10;
+    if (edit.addPage(id, { title, area: place.area, chapter: place.chapter, order, ship: true })) {
+      added += 1;
+    }
+  }
+  await edit.save();
+  return added;
+}
+
 function requirePage(
   deps: PageDeps,
   node: DocsNode | undefined
@@ -835,9 +1742,9 @@ function validSlug(value: string): boolean {
 }
 
 /** The page's own `#` heading, which is where the generator takes a new page's title from. */
-async function firstHeading(page: PageEntry): Promise<string | undefined> {
+async function firstHeading(uri: vscode.Uri): Promise<string | undefined> {
   try {
-    const text = Buffer.from(await vscode.workspace.fs.readFile(page.uri)).toString('utf8');
+    const text = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
     return /^#\s+(.+?)\s*$/m.exec(text)?.[1]?.trim();
   } catch {
     return undefined;

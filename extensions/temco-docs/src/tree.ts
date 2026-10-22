@@ -10,13 +10,17 @@
 // a person sees first.
 
 import * as vscode from 'vscode';
+import { cutUris } from './clipboard';
+import { Loose, LooseFile } from './loose';
 import {
   AreaGroup,
   ChapterGroup,
   DocsRoot,
   PageEntry,
   Provenance,
+  ROOT_CHAPTER,
   collectPages,
+  contentUri,
   countStale,
 } from './registry';
 
@@ -36,12 +40,13 @@ class AreaNode {
 
 class ChapterNode {
   readonly kind = 'chapter';
-  constructor(readonly root: DocsRoot, readonly area: AreaGroup, readonly chapter: ChapterGroup) { }
+  /** A folder on disk the registry does not name yet: shown at once, and renamed by a file move. */
+  constructor(readonly root: DocsRoot, readonly area: AreaGroup, readonly chapter: ChapterGroup, readonly loose = false) { }
 }
 
 class PageNode {
   readonly kind = 'page';
-  constructor(readonly root: DocsRoot, readonly page: PageEntry) { }
+  constructor(readonly root: DocsRoot, readonly page: PageEntry, readonly loose = false) { }
 }
 
 class IssueNode {
@@ -85,10 +90,24 @@ export class DocsTreeProvider implements vscode.TreeDataProvider<DocsNode> {
 
   private roots: DocsRoot[] = [];
   private notes: TreeNote[] = [];
+  /** Folders and files on disk the registry does not name, by root — filled by the module's own refresh. */
+  private loose = new Map<string, Loose>();
 
-  setRoots(roots: DocsRoot[], notes: TreeNote[] = []): void {
-    this.roots = roots;
+  setRoots(roots: DocsRoot[], notes: TreeNote[] = [], loose: Map<string, Loose> = new Map()): void {
+    // One place is one row. The module already reads each folder once, but this is the surface that paints, and a
+    // caller that hands the same folder twice — two reads racing at startup, one path with a separator it lost —
+    // must still draw one tree. That doubling is the whole of "the list is correct until something reloads".
+    const seen = new Set<string>();
+    this.roots = roots.filter((root) => {
+      const key = root.folder.uri.toString().replace(/[\\/]+$/, '').toLowerCase();
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
     this.notes = notes;
+    this.loose = loose;
     this.changed.fire();
   }
 
@@ -96,14 +115,66 @@ export class DocsTreeProvider implements vscode.TreeDataProvider<DocsNode> {
     this.changed.fire();
   }
 
+  /**
+   * The row for a place the module has just written — what lets *New folder* put the tree on the folder it made.
+   *
+   * A loose folder has no page yet, so it is not in the registry and not in any cached read: the node is built here
+   * from the place alone, and the identity travels by the row's `id` (see `getTreeItem`), not by this object.
+   */
+  placeNode(rootUri: string, area: string, chapter: string): DocsNode | undefined {
+    const root = this.roots.find((candidate) => candidate.folder.uri.toString() === rootUri);
+    const group = root?.areas.find((candidate) => candidate.area === area);
+    if (root === undefined || group === undefined) {
+      return undefined;
+    }
+    const known = group.chapters.find((candidate) => candidate.chapter === chapter);
+    return known === undefined
+      ? new ChapterNode(root, group, { chapter, pages: [] }, true)
+      : new ChapterNode(root, group, known);
+  }
+
+  /**
+   * The row a row sits under — what `reveal` walks, and it is a fold back up the same shape `getChildren` unfolds.
+   *
+   * Nothing is remembered between refreshes: every node carries its own place, so its parent can be rebuilt from it.
+   */
+  getParent(node: DocsNode): DocsNode | undefined {
+    switch (node.kind) {
+      case 'folder':
+      case 'note':
+        return undefined;
+      case 'area':
+        return node.top ? undefined : new FolderNode(node.root);
+      case 'chapter':
+        return new AreaNode(node.root, node.area, this.areasAreTop(node.root));
+      case 'page': {
+        const area = node.root.areas.find((candidate) => candidate.area === node.page.area);
+        if (area === undefined) {
+          return new FolderNode(node.root);
+        }
+        const chapter = area.chapters.find((candidate) => candidate.chapter === node.page.chapter);
+        return chapter === undefined
+          ? new ChapterNode(node.root, area, { chapter: node.page.chapter, pages: [] }, true)
+          : new ChapterNode(node.root, area, chapter);
+      }
+      case 'issue':
+        return new PageNode(node.root, node.page);
+    }
+  }
+
+  /** Whether this root's areas are the view's own top level — the one case where an area has no folder above it. */
+  private areasAreTop(root: DocsRoot): boolean {
+    return this.roots.length === 1 && this.roots[0].folder.uri.toString() === root.folder.uri.toString();
+  }
+
   getTreeItem(node: DocsNode): vscode.TreeItem {
     switch (node.kind) {
       case 'folder':
         return folderItem(node);
       case 'area':
-        return areaItem(node);
+        return areaItem(node, this.hasLooseFolders(node.root, node.area.area));
       case 'chapter':
-        return chapterItem(node);
+        return chapterItem(node, this.hasLooseFiles(node.root, node.area.area, node.chapter.chapter));
       case 'page':
         return pageItem(node);
       case 'issue':
@@ -125,6 +196,18 @@ export class DocsTreeProvider implements vscode.TreeDataProvider<DocsNode> {
     }
   }
 
+  /** Whether a folder on disk sits in this area and the registry does not name it: the row must open for it. */
+  private hasLooseFolders(root: DocsRoot, area: string): boolean {
+    return (this.loose.get(root.folder.uri.toString())?.folders ?? []).some((folder) => folder.area === area);
+  }
+
+  /** Whether a page on disk sits in this chapter and the registry does not name it. */
+  private hasLooseFiles(root: DocsRoot, area: string, chapter: string): boolean {
+    return (this.loose.get(root.folder.uri.toString())?.files ?? []).some(
+      (file) => file.area === area && file.chapter === chapter
+    );
+  }
+
   getChildren(node?: DocsNode): DocsNode[] {
     if (!node) {
       const roots = this.roots;
@@ -144,16 +227,56 @@ export class DocsTreeProvider implements vscode.TreeDataProvider<DocsNode> {
     switch (node.kind) {
       case 'folder':
         return node.root.areas.map((area) => new AreaNode(node.root, area));
-      case 'area':
-        return node.area.chapters.map((chapter) => new ChapterNode(node.root, node.area, chapter));
-      case 'chapter':
-        return node.chapter.pages.map((page) => new PageNode(node.root, page));
+      case 'area': {
+        const key = node.root.folder.uri.toString();
+        const loose = (this.loose.get(key)?.folders ?? []).filter((folder) => folder.area === node.area.area);
+        return [
+          ...node.area.chapters.map((chapter) => new ChapterNode(node.root, node.area, chapter)),
+          ...loose.map((folder) => new ChapterNode(
+            node.root,
+            node.area,
+            { chapter: folder.chapter, pages: [] },
+            true
+          )),
+        ];
+      }
+      case 'chapter': {
+        const key = node.root.folder.uri.toString();
+        const loose = (this.loose.get(key)?.files ?? []).filter(
+          (file) => file.area === node.area.area && file.chapter === node.chapter.chapter
+        );
+        return [
+          ...node.chapter.pages.map((page) => new PageNode(node.root, page)),
+          ...loose.map((file) => new PageNode(node.root, loosePage(node.area.area, file), true)),
+        ];
+      }
       case 'page':
         return node.page.issues.map((_, index) => new IssueNode(node.root, node.page, index));
       default:
         return [];
     }
   }
+}
+
+/** The page a loose file will be once the generator names it — the same id rule, and nothing claimed beyond it. */
+function loosePage(area: string, file: LooseFile): PageEntry {
+  const id = [area, file.chapter === ROOT_CHAPTER ? '' : file.chapter, file.name].filter((part) => part.length > 0).join('/');
+  return {
+    id,
+    title: file.title,
+    area,
+    chapter: file.chapter,
+    order: 0,
+    audience: '',
+    ship: true,
+    owner: '',
+    reviewed: null,
+    tags: [],
+    keywords: [],
+    uri: file.uri,
+    exists: true,
+    issues: [],
+  };
 }
 
 function folderItem(node: FolderNode): vscode.TreeItem {
@@ -163,6 +286,7 @@ function folderItem(node: FolderNode): vscode.TreeItem {
   );
   const { root } = node;
   const recorded = root.origin === 'catalog';
+  item.id = `docs|folder|${root.folder.uri.toString()}`;
   item.description = String(root.pages);
   const stale = countStale(collectPages(root));
   item.tooltip = new vscode.MarkdownString(
@@ -181,17 +305,18 @@ function folderItem(node: FolderNode): vscode.TreeItem {
   return item;
 }
 
-function areaItem(node: AreaNode): vscode.TreeItem {
+function areaItem(node: AreaNode, hasLoose = false): vscode.TreeItem {
   const { area } = node;
   const item = new vscode.TreeItem(
     area.title,
-    area.chapters.length > 0
+    area.chapters.length > 0 || hasLoose
       ? node.top
         ? vscode.TreeItemCollapsibleState.Expanded
         : vscode.TreeItemCollapsibleState.Collapsed
       : vscode.TreeItemCollapsibleState.None
   );
   item.description = String(area.pages);
+  item.id = `docs|area|${node.root.folder.uri.toString()}|${area.area}`;
   const stale = countStale(node.area.chapters.flatMap((chapter) => chapter.pages));
   item.tooltip = new vscode.MarkdownString(
     [
@@ -214,16 +339,30 @@ function areaItem(node: AreaNode): vscode.TreeItem {
   return item;
 }
 
-function chapterItem(node: ChapterNode): vscode.TreeItem {
+function chapterItem(node: ChapterNode, hasLoose = false): vscode.TreeItem {
   const item = new vscode.TreeItem(
     node.chapter.chapter,
-    node.chapter.pages.length > 0
+    node.chapter.pages.length > 0 || node.loose || hasLoose
       ? vscode.TreeItemCollapsibleState.Collapsed
       : vscode.TreeItemCollapsibleState.None
   );
-  item.description = String(node.chapter.pages.length);
+  item.description = node.loose ? undefined : String(node.chapter.pages.length);
+  item.id = `docs|chapter|${node.root.folder.uri.toString()}|${node.area.area}|${node.chapter.chapter}`;
+  // One folder looks like one folder. A folder the registry does not name yet is still a folder, so it carries the
+  // same icon as the registered ones and says nothing beside its name: "not registered" on every second row is a
+  // wall of the same word, and the tooltip is where that belongs.
   item.iconPath = new vscode.ThemeIcon('folder');
-  item.contextValue = 'chapter';
+  // A folder that was cut is on its way somewhere else, and Explorer's way of saying so is to dim it.
+  if (cutUris().has(contentUri(node.root.rootUri, node.area.area, node.chapter.chapter).toString())) {
+    item.iconPath = new vscode.ThemeIcon('folder', new vscode.ThemeColor('disabledForeground'));
+  }
+  item.tooltip = node.loose
+    ? 'A folder on disk that the registry does not name yet. Run the generator to register the pages inside it.'
+    : undefined;
+  item.contextValue = node.loose ? 'looseChapter' : 'chapter';
+  // Double-click renames it, the way a folder in Explorer does. A registered chapter renames its pages with it, so
+  // the act confirms what it will move before it moves anything — see `renameFolder` in `pageOps.ts`.
+  item.command = { command: 'temcoDocs.rename', title: 'Rename…' };
   return item;
 }
 
@@ -235,7 +374,7 @@ function pageItem(node: PageNode): vscode.TreeItem {
     page.title,
     page.issues.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
   );
-  item.id = `${node.root.folder.name}:${page.id}`;
+  item.id = `docs|page|${node.root.folder.uri.toString()}|${page.id}`;
 
   if (recorded) {
     // Nothing was checked and nothing was reviewed, so the row says what it is: a page a read told us about.
@@ -285,7 +424,16 @@ function pageItem(node: PageNode): vscode.TreeItem {
       : colour !== undefined
         ? new vscode.ThemeIcon('file', new vscode.ThemeColor(colour))
         : new vscode.ThemeIcon('file');
-  item.contextValue = page.exists ? 'page' : 'missingPage';
+  item.contextValue = node.loose ? 'loosePage' : page.exists ? 'page' : 'missingPage';
+  if (node.loose) {
+    // A page on disk is a page: the same file icon, dimmed, and its tooltip says what the registry does not know yet.
+    item.iconPath = new vscode.ThemeIcon('file', new vscode.ThemeColor('descriptionForeground'));
+    item.tooltip = 'A page on disk that the registry does not name yet. Run the generator to register it.';
+  }
+  // A page that was cut is on its way somewhere else: Explorer dims it until it lands.
+  if (cutUris().has(page.uri.toString())) {
+    item.iconPath = new vscode.ThemeIcon('file', new vscode.ThemeColor('disabledForeground'));
+  }
   item.command = {
     command: 'temcoDocs.openPage',
     title: 'Open Page',
@@ -322,6 +470,7 @@ function provenanceLines(provenance: Provenance | undefined): string[] {
 function issueItem(node: IssueNode): vscode.TreeItem {
   const issue = node.page.issues[node.index];
   const item = new vscode.TreeItem(issue.message, vscode.TreeItemCollapsibleState.None);
+  item.id = `docs|issue|${node.root.folder.uri.toString()}|${node.page.id}|${node.index}`;
   item.iconPath = new vscode.ThemeIcon(
     issue.severity === 'error' ? 'error' : 'warning',
     new vscode.ThemeColor(issue.severity === 'error' ? 'problemsErrorIcon.foreground' : 'problemsWarningIcon.foreground')
