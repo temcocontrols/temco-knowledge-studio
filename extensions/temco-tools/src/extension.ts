@@ -1,12 +1,13 @@
 // Temco Tools — the device and data surfaces, one container each until their own modules exist.
 //
-// Five studios, each with its own side-bar groups and its own pages:
+// Five studios, each with its own pages:
 //
-//   * **Devices** — Fleet and Data, six pages;
-//   * **I/O Studio** — Engineering and Live, five pages;
-//   * **BACnet Studio** — Network and History, five pages;
-//   * **Network** — Tools and Traffic, four pages;
-//   * **SQL Studio** — Workbench and Docs Database, six pages.
+//   * **Devices** — six pages;
+//   * **I/O Studio** — five pages;
+//   * **BACnet Studio** — five pages;
+//   * **Network** — four pages;
+//   * **SQL Studio** — Workbench and Docs Database, six pages, and the only one that still keeps a side bar of its
+//     own: those two views are declared under `temcoSql` and are the only `createTreeView` calls left here.
 //
 // Every one of them was a folded section of a single page until the mock's side bar was taken seriously: each row has
 // its own title, its own count where the count means something, and its own actions, and a folded section cannot carry
@@ -20,11 +21,10 @@
 // and can clear or reset it — see `sqlStudio.ts`.
 
 import * as vscode from 'vscode';
-import { BACNET_PAGES, registerBacnet } from './bacnet';
-import { ALARMS, DEVICES } from './data';
-import { DEVICE_PAGES, onDidChangeDevices, registerDevices } from './devices';
-import { IO_PAGES, registerIo } from './io';
-import { NETWORK_PAGES, registerNetwork } from './network';
+import { registerBacnet } from './bacnet';
+import { registerDevices } from './devices';
+import { registerIo } from './io';
+import { registerNetwork } from './network';
 import { SQL_PAGES, registerSql } from './sqlStudio';
 
 /** One row of a studio's side bar: the label, the sentence behind it, and the glyph. */
@@ -101,48 +101,6 @@ class PagesTree implements vscode.TreeDataProvider<vscode.TreeItem> {
 	}
 }
 
-/**
- * The Devices container's two views — the mock's **Fleet** and **Data**.
- *
- * The mock's side bar puts a count beside two of the six rows (the fleet, and the conditions that are still true),
- * and none beside the rest: a number that is always there stops meaning anything. The row's own sentence is the
- * tooltip, as it is on every other side bar of the application.
- */
-class DevicesTree implements vscode.TreeDataProvider<vscode.TreeItem> {
-	private readonly emitter = new vscode.EventEmitter<void>();
-	readonly onDidChangeTreeData = this.emitter.event;
-
-	constructor(private readonly group: 'fleet' | 'data') { }
-
-	/** Re-reads the counts: a controller added or a condition acknowledged is a different panel. */
-	refresh(): void {
-		this.emitter.fire();
-	}
-
-	getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
-		return element;
-	}
-
-	getChildren(): vscode.TreeItem[] {
-		return DEVICE_PAGES.filter((entry) => entry.group === this.group).map((entry) => {
-			const item = new vscode.TreeItem(entry.label, vscode.TreeItemCollapsibleState.None);
-			item.iconPath = new vscode.ThemeIcon(codicon(entry.mark));
-			item.tooltip = `${entry.label} — ${entry.note}`;
-			if (entry.id === 'all') {
-				item.resourceUri = counted(DEVICES.length, entry.label);
-			}
-			if (entry.id === 'health') {
-				const active = ALARMS.filter((alarm) => alarm.state === 'Active').length;
-				if (active > 0) {
-					item.resourceUri = counted(active, entry.label);
-				}
-			}
-			item.command = { command: entry.command, title: entry.label };
-			return item;
-		});
-	}
-}
-
 export function activate(context: vscode.ExtensionContext): void {
 	// The numbers at the right edge of a row: a decoration, because that is the slot the host pushes to the end.
 	context.subscriptions.push(
@@ -162,8 +120,6 @@ export function activate(context: vscode.ExtensionContext): void {
 	const network = registerNetwork(context);
 	const sql = registerSql(context);
 
-	const fleet = new DevicesTree('fleet');
-	const data = new DevicesTree('data');
 	context.subscriptions.push(
 		devices.pages,
 		...devices.disposables,
@@ -175,20 +131,8 @@ export function activate(context: vscode.ExtensionContext): void {
 		...network.disposables,
 		sql.pages,
 		...sql.disposables,
-		vscode.window.createTreeView('temcoTools.devicesFleet', { treeDataProvider: fleet }),
-		vscode.window.createTreeView('temcoTools.devicesData', { treeDataProvider: data }),
-		vscode.window.createTreeView('temcoTools.ioEngineering', { treeDataProvider: new PagesTree(IO_PAGES.filter((entry) => entry.group === 'engineering')) }),
-		vscode.window.createTreeView('temcoTools.ioLive', { treeDataProvider: new PagesTree(IO_PAGES.filter((entry) => entry.group === 'live')) }),
-		vscode.window.createTreeView('temcoTools.bacnetNetwork', { treeDataProvider: new PagesTree(BACNET_PAGES.filter((entry) => entry.group === 'network'), { alarms: () => ALARMS.filter((alarm) => alarm.state === 'Active').length }) }),
-		vscode.window.createTreeView('temcoTools.bacnetHistory', { treeDataProvider: new PagesTree(BACNET_PAGES.filter((entry) => entry.group === 'history')) }),
-		vscode.window.createTreeView('temcoTools.networkTools', { treeDataProvider: new PagesTree(NETWORK_PAGES.filter((entry) => entry.group === 'tools')) }),
-		vscode.window.createTreeView('temcoTools.networkTraffic', { treeDataProvider: new PagesTree(NETWORK_PAGES.filter((entry) => entry.group === 'traffic')) }),
 		vscode.window.createTreeView('temcoTools.sqlWorkbench', { treeDataProvider: new PagesTree(SQL_PAGES.filter((entry) => entry.group === 'rows')) }),
-		vscode.window.createTreeView('temcoTools.sqlDocs', { treeDataProvider: new PagesTree(SQL_PAGES.filter((entry) => entry.group === 'file')) }),
-		onDidChangeDevices(() => {
-			fleet.refresh();
-			data.refresh();
-		})
+		vscode.window.createTreeView('temcoTools.sqlDocs', { treeDataProvider: new PagesTree(SQL_PAGES.filter((entry) => entry.group === 'file')) })
 	);
 }
 

@@ -70,6 +70,7 @@ const GROUPS: Group[] = [
 		title: 'Profile',
 		rows: [
 			{ label: 'General', note: 'the window, its working folder, diagnostics and updates', icon: 'gear', command: 'temcoWorkbench.settings.general' },
+			{ label: 'Repositories', note: 'the default enterprise, where copies are cloned, and the GitHub token', icon: 'repo', command: 'temcoRepositories.settings' },
 			{ label: 'AI Models', note: 'what this profile loads, and what it may read', icon: 'sparkle', command: 'temcoWorkbench.settings.ai' }
 		]
 	},

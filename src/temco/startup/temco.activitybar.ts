@@ -5,17 +5,26 @@
 
 import { Disposable } from '../../vs/base/common/lifecycle.js';
 import { Registry } from '../../vs/platform/registry/common/platform.js';
-import { IStorageService, StorageScope } from '../../vs/platform/storage/common/storage.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../vs/platform/storage/common/storage.js';
 import { Extensions, IViewContainersRegistry, ViewContainer } from '../../vs/workbench/common/views.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../vs/workbench/common/contributions.js';
 
 /** The key the activity bar keeps its own order in: an array of container ids, written as icons are pinned. */
 const PINNED_VIEWLETS_KEY = 'workbench.activity.pinnedViewlets2';
 
+/**
+ * How a container contributed by an extension is named in that key.
+ *
+ * The registry knows the container as `temco`; the bar stores it as `workbench.view.extension.temco`. Comparing the
+ * two directly never matches, which is how the bar's remembered list was being thrown away on every start.
+ */
+const EXTENSION_PREFIX = 'workbench.view.extension.';
+
 /** The bar's order, as the mock has it. Explorer and Search come before these and are VS Code's own. */
 const ORDER = [
 	'temcoDashboard',
 	'temco',
+	'temcoDocsTree',
 	'temcoRepos',
 	'temcoAiHub',
 	'temcoLearn',
@@ -66,16 +75,27 @@ class TemcoActivityBar extends Disposable {
 		// The remembered order, before anything reads it.
 		const raw = storageService.get(PINNED_VIEWLETS_KEY, StorageScope.PROFILE, '[]');
 		const hidden = new Set(TemcoActivityBar.HIDDEN);
+		let stored: string[] = [];
 		try {
-			const stored = (JSON.parse(raw) as { id?: string }[]).map((entry) => entry.id).filter((id): id is string => typeof id === 'string');
-			const ours = stored.filter((id) => ORDER.includes(id));
-			// Dropped when the remembered list disagrees with ORDER *or* still names a shelved container: a remembered
-			// id keeps an icon on the bar by itself, long after the container behind it has gone.
-			if (ours.join('|') !== ORDER.join('|') || stored.some((id) => hidden.has(id))) {
-				storageService.remove(PINNED_VIEWLETS_KEY, StorageScope.PROFILE);
-			}
+			stored = (JSON.parse(raw) as { id?: string }[]).map((entry) => entry.id).filter((id): id is string => typeof id === 'string');
 		} catch {
-			storageService.remove(PINNED_VIEWLETS_KEY, StorageScope.PROFILE);
+			stored = [];
+		}
+
+		const bare = stored.map(TemcoActivityBar.bare);
+		const ours = bare.filter((id) => ORDER.includes(id));
+		// A remembered list that disagrees with ORDER — or that still names a shelved container — is not edited but
+		// **replaced**, with every one of our containers pinned, in order. Editing it was the older approach and it had
+		// two faults: it removed the key (so the bar rebuilt from whatever the registration order happened to be, and a
+		// module could be left without an icon), and it compared `temco` against the stored `workbench.view.extension.temco`
+		// so it never matched and ran on every start.
+		if (ours.join('|') !== ORDER.join('|') || bare.some((id) => hidden.has(id))) {
+			storageService.store(
+				PINNED_VIEWLETS_KEY,
+				JSON.stringify(TemcoActivityBar.pinnedOrder(stored)),
+				StorageScope.PROFILE,
+				StorageTarget.USER
+			);
 		}
 
 		const registry = Registry.as<IViewContainersRegistry>(Extensions.ViewContainersRegistry);
@@ -97,6 +117,31 @@ class TemcoActivityBar extends Disposable {
 		// registers it — *after* this phase — so a single sweep at startup only ever saw VS Code's own containers,
 		// which is why the module icons stayed on the bar. Watching the registry catches both cases.
 		this._register(registry.onDidRegister(({ viewContainer }) => remove(viewContainer)));
+	}
+
+	/** The container's id as the bar's storage writes it: extension containers carry a prefix, VS Code's own do not. */
+	private static bare(id: string): string {
+		return id.startsWith(EXTENSION_PREFIX) ? id.slice(EXTENSION_PREFIX.length) : id;
+	}
+
+	/**
+	 * The bar's list, built rather than remembered: whatever else is there, then our modules in `ORDER`.
+	 *
+	 * Everything is pinned and visible, so no module depends on a default that a rebuild can change, and the icons are
+	 * in the sequence the mock draws. Items that are neither ours nor shelved are kept as they were — Explorer and
+	 * Search are the two the workbench cannot do without, and an extension nobody here wrote keeps its own icon.
+	 */
+	private static pinnedOrder(stored: readonly string[]): { id: string; pinned: boolean; visible: boolean; order: number }[] {
+		const hidden = new Set(TemcoActivityBar.HIDDEN);
+		const kept = stored.filter((id) => {
+			const id_ = TemcoActivityBar.bare(id);
+			return !ORDER.includes(id_) && !hidden.has(id_) && !hidden.has(id);
+		});
+		const items = kept.map((id, index) => ({ id, pinned: true, visible: true, order: index }));
+		for (const id of ORDER) {
+			items.push({ id: `${EXTENSION_PREFIX}${id}`, pinned: true, visible: true, order: items.length });
+		}
+		return items;
 	}
 }
 

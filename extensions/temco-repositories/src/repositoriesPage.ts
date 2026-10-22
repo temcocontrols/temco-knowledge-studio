@@ -99,8 +99,11 @@ export class RepositoriesPage {
     // Always assigned: a plain open is a browse, and a browse must not inherit the last project's target.
     this.citeTarget = citeTarget;
     if (this.panel) {
+      // Already drawn once: bring it forward and re-read what it says. Re-baking the HTML here would throw away the
+      // list, the ticks and the scroll position, and put “Reading the organisation from GitHub…” back on screen for
+      // as long as the database takes — the list a person came back to is already drawn.
       this.panel.reveal(pageColumn());
-      void this.render();
+      void this.send();
       return;
     }
     this.panel = vscode.window.createWebviewPanel(REPOSITORIES_VIEW_TYPE, 'Repositories', pageColumn(), {
@@ -111,6 +114,12 @@ export class RepositoriesPage {
       this.panel = undefined;
     });
     this.panel.webview.onDidReceiveMessage((message: RepositoriesMessage) => void this.receive(message));
+    // Shown again after another page has had the focus — a project page, say, where a citation may have changed.
+    this.panel.onDidChangeViewState((state) => {
+      if (state.webviewPanel.visible) {
+        void this.send(undefined, false);
+      }
+    });
     void this.render();
   }
 
@@ -132,15 +141,14 @@ export class RepositoriesPage {
    *
    * The held list goes out first so the page paints at once — a dashboard that waits for the network is a blank
    * screen on a rate-limited machine. The read follows and replaces it; a refusal follows as the same list with
-   * the reason attached.
+   * the reason attached. `ask` is false when the page is only being repainted — coming back to its tab is not a
+   * reason to spend a request.
    */
-  private async send(slug?: string): Promise<void> {
+  private async send(slug?: string, ask = true): Promise<void> {
     const panel = this.panel;
     if (!panel) {
       return;
     }
-    const project = this.citeTarget ?? this.selection.project();
-    const cited = project === undefined ? [] : await this.cited(project);
 
     let catalog: Catalog | undefined;
     try {
@@ -166,17 +174,22 @@ export class RepositoriesPage {
       const org = organisations.find((row) => row.slug === (slug ?? this.showing)) ?? organisations[0];
       this.showing = org.slug;
       this.listed = catalog.repositoriesOf(org.slug);
-      await panel.webview.postMessage(await this.seed(organisations, org, this.listed, cited, project));
+      // One open reads everything this pass needs: the held list, what the project cites, and the project's name. Each
+      // of those used to open the catalog on its own, which is what the page waited on before it could paint.
+      const project = this.citeTarget ?? this.selection.project();
+      const cited = project === undefined ? [] : catalog.documentSources(project).map((source) => source.name);
+      const citeName = this.citeTarget === undefined ? undefined : catalog.document(this.citeTarget)?.name;
+      await panel.webview.postMessage(await this.seed(organisations, org, this.listed, cited, project, citeName));
 
       // One repository named by its address is its own answer; an enterprise has to be asked.
-      if (org.kind === 'repository') {
+      if (!ask || org.kind === 'repository') {
         return;
       }
       const result = await listRepositories(this.context, org.name);
       if ('error' in result) {
         catalog.recordOrganisationRead(org.slug, 'refused');
         await panel.webview.postMessage({
-          ...(await this.seed(catalog.organisations(), org, this.listed, cited, project)),
+          ...(await this.seed(catalog.organisations(), org, this.listed, cited, project, citeName)),
           warning: result.error,
         });
         return;
@@ -186,7 +199,7 @@ export class RepositoriesPage {
       catalog.recordOrganisationRead(org.slug, 'read');
       const renamed = catalog.organisations().find((row) => row.slug === org.slug) ?? org;
       await panel.webview.postMessage({
-        ...(await this.seed(catalog.organisations(), renamed, this.listed, cited, project)),
+        ...(await this.seed(catalog.organisations(), renamed, this.listed, cited, project, citeName)),
         truncated: result.truncated,
       });
     } finally {
@@ -200,7 +213,8 @@ export class RepositoriesPage {
     org: OrganisationRow,
     repositories: readonly RepositoryCacheRow[],
     cited: readonly string[],
-    project: string | undefined
+    project: string | undefined,
+    citeName: string | undefined
   ): Promise<Record<string, unknown>> {
     return {
       type: 'seed',
@@ -210,7 +224,7 @@ export class RepositoriesPage {
       cited,
       // Citing writes into this project when the page was opened from it; the button says which it is.
       citeTarget: this.citeTarget,
-      citeTargetName: this.citeTarget === undefined ? undefined : (await this.projectName(this.citeTarget)),
+      citeTargetName: citeName,
       takenAt: org.lastRead,
       state: org.state,
       // Where a download lands, and what a draft is written beside — the one setting this page acts on.
@@ -235,19 +249,6 @@ export class RepositoriesPage {
       }
     }
     return copies;
-  }
-
-  /** What the project being worked on already cites, by name — the names are what a repository is matched on. */
-  private async cited(project: string): Promise<string[]> {
-    let catalog: Catalog | undefined;
-    try {
-      catalog = await Catalog.open(this.context);
-      return catalog.documentSources(project).map((source) => source.name);
-    } catch {
-      return [];
-    } finally {
-      catalog?.close();
-    }
   }
 
   private async receive(message: RepositoriesMessage): Promise<void> {
@@ -501,19 +502,6 @@ export class RepositoriesPage {
     await vscode.commands.executeCommand('temcoProjects.editProject', target);
   }
 
-  /** The name behind a slug, so the button can say *Cite in T3000 Documentation* rather than in a slug. */
-  private async projectName(slug: string): Promise<string | undefined> {
-    let catalog: Catalog | undefined;
-    try {
-      catalog = await Catalog.open(this.context);
-      return catalog.document(slug)?.name;
-    } catch {
-      return undefined;
-    } finally {
-      catalog?.close();
-    }
-  }
-
   /**
    * Start a repository: cite it in the project being worked on, then read it.
    *
@@ -689,12 +677,12 @@ function html(citing = false): string {
     <ol>
       <li><b>Add an enterprise</b> — <code>temcocontrols</code> is already here — or one repository's address. What an
         enterprise holds is kept in the platform database, so this page still lists it when GitHub will not answer.</li>
-      <li><b>Start</b> adds the repository as a source of the project being worked on, then reads its own
-        <code>docs/help/registry.json</code> over the API. Nothing is cloned, and nothing is written to the
-        repository.</li>
+      <li><b>Start</b> adds the repository as a source of the project being worked on, then reads what documentation
+        it publishes through the API. A repository that publishes none still becomes a source: it has no pages yet, and
+        its files are still there to draft from. Nothing is cloned and nothing is written to the repository.</li>
       <li><b>Project</b> opens a new project <em>from</em> this repository: it is cited as the source, its own
         documentation and classes are listed to pick from, and the AI can draft the first page from what you picked.</li>
-      <li><b>Download</b> clones one branch, with full history, into the folder at the top of this page — the
+      <li><b>Download</b> clones one branch, with full history, into the folder named in the description above — the
         working area, which is outside every repository. That copy is what lets a draft, the AI and its citations
         read the files and the history behind them.</li>
       <li><b>Pull</b> freshens that copy when the repository has moved on. <b>Remove the local copy</b> deletes the

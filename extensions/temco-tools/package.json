@@ -26,14 +26,6 @@
     "temcocontrols.temco-store"
   ],
   "activationEvents": [
-    "onView:temcoTools.devicesFleet",
-    "onView:temcoTools.devicesData",
-    "onView:temcoTools.ioEngineering",
-    "onView:temcoTools.ioLive",
-    "onView:temcoTools.bacnetNetwork",
-    "onView:temcoTools.bacnetHistory",
-    "onView:temcoTools.networkTools",
-    "onView:temcoTools.networkTraffic",
     "onView:temcoTools.sqlWorkbench",
     "onView:temcoTools.sqlDocs"
   ],
