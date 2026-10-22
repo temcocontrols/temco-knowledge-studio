@@ -50,10 +50,6 @@
           "name": "Overview"
         },
         {
-          "id": "temcoDocs.queue",
-          "name": "Needs You"
-        },
-        {
           "id": "temcoWorkbench.activityView",
           "name": "Recent activity"
         }

@@ -40,8 +40,28 @@ class AreaNode {
 
 class ChapterNode {
   readonly kind = 'chapter';
-  /** A folder on disk the registry does not name yet: shown at once, and renamed by a file move. */
-  constructor(readonly root: DocsRoot, readonly area: AreaGroup, readonly chapter: ChapterGroup, readonly loose = false) { }
+  /**
+   * A folder: one at the top of an area, or one inside another folder.
+   *
+   * `chapter.chapter` is the folder's own name, which is what its row shows; `segments` is where it sits under the
+   * area, so `['getting-started', 'advanced']` is the folder `advanced` inside `getting-started`. A folder on disk
+   * the registry does not name yet is shown the same way and renamed by a file move.
+   */
+  constructor(
+    readonly root: DocsRoot,
+    readonly area: AreaGroup,
+    readonly chapter: ChapterGroup,
+    readonly loose = false,
+    readonly segments: string[] = chapter.chapter === ROOT_CHAPTER ? [] : [chapter.chapter]
+  ) { }
+}
+
+/** One level of the tree below an area: the folders there, and the pages filed directly in it. */
+interface FolderLevel {
+  folders: Map<string, FolderLevel>;
+  pages: PageEntry[];
+  /** True when a folder on disk sits here and the registry does not name it — the row has to open for it. */
+  loose: boolean;
 }
 
 class PageNode {
@@ -72,7 +92,23 @@ class NoteNode {
   constructor(readonly note: TreeNote) { }
 }
 
+/** The project the tree shows: its first row, and the way to switch to another. */
+export interface TreeProject {
+  name: string;
+  detail: string;
+}
+
+class ProjectNode {
+  readonly kind = 'project';
+  /**
+   * The area this row stands in for, when it is the tree's root for a single-area project. It is what a page or a
+   * folder dropped on the row moves into: with the area row gone, the project row *is* the area.
+   */
+  constructor(readonly project: TreeProject, readonly place?: { root: DocsRoot; area: AreaGroup }) { }
+}
+
 export type DocsNode =
+  | ProjectNode
   | FolderNode
   | AreaNode
   | ChapterNode
@@ -90,8 +126,20 @@ export class DocsTreeProvider implements vscode.TreeDataProvider<DocsNode> {
 
   private roots: DocsRoot[] = [];
   private notes: TreeNote[] = [];
+  private project: TreeProject | undefined;
   /** Folders and files on disk the registry does not name, by root — filled by the module's own refresh. */
   private loose = new Map<string, Loose>();
+  /** The folder shape of each area, built once per refresh from the page paths. */
+  private levels = new Map<string, FolderLevel>();
+
+  setProject(project: TreeProject | undefined): void {
+    this.project = project;
+  }
+
+  /** Whether the tree draws the project as its own row — the case that makes a title description a repeat. */
+  showsProjectRow(): boolean {
+    return this.project !== undefined;
+  }
 
   setRoots(roots: DocsRoot[], notes: TreeNote[] = [], loose: Map<string, Loose> = new Map()): void {
     // One place is one row. The module already reads each folder once, but this is the surface that paints, and a
@@ -108,7 +156,71 @@ export class DocsTreeProvider implements vscode.TreeDataProvider<DocsNode> {
     });
     this.notes = notes;
     this.loose = loose;
+    this.levels.clear();
     this.changed.fire();
+  }
+
+  /**
+   * The folders of one area, as a tree.
+   *
+   * A page id is its path under `docs/` without the extension, so `guides/getting-started/install` says that
+   * `install` is filed in `getting-started`, inside `guides`. Every folder level is derived from those paths, which
+   * is what lets a folder sit inside a folder without the registry having to name the middle one. Folders and files
+   * found on disk but not registered yet are folded into the same shape.
+   */
+  private levelFor(root: DocsRoot, area: AreaGroup): FolderLevel {
+    const key = `${root.folder.uri.toString()}|${area.area}`;
+    const cached = this.levels.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const top: FolderLevel = { folders: new Map(), pages: [], loose: false };
+    const descent = (segments: readonly string[]): FolderLevel => {
+      let level = top;
+      for (const segment of segments) {
+        let next = level.folders.get(segment);
+        if (next === undefined) {
+          next = { folders: new Map(), pages: [], loose: false };
+          level.folders.set(segment, next);
+        }
+        level = next;
+      }
+      return level;
+    };
+
+    for (const page of area.chapters.flatMap((group) => group.pages)) {
+      const segments = page.id.split('/').slice(1, -1).filter((segment) => segment.length > 0 && segment !== ROOT_CHAPTER);
+      descent(segments).pages.push(page);
+    }
+    const onDisk = this.loose.get(root.folder.uri.toString());
+    for (const folder of onDisk?.folders ?? []) {
+      if (folder.area !== area.area) {
+        continue;
+      }
+      descent(folder.chapter.split('/').filter((segment) => segment.length > 0)).loose = true;
+    }
+    for (const file of onDisk?.files ?? []) {
+      if (file.area !== area.area) {
+        continue;
+      }
+      descent(file.chapter.split('/').filter((segment) => segment.length > 0))
+        .pages.push(loosePage(area.area, file));
+    }
+
+    this.levels.set(key, top);
+    return top;
+  }
+
+  /** The level a folder row stands for, or undefined when the folder is gone. */
+  private levelAt(root: DocsRoot, area: AreaGroup, segments: readonly string[]): FolderLevel | undefined {
+    let level: FolderLevel | undefined = this.levelFor(root, area);
+    for (const segment of segments) {
+      level = level.folders.get(segment);
+      if (level === undefined) {
+        return undefined;
+      }
+    }
+    return level;
   }
 
   refresh(): void {
@@ -128,9 +240,10 @@ export class DocsTreeProvider implements vscode.TreeDataProvider<DocsNode> {
       return undefined;
     }
     const known = group.chapters.find((candidate) => candidate.chapter === chapter);
+    const segments = chapter.split('/').filter((segment) => segment.length > 0);
     return known === undefined
-      ? new ChapterNode(root, group, { chapter, pages: [] }, true)
-      : new ChapterNode(root, group, known);
+      ? new ChapterNode(root, group, { chapter: segments[segments.length - 1] ?? chapter, pages: [] }, true, segments)
+      : new ChapterNode(root, group, known, false, segments);
   }
 
   /**
@@ -142,24 +255,66 @@ export class DocsTreeProvider implements vscode.TreeDataProvider<DocsNode> {
     switch (node.kind) {
       case 'folder':
       case 'note':
+      case 'project':
         return undefined;
       case 'area':
         return node.top ? undefined : new FolderNode(node.root);
-      case 'chapter':
-        return new AreaNode(node.root, node.area, this.areasAreTop(node.root));
+      case 'chapter': {
+        // A folder's parent is the folder above it, or the area when it sits at the top. Nothing is remembered
+        // between refreshes: the row carries its own place, so its parent is rebuilt from its own segments.
+        const above = node.segments.slice(0, -1);
+        if (above.length === 0) {
+          return this.topOf(node.root, node.area);
+        }
+        return new ChapterNode(
+          node.root,
+          node.area,
+          { chapter: above[above.length - 1], pages: [] },
+          false,
+          above
+        );
+      }
       case 'page': {
         const area = node.root.areas.find((candidate) => candidate.area === node.page.area);
         if (area === undefined) {
           return new FolderNode(node.root);
         }
-        const chapter = area.chapters.find((candidate) => candidate.chapter === node.page.chapter);
+        const segments = node.page.id.split('/').slice(1, -1).filter((segment) => segment.length > 0);
+        if (segments.length === 0) {
+          return this.topOf(node.root, area);
+        }
+        const chapter = area.chapters.find((candidate) => candidate.chapter === segments[0]);
         return chapter === undefined
-          ? new ChapterNode(node.root, area, { chapter: node.page.chapter, pages: [] }, true)
-          : new ChapterNode(node.root, area, chapter);
+          ? new ChapterNode(node.root, area, { chapter: segments[segments.length - 1], pages: [] }, true, segments)
+          : new ChapterNode(node.root, area, chapter, false, segments);
       }
       case 'issue':
         return new PageNode(node.root, node.page);
     }
+  }
+
+  /**
+   * The row an area's top-level children hang under.
+   *
+   * With one source that has one area — the shape a new project has — the project's own row *is* that area: the
+   * area row would repeat the project's name under the project's name. Every other shape keeps an area row, because
+   * there the area says something the project row does not.
+   */
+  private topOf(root: DocsRoot, area: AreaGroup): DocsNode {
+    const single = this.singleArea();
+    if (single !== undefined && single.root.folder.uri.toString() === root.folder.uri.toString()) {
+      return new ProjectNode(this.project ?? { name: '', detail: '' }, { root, area });
+    }
+    return new AreaNode(root, area, this.areasAreTop(root));
+  }
+
+  /** The one area a project row stands in for, when there is exactly one. */
+  private singleArea(): { root: DocsRoot; area: AreaGroup } | undefined {
+    if (this.project === undefined || this.roots.length !== 1) {
+      return undefined;
+    }
+    const root = this.roots[0];
+    return root.areas.length === 1 ? { root, area: root.areas[0] } : undefined;
   }
 
   /** Whether this root's areas are the view's own top level — the one case where an area has no folder above it. */
@@ -169,12 +324,32 @@ export class DocsTreeProvider implements vscode.TreeDataProvider<DocsNode> {
 
   getTreeItem(node: DocsNode): vscode.TreeItem {
     switch (node.kind) {
+      case 'project': {
+        const single = this.singleArea();
+        // When the row stands for an area it can always be opened: an empty project opens onto the one row that
+        // says so and offers New Page, which is more use than a row that refuses to expand.
+        const item = new vscode.TreeItem(
+          node.project.name,
+          single === undefined ? vscode.TreeItemCollapsibleState.None : vscode.TreeItemCollapsibleState.Expanded
+        );
+        item.id = 'docs|project';
+        item.description = node.project.detail;
+        // A folder, because that is what the row is: with one area it *is* that area, and the folder icon is what
+        // says so. A book read as a different kind of row sitting among folders.
+        item.iconPath = new vscode.ThemeIcon('folder');
+        item.contextValue = 'project';
+        item.tooltip = `${node.project.name} — click to switch project`;
+        item.command = { command: 'temcoDocs.projects', title: 'Switch Project' };
+        return item;
+      }
       case 'folder':
         return folderItem(node);
       case 'area':
-        return areaItem(node, this.hasLooseFolders(node.root, node.area.area));
-      case 'chapter':
-        return chapterItem(node, this.hasLooseFiles(node.root, node.area.area, node.chapter.chapter));
+        return areaItem(node, this.levelFor(node.root, node.area).folders.size > 0);
+      case 'chapter': {
+        const level = this.levelAt(node.root, node.area, node.segments);
+        return chapterItem(node, this.hasChildren(node), level === undefined ? node.chapter.pages.length : countPages(level));
+      }
       case 'page':
         return pageItem(node);
       case 'issue':
@@ -196,16 +371,10 @@ export class DocsTreeProvider implements vscode.TreeDataProvider<DocsNode> {
     }
   }
 
-  /** Whether a folder on disk sits in this area and the registry does not name it: the row must open for it. */
-  private hasLooseFolders(root: DocsRoot, area: string): boolean {
-    return (this.loose.get(root.folder.uri.toString())?.folders ?? []).some((folder) => folder.area === area);
-  }
-
-  /** Whether a page on disk sits in this chapter and the registry does not name it. */
-  private hasLooseFiles(root: DocsRoot, area: string, chapter: string): boolean {
-    return (this.loose.get(root.folder.uri.toString())?.files ?? []).some(
-      (file) => file.area === area && file.chapter === chapter
-    );
+  /** Whether a folder row has anything to open for: a folder inside it, a page filed in it, or a file on disk. */
+  private hasChildren(node: ChapterNode): boolean {
+    const level = this.levelAt(node.root, node.area, node.segments);
+    return level !== undefined && (level.folders.size > 0 || level.pages.length > 0);
   }
 
   getChildren(node?: DocsNode): DocsNode[] {
@@ -221,34 +390,44 @@ export class DocsTreeProvider implements vscode.TreeDataProvider<DocsNode> {
           ? roots[0].areas.map((area) => new AreaNode(roots[0], area, true))
           : roots.map((root) => new FolderNode(root));
       // Whatever the sources could not say for themselves: a source with no local copy, a registry that failed.
-      return [...rows, ...this.notes.map((note) => new NoteNode(note))];
+      // With one source and one area the project row *is* that area, so it also carries the area itself.
+      const single = this.singleArea();
+      const head = this.project === undefined
+        ? []
+        : [new ProjectNode(this.project, single === undefined ? undefined : { root: single.root, area: single.area })];
+      // The areas are not drawn as well when the project row stands for the only one: the two rows carried the same
+      // name and read as a duplicate. The project row's children are that area's rows.
+      const body = single === undefined ? rows : [];
+      return [...head, ...body, ...this.notes.map((note) => new NoteNode(note))];
     }
 
     switch (node.kind) {
+      case 'project': {
+        const single = this.singleArea();
+        if (single === undefined) {
+          return [];
+        }
+        const level = this.levelFor(single.root, single.area);
+        const rows = this.rowsAt(single.root, [single.area], [], level);
+        if (rows.length > 0) {
+          return rows;
+        }
+        // An empty project is the ordinary state of a new one; the row that explains it also carries the one act.
+        return [new NoteNode({
+          label: 'No pages yet',
+          detail: 'New Page writes the first one',
+          command: { command: 'temcoDocs.newPage' },
+        })];
+      }
       case 'folder':
         return node.root.areas.map((area) => new AreaNode(node.root, area));
       case 'area': {
-        const key = node.root.folder.uri.toString();
-        const loose = (this.loose.get(key)?.folders ?? []).filter((folder) => folder.area === node.area.area);
-        return [
-          ...node.area.chapters.map((chapter) => new ChapterNode(node.root, node.area, chapter)),
-          ...loose.map((folder) => new ChapterNode(
-            node.root,
-            node.area,
-            { chapter: folder.chapter, pages: [] },
-            true
-          )),
-        ];
+        const level = this.levelFor(node.root, node.area);
+        return this.rowsAt(node.root, [node.area], [], level);
       }
       case 'chapter': {
-        const key = node.root.folder.uri.toString();
-        const loose = (this.loose.get(key)?.files ?? []).filter(
-          (file) => file.area === node.area.area && file.chapter === node.chapter.chapter
-        );
-        return [
-          ...node.chapter.pages.map((page) => new PageNode(node.root, page)),
-          ...loose.map((file) => new PageNode(node.root, loosePage(node.area.area, file), true)),
-        ];
+        const level = this.levelAt(node.root, node.area, node.segments);
+        return level === undefined ? [] : this.rowsAt(node.root, [node.area], node.segments, level);
       }
       case 'page':
         return node.page.issues.map((_, index) => new IssueNode(node.root, node.page, index));
@@ -256,6 +435,47 @@ export class DocsTreeProvider implements vscode.TreeDataProvider<DocsNode> {
         return [];
     }
   }
+
+  /**
+   * The rows one folder level holds: its folders first, in the order their first page has, then the pages filed
+   * directly in it. A folder with nothing registered in it still gets a row when something is on disk there.
+   */
+  private rowsAt(
+    root: DocsRoot,
+    area: [AreaGroup],
+    segments: readonly string[],
+    level: FolderLevel
+  ): DocsNode[] {
+    const folders = [...level.folders].map(([name, child]) => ({
+      name,
+      child,
+      segments: [...segments, name],
+      order: child.pages.reduce((first, page) => Math.min(first, page.order), Number.MAX_SAFE_INTEGER),
+    }));
+    folders.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+    return [
+      ...folders.map((folder) => new ChapterNode(
+        root,
+        area[0],
+        { chapter: folder.name, pages: folder.child.pages },
+        folder.child.loose,
+        folder.segments
+      )),
+      ...level.pages
+        .slice()
+        .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title))
+        .map((page) => new PageNode(root, page)),
+    ];
+  }
+}
+
+/** Every page at or below one folder level — what a folder's row counts, folders inside it included. */
+function countPages(level: FolderLevel): number {
+  let total = level.pages.length;
+  for (const child of level.folders.values()) {
+    total += countPages(child);
+  }
+  return total;
 }
 
 /** The page a loose file will be once the generator names it — the same id rule, and nothing claimed beyond it. */
@@ -339,30 +559,31 @@ function areaItem(node: AreaNode, hasLoose = false): vscode.TreeItem {
   return item;
 }
 
-function chapterItem(node: ChapterNode, hasLoose = false): vscode.TreeItem {
+function chapterItem(node: ChapterNode, hasChildren = false, total = node.chapter.pages.length): vscode.TreeItem {
   const item = new vscode.TreeItem(
     node.chapter.chapter,
-    node.chapter.pages.length > 0 || node.loose || hasLoose
+    node.chapter.pages.length > 0 || hasChildren
       ? vscode.TreeItemCollapsibleState.Collapsed
       : vscode.TreeItemCollapsibleState.None
   );
-  item.description = node.loose ? undefined : String(node.chapter.pages.length);
-  item.id = `docs|chapter|${node.root.folder.uri.toString()}|${node.area.area}|${node.chapter.chapter}`;
+  item.description = node.loose ? undefined : String(total);
+  // A folder's identity is its whole path: `advanced` inside `getting-started` is not the `advanced` beside it.
+  item.id = `docs|chapter|${node.root.folder.uri.toString()}|${node.area.area}|${node.segments.join('/')}`;
   // One folder looks like one folder. A folder the registry does not name yet is still a folder, so it carries the
   // same icon as the registered ones and says nothing beside its name: "not registered" on every second row is a
   // wall of the same word, and the tooltip is where that belongs.
   item.iconPath = new vscode.ThemeIcon('folder');
   // A folder that was cut is on its way somewhere else, and Explorer's way of saying so is to dim it.
-  if (cutUris().has(contentUri(node.root.rootUri, node.area.area, node.chapter.chapter).toString())) {
+  if (cutUris().has(contentUri(node.root.rootUri, node.area.area, ...node.segments).toString())) {
     item.iconPath = new vscode.ThemeIcon('folder', new vscode.ThemeColor('disabledForeground'));
   }
   item.tooltip = node.loose
     ? 'A folder on disk that the registry does not name yet. Run the generator to register the pages inside it.'
     : undefined;
   item.contextValue = node.loose ? 'looseChapter' : 'chapter';
-  // Double-click renames it, the way a folder in Explorer does. A registered chapter renames its pages with it, so
-  // the act confirms what it will move before it moves anything — see `renameFolder` in `pageOps.ts`.
-  item.command = { command: 'temcoDocs.rename', title: 'Rename…' };
+  // No click command: a folder row is opened and closed by clicking it, the way a folder in Explorer is. Renaming
+  // is F2 and the context menu — a rename nobody asked for, on the gesture that means "show me what is inside",
+  // is the wrong answer to the commonest click in the tree.
   return item;
 }
 

@@ -407,7 +407,20 @@ async function deleteProjectFolder(
     return false;
   }
 
-  await fs.rm(folder, { recursive: true, force: true });
+  // A folder the window has open cannot be deleted on Windows — the watchers hold it — so it is closed first.
+  // It was added to the workspace when the project was created, to show its `docs/` in Explorer, and a removal
+  // that leaves a workspace folder pointing at nothing is a second mess.
+  await closeWorkspaceFoldersAt(folder);
+
+  try {
+    await fs.rm(folder, { recursive: true, force: true });
+  } catch (error) {
+    void vscode.window.showErrorMessage(
+      `Temco Repositories: ${folder} could not be deleted — ` +
+      `${error instanceof Error ? error.message : String(error)}. Close anything using it, then delete it in Explorer.`
+    );
+    return false;
+  }
   await withCatalog(context, (catalog) => {
     for (const row of catalog.sources()) {
       const detail = catalog.source(row.slug);
@@ -435,10 +448,39 @@ async function isThere(folder: string): Promise<boolean> {
   }
 }
 
-/** Whether a recorded path is inside a folder — a clone that lived in a project's own folder. */
+/**
+ * Closes every workspace folder at or inside a path.
+ *
+ * The folders are re-read on every turn of the loop because removing one renumbers the rest, and the count is
+ * changed one entry at a time: a single call with a range would remove a neighbour if the list shifted.
+ */
+async function closeWorkspaceFoldersAt(folder: string): Promise<void> {
+  for (;;) {
+    const folders = vscode.workspace.workspaceFolders ?? [];
+    const index = folders.findIndex((candidate) => {
+      const open = path.resolve(candidate.uri.fsPath);
+      const gone = path.resolve(folder);
+      return open === gone || open.toLowerCase().startsWith(`${gone.toLowerCase()}${path.sep}`);
+    });
+    if (index < 0) {
+      return;
+    }
+    await vscode.workspace.updateWorkspaceFolders(index, 1);
+  }
+}
+
+/**
+ * Whether a recorded path is the folder or inside it.
+ *
+ * Both matter, and they are different cases rather than one: a **clone** lives *inside* a project's folder, while
+ * the source a project's own `docs/` is cited by *is* that folder. Comparing only the inside case left the second
+ * kind pointing at a folder that no longer existed.
+ */
 function isInside(file: string, folder: string): boolean {
-  const parent = `${path.resolve(folder)}${path.sep}`;
-  return path.resolve(file).toLowerCase().startsWith(parent.toLowerCase());
+  const target = path.resolve(folder);
+  const resolved = path.resolve(file);
+  return resolved.toLowerCase() === target.toLowerCase()
+    || resolved.toLowerCase().startsWith(`${target.toLowerCase()}${path.sep}`);
 }
 
 // ------------------------------------------------------------------ helpers

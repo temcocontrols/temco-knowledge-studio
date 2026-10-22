@@ -52,55 +52,54 @@ export async function looseEntries(root: DocsRoot): Promise<Loose> {
 	const files: LooseFile[] = [];
 
 	for (const area of root.areas) {
-		const areaFolder = contentUri(root.rootUri, area.area);
-		let entries: [string, vscode.FileType][] = [];
-		try {
-			entries = await vscode.workspace.fs.readDirectory(areaFolder);
-		} catch {
-			continue;
+		const pages = area.chapters.flatMap((group) => group.pages);
+		// What the registry knows, by the folder's **whole** path under the area: a folder can sit inside a
+		// folder, so `advanced` inside `getting-started` is not the `advanced` beside it.
+		const registered = new Set<string>();
+		const named = new Map<string, Set<string>>();
+		for (const page of pages) {
+			const parts = page.id.split('/');
+			const file = parts[parts.length - 1];
+			const above = parts.slice(1, -1);
+			for (let depth = 1; depth <= above.length; depth++) {
+				registered.add(above.slice(0, depth).join('/'));
+			}
+			const key = above.join('/');
+			const names = named.get(key) ?? new Set<string>();
+			names.add(file);
+			named.set(key, names);
 		}
 
-		const registered = new Set(area.chapters.map((chapter) => chapter.chapter));
-		for (const [name, type] of entries) {
-			if (type !== vscode.FileType.Directory) {
-				continue;
-			}
-			if (!registered.has(name)) {
-				folders.push({ area: area.area, chapter: name, uri: vscode.Uri.joinPath(areaFolder, name) });
-			}
-		}
-
-		// Loose files are read for both registered and loose chapters: a page added to an existing chapter is the
-		// commonest case of all.
-		const chapters = [
-			...area.chapters.map((chapter) => chapter.chapter),
-			...folders.filter((folder) => folder.area === area.area).map((folder) => folder.chapter),
-		];
-		for (const chapter of chapters) {
-			const chapterFolder = contentUri(root.rootUri, area.area, chapter);
-			let chapterEntries: [string, vscode.FileType][] = [];
+		// The area folder is walked whole. A folder nobody registered is a loose row, and it is walked too, so
+		// what a person just made — a folder inside it, a page inside that — is a row rather than a blank pane.
+		const walk = async (folder: vscode.Uri, relative: string): Promise<void> => {
+			let entries: [string, vscode.FileType][] = [];
 			try {
-				chapterEntries = await vscode.workspace.fs.readDirectory(chapterFolder);
+				entries = await vscode.workspace.fs.readDirectory(folder);
 			} catch {
-				continue;
+				return;
 			}
-			const named = new Set(
-				(area.chapters.find((entry) => entry.chapter === chapter)?.pages ?? []).map((page) =>
-					page.uri.fsPath.replace(/\\/g, '/').split('/').pop()?.replace(/\.md$/i, '')
-				)
-			);
-			for (const [file, kind] of chapterEntries) {
-				if (kind !== vscode.FileType.File || !/\.md$/i.test(file)) {
+			for (const [name, type] of entries) {
+				const path = relative.length === 0 ? name : `${relative}/${name}`;
+				if (type === vscode.FileType.Directory) {
+					if (!registered.has(path)) {
+						folders.push({ area: area.area, chapter: path, uri: vscode.Uri.joinPath(folder, name) });
+					}
+					await walk(vscode.Uri.joinPath(folder, name), path);
 					continue;
 				}
-				const name = file.replace(/\.md$/i, '');
-				if (named.has(name)) {
+				if (type !== vscode.FileType.File || !/\.md$/i.test(name)) {
 					continue;
 				}
-				const uri = vscode.Uri.joinPath(chapterFolder, file);
-				files.push({ area: area.area, chapter, name, title: await titleOf(uri, name), uri });
+				const base = name.replace(/\.md$/i, '');
+				if (named.get(relative)?.has(base) === true) {
+					continue;
+				}
+				const uri = vscode.Uri.joinPath(folder, name);
+				files.push({ area: area.area, chapter: relative, name: base, title: await titleOf(uri, base), uri });
 			}
-		}
+		};
+		await walk(contentUri(root.rootUri, area.area), '');
 	}
 
 	return { folders, files };

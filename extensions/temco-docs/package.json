@@ -32,8 +32,7 @@
     "onView:temcoDocs.project",
     "onView:temcoDocs.queue",
     "onView:temcoDocs.draft",
-    "onView:temcoDocs.section.pipeline",
-    "onView:temcoDocs.section.working"
+    "onView:temcoDocs.section.pipeline"
   ],
   "contributes": {
     "viewsContainers": {
@@ -53,20 +52,20 @@
           "initialSize": 3
         },
         {
+          "id": "temcoDocs.queue",
+          "name": "Needs You",
+          "initialSize": 1,
+          "visibility": "collapsed"
+        },
+        {
           "id": "temcoDocs.project",
-          "name": "Project",
+          "name": "Sources",
           "initialSize": 1,
           "visibility": "collapsed"
         },
         {
           "id": "temcoDocs.section.pipeline",
-          "name": "Pipeline",
-          "initialSize": 1,
-          "visibility": "collapsed"
-        },
-        {
-          "id": "temcoDocs.section.working",
-          "name": "Working Set",
+          "name": "Publish",
           "initialSize": 1,
           "visibility": "collapsed"
         }
@@ -82,13 +81,15 @@
     "commands": [
       {
         "command": "temcoDocs.projects",
-        "title": "Projects",
+        "title": "Switch Project",
         "icon": "$(folder)"
       },
       {
         "command": "temcoDocs.projectPage",
-        "title": "Open the Project Page",
-        "icon": "$(folders)"
+        "title": "Project Detail",
+        "shortTitle": "Detail",
+        "category": "Temco Docs",
+        "icon": "$(info)"
       },
       {
         "command": "temcoDocs.needsPage",
@@ -102,12 +103,12 @@
       },
       {
         "command": "temcoDocs.repository",
-        "title": "Open a Repository",
+        "title": "Show the Sources",
         "icon": "$(repo)"
       },
       {
         "command": "temcoDocs.documents",
-        "title": "Documents",
+        "title": "Show the Pages",
         "icon": "$(book)"
       },
       {
@@ -127,17 +128,17 @@
       },
       {
         "command": "temcoDocs.source",
-        "title": "Open a Source",
+        "title": "Show the Sources",
         "icon": "$(code)"
       },
       {
         "command": "temcoDocs.review",
-        "title": "Review Center",
+        "title": "Review the Drafts",
         "icon": "$(check)"
       },
       {
         "command": "temcoDocs.builds",
-        "title": "Build Center",
+        "title": "Show Publish",
         "icon": "$(play)"
       },
       {
@@ -253,6 +254,12 @@
         "command": "temcoDocs.servePublished",
         "title": "Serve the Published Site",
         "icon": "$(radio-tower)"
+      },
+      {
+        "command": "temcoDocs.openLearn",
+        "title": "Open the Temco Learn Portal",
+        "category": "Temco Docs",
+        "icon": "$(globe)"
       },
       {
         "command": "temcoDocs.stopServing",
@@ -772,6 +779,26 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "temcoDocs.newPage",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|looseChapter)$/",
+          "group": "inline@1"
+        },
+        {
+          "command": "temcoDocs.newChapter",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(folder|area|chapter|looseChapter)$/",
+          "group": "inline@2"
+        },
+        {
+          "command": "temcoDocs.captureImage",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(page|loosePage)$/",
+          "group": "inline@1"
+        },
+        {
+          "command": "temcoDocs.rename",
+          "when": "view == temcoDocs.pages && viewItem =~ /^(page|loosePage|chapter|looseChapter)$/",
+          "group": "inline@2"
+        },
         {
           "command": "temcoDocs.attachCapture",
           "when": "view == temcoDocs.queue && viewItem == capture",

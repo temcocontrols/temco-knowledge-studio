@@ -169,9 +169,15 @@ export function pageUri(rootUri: vscode.Uri, id: string): vscode.Uri {
   return vscode.Uri.joinPath(contentUri(rootUri, ...segments), `${file}.md`);
 }
 
-/** A folder under a repository's `docs/` — the one path rule the platform owns, named in one place. */
+/**
+ * A folder under a repository's `docs/` — the one path rule the platform owns, named in one place.
+ *
+ * A segment may itself be a path: a folder can sit inside a folder, and callers pass what the registry calls a
+ * chapter, which is everything between the area and the file. Splitting here keeps every caller from having to.
+ */
 export function contentUri(rootUri: vscode.Uri, ...path: string[]): vscode.Uri {
-  return vscode.Uri.joinPath(rootUri, ...CONTENT_RELATIVE_PATH, ...path);
+  const segments = path.flatMap((part) => part.split('/')).filter((part) => part.length > 0 && part !== '.');
+  return vscode.Uri.joinPath(rootUri, ...CONTENT_RELATIVE_PATH, ...segments);
 }
 
 export function registryUriFor(folder: vscode.WorkspaceFolder): vscode.Uri {
@@ -324,18 +330,19 @@ export function totals(roots: readonly DocsRoot[]): Counts {
  */
 export async function loadDocsRoot(folder: vscode.WorkspaceFolder): Promise<DocsRoot | undefined> {
   const registryUri = registryUriFor(folder);
-  if (!(await fileExists(registryUri))) {
-    return undefined;
-  }
-
-  let registry: Registry;
-  try {
-    const bytes = await vscode.workspace.fs.readFile(registryUri);
-    registry = JSON.parse(Buffer.from(bytes).toString('utf8')) as Registry;
-  } catch (error) {
-    throw new RegistryError(
-      `${vscode.workspace.asRelativePath(registryUri)} could not be read: ${describe(error)}`
-    );
+  // A registry that is not there is not a broken source: the folders and the files are the documentation, and the
+  // registry is the metadata a build generates beside them. A registry that *is* there and cannot be read is still
+  // reported, because that is a file somebody has to look at.
+  let registry: Registry = {};
+  if (await fileExists(registryUri)) {
+    try {
+      const bytes = await vscode.workspace.fs.readFile(registryUri);
+      registry = JSON.parse(Buffer.from(bytes).toString('utf8')) as Registry;
+    } catch (error) {
+      throw new RegistryError(
+        `${vscode.workspace.asRelativePath(registryUri)} could not be read: ${describe(error)}`
+      );
+    }
   }
 
   const declaredAreas = registry.areas ?? {};
@@ -343,9 +350,8 @@ export async function loadDocsRoot(folder: vscode.WorkspaceFolder): Promise<Docs
   const problems: RootProblem[] = [];
   const ids = Object.keys(declaredPages);
 
-  if (ids.length === 0) {
-    problems.push({ severity: 'warning', message: 'The registry declares no pages.' });
-  }
+  // No warning for an empty `pages{}`: a registry is generated metadata, and "it lists nothing yet" is the normal
+  // state of a project whose pages are files on disk.
 
   const titleOwners = new Map<string, string[]>();
   const orderOwners = new Map<string, string[]>();
@@ -355,27 +361,19 @@ export async function loadDocsRoot(folder: vscode.WorkspaceFolder): Promise<Docs
     const raw = declaredPages[id] ?? {};
     const issues: Issue[] = [];
 
+    // The path is the structure. `area` and `chapter` used to be read from the entry and then compared with the
+    // path, which made a registry written by an older generator — or by hand — report a page as broken when the
+    // page was perfectly fine. A registry is *generated metadata* now: the folders decide where a page is, and
+    // these two fields are derived from them, never trusted over them.
     const segments = id.split('/');
-    const area = raw.area ?? segments[0] ?? '';
-    const chapter = raw.chapter ?? segments[1] ?? '';
+    const area = segments[0] ?? '';
+    const chapter = segments[1] ?? '';
 
-    if (!raw.title) {
-      issues.push({ severity: 'error', message: 'The page has no title.' });
-    }
-    if (!declaredAreas[area]) {
-      issues.push({
-        severity: 'error',
-        message: `Area "${area}" is not declared in areas{}, so nothing groups or filters this page.`,
-      });
-    }
-    if (segments.length < 2 || segments[0] !== area || segments[1] !== chapter) {
-      issues.push({
-        severity: 'error',
-        message: `The page id disagrees with its own area and chapter (expected "${area}/${chapter}/…").`,
-      });
-    }
-    if (raw.order === undefined) {
-      issues.push({ severity: 'warning', message: 'No order: the page has no defined place in navigation.' });
+    if (raw.title === undefined) {
+      // A page without a curated title is named the way a reader would name it: from its file. Not an error —
+      // every new page starts that way, and a title can be curated later.
+      const file = segments[segments.length - 1] ?? id;
+      raw.title = file.replace(/[-_]+/g, ' ').replace(/^./, (first) => first.toUpperCase());
     }
 
     const uri = pageUri(folder.uri, id);
@@ -444,8 +442,50 @@ export async function loadDocsRoot(folder: vscode.WorkspaceFolder): Promise<Docs
     }
   }
 
-  const areas = groupAreas(declaredAreas, entries);
+  const areas = await areasOnDisk(folder.uri, groupAreas(declaredAreas, entries));
   return { folder, rootUri: folder.uri, registryUri, areas, problems, ...sumCounts(entries) };
+}
+
+/**
+ * Adds the folders that exist under `docs/` and that the registry does not declare.
+ *
+ * The folders are the structure: a directory somebody made is an area even before anything has named it, and a
+ * registry that is generated — or simply out of date — must not make a folder disappear from the tree. A declared
+ * area keeps everything the registry says about it; an undeclared one is added empty, with a title made from its
+ * name, and its pages are read from disk like any other.
+ */
+async function areasOnDisk(rootUri: vscode.Uri, declared: AreaGroup[]): Promise<AreaGroup[]> {
+  let entries: [string, vscode.FileType][] = [];
+  try {
+    entries = await vscode.workspace.fs.readDirectory(contentUri(rootUri));
+  } catch {
+    // No `docs/` folder at all: the registry is all there is to go on.
+    return declared;
+  }
+  const known = new Set(declared.map((area) => area.area));
+  // The registry's own folder is not an area: `docs/help/` holds `registry.json`, and a section called "Help"
+  // made of the index itself would be a room containing its own door.
+  const ownFolder = REGISTRY_RELATIVE_PATH[1];
+  const added: AreaGroup[] = [];
+  for (const [name, type] of entries) {
+    if (type !== vscode.FileType.Directory || known.has(name) || name === ownFolder) {
+      continue;
+    }
+    added.push({
+      area: name,
+      title: name.replace(/[-_]+/g, ' ').replace(/^./, (first) => first.toUpperCase()),
+      audience: 'user',
+      noindex: false,
+      chapters: [],
+      pages: 0,
+      issues: 0,
+      errors: 0,
+      warnings: 0,
+      neverReviewed: 0,
+      unshipped: 0,
+    });
+  }
+  return [...declared, ...added].sort((a, b) => a.area.localeCompare(b.area));
 }
 
 function groupAreas(

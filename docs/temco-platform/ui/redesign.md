@@ -1,127 +1,325 @@
-# Redesign: the documentation center layout
+# Docs center: the redesign
 
-Supersedes the layout parts of `app-flow.md`, `authoring-flow.md` and `extension-design.md`, which contradict each other. Draft for review; nothing here is built yet.
+One consolidated design for the documentation center. It supersedes the layout sections of `app-flow.md`, `authoring-flow.md` and `extension-design.md`, which contradict each other. Nothing here is built yet.
 
-## 1. The model (from the origin discussion)
+## 1. The model
 
 ```
- Sources ─► Temco Platform (authoring) ─► Product Package ─► Temco Learn (website) 
- repos, pdf,   projects · AI · review       products/<id>/         search · downloads · versions
- word, chm                                  manifest.json          DocFX = one build engine,
-                                            docs/ api/ guides/     CHM/PDF/ZIP = other exporters
-                                            assets/ releases/
+ Sources ─► Temco Platform (authoring) ─► Product package ─► Temco Learn (website)
+ repos, pdf,   projects · AI · review       products/<id>/       search · downloads · versions
+ word, chm                                  manifest.json
+                                            docs/ api/ guides/ assets/ releases/
 ```
 
 | System | Job | Where |
 |---|---|---|
-| **Temco Platform** | where people work: projects, sources, AI drafts, review, generate | this repo (the VS Code fork) |
-| **Product Package** | the unit of exchange; a plug-in the portal discovers | `products/<id>/` |
-| **Temco Learn** | the reader's MSDN-style portal | `temco-learn` repo |
-| **DocFX** | one pluggable build engine | called by Build, never a surface |
+| **Temco Platform** | where people work: projects, sources, AI drafts, review, generate | this repository |
+| **Product package** | the unit of exchange; a plug-in the portal discovers | `products/<id>/` |
+| **Temco Learn** | the reader's MSDN-style portal | the `temco-learn` repository |
+| **DocFX** | one pluggable build engine; CHM and PDF are other exporters | invoked by Build, never a surface |
 
-Vocabulary, one word per thing: **Product** (T3000) → **Version** (13.0) → **Section** (Overview, Guides, API, Troubleshooting, Release Notes) → **Page**. This replaces Area/Chapter/Project/Source overlap in the UI. The registry fields stay as they are; only the labels change.
+**Vocabulary.** Project (a `documents` row) → Section (the registry's *area*) → Folder (its *chapter*, nestable) → Page. Versions come from the project's releases. A `products` table is added only if several versions must be open at once.
 
-## 2. The layout
+**Truth rule.** Markdown and `registry.json` in the repository are the content. `catalog.sqlite` is a register (projects, sources, builds, releases, drafts, caches) and never holds a second copy of page text, except a draft not yet accepted.
 
-One activity-bar icon for the whole center, named **Docs**. Dashboard, Learn and the docs container merge into it; Explorer, Search, Repositories, AI, SQL, Settings stay as they are.
+## 2. Journey
 
 ```
-┌─ ACTIVITY ─┬─ DOCS ─────────────────────┬─ EDITOR ──────────────────────────┬─ ASSIST ───────┐
-│ Explorer   │ [T3000 ▾]  [13.0 ▾]   ＋ ⟳ │ Page tab · Preview · Properties   │ Draft (AI)     │
-│ Search     │ ▾ Overview                 │                                   │  from a source │
-│ ▤ Docs     │ ▾ Guides                   │ # Data Points API                 │  another page  │
-│ Repos      │   ▾ Getting Started        │ …markdown…                        │ Ask this page  │
-│ AI         │       Install              │ ![](media/01-…)                   │  with citations│
-│ SQL        │       First project  ●     │                                   │ Result (diff)  │
-│            │ ▸ Architecture             │                                   │ [Apply][Reject]│
-│            │ ▸ API                      │                                   │                │
-│            │ ▸ Troubleshooting          │                                   │                │
-│            │ ▸ Release Notes            │                                   │                │
-├────────────┤────────────────────────────┤                                   │                │
-│            │ NEEDS YOU (7)              │                                   │                │
-│            │ SOURCES (3)                │                                   │                │
-│            │ PUBLISH                    │                                   │                │
-└────────────┴────────────────────────────┴───────────────────────────────────┴────────────────┘
+ A LAUNCH ─► B START PAGE ─► C CREATE PROJECT ─► D EMPTY PROJECT ─► E ADD PAGES
+                                                                        │
+   I RELEASE ◄─ H PUBLISH ◄─ G NEEDS YOU / AI LOOP ◄─ F EDIT / CAPTURE ◄┘
 ```
 
-### Left panel: three zones, in this order
+### A. First launch
 
-1. **Header: Product and Version pickers.** This is the whole "project" concept. Picking a product makes the rest of the panel about it. Replaces the Dashboard Projects list and the Project section.
-2. **PAGES: the tree.** Same look as the original tree: folder rows with a page count, leaf rows showing only the title. The top level is the product's sections in the MSDN order (Overview, Guides, Architecture, API, Troubleshooting, Release Notes), mirroring the portal's own navigation, so the tree *is* what the reader will see. State is shown by a badge, never by extra rows: `●` draft waiting, `⚠` stale, `📷` missing image.
-3. **Three collapsed views beneath, only one open at a time:**
-   - **NEEDS YOU**: screenshots to place, stale pages, never reviewed, drafts awaiting review. Each row opens the page.
-   - **SOURCES**: what the AI reads (repos, PDF, Word, CHM). `＋` imports.
-   - **PUBLISH**: Review · Build · Release (below).
+```
+┌────┬───────────────────────────┬──────────────────────────────────────────────────────────────┐
+│ ▤◀ │ DOCS                      │  Welcome to Temco Docs                                       │
+│    │  No project yet           │   ┌─ Start ─────────────────┐  ┌─ Bring in existing ───────┐ │
+│    │  [ ＋ Create a project ]  │   │ ＋ New project          │  │ Word · RTF · CHM · HTML   │ │
+│    │  [ ⇩ Import a doc set  ]  │   │ ▤ From a template       │  │ A folder of Markdown      │ │
+│    │  [ ⎇ Open a repository ]  │   │ ⎇ From a repository     │  │ A git repository          │ │
+│    │                           │   └─────────────────────────┘  └───────────────────────────┘ │
+├────┴───────────────────────────┴──────────────────────────────────────────────────────────────┤
+│ catalog.sqlite created · default organisation written                                         │
+└───────────────────────────────────────────────────────────────────────────────────────────────┘
+```
 
-Removed: Working Set (use the editor's Open Editors), Pipeline as a separate section, Dashboard as a container.
+### B. Start page (projects exist; shown in the editor, not a container)
 
-### Tree actions
+```
+┌───────────────────────────────────────────────────────────────────────────────┐
+│ Temco Docs                                                      ＋ New project │
+│ RECENT PROJECTS                                                               │
+│  ▤ T3000 Documentation   v13.0   3 sources   built 12:04 ✓   [ Open ] [ ⋯ ]   │
+│  ▤ BACnet Tools          v1.2    1 source    never built     [ Open ] [ ⋯ ]   │
+│ NEEDS YOU (all projects)                 RECENT ACTIVITY                      │
+│  ⚑ 2 drafts waiting       T3000          12:04 build site ✓ T3000             │
+│  📷 1 screenshot to place  T3000          11:40 capture placed → Scaling       │
+└───────────────────────────────────────────────────────────────────────────────┘
+```
 
-| Where | Action |
+### C. Create a project (4 steps)
+
+```
+ 1 ORIGIN   ◉ Blank · ○ From a template · ○ From a repository · ○ Import a document set · ○ Open existing
+ 2 BASICS   Name [T3000 Documentation]  Version [13.0]  Owner [alice ▾]  Audience [developer ▾]
+ 3 SOURCES  ☑ ⎇ t3000webview [main ▾] [src/**]   ☑ ⎇ t3000-esp [main ▾]   ＋ GitHub org · folder · archive
+ 4 OUTPUTS  Engine [DocFX ▾]  ☑ Website ☑ PDF ☑ CHM ☑ Search index ☐ AI index  →  Review  →  [ Create ]
+```
+
+Create writes `documents`, `doc_sources`, `recipes` and the smallest valid `docs/help/registry.json`. The six default sections are seeded for a blank project: Overview, Guides, Architecture, API, Troubleshooting, Release Notes.
+
+### D. First open (empty project)
+
+```
+┌────┬───────────────────────────┬──────────────────────────────────────────────────────────┐
+│ ▤◀ │ DOCS                ＋ 🗀 ⟳│ T3000 Documentation 13.0                                 │
+│    │ ▾ T3000 Docs · 13.0       │  Your project is ready. Next:                            │
+│    │     (empty)               │   ① Add the first page            [ New Page ]           │
+│    │ ▸ NEEDS YOU          (0)  │   ② Bring in existing material     [ Import ]            │
+│    │ ▸ SOURCES            (2)  │   ③ Let the AI draft from sources  [ Draft sections ]    │
+│    │ ▸ PUBLISH                 │                                                          │
+└────┴───────────────────────────┴──────────────────────────────────────────────────────────┘
+```
+
+## 3. The window
+
+```
+┌────┬─────────────────────────────┬──────────────────────────────┬──────────────────────────┐
+│ ▤◀ │ DOCS                  ＋ 🗀 ⟳│ first-project.md × │ Preview │ ASSIST                   │
+│    │ ▾ T3000 Docs · 13.0  (pick) │                              │ [Draft][Properties]      │
+│    │   ▾ Overview            3   │ markdown editor              │  title · owner · ship    │
+│    │   ▾ Guides             14   │  Ctrl+Alt+S inserts image    │  keywords · help ids     │
+│    │     ▾ Getting Started   4   │                              │  code · reviewed         │
+│    │         First project  ●    │                              │                          │
+│    │   ▸ API · Troubleshooting…  │                              │                          │
+│    │ ▸ NEEDS YOU (7)  collapsed  │                              │                          │
+│    │ ▸ SOURCES (3)    collapsed  │                              │                          │
+│    │ ▸ PUBLISH        collapsed  │                              │                          │
+├────┴─────────────────────────────┴──────────────────────────────┴──────────────────────────┤
+│ T3000 13.0 · 318 pages · 14 stale · 0 problems         ⚑ 2 drafts        site ✓ · help ✗    │
+└─────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+Constraints from the VS Code API that shape this layout:
+
+- A tree view cannot hold dropdowns, so **the project is the tree's first row**. Clicking it opens a quick-pick; the view title shows it too.
+- The three lower views are independent panes, collapsed by default. There is no accordion behaviour.
+- A text editor has no tabs: Edit and Preview use the Markdown side-by-side preview, and **Properties is a tab in the right panel**.
+- Dropping on the tree reports only the row dropped on, never the gap between rows.
+- The tree is **path-based**. A page id is its path under `docs/`, so `guides/getting-started/install.md` is the page `install` in the folder `getting-started`, inside `guides`. Every folder level is derived from those paths: the registry does not have to name the middle folders, and folders nest to any depth.
+
+## 4. E. The Pages tree
+
+### Rows and hover icons
+
+```
+ PAGES                                            ＋  🗀  ⇩  ⟳  ⋯
+┌────────────────────────────────────────────────────────────────────┐
+│ ▾ Guides                                    14                     │
+│   ▾ Getting Started                  [＋][🗀][⋯]     ← folder hover │
+│       Install                                                      │
+│       First project   ●              [📷][✦][⋯]      ← page hover   │
+│       Licensing                                                    │
+│ ▾ API                                                              │
+│   ▾ Data Points API                                                │
+│       Scaling         ⚠  📷                                         │
+│         └ ⚠ code changed since last review                         │
+│         └ 📷 no image on this page                                 │
+└────────────────────────────────────────────────────────────────────┘
+ Folder row: name and page count only. Leaf row: title only.
+ State is a badge (● draft · ⚠ stale · 📷 no image) or a folded child, never an extra row.
+ Hover icons: folder = ＋ New Page · 🗀 New Folder · ⋯ ;  page = 📷 Capture · ✦ Draft with AI · ⋯
+ Tooltip: id · owner · audience · last change.
+```
+
+### New page and new folder: the selection is the location
+
+```
+ Selected row            New Page lands…            New Folder lands…
+ ─────────────────────   ────────────────────────   ──────────────────────
+ nothing / empty space   at the root of the section the root
+ a folder                inside it                  inside it (a sub-folder)
+ a page                  next to it                 next to it
+```
+
+```
+ click ＋ (or Ctrl+N with the tree focused)
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │ New page in  Guides / Getting Started                                  │
+ │ [ First project________________________ ]                              │
+ │   → getting-started/first-project.md                                   │
+ │                              Enter = create    Esc = cancel            │
+ └────────────────────────────────────────────────────────────────────────┘
+          │ Enter ─► file written, registry entry added, row selected, page opens
+```
+
+| Act | You type | Automatic |
+|---|---|---|
+| New Page | title | file name from the slug, kind Article, last position, registry entry, empty template |
+| New Page ▸ Task / Reference / Troubleshooting / Release Note | title | the same, with the kind set |
+| New Folder | folder name | the folder and its first page, since an empty chapter does not exist in the registry |
+
+The input box is a quick-input, the closest thing the extension API allows to Explorer's inline edit. Renaming in the row itself would need a change to the core of this fork and is deferred.
+
+### Context menus
+
+```
+ on a FOLDER row             on a PAGE row                    on empty space
+┌─────────────────────┐    ┌───────────────────────────┐    ┌─────────────────┐
+│ New Page…           │    │ Open · Open to the Side   │    │ New Page…       │
+│ New Folder…         │    │ ───────────────────────── │    │ New Folder…     │
+│ Import Here…        │    │ New Page…  (sibling)      │    │ Import…         │
+│ ─────────────────── │    │ New Page of a Kind  ▸     │    │ Refresh         │
+│ Rename…       F2    │    │ ───────────────────────── │    └─────────────────┘
+│ Move Up / Down      │    │ Rename File…       F2     │
+│ ─────────────────── │    │ Rename Title…  Shift+F2   │
+│ Reveal · Copy Path  │    │ Move Up / Down            │
+│ Delete…             │    │ ───────────────────────── │
+└─────────────────────┘    │ Capture…  Ctrl+Alt+S      │
+                           │ Paste Image  Ctrl+Alt+V   │
+                           │ Draft a Change with AI…   │
+                           │ Mark Reviewed             │
+                           │ ───────────────────────── │
+                           │ Reveal · Copy Path        │
+                           │ Delete…                   │
+                           └───────────────────────────┘
+```
+
+### Keys
+
+```
+ F2 rename file (old id kept as an alias)    Shift+F2 rename title only    Delete  with confirmation
+ Ctrl+C / Ctrl+X / Ctrl+V  copy or move rows between folders      Enter / click  open the page
+```
+
+F2 moves the file, the repository's own generator writes the new registry entry, and the old id is written into `aliases` first. A project with no generator is refused, because the rename would orphan inbound links.
+
+### Drag and drop
+
+```
+ drag a page   onto a FOLDER row  → into that folder, last position
+               onto a PAGE row    → into that page's folder, right after it
+               onto empty space   → to the section root
+ multi-select  Ctrl/Shift+click, then drag together          Ctrl+drag  copies
+ every move    → file moves, `order` rewritten, old id kept as an alias
+ refused       → into itself or its own child; across projects
+ from the OS   → a .md, .png or .docx dropped on a folder is imported there
+```
+
+## 5. F. Editing a page
+
+```
+┌───────────────────────────────────────────────────────────────┬──────────────────┐
+│ first-project.md        [ side-by-side Preview ]              │ ASSIST           │
+│ # First project                                               │ [Draft][Ask][Props]
+│ Points carry a scale factor.                                  │ Draft from…      │
+│ ![Trend log](media/02-trend.png)  ◄─ Ctrl+Alt+S inserts this  │  ◉ source file   │
+│                                                               │  ○ another page  │
+│                                                               │ RESULT (diff)    │
+│                                                               │ [Apply][Reject]  │
+└───────────────────────────────────────────────────────────────┴──────────────────┘
+ Capture: snip overlay → clipboard → media/NN-slug.png (warn < 1600 px, refuse > 2 MB).
+ No page in front → .temco/captures/ and a row in NEEDS YOU until it is attached.
+ Apply is one undoable edit. Drafts wait in SQLite until accepted.
+```
+
+The **Properties** tab is the form over the registry fields: title, section, order, owner, audience, ship, keywords, help ids, code, reviewed.
+
+## 6. G. Needs You and the AI loop
+
+```
+ NEEDS YOU (7)
+  📷 Screenshots to place (1)  row → "which page takes it?"
+  ⚠ Retake these (4)          row → the page
+  ○ Never reviewed (2)        row → the report
+  ● Drafts waiting (2)        row → diff, Apply / Reject
+
+ source changes ─► commit summarised once (model recorded) ─► mapped to pages (code-glob · path · terms)
+   ─► page marked stale ─► NEEDS YOU ─► Draft a Change ─► draft row ─► diff ─► Apply
+```
+
+## 7. H. Publish
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│ PUBLISH · T3000 Documentation 13.0                                 │
+│  ① REVIEW ───► ② BUILD ───► ③ RELEASE                              │
+│  2 waiting     site ✓ help ✗   not released                        │
+│ ① drafts and changed pages: [Open diff] [Approve]                  │
+│ ② Engine [DocFX ▾] ☑Website ☑PDF ☑CHM ☐ZIP   [▶ Build]             │
+│    success is the artifact left behind, never the exit code        │
+│ ③ Writes products/t3000/releases/13.0, latest → 13.0   [⬆ Release] │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+## 8. I. Result on disk, and Temco Learn
+
+```
+ products/t3000/
+   manifest.json   {id, title, version}
+   docs/ guides/ api/ assets/ toc.yml docfx.json
+   releases/13.0 · 12.9 · 12.8      latest → 13.0
+                    │
+                    ▼
+ Temco Learn discovers products/*  →  Home · Product page · Doc page · Downloads (Online · PDF · CHM · ZIP)
+```
+
+The Learn page's top navigation mirrors the project's sections, so what the writer sees in the tree is what the reader sees.
+
+## 9. SQLite storage (catalog.sqlite)
+
+```
+ organisations ─┬─< repositories           cache of what GitHub listed
+                │
+ sources ───────┤  kind git|folder|archive · remote_url · path · branch · registry_path · last_commit
+   │            └──< scans
+   ├──< commits ──< commit_pages           sha · summary · summary_model · how: code-glob|path|terms
+   │ n..n (doc_sources: branch, include_glob, role)
+   ▼
+ documents  (the PROJECT)  name · slug · version · audience · owner · origin · template
+   ├── 1:1 ─ recipes          engine · config_path · script · outputs
+   ├──< pages                 id · path · title · owner · reviewed_at · stale · counts   (cache of registry.json)
+   ├──< builds ──< artifacts  status · revision · log_path  /  kind · path · bytes · sha256
+   ├──< releases              version · destination · files · published_at · build_id
+   └──< drafts                page_id · title · body · state draft|accepted|discarded
+ events  at · kind · subject · detail · seen_at       meta  key/value schema version
+```
+
+## 10. What the extension does now
+
+The rule this table records: **one list, one owner.** Every kind of list has exactly one surface, and a webview page never lists something a tree or a panel already lists. Everything a webview page *did* became a command on that surface.
+
+| Then | Now |
 |---|---|
-| view title | ＋ New Page · ⟳ Refresh · ⋯ New Section, Import, Capture, Paste |
-| row inline | New below · Rename (F2 = file with alias, Shift+F2 = title) · Capture |
-| row menu | Move up/down (drag later), Properties, Reveal, Copy path |
-| drag | reorder (writes `order`) |
+| views Pages, Project, Pipeline, Working Set, plus the queue declared in `temco-workbench` | Pages, Needs You, Sources, Publish — all declared by `temco-docs` |
+| 3-step New Page wizard | the selection is the location; one title box |
+| 10 webview pages (projects, project, needs, repository, documents, page, source, review, builds, releases) | 2 left: **Project home** and **Release report**. The other eight commands still exist and now focus the surface that owns the list, so every button and menu item in the other modules still lands somewhere |
+| the tree stopped at area → chapter → page | the tree is a path: folders inside folders, any depth, like Explorer |
+| Working Set | removed (use Open Editors) |
+| Properties as an editor panel | the right panel's **Properties** tab, beside **Draft** |
+| publishing copied artifacts | publishing also writes `manifest.json` per product and regenerates the Learn portal |
+| `home.ts`, `views.ts` named in `extension-design.md` | do not exist; that document now points here |
 
-### Editor: the page, three tabs
+## 11. Where the work stands
 
-**Edit** (Markdown) · **Preview** (as the portal renders it) · **Properties** (the form over `registryEdit`: title, owner, audience, ship, keywords, help_ids). Properties moves from a separate webview page into a tab of the page it belongs to. Captures (Ctrl+Alt+S, Ctrl+Alt+V) keep working unchanged.
+Done:
 
-### Right panel: Assist
+1. The three older documents carry a pointer here instead of a competing layout.
+2. The four views, the queue moved out of `temco-workbench`, `Sources`/`Publish` renamed.
+3. The project is the tree's first row; a new project is seeded with the six sections.
+4. New Page and New Folder take their location from the selection; hover icons; multi-select drag and drop.
+5. Properties is a tab in the right panel.
+6. `manifest.json` is written on publish, and the Learn portal is generated from every product's manifest.
 
-Open only while a page is open. **Draft** (what may the model read; result as a diff, Apply is one undo) and **Ask this page** (citations checked as today). The AI also knows related pages, source repos and release notes, as in the origin.
+Not done, and deliberately so:
 
-## 3. The flow
-
-```
- ① pick Product + Version        header
- ② ＋ Import sources              SOURCES   (repo, pdf, word, chm)
- ③ AI drafts the sections         ASSIST    Getting Started · Architecture · API · Troubleshooting · Release Notes
- ④ edit the page, capture         tree → editor
- ⑤ clear NEEDS YOU                stale, missing images, drafts
- ⑥ PUBLISH → Review → Approved → Build → Release
-```
-
-**PUBLISH** is one page with three stages, each showing its state:
-
-| Stage | Does |
-|---|---|
-| Review | drafts and changed pages, Approve or Reject |
-| Build | pick outputs: Website (DocFX engine) · PDF · CHM · ZIP. Engines are plug-ins; success is judged by the artifact, never the exit code |
-| Release | writes `products/<id>/releases/<version>` and the `manifest.json`, and `latest` points at it; Learn discovers it with no portal change |
-
-## 4. Disk contract with Temco Learn
-
-```
-products/t3000/
-  manifest.json      { "id": "t3000", "title": "T3000", "version": "13.0" }
-  docs/ guides/ api/ assets/
-  toc.yml docfx.json
-  releases/13.0 · 12.9 · 12.8      latest → 13.0
-```
-
-Platform writes it; Learn only reads it. Downloads (Online, PDF, CHM, ZIP) come from `releases/<version>`.
-
-## 5. What this changes in the extension
-
-| Today | After |
-|---|---|
-| containers `temco`, `temcoDashboard`, … | one `temcoDocs` container |
-| views Pages / Project / Pipeline / Working Set + queue in workbench | Pages / Needs You / Sources / Publish, all declared by `temco-docs` |
-| webview pages: project, needs, review, builds, documents, properties | Publish page, new-page flow, Properties tab; the rest folded into the tree |
-| `home.ts`, `views.ts`, "Content" view in the docs | deleted from the docs (they do not exist) |
-| "project" row list | Product + Version pickers |
-
-## 6. Build order
-
-1. Agree this doc; delete the contradicting layout sections in the three older docs.
-2. Container and views in `package.json`; move the queue view from `temco-workbench`.
-3. Product/Version pickers; section-ordered tree.
-4. Properties as a tab; Publish page (Review · Build · Release).
-5. `manifest.json` and release writer; then the `temco-learn` reader.
+- The `temco-learn` site itself. The portal is generated by this extension and served from local storage; a real reader site is a separate repository.
+- Inline rename in the tree row. It needs a change to the fork's tree widget; an input box is the closest the extension API allows.
+- Dropping *between* rows. The tree reports only the row dropped on, so a drop on a page means "after it".
 
 ## Open decisions
 
-- Does the Dashboard survive as a start page (recent products, activity)? Proposed: yes, as an editor page, not a container.
-- Are product sections fixed to the six names, or per-product? Proposed: fixed defaults, extendable in `manifest.json`.
+- Whether `products` becomes a table later (versions open side by side).
+- Whether the six sections stay fixed, or are defined per project in `manifest.json`.

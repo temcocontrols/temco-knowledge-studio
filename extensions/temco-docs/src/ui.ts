@@ -22,6 +22,7 @@ export interface PageMessage {
 interface UiApi {
 	pageColumn(): vscode.ViewColumn;
 	fileColumn(): vscode.ViewColumn;
+	rowSlug(target: unknown): string | undefined;
 	page(body: string, options?: { title?: string; script?: string; extraCss?: string }): string;
 	escapeHtml(text: string): string;
 	icon(name: string, cls?: string): string;
@@ -40,8 +41,11 @@ const ui = extension.exports;
 /** The editor column every page of ours opens in. */
 export const pageColumn = ui.pageColumn;
 
-/** The editor column for something that is not a page of ours — a documentation page, a registry. */
+/** The column for something that is not a page of ours — a documentation page, a registry. */
 export const fileColumn = ui.fileColumn;
+
+/** The slug a command argument names, whether it is a slug, a row, or a row's own command argument. */
+export const rowSlug = ui.rowSlug;
 
 /** A document around `body`, carrying the application's page vocabulary. */
 export const page = ui.page;

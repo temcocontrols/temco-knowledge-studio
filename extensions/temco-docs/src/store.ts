@@ -245,7 +245,8 @@ export interface Catalog {
 	): void;
 	document(slug: string): DocumentDetail | undefined;
 	setRecipe(slug: string, engine: string, outputs: string[]): void;
-	deleteDocument(slug: string): void;
+	/** Forgets a project. The row count is what tells a real delete from one that matched nothing. */
+	deleteDocument(slug: string): number;
 	source(slug: string): SourceDetail | undefined;
 	setSourceBranch(slug: string, branch: string | undefined): void;
 	setSourcePath(slug: string, path: string | undefined): void;

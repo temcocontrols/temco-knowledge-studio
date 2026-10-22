@@ -17,13 +17,14 @@ import { registerFeedbackCommands } from './feedback';
 import { registerFormatCommands } from './format';
 import { registerImportCommand } from './importer';
 import { looseByRoot } from './loose';
+import { rowSlug } from './ui';
 import { DocsPages } from './docsPages';
 import { DraftView } from './draftView';
 import { registerMediaCommands } from './media';
 import { NewPagePage } from './newPagePage';
 import { OverviewPage } from './overview';
 import { AREA_CHAPTER, KINDS, PageDeps, PageOperations, registerPageCommands, sourceAt, writePage } from './pageOps';
-import { PageProperties } from './pageProperties';
+import { writePortal } from './learnPortal';
 import { ProjectSection } from './projectSection';
 import { projects } from './projects';
 import { codeFiles } from './repositories';
@@ -31,7 +32,7 @@ import { QueueTreeProvider } from './queue';
 import { registerReportCommands } from './report';
 import { registerRowCommands } from './rowOps';
 import { registerScaffoldCommands } from './scaffold';
-import { registerSectionViews, SidebarModel, WorkingEntry } from './sections';
+import { registerSectionViews, SidebarModel } from './sections';
 import { PublishedSite } from './siteServer';
 import { Catalog, DraftRow, Selection, selection, slugOf } from './store';
 import { fileColumn, pageColumn } from './surface';
@@ -161,7 +162,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   const treeView = vscode.window.createTreeView(VIEW_ID, {
     treeDataProvider: provider,
     showCollapseAll: true,
-    // A chapter is somewhere a page can be put, and the drop is a registry write — see `src/pageOps.ts`.
+    canSelectMany: true,
     dragAndDropController: pageOps,
   });
   selectedRow = () => treeView.selection[0];
@@ -201,19 +202,19 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   };
 
   // The right-hand panel: the page in front, what the model may read, and the drafts waiting on a person.
-  const draftView = new DraftView(context, { page: () => currentPage() });
+  const draftView = new DraftView(context, {
+    page: () => currentPage(),
+    roots: () => roots,
+    redraw: () => void vscode.commands.executeCommand('temcoDocs.refresh'),
+  });
   context.subscriptions.push(vscode.window.registerWebviewViewProvider(DraftView.TYPE, draftView));
 
-  // The tree is this module's own view. The Library, the dashboard and the needs page are the workbench's, and
-  // they read this module's model through the API at the bottom of `activate()`.
+  // The right panel is about the page in front: **Draft** reads it, **Properties** curates it. The tree is this
+  // module's own view; the Dashboard lists projects, and these two read this module's model.
 
   // The page behind the *Documentation Owed* row, and the form that creates a page.
 
-  // The side bar's two remaining groups — the pipeline and the working set. The project list moved to the
-  // Dashboard, and the areas went with it: the tree's roots are the areas.
-  const working: WorkingEntry[] = [];
   const sidebarModel: SidebarModel = {
-    working: () => working,
     counts: () => ({
       // A source that is a folder here is a repository with a working tree; the rest are what a read recorded.
       repositories: roots.filter((root) => root.origin !== 'catalog').length,
@@ -222,45 +223,6 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     }),
   };
   const sidebar = registerSectionViews(context, sidebarModel);
-
-  // The Working Set, the mock's `M.state.working`: the pages this window has shown, newest first, six at most.
-  //
-  // It follows the *editor* rather than one command, because a page can be opened from the tree, from the
-  // Documents list, from the working set itself or from a file in the Explorer — the mock lists all of those, and
-  // a list that filled only from one of them would be a different feature.
-  const rememberWorking = (uri: vscode.Uri): void => {
-    if (uri.scheme !== 'file') {
-      return;
-    }
-    const page = pageForUri(roots, uri);
-    if (page === undefined) {
-      return;
-    }
-    const entry: WorkingEntry = { area: page.id.split('/')[0], title: page.title, id: page.id, path: uri.fsPath };
-    const at = working.findIndex((item) => item.id === entry.id);
-    if (at >= 0) {
-      working.splice(at, 1);
-    }
-    working.unshift(entry);
-    working.splice(6);
-    sidebar.refresh();
-  };
-
-  context.subscriptions.push(
-    vscode.window.onDidChangeActiveTextEditor((editor) => {
-      if (editor !== undefined) {
-        rememberWorking(editor.document.uri);
-      }
-    }),
-    // Closing a page takes it off the list, which is what the mock does when its tab is closed.
-    vscode.workspace.onDidCloseTextDocument((document) => {
-      const at = working.findIndex((item) => item.path === document.uri.fsPath);
-      if (at >= 0) {
-        working.splice(at, 1);
-        sidebar.refresh();
-      }
-    })
-  );
 
   // Two reads can be in flight at once — a file event while the window is still coming up, one save firing two
   // watchers, the workspace folders changing under a read that has already started. Each read builds its own answer
@@ -372,16 +334,22 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
       return;
     }
     roots = unique;
+    provider.setProject(
+      projectName === undefined ? undefined : { name: projectName, detail: `${totals(unique).pages} pages` }
+    );
     provider.setRoots(unique, notes, loose);
     sidebar.refresh();
     projectSection.refresh();
     queue.refresh();
     draftView.refresh();
     // The view says which project it is showing: it answers about a project, never about the window, and a view
-    // that silently answers a different question is worse than an empty one.
-    treeView.description = projectName
-      ? `${projectName} · ${totals(roots).pages} pages`
-      : undefined;
+    // that silently answers a different question is worse than an empty one. The name and the page count are the
+    // project row's own; the title carries the count only when there is no such row to carry it.
+    treeView.description = projectName === undefined
+      ? undefined
+      : provider.showsProjectRow()
+        ? undefined
+        : `${projectName} · ${totals(roots).pages} pages`;
     publishDiagnostics(diagnostics, roots);
     for (const { uri, message } of broken) {
       diagnostics.set(uri, [
@@ -572,7 +540,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
       catalog?.close();
     }
     if (kept) {
-      docsPages.review();
+      queue.refresh();
     } else {
       void vscode.window.showWarningMessage(
         'Temco Docs: the draft was written but could not be kept — no project is selected.'
@@ -606,11 +574,18 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
       }
       const version = catalog.document(project)?.version ?? 'unversioned';
       const destination = vscode.Uri.joinPath(context.globalStorageUri, 'published', project, version);
+      const productRoot = vscode.Uri.joinPath(context.globalStorageUri, 'published', project);
       const copied = await copyArtifacts(chosen.map((artifact) => artifact.path), destination.fsPath);
       if (copied === 0) {
         void vscode.window.showWarningMessage('Temco Docs: the artifacts could not be copied, so nothing was published.');
         return;
       }
+      await writeManifest(productRoot, {
+        id: project,
+        title: catalog.document(project)?.name ?? project,
+        version,
+      });
+      await writePortal(vscode.Uri.joinPath(context.globalStorageUri, 'published'));
       catalog.publishRelease(project, {
         version,
         destination: destination.fsPath,
@@ -636,58 +611,63 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     }
   };
 
-  // The page properties: the registry fields of the page in front, in one form. It writes through
-  // `RegistryEdit`, so the repository's generator keeps every value it sets.
-  const pageProperties = new PageProperties(() => roots, () => void refresh());
-
+  // The page's properties are a tab of the right panel, beside the draft: one place about the page in front.
   context.subscriptions.push(
-    pageProperties,
-    vscode.commands.registerCommand('temcoDocs.pageProperties', () => void pageProperties.open()),
+    vscode.commands.registerCommand('temcoDocs.pageProperties', () => draftView.showProperties()),
     // Importing a document set: the conversion the project wizard calls after it has a destination.
     registerImportCommand(),
     vscode.commands.registerCommand('temcoDocs.showStatus', report),
     vscode.commands.registerCommand('temcoDocs.validate', report),
     vscode.commands.registerCommand('temcoDocs.refresh', refresh),
-    // The Documentation container's surfaces, rebuilt from the mock: projects, repositories, sources,
-    // documents, a page, a source, review, builds and releases.
-    vscode.commands.registerCommand('temcoDocs.projects', () => docsPages.projects()),
-    // The project as a page: what it cites, what it produces, and the acts on it.
-    vscode.commands.registerCommand('temcoDocs.projectPage', (slug?: unknown) =>
-      docsPages.project(typeof slug === 'string' ? slug : undefined)
+    // The Documentation container has one list per kind of thing, and each list has one surface: pages in the
+    // tree, drafts in **Needs You**, sources in **Sources**, builds and releases in **Publish**. These entries are
+    // the destinations the old webview pages offered, so every button and menu item that pointed at a page still
+    // lands somewhere — on the list, instead of on a second copy of it.
+    // The projects list is a page the projects module owns; this module's entry opens it, so there is one list and
+    // not a second copy. The quick pick is kept for the one case a page cannot serve: a project row whose slug has
+    // just been removed, where the question is "which one instead?" and not "what exists?".
+    vscode.commands.registerCommand('temcoDocs.projects', () => openProjectsPage(context)),
+    // The project as a page: what it cites, what it produces, and the acts on it. The read argument is the row it
+    // was invoked from — a tree row is not a slug, so it is read with `rowSlug` like every other row command here.
+    vscode.commands.registerCommand('temcoDocs.projectPage', (target?: unknown) =>
+      docsPages.project(rowSlug(target))
     ),
-    // The queue as a page: the three kinds of work, each with the act that settles it.
-    vscode.commands.registerCommand('temcoDocs.needsPage', () => docsPages.needsYou()),
+    // *Needs You* is the queue: the drafts waiting, each settled where it is read.
+    vscode.commands.registerCommand('temcoDocs.needsPage', () => focusView('temcoDocs.queue')),
     // A new project with no source has nowhere to write: this makes the folder, the registry and the first area,
     // then cites the folder to the project. Called by the project form, and never by hand.
     vscode.commands.registerCommand('temcoDocs.createProjectFolder', async (slug?: unknown, name?: unknown) => {
       await createProjectFolder(context, typeof slug === 'string' ? slug : undefined, typeof name === 'string' ? name : undefined);
     }),
-    vscode.commands.registerCommand('temcoDocs.repository', (name?: unknown) => docsPages.repository(typeof name === 'string' ? name : undefined)),
-    vscode.commands.registerCommand('temcoDocs.documents', (area?: unknown) => docsPages.documents(typeof area === 'string' ? area : undefined)),
-    // The side bar's project row, which is the mock's `tree-project`: *become* that project, then show the
-    // projects page. It does not open a project's own editor — the side bar says where you are, the page says
-    // what is there. A selection that fails (a project removed between the draw and the click) still opens the
-    // page, because the page is where the list of what exists lives.
+    // A source is the repositories module's page; this module only knows which source a page came from.
+    vscode.commands.registerCommand('temcoDocs.repository', () => focusView('temcoRepositories.sources')),
+    vscode.commands.registerCommand('temcoDocs.documents', () => focusView('temcoDocs.pages')),
+    // The side bar's project row: *become* that project. The row says where you are; the picker says what else
+    // there is. A slug that no longer exists falls through to the picker rather than to an error.
     vscode.commands.registerCommand('temcoDocs.selectProject', async (slug?: unknown) => {
       if (typeof slug === 'string') {
         try {
           await vscode.commands.executeCommand('temcoProjects.selectProject', slug);
+          return;
         } catch {
-          // The projects module is not installed in this window; the page still opens.
+          // The project was removed between the draw and the click.
         }
       }
-      docsPages.projects();
+      await pickProject(context);
     }),
-    vscode.commands.registerCommand('temcoDocs.page', (title?: unknown, area?: unknown) => docsPages.pageOf(typeof title === 'string' ? title : undefined, typeof area === 'string' ? area : undefined)),
-    vscode.commands.registerCommand('temcoDocs.source', (repo?: unknown) => docsPages.source(typeof repo === 'string' ? repo : undefined)),
-    vscode.commands.registerCommand('temcoDocs.review', () => docsPages.review()),
+    // A page is a file: opening one is opening the editor, never a second rendering of it.
+    vscode.commands.registerCommand('temcoDocs.page', (title?: unknown, area?: unknown) =>
+      openPageFile(roots, title, area)
+    ),
+    vscode.commands.registerCommand('temcoDocs.source', () => focusView('temcoRepositories.sources')),
+    vscode.commands.registerCommand('temcoDocs.review', () => focusView('temcoDocs.queue')),
     // Settling a draft: accepting writes the page it proposed, discarding wastes the text. Both act on one row and
     // both redraw the queue, because what is left is what a person needs to see.
     vscode.commands.registerCommand('temcoDocs.acceptDraft', async (id?: unknown) => {
       const draft = await draftById(id);
       if (draft === undefined) {
         void vscode.window.showInformationMessage('Temco Docs: that draft is no longer waiting.');
-        docsPages.review();
+        queue.refresh();
         return;
       }
       // The draft is the whole proposal — id, title and body — so accepting needs nothing else, and the page is
@@ -708,13 +688,13 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
         // queue empties and the workspace still shows the page as missing.
         await refresh();
       }
-      docsPages.review();
+      queue.refresh();
     }),
     vscode.commands.registerCommand('temcoDocs.discardDraft', async (id?: unknown) => {
       const draft = await draftById(id);
       if (draft === undefined) {
         void vscode.window.showInformationMessage('Temco Docs: that draft is no longer waiting.');
-        docsPages.review();
+        queue.refresh();
         return;
       }
       const answer = await vscode.window.showWarningMessage(
@@ -726,7 +706,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
         return;
       }
       await settleDraft(draft, 'discarded');
-      docsPages.review();
+      queue.refresh();
     }),
     // A draft written elsewhere — the AI panel drafts against the open page — is recorded here, because this
     // module owns the queue: one place decides what is waiting, and one place settles it.
@@ -753,11 +733,8 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
           body: input.body,
           source: typeof input.source === 'string' ? input.source : undefined,
         });
-        vscode.window.setStatusBarMessage('Temco Docs: the draft is waiting in the Review Center.', 5000);
-        // Redrawn only if it is already on screen: recording a draft must never open a page nobody asked for.
-        if (docsPages.isOpen('review')) {
-          docsPages.review();
-        }
+        vscode.window.setStatusBarMessage('Temco Docs: the draft is waiting in Needs You.', 5000);
+        queue.refresh();
       } catch {
         // A catalog that cannot be written leaves the draft where it was: in the editor, in front of a person.
       } finally {
@@ -783,7 +760,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
         catalog?.close();
       }
     }),
-    vscode.commands.registerCommand('temcoDocs.builds', () => docsPages.builds()),
+    vscode.commands.registerCommand('temcoDocs.builds', () => focusView('temcoDocs.section.pipeline')),
     vscode.commands.registerCommand('temcoDocs.releases', () => docsPages.releases()),
     // Publishing hands files to a reader: copied into a folder the platform owns, recorded, then opened.
     vscode.commands.registerCommand('temcoDocs.publishRelease', () => publishRelease()),
@@ -825,6 +802,18 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
       }
     }),
     vscode.commands.registerCommand('temcoDocs.stopServing', () => site.stop()),
+    // The Temco Learn portal: every published product, served from the folder that holds them all.
+    vscode.commands.registerCommand('temcoDocs.openLearn', async () => {
+      const root = vscode.Uri.joinPath(context.globalStorageUri, 'published');
+      await writePortal(root);
+      try {
+        await vscode.env.openExternal(vscode.Uri.parse(await site.serve(root.fsPath)));
+      } catch (error) {
+        void vscode.window.showErrorMessage(
+          `Temco Docs: the Learn portal could not be served — ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }),
     // An artifact is a file the build wrote, so opening one is opening a file — not a copy the platform keeps.
     vscode.commands.registerCommand('temcoDocs.openArtifact', async (file?: unknown) => {
       if (typeof file !== 'string' || file.length === 0) {
@@ -1188,15 +1177,35 @@ async function draftMaterial(page: PageEntry, root: DocsRoot | undefined, curren
 /**
  * Where a project's own documentation lives.
  *
- * The working folder the Settings page offers, then the open folder, then `~/Temco` — the same order a person would
- * answer "where should this go?" in. Nothing is created outside it.
+ * The working area `temco-repositories` owns, which is the one folder that module deletes a project from. Nothing
+ * is created outside it.
+ */
+/**
+ * The working area: **the same root `temco-repositories` clones into**, and never the folder the window happens
+ * to have open.
+ *
+ * It used to fall back to `workspaceFolders[0]`, and that made two mistakes at once. A project's folder is added
+ * to the workspace so Explorer can show its `docs/`, so the *next* project created itself a folder **inside the
+ * previous one** (`~/Temco/test1/test2`, `/test3`…). And because `temco-repositories` deletes `~/Temco/<slug>`,
+ * those nested folders were never the path it looked at, so removing the projects left them on disk.
+ *
+ * One working area, one owner: the repositories module owns it and names it in `temcoRepositories.workspaceFolder`.
  */
 function workingFolder(): string {
-  const configured = vscode.workspace.getConfiguration('temcoWorkbench').get<string>('workingFolder');
-  if (typeof configured === 'string' && configured.trim().length > 0) {
-    return configured.trim();
+  const configured = vscode.workspace.getConfiguration('temcoRepositories').get<string>('workspaceFolder');
+  return typeof configured === 'string' && configured.trim().length > 0
+    ? expandHome(configured.trim())
+    : path.join(os.homedir(), 'Temco');
+}
+
+/** `~` written by hand means the home folder, the same rule the working area uses. */
+function expandHome(value: string): string {
+  if (value === '~') {
+    return os.homedir();
   }
-  return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? path.join(os.homedir(), 'Temco');
+  return value.startsWith('~/') || value.startsWith('~\\')
+    ? path.join(os.homedir(), value.slice(2))
+    : value;
 }
 
 /**
@@ -1215,15 +1224,18 @@ async function createProjectFolder(
     return;
   }
   const base = path.join(workingFolder(), slug);
+  // One area, named after the project, and nothing inside it. A new project has not a single page; six empty
+  // section folders looked like a structure somebody had planned, and every one of them was a room with no
+  // furniture. The person adds sections when they know what they are.
   const area = slugOf(name) || 'docs';
   const registry = vscode.Uri.file(path.join(base, 'docs', 'help', 'registry.json'));
   try {
     await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.join(base, 'docs', 'help')));
     await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.join(base, 'docs', area)));
-    if (!(await fileExists(registry))) {
-      const minimal = { version: 1, areas: { [area]: { title: name } }, pages: {} };
-      await vscode.workspace.fs.writeFile(registry, Buffer.from(`${JSON.stringify(minimal, null, 2)}\n`, 'utf8'));
-    }
+    // A folder that already exists — the same name used twice, or a leftover — keeps the registry it has. The area
+    // is **added** to it rather than the file being skipped: creating a directory the registry does not name is how
+    // six folders ended up drawn as "not registered yet" beside a registered one.
+    await ensureArea(registry, area, name);
   } catch (error) {
     void vscode.window.showErrorMessage(
       `Temco Docs: the documentation folder for ${name} could not be created in ${base} — ` +
@@ -1267,6 +1279,138 @@ async function createProjectFolder(
   if (known !== true) {
     vscode.workspace.updateWorkspaceFolders(vscode.workspace.workspaceFolders?.length ?? 0, 0, { uri: folderUri });
   }
+}
+
+/**
+ * The product package's identity, `products/<id>/manifest.json`: what a reader site needs to list the product and
+ * its newest version. Versions already published are kept; the version just released becomes `latest`.
+ */
+async function writeManifest(
+  productRoot: vscode.Uri,
+  entry: { id: string; title: string; version: string }
+): Promise<void> {
+  const file = vscode.Uri.joinPath(productRoot, 'manifest.json');
+  let versions: string[] = [];
+  try {
+    const previous = JSON.parse(Buffer.from(await vscode.workspace.fs.readFile(file)).toString('utf8')) as {
+      versions?: unknown;
+    };
+    if (Array.isArray(previous.versions)) {
+      versions = previous.versions.filter((value): value is string => typeof value === 'string');
+    }
+  } catch {
+    // No manifest yet: this is the product's first release.
+  }
+  versions = [entry.version, ...versions.filter((value) => value !== entry.version)];
+  const manifest = { id: entry.id, title: entry.title, version: entry.version, latest: entry.version, versions };
+  await vscode.workspace.fs.writeFile(file, Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, 'utf8'));
+}
+
+/** Brings one of the side bar's lists into view: a list is a view, so showing it is focusing it. */
+function focusView(id: string): void {
+  void vscode.commands.executeCommand(`${id}.focus`).then(undefined, () => {
+    void vscode.commands.executeCommand('workbench.view.extension.temco');
+  });
+}
+
+/** The projects page belongs to the projects module; this module only knows how to ask for it. */
+async function openProjectsPage(context: vscode.ExtensionContext): Promise<void> {
+  try {
+    await vscode.commands.executeCommand('temcoProjects.projectsPage');
+  } catch {
+    // The projects module is not installed in this window: the picker still answers the question.
+    await pickProject(context);
+  }
+}
+
+/**
+ * *Switch Project*: the projects this window knows, in a quick pick.
+ *
+ * The list used to be a webview page, which meant two lists of the same projects — the Dashboard's and the page's
+ * — and a page whose only job was to be a menu. A menu is a quick pick.
+ */
+async function pickProject(context: vscode.ExtensionContext): Promise<void> {
+  let catalog: Catalog | undefined;
+  let projects: { name: string; slug: string; version: string }[] = [];
+  try {
+    catalog = await Catalog.open(context);
+    projects = catalog.documents().map((row) => ({ name: row.name, slug: row.slug, version: row.version ?? '' }));
+  } catch {
+    void vscode.window.showWarningMessage('Temco Docs: the project list could not be read.');
+    return;
+  } finally {
+    catalog?.close();
+  }
+  if (projects.length === 0) {
+    const answer = await vscode.window.showInformationMessage(
+      'Temco Docs: there is no project yet. A project is what you manage — create one, then give it a source.',
+      'Create a Project'
+    );
+    if (answer === 'Create a Project') {
+      await vscode.commands.executeCommand('temcoProjects.newProject');
+    }
+    return;
+  }
+  const current = selection.project();
+  const pick = await vscode.window.showQuickPick(
+    projects.map((project) => ({
+      label: project.slug === current ? `$(check) ${project.name}` : project.name,
+      description: project.version,
+      slug: project.slug,
+    })),
+    { title: 'Switch Project', placeHolder: 'Which project are you working on?' }
+  );
+  if (pick !== undefined) {
+    await vscode.commands.executeCommand('temcoDocs.selectProject', pick.slug);
+  }
+}
+
+/** Opens the file behind a page the caller names by title (and area), rather than a rendering of it. */
+async function openPageFile(known: readonly DocsRoot[], title: unknown, area: unknown): Promise<void> {
+  const wanted = typeof title === 'string' ? title.trim() : '';
+  const areaName = typeof area === 'string' ? area : undefined;
+  const pages = known.flatMap((root) => collectPages(root));
+  const page =
+    pages.find((entry) => entry.id === wanted) ??
+    pages.find((entry) => entry.title === wanted && (areaName === undefined || entry.area === areaName)) ??
+    pages.find((entry) => entry.title === wanted);
+  if (page === undefined || !page.exists) {
+    focusView('temcoDocs.pages');
+    return;
+  }
+  const document = await vscode.workspace.openTextDocument(page.uri);
+  await vscode.window.showTextDocument(document, { preview: false, viewColumn: fileColumn() });
+}
+
+/**
+ * Makes sure a registry declares an area, keeping everything else in it.
+ *
+ * A missing `areas` map made the old code skip the whole file, so a folder that already had a registry kept a
+ * registry naming none of the directories just created — and the tree drew those as unregistered folders.
+ */
+async function ensureArea(registry: vscode.Uri, area: string, title: string): Promise<void> {
+  let document: { version?: number; areas?: Record<string, unknown>; pages?: Record<string, unknown> } = {
+    version: 1,
+    areas: {},
+    pages: {},
+  };
+  try {
+    const read = JSON.parse(Buffer.from(await vscode.workspace.fs.readFile(registry)).toString('utf8')) as {
+      version?: number;
+      areas?: Record<string, unknown>;
+      pages?: Record<string, unknown>;
+    };
+    document = { version: read.version ?? 1, areas: read.areas ?? {}, pages: read.pages ?? {} };
+  } catch {
+    // No registry yet, or one that is not JSON: this writes the smallest registry the generator accepts.
+  }
+  const areas = document.areas ?? {};
+  if (areas[area] !== undefined) {
+    return;
+  }
+  areas[area] = { title };
+  const text = { version: document.version ?? 1, areas, pages: document.pages ?? {} };
+  await vscode.workspace.fs.writeFile(registry, Buffer.from(`${JSON.stringify(text, null, 2)}\n`, 'utf8'));
 }
 
 /** A new page starts as a title and nothing else — the structure lives in the registry, not in front matter. */

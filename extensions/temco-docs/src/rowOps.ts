@@ -8,12 +8,12 @@
 // palette can start an act without naming a row.
 //
 // **A row's place is derived from the platform's own path rule**, not from where a page happens to be: a page id
-// *is* its path under `docs/` (`05-content-and-registry.md` rule 1), so `docs/<area>/<chapter>/` is the folder —
-// except for the chapter that is the area folder itself, where the pages sit directly in `docs/<area>`. Nothing
-// here reads the disk to find out, so the answer is the same whether or not the folder has been created yet.
+// *is* its path under `docs/` (`05-content-and-registry.md` rule 1), so `docs/<area>/<folder>…/` is the folder —
+// and a folder can sit inside a folder, so a row carries its whole path rather than one name. Nothing here reads
+// the disk to find out, so the answer is the same whether or not the folder has been created yet.
 
 import * as vscode from 'vscode';
-import { ROOT_CHAPTER, contentUri, pageUri } from './registry';
+import { contentUri, pageUri } from './registry';
 import { DocsNode } from './tree';
 
 export interface RowDeps {
@@ -110,7 +110,7 @@ function fileOf(row: DocsNode): vscode.Uri | undefined {
 
 /** The folder a row stands for — `docs/<area>[/<chapter>]`, and never a folder outside `docs/`. */
 function folderOf(row: DocsNode): vscode.Uri | undefined {
-  if (row.kind === 'note' || row.root.origin === 'catalog') {
+  if (row.kind === 'note' || row.kind === 'project' || row.root.origin === 'catalog') {
     return undefined;
   }
   const rootUri = row.root.rootUri;
@@ -120,9 +120,9 @@ function folderOf(row: DocsNode): vscode.Uri | undefined {
     case 'area':
       return contentUri(rootUri, row.area.area);
     case 'chapter':
-      return row.chapter.chapter === ROOT_CHAPTER
+      return row.segments.length === 0
         ? contentUri(rootUri, row.area.area)
-        : contentUri(rootUri, row.area.area, row.chapter.chapter);
+        : contentUri(rootUri, row.area.area, ...row.segments);
     case 'page':
       // A page's folder is the chapter's, whatever the page's own name is: the last id segment is the file.
       return contentUri(rootUri, ...row.page.id.split('/').slice(0, -1));
@@ -146,5 +146,7 @@ function rowName(row: DocsNode): string {
       return row.root.folder.name;
     case 'note':
       return row.note.label;
+    case 'project':
+      return row.project.name;
   }
 }

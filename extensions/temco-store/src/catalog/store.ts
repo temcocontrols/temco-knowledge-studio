@@ -772,9 +772,14 @@ export class Catalog {
       .run(id, engine, JSON.stringify(outputs));
   }
 
-  /** Forgets a document. Its artifacts and source links go with it, by foreign key. */
-  deleteDocument(slug: string): void {
-    this.db.prepare('DELETE FROM documents WHERE slug = ?').run(slug);
+  /**
+   * Forgets a document. Its artifacts and source links go with it, by foreign key.
+   *
+   * The count is returned rather than swallowed: a delete that matched no row is a removal that did nothing, and a
+   * caller that cannot tell the two apart reports success over a project that is still there.
+   */
+  deleteDocument(slug: string): number {
+    return Number(this.db.prepare('DELETE FROM documents WHERE slug = ?').run(slug).changes);
   }
 
   /**

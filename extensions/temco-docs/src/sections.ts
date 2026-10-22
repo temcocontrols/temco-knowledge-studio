@@ -8,7 +8,7 @@
 //   * each carries a **count**, at the end of the row;
 //   * the two headings that name things inside them — the projects and the areas — list those things, with the one
 //     being worked on first and the rest behind "… N more" (`treeBody`);
-//   * the pages opened in this window are the group **Working Set**, folded by area.
+//   * the pipeline is the group **Publish**: review, build and release.
 //
 // VS Code draws a heading as a view, so each group is one. The view's own header carries the count as a badge, and
 // every row carries its own as the description — the same number at the same end of the row as the mock.
@@ -18,19 +18,8 @@
 
 import * as vscode from 'vscode';
 
-/** A page opened in this window, newest first: what the Working Set lists. */
-export interface WorkingEntry {
-	/** The area the page belongs to — the branch it is filed under. */
-	area: string;
-	title: string;
-	id: string;
-	path?: string;
-}
-
 /** What the side bar reads: live questions, so a refresh is one call rather than a snapshot to keep in step. */
 export interface SidebarModel {
-	/** The pages opened in this window. */
-	working(): readonly WorkingEntry[];
 	counts(): { repositories: number; sources: number; review: number };
 }
 
@@ -97,72 +86,12 @@ class Flat extends Group {
 	}
 }
 
-/**
- * The Working Set: the pages opened in this window, folded by area.
- *
- * The mock keeps the same list (`M.state.working`, capped, newest first) and draws it the same way: a branch per
- * area with the count of pages under it, and the pages as its leaves. Nothing here is stored — it is what this
- * window has shown, and it goes when the window does.
- */
-class WorkingSet extends Group {
-	constructor(private readonly model: SidebarModel) {
-		super('working');
-	}
-
-	getChildren(element?: vscode.TreeItem): vscode.TreeItem[] {
-		const entries = this.model.working();
-		if (element !== undefined) {
-			// The branch is open: its pages, in the order they were opened.
-			const area = String(element.label);
-			return entries
-				.filter((entry) => entry.area === area)
-				.map((entry) => {
-					const page = new vscode.TreeItem(entry.title, vscode.TreeItemCollapsibleState.None);
-					page.iconPath = new vscode.ThemeIcon('file');
-					page.tooltip = `${entry.title} — opened in this window`;
-					page.command = {
-						command: 'temcoRepositories.openFile',
-						title: entry.title,
-						arguments: [{ path: entry.path, id: entry.id, title: entry.title }],
-					};
-					return page;
-				});
-		}
-		if (entries.length === 0) {
-			const empty = new vscode.TreeItem('No page opened yet', vscode.TreeItemCollapsibleState.None);
-			empty.iconPath = new vscode.ThemeIcon('info');
-			empty.tooltip = 'Pages you open are listed here, grouped by area, until the window closes.';
-			empty.description = '';
-			return [empty];
-		}
-
-		const branches: { area: string; entries: WorkingEntry[] }[] = [];
-		for (const entry of entries) {
-			let branch = branches.filter((candidate) => candidate.area === entry.area)[0];
-			if (branch === undefined) {
-				branch = { area: entry.area, entries: [] };
-				branches.push(branch);
-			}
-			branch.entries.push(entry);
-		}
-
-		return branches.map((branch) => {
-			const node = new vscode.TreeItem(branch.area, vscode.TreeItemCollapsibleState.Expanded);
-			node.iconPath = new vscode.ThemeIcon('folder');
-			node.description = String(branch.entries.length);
-			node.tooltip = `${branch.entries.length} page${branch.entries.length === 1 ? '' : 's'} opened in ${branch.area}`;
-			node.contextValue = 'workingBranch';
-			return node;
-		});
-	}
-}
-
 /** The side bar, after it is registered: the one call a refresh needs. */
 export interface DocsSidebar {
 	refresh(): void;
 }
 
-/** Registers the two group views that remain: the pipeline and the working set. */
+/** Registers the Publish group: review, build and release. */
 export function registerSectionViews(context: vscode.ExtensionContext, model: SidebarModel): DocsSidebar {
 	const groups: Group[] = [];
 
@@ -179,8 +108,7 @@ export function registerSectionViews(context: vscode.ExtensionContext, model: Si
 	];
 
 	const flatPipeline = new Flat('pipeline', pipeline);
-	const working = new WorkingSet(model);
-	groups.push(flatPipeline, working);
+	groups.push(flatPipeline);
 
 	const view = (id: string, group: Group): void => {
 		context.subscriptions.push(
@@ -189,7 +117,6 @@ export function registerSectionViews(context: vscode.ExtensionContext, model: Si
 	};
 
 	view('pipeline', flatPipeline);
-	view('working', working);
 
 	context.subscriptions.push(
 		vscode.window.registerFileDecorationProvider({

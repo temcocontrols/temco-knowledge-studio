@@ -2,6 +2,26 @@
 	"version": "0.1.0",
 	"configurations": [
 		{
+			"type": "extensionHost",
+			"request": "launch",
+			"name": "Temco Platform",
+			"runtimeExecutable": "${execPath}",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}/extensions/temco-store",
+				"--extensionDevelopmentPath=${workspaceFolder}/extensions/temco-ui",
+				"--extensionDevelopmentPath=${workspaceFolder}/extensions/temco-repositories",
+				"--extensionDevelopmentPath=${workspaceFolder}/extensions/temco-docs",
+				"--extensionDevelopmentPath=${workspaceFolder}/extensions/temco-projects",
+				"--extensionDevelopmentPath=${workspaceFolder}/extensions/temco-workbench",
+				"--extensionDevelopmentPath=${workspaceFolder}/extensions/temco-ai",
+				"--extensionDevelopmentPath=${workspaceFolder}/extensions/temco-tools",
+				"${workspaceFolder}"
+			],
+			"outFiles": [
+				"${workspaceFolder}/extensions/temco-*/out/**/*.js"
+			]
+		},
+		{
 			"type": "node",
 			"request": "launch",
 			"name": "Gulp Build",

@@ -111,6 +111,8 @@ export interface NewPageSpec extends NewPageSeed {
   slug?: string;
   /** What to write under the title — a draft the person read. Nothing means the kind's headings alone. */
   body?: string;
+  /** True for the title-only input in the tree: the file is written without the modal confirmation. */
+  quick?: boolean;
 }
 
 interface Place {
@@ -126,9 +128,11 @@ export class PageOperations implements vscode.TreeDragAndDropController<DocsNode
   constructor(private readonly deps: PageDeps) { }
 
   handleDrag(source: readonly DocsNode[], data: vscode.DataTransfer): void {
-    const page = source.find((node) => node.kind === 'page');
-    if (page?.kind === 'page' && page.page.exists && page.root.origin !== 'catalog') {
-      data.set(PAGE_MIME, new vscode.DataTransferItem(page.page.id));
+    const pages = source.flatMap((node) =>
+      node.kind === 'page' && node.page.exists && node.root.origin !== 'catalog' ? [node.page.id] : []
+    );
+    if (pages.length > 0) {
+      data.set(PAGE_MIME, new vscode.DataTransferItem(pages.join('\n')));
       return;
     }
     // A folder drags too, because moving one into another area is an ordinary act — and the only thing a folder
@@ -167,7 +171,13 @@ export class PageOperations implements vscode.TreeDragAndDropController<DocsNode
     if (item === undefined || target === undefined) {
       return;
     }
-    const id = await item.asString();
+    const ids = (await item.asString()).split('\n').filter((id) => id.length > 0);
+    for (const id of ids) {
+      await this.dropPage(target, id);
+    }
+  }
+
+  private async dropPage(target: DocsNode, id: string): Promise<void> {
     const found = findPage(this.deps.roots(), id);
     if (!found) {
       return;
@@ -206,13 +216,19 @@ export class PageOperations implements vscode.TreeDragAndDropController<DocsNode
     carried: { rootUri: string; area: string; chapter: string }
   ): Promise<void> {
     const root = this.deps.roots().find((candidate) => candidate.rootUri.toString() === carried.rootUri);
-    if (root === undefined || target?.kind !== 'area' || target.root.rootUri.toString() !== carried.rootUri) {
+    // A folder moves into an area: an area row, or the project row that stands for the only one.
+    const into = target?.kind === 'area'
+      ? target
+      : target?.kind === 'project' && target.place !== undefined
+        ? { root: target.place.root, area: target.place.area }
+        : undefined;
+    if (root === undefined || into === undefined || into.root.rootUri.toString() !== carried.rootUri) {
       void vscode.window.showInformationMessage('Temco Docs: drop a folder on an area — that is what a folder moves into.');
       return;
     }
-    if (target.area.area === carried.area) {
+    if (into.area.area === carried.area) {
       void vscode.window.showInformationMessage(
-        `Temco Docs: “${carried.chapter}” is already in ${target.area.title}.`
+        `Temco Docs: “${carried.chapter}” is already in ${into.area.title}.`
       );
       return;
     }
@@ -224,7 +240,7 @@ export class PageOperations implements vscode.TreeDragAndDropController<DocsNode
         folder: true,
         rootUri: carried.rootUri,
       },
-      contentUri(root.rootUri, target.area.area),
+      contentUri(root.rootUri, into.area.area),
       true
     );
   }
@@ -252,16 +268,18 @@ async function createFolder(context: vscode.ExtensionContext, deps: PageDeps, no
   }
 
   // A name nobody typed still has to be unique: new-folder, new-folder-2, …
+  const parent = place.parent.length === 0 ? [] : place.parent.split('/');
   let suggestion = 'new-folder';
-  for (let suffix = 2; await fileExists(contentUri(place.root.rootUri, place.area, suggestion)) && suffix < 100; suffix++) {
+  for (let suffix = 2; await fileExists(contentUri(place.root.rootUri, place.area, ...parent, suggestion)) && suffix < 100; suffix++) {
     suggestion = `new-folder-${suffix}`;
   }
 
   // The name comes first and the folder second. The title names the folder it goes **into**, because the panel is a
   // tree of several folders and "a new one" is not an answer to where it went.
+  const into = [place.area, ...parent].join(' / ');
   const typed = await vscode.window.showInputBox({
-    title: `New folder in “${place.area}”`,
-    prompt: 'A folder inside this area — what the generator calls a chapter. Pages are put in folders.',
+    title: `New folder in “${into}”`,
+    prompt: 'A folder inside this one. Pages and folders can be put in it.',
     value: suggestion,
     valueSelection: [0, suggestion.length],
     validateInput: (value) => nameProblem(value),
@@ -270,16 +288,20 @@ async function createFolder(context: vscode.ExtensionContext, deps: PageDeps, no
     return;
   }
   const name = typed.trim();
-  const folder = contentUri(place.root.rootUri, place.area, name);
+  const folder = contentUri(place.root.rootUri, place.area, ...parent, name);
   if (await fileExists(folder)) {
-    void vscode.window.showWarningMessage(`Temco Docs: ${name} already exists in ${place.area}.`);
+    void vscode.window.showWarningMessage(`Temco Docs: ${name} already exists in ${into}.`);
     return;
   }
 
   await vscode.workspace.fs.createDirectory(folder);
   // The read is awaited rather than fired: the reveal below is a promise about a row that only exists after it.
   await vscode.commands.executeCommand('temcoDocs.refresh');
-  deps.reveal({ rootUri: place.root.folder.uri.toString(), area: place.area, chapter: name });
+  deps.reveal({
+    rootUri: place.root.folder.uri.toString(),
+    area: place.area,
+    chapter: [...parent, name].join('/'),
+  });
 }
 
 /**
@@ -307,7 +329,7 @@ async function removeFolder(deps: PageDeps, node: DocsNode | undefined): Promise
     );
     return;
   }
-  const folder = contentUri(row.root.rootUri, row.area.area, row.chapter.chapter);
+  const folder = contentUri(row.root.rootUri, row.area.area, ...row.segments);
   const files = await markdownUnder(folder);
   const registered = row.loose ? 0 : row.chapter.pages.length;
   const answer = await vscode.window.showWarningMessage(
@@ -476,8 +498,8 @@ async function renameFolder(deps: PageDeps, node: DocsNode | undefined): Promise
   if (next === current) {
     return;
   }
-  const from = contentUri(root.rootUri, area.area, current);
-  const to = contentUri(root.rootUri, area.area, next);
+  const from = contentUri(root.rootUri, area.area, ...chapter.segments);
+  const to = contentUri(root.rootUri, area.area, ...chapter.segments.slice(0, -1), next);
   if (await fileExists(to)) {
     void vscode.window.showWarningMessage(`Temco Docs: ${next} already exists in ${area.title}.`);
     return;
@@ -558,7 +580,7 @@ async function renameFolder(deps: PageDeps, node: DocsNode | undefined): Promise
 async function citeAFolder(
   context: vscode.ExtensionContext,
   deps: PageDeps
-): Promise<{ root: DocsRoot; area: string } | undefined> {
+): Promise<{ root: DocsRoot; area: string; parent: string } | undefined> {
   const project = deps.project();
   if (project === undefined) {
     void vscode.window.showWarningMessage(
@@ -651,7 +673,7 @@ async function citeAFolder(
     );
     return undefined;
   }
-  return { root, area: area.area };
+  return { root, area: area.area, parent: '' };
 }
 
 /**
@@ -685,19 +707,21 @@ function nameProblem(value: string): string | undefined {
 }
 
 /** The area a row belongs to: what a new folder is created inside. */
-function areaOf(node: DocsNode | undefined, roots: readonly DocsRoot[]): { root: DocsRoot; area: string } | undefined {
+function areaOf(node: DocsNode | undefined, roots: readonly DocsRoot[]): { root: DocsRoot; area: string; parent: string } | undefined {
   if (node?.kind === 'area') {
-    return { root: node.root, area: node.area.area };
+    return { root: node.root, area: node.area.area, parent: '' };
   }
   if (node?.kind === 'chapter') {
-    return { root: node.root, area: node.area.area };
+    // A folder made while a folder is selected goes **inside** it, the way Explorer nests them.
+    return { root: node.root, area: node.area.area, parent: node.segments.join('/') };
   }
   if (node?.kind === 'page') {
-    return { root: node.root, area: node.page.area };
+    const segments = node.page.id.split('/').slice(1, -1).filter((segment) => segment.length > 0);
+    return { root: node.root, area: node.page.area, parent: segments.join('/') };
   }
   const root = roots.find((candidate) => candidate.areas.length > 0);
   const area = root?.areas[0];
-  return root === undefined || area === undefined ? undefined : { root, area: area.area };
+  return root === undefined || area === undefined ? undefined : { root, area: area.area, parent: '' };
 }
 
 /**
@@ -735,17 +759,6 @@ async function renameFile(deps: PageDeps, node: DocsNode | undefined): Promise<v
     void vscode.window.showWarningMessage('Temco Docs: that page is not inside a folder this window is reading.');
     return;
   }
-  // A page the registry does not name yet has no entry to orphan, so the file can be renamed with or without a
-  // generator. A registered page cannot: the id *is* the path, so a new path needs an entry that carries the old one.
-  const generated = scriptsIn([root]).has('docs:registry');
-  if (!generated && !loose) {
-    void vscode.window.showWarningMessage(
-      `Temco Docs: ${root.folder.name} has no \`docs:registry\` script, so a renamed file would leave its registry ` +
-      'entry pointing at nothing. Rename the title instead — it is the value the registry holds.'
-    );
-    return;
-  }
-
   const current = path.basename(page.uri.fsPath, path.extname(page.uri.fsPath));
   const typed = await vscode.window.showInputBox({
     title: `Rename the file of “${page.title}”`,
@@ -782,32 +795,48 @@ async function renameFile(deps: PageDeps, node: DocsNode | undefined): Promise<v
   }
 
   await vscode.workspace.fs.rename(page.uri, target, { overwrite: false });
+  const base = contentUri(root.rootUri).fsPath;
+  const newId = path.relative(base, target.fsPath).replace(/\\/g, '/').replace(/\.md$/i, '');
+
   if (loose) {
-    // Nothing names this file yet, so there is no entry to keep an alias in: the generator registers it at the new
-    // path, and there was no old address to keep alive.
-    if (generated) {
-      await runScript(deps.roots(), deps.output, 'docs:registry');
-    }
+    // Nothing names this file yet, so there is no entry to carry: the path *is* the page id, and the tree reads the
+    // new one from disk on the next refresh.
     deps.redraw();
     void vscode.window.showInformationMessage(`Temco Docs: the file is ${slug}.md now.`);
     return;
   }
-  // The entry the id names does not exist yet: the generator writes it, then the alias is added to it.
-  await runScript(deps.roots(), deps.output, 'docs:registry');
 
-  const base = contentUri(root.rootUri).fsPath;
-  const newId = path.relative(base, target.fsPath).replace(/\\/g, '/').replace(/\.md$/i, '');
+  // A registered page keeps what a person curated: the entry is moved to the new id by hand, because the id is the
+  // path and the old entry would otherwise be left pointing at a file that is no longer there. No generator script
+  // is needed for this — the registry is a record we maintain, not a program we depend on.
   const edit = await RegistryEdit.open(root.registryUri);
-  const aliased = edit === undefined ? false : edit.set(newId, 'aliases', [page.id]);
-  if (edit !== undefined && aliased) {
-    await edit.save();
+  let carried = false;
+  if (edit !== undefined) {
+    const old = edit.entry(page.id);
+    if (old !== undefined) {
+      edit.remove(page.id);
+      const segments = newId.split('/');
+      for (const [field, value] of Object.entries(old)) {
+        if (field === 'area' || field === 'chapter' || field === 'aliases') {
+          continue;
+        }
+        edit.set(newId, field, value);
+      }
+      // The two fields that describe the place are written from the new place, never carried from the old one.
+      edit.set(newId, 'area', segments[0]);
+      edit.set(newId, 'chapter', segments[1] ?? segments[0]);
+      edit.set(newId, 'aliases', [...((old['aliases'] as string[] | undefined) ?? []), page.id]);
+      await edit.save();
+      carried = true;
+    }
   }
   deps.redraw();
 
   void vscode.window.showInformationMessage(
-    aliased
+    carried
       ? `Temco Docs: ${slug}.md is the page now, and ${page.id} is kept as an alias so old links still resolve.`
-      : `Temco Docs: ${slug}.md is the page now. The alias could not be written — add \`${page.id}\` to its \`aliases\` by hand.`
+      : `Temco Docs: the file is ${slug}.md now. Its registry entry could not be moved — run the project's ` +
+        'generator, or rename the entry by hand.'
   );
 }
 
@@ -905,7 +934,7 @@ function clipEntryOf(row: DocsNode): ClipEntry | undefined {
       return undefined;
     }
     return {
-      uri: contentUri(row.root.rootUri, row.area.area, row.chapter.chapter),
+      uri: contentUri(row.root.rootUri, row.area.area, ...row.segments),
       folder: true,
       rootUri: row.root.rootUri.toString(),
     };
@@ -1119,17 +1148,46 @@ async function carryEntries(
  * that. What the tree *does* contribute is where the page is going: the row that was clicked, or the row the
  * view has selected.
  */
-function startNewPage(deps: PageDeps, node: DocsNode | undefined, seed: NewPageSeed): void {
-  deps.newPagePage({ ...whereOf(targeted(deps, node)), ...seed });
+async function startNewPage(deps: PageDeps, node: DocsNode | undefined, seed: NewPageSeed): Promise<void> {
+  const where: NewPageSeed = { ...whereOf(targeted(deps, node)), ...seed };
+  // With several sources open and nothing selected there is no place to infer; the form can ask for one.
+  if (where.source === undefined && deps.roots().length > 1) {
+    deps.newPagePage(where);
+    return;
+  }
+  const root = deps.roots().find((candidate) => candidate.folder.name === where.source) ?? deps.roots()[0];
+  const area = where.area ?? root?.areas[0]?.area;
+  const chapter = where.chapter ?? ROOT_CHAPTER;
+  if (root === undefined || area === undefined) {
+    void vscode.window.showInformationMessage('Temco Docs: there is no area to put a page in yet. Create a folder first.');
+    return;
+  }
+  const kind = KINDS.find((candidate) => candidate.label === where.kind) ?? KINDS[0];
+  // The New Page page, with the place already chosen — not an input box. The form is where a page is made: it can
+  // show the kind, the file it will write and the body it starts from, and the location question is already
+  // answered, so opening it does not ask where.
+  deps.newPagePage({
+    source: root.folder.name,
+    area,
+    chapter: chapter === ROOT_CHAPTER ? undefined : chapter,
+    kind: kind.label,
+  });
 }
 
 /** Where a row sits, in the names the form shows. A row that stands for no place contributes nothing. */
 function whereOf(row: DocsNode | undefined): NewPageSeed {
   switch (row?.kind) {
-    case 'page':
-      return { source: row.root.folder.name, area: row.page.area, chapter: row.page.chapter };
+    case 'page': {
+      // A page's folder is everything above its file: a new sibling belongs in that folder, not in the area.
+      const above = row.page.id.split('/').slice(1, -1).filter((segment) => segment.length > 0);
+      return {
+        source: row.root.folder.name,
+        area: row.page.area,
+        chapter: above.length === 0 ? undefined : above.join('/'),
+      };
+    }
     case 'chapter':
-      return { source: row.root.folder.name, area: row.area.area, chapter: row.chapter.chapter };
+      return { source: row.root.folder.name, area: row.area.area, chapter: row.segments.join('/') };
     case 'area':
       return { source: row.root.folder.name, area: row.area.area };
     case 'folder':
@@ -1187,21 +1245,23 @@ export async function writePage(deps: PageDeps, spec: NewPageSpec): Promise<{ re
   }
 
   const drafted = spec.body !== undefined && spec.body.trim().length > 0;
-  const answer = await vscode.window.showWarningMessage(
-    `Write the new page to ${relative}?`,
-    {
-      modal: true,
-      detail:
-        (drafted
-          ? 'It carries the draft you read, with the kind’s headings as its structure. '
-          : `It starts as “# ${title}” and the ${kind.label.toLowerCase()} headings — no prose. `) +
-        'The repository’s own generator then gives it its registry entry: its area and chapter from that path, ' +
-        'its title from that heading, and a place at the end of the chapter.',
-    },
-    'Write the page'
-  );
-  if (answer !== 'Write the page') {
-    return undefined;
+  if (spec.quick !== true) {
+    const answer = await vscode.window.showWarningMessage(
+      `Write the new page to ${relative}?`,
+      {
+        modal: true,
+        detail:
+          (drafted
+            ? 'It carries the draft you read, with the kind’s headings as its structure. '
+            : `It starts as “# ${title}” and the ${kind.label.toLowerCase()} headings — no prose. `) +
+          'The repository’s own generator then gives it its registry entry: its area and chapter from that path, ' +
+          'its title from that heading, and a place at the end of the chapter.',
+      },
+      'Write the page'
+    );
+    if (answer !== 'Write the page') {
+      return undefined;
+    }
   }
 
   const text = drafted ? withTitle(spec.body ?? '', title) : skeleton(title, kind);
@@ -1546,14 +1606,26 @@ async function retirePage(deps: PageDeps, node?: DocsNode): Promise<void> {
 // ------------------------------------------------------------------ helpers
 
 function placeOf(node: DocsNode): Place | undefined {
+  if (node.kind === 'project') {
+    // The project row stands for its only area: a page dropped on it goes to the top of that area.
+    return node.place === undefined
+      ? undefined
+      : { root: node.place.root, area: node.place.area.area, chapter: ROOT_CHAPTER };
+  }
   if (node.kind === 'chapter') {
-    return { root: node.root, area: node.area.area, chapter: node.chapter.chapter };
+    return { root: node.root, area: node.area.area, chapter: node.segments.join('/') };
   }
   if (node.kind === 'area') {
     return { root: node.root, area: node.area.area, chapter: ROOT_CHAPTER };
   }
   if (node.kind === 'page') {
-    return { root: node.root, area: node.page.area, chapter: node.page.chapter };
+    // A page's folder is everything above its file, which for a nested folder is more than one segment.
+    const segments = node.page.id.split('/').slice(1, -1).filter((segment) => segment.length > 0);
+    return {
+      root: node.root,
+      area: node.page.area,
+      chapter: segments.length === 0 ? ROOT_CHAPTER : segments.join('/'),
+    };
   }
   return undefined;
 }
@@ -1700,7 +1772,9 @@ function findPage(roots: readonly DocsRoot[], id: string): { root: DocsRoot; pag
 function pageUri(root: DocsRoot, area: string, chapter: string, slug: string): vscode.Uri {
   // The file name carries its extension: joined as separate segments it would become `trend-logs/.md`, which is
   // a folder with a file named `.md` in it — a mistake worth one comment, since it reads as harmless.
-  const parts = chapter === ROOT_CHAPTER ? [`${slug}.md`] : [chapter, `${slug}.md`];
+  const parts = chapter === ROOT_CHAPTER
+    ? [`${slug}.md`]
+    : [...chapter.split('/').filter((segment) => segment.length > 0 && segment !== '.'), `${slug}.md`];
   return vscode.Uri.joinPath(root.rootUri, 'docs', area, ...parts);
 }
 

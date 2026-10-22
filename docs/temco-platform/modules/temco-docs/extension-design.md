@@ -1,5 +1,7 @@
 # Extension design
 
+> **Layout superseded.** The views, the Pages tree behaviour and the flow are defined in [../../ui/redesign.md](../../ui/redesign.md). Files such as `home.ts` and `views.ts` mentioned below do not exist; the code is under `extensions/temco-docs/src/`.
+
 ## Responsibilities, one file each
 
 | Module | Owns |
