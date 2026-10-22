@@ -16,11 +16,13 @@ import { registerFeedbackCommands } from './feedback';
 import { registerFormatCommands } from './format';
 import { registerImportCommand } from './importer';
 import { DocsPages } from './docsPages';
+import { registerMediaCommands } from './media';
 import { NewPagePage } from './newPagePage';
 import { OverviewPage } from './overview';
 import { AREA_CHAPTER, KINDS, PageDeps, PageOperations, registerPageCommands, writePage } from './pageOps';
 import { PageProperties } from './pageProperties';
 import { projects } from './projects';
+import { QueueTreeProvider } from './queue';
 import { registerReportCommands } from './report';
 import { registerRowCommands } from './rowOps';
 import { registerScaffoldCommands } from './scaffold';
@@ -33,6 +35,10 @@ import { DocsNode, DocsTreeProvider, TreeNote, pageFromNode } from './tree';
 
 const OUTPUT_NAME = 'Temco Docs';
 const VIEW_ID = 'temcoDocs.pages';
+/** The tree's second home: its own container on the activity bar. */
+const TREE_ID = 'temcoDocs.tree';
+/** The queue that lives with the tree: what the tool knows needs doing and the person does not. */
+const QUEUE_ID = 'temcoDocs.queue';
 
 /**
  * Copy a build's files into the publish folder, keeping each path as it was under the folder they share.
@@ -147,7 +153,16 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     // A chapter is somewhere a page can be put, and the drop is a registry write — see `src/pageOps.ts`.
     dragAndDropController: pageOps,
   });
-  selectedRow = () => treeView.selection[0];
+  // The same tree, in its own container on the activity bar. One provider behind both views, so there is one answer
+  // to "what is the documentation": the panel keeps the groups it had, and the tree is one icon away.
+  const treeInOwnContainer = vscode.window.createTreeView(TREE_ID, {
+    treeDataProvider: provider,
+    showCollapseAll: true,
+    dragAndDropController: pageOps,
+  });
+  context.subscriptions.push(treeInOwnContainer);
+  // Whichever tree the person used last supplies the row a command was started without one from.
+  selectedRow = () => treeView.selection[0] ?? treeInOwnContainer.selection[0];
 
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   status.command = 'temcoDocs.validate';
@@ -161,6 +176,12 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
    * the selection would re-make it on the very next refresh, and the view would never go away.
    */
   let picked = false;
+
+  // **Needs You** — the queue under the tree: screenshots with no page yet, pages the code moved away from, pages
+  // never reviewed. It reads the same roots the tree reads, so the two can never disagree.
+  const queue = new QueueTreeProvider({ roots: () => roots });
+  const queueView = vscode.window.createTreeView(QUEUE_ID, { treeDataProvider: queue });
+  context.subscriptions.push(queueView);
 
   // The tree is this module's own view. The Library, the dashboard and the needs page are the workbench's, and
   // they read this module's model through the API at the bottom of `activate()`.
@@ -334,6 +355,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     // The projects the side bar lists, the one being worked on first.
     projectRows = await readProjects(context, selection.project());
     sidebar?.refresh();
+    queue.refresh();
     // The view says which project it is showing: it answers about a project, never about the window, and a view
     // that silently answers a different question is worse than an empty one.
     treeView.description = projectName
@@ -874,6 +896,29 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   registerPageCommands(context, pageDeps);
   // and where a row is: opening it, revealing it, a terminal at its folder, its path on the clipboard.
   registerRowCommands(context, { selected: () => selectedRow() });
+  // Screenshots: capture or paste, and the file lands in the page's own `media/` before the reference to it means
+  // anything. Whichever tree or editor the person used last decides which page it belongs to.
+  let lastTouched: 'tree' | 'page' = 'page';
+  context.subscriptions.push(
+    treeView.onDidChangeSelection(() => { lastTouched = 'tree'; }),
+    treeInOwnContainer.onDidChangeSelection(() => { lastTouched = 'tree'; }),
+    vscode.window.onDidChangeTextEditorSelection(() => { lastTouched = 'page'; })
+  );
+  registerMediaCommands(context, {
+    roots: () => roots,
+    targetPage: () => {
+      if (lastTouched === 'tree') {
+        const row = pageFromNode(selectedRow());
+        if (row !== undefined) {
+          return row.page;
+        }
+      }
+      const editor = vscode.window.activeTextEditor;
+      return editor === undefined ? undefined : pageForUri(roots, editor.document.uri);
+    },
+    redraw: () => redraw(),
+    output,
+  });
   // The page that creates a page — the other page that exists because a name is asked for in a form. The
   // organisation's own page is `temcoRepositories.page`, and it belongs to that module.
   newPagePage = new NewPagePage(context, () => roots, pageDeps);

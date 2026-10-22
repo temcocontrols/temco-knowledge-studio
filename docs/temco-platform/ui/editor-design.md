@@ -144,10 +144,11 @@ The rules are already written down, in the design package, so they are not ours 
 | **the destination is derived, never supplied** | `15-online-editor.md`, *Safety rules*, rule 1 |
 | screenshots are captured properly or not at all — no editing, no resizing | `15-online-editor.md`, *What is not built* |
 
-**What an extension can and cannot take.** A file the user **picked** (`showOpenDialog`) and a file **dropped** on
-the page are both reachable; VS Code's API does not expose the **clipboard image**, so "screenshot → `Ctrl+V` → it
-lands in `media/`" is a browser-editor feature and stays on the website. That limit is worth saying out loud
-because `15-online-editor.md`, *Uploads* puts paste first, and its assumption is the browser.
+**What an extension can and cannot take.** A file the user **picked** (`showOpenDialog`), a file **dropped** on
+the page and an image already on the clipboard are all reachable — the last one not through the extension API,
+which exposes the clipboard's *text* only. On Windows the module reads the bitmap itself
+(`System.Windows.Forms.Clipboard`, one child process per capture), which is what makes `Ctrl+Alt+V` work; the loop
+it belongs to, and what is still missing from it, is `authoring-flow.md`.
 
 ---
 

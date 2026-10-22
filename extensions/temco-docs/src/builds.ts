@@ -167,6 +167,16 @@ async function build(context: vscode.ExtensionContext, root: DocsRoot, output: v
   output.appendLine(`Building ${recipe.label} in ${root.folder.name}: npm run ${script}`);
   // Opened before the script runs: the attempt is a fact whether or not anything comes of it.
   const watch = await openWatch(context);
+
+  // The generator first, when the repository carries one: `docs:registry` is what writes the index, the headings
+  // and the stale verdict, so a build that skips it renders whatever the last person happened to leave behind —
+  // including pages added since. `platform-design.md`, decision E. It is invoked, never reimplemented.
+  if (script !== 'docs:registry' && typeof scripts['docs:registry'] === 'string') {
+    output.appendLine('Running the repository’s own generator first: npm run docs:registry');
+    const generated = await runTask(root, 'docs:registry');
+    output.appendLine(`npm run docs:registry exited with ${generated === undefined ? 'no code' : generated}`);
+  }
+
   const exit = await runTask(root, script);
   output.appendLine(`npm run ${script} exited with ${exit === undefined ? 'no code' : exit}`);
 

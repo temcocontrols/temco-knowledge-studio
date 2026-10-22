@@ -128,15 +128,17 @@ export class DocsTreeProvider implements vscode.TreeDataProvider<DocsNode> {
   getChildren(node?: DocsNode): DocsNode[] {
     if (!node) {
       const roots = this.roots;
-      if (roots.length === 0) {
-        // Nothing read is not nothing to say: the rows carry the reason and the way out of it.
-        return this.notes.map((note) => new NoteNode(note));
-      }
       // One source puts its areas at the top, the way the mock's tree starts at the areas. More than one keeps a
-      // row per source: with two repositories open, a page named "Install" belongs to one of them.
-      return roots.length === 1
-        ? roots[0].areas.map((area) => new AreaNode(roots[0], area, true))
-        : roots.map((root) => new FolderNode(root));
+      // row per source: with two repositories open, a page named "Install" belongs to one of them. A single source
+      // with no areas has nothing to lift — a repository read over the API that recorded no pages — so it keeps its
+      // own row rather than leaving the view blank.
+      const rows = roots.length === 0
+        ? []
+        : roots.length === 1 && roots[0].areas.length > 0
+          ? roots[0].areas.map((area) => new AreaNode(roots[0], area, true))
+          : roots.map((root) => new FolderNode(root));
+      // Whatever the sources could not say for themselves: a source with no local copy, a registry that failed.
+      return [...rows, ...this.notes.map((note) => new NoteNode(note))];
     }
 
     switch (node.kind) {

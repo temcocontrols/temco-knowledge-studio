@@ -106,6 +106,8 @@ export class NewPagePage {
       type: 'form',
       seed: this.seed,
       sources: this.sources(),
+      // The cited sources that are only in the catalog: no folder, so nowhere to write until one is downloaded.
+      missing: await this.missingCopies(),
       kinds: KINDS.map((kind) => ({ label: kind.label, detail: kind.detail, headings: kind.headings })),
       areaChapter: AREA_CHAPTER,
       model: await modelLabel(),
@@ -164,9 +166,67 @@ export class NewPagePage {
       case 'cancel':
         this.panel?.dispose();
         return;
+      case 'download':
+        await this.download(message.source ?? '');
+        return;
+      case 'cite':
+        await vscode.commands.executeCommand('temcoRepositories.page');
+        return;
       default:
         return;
     }
+  }
+
+  /**
+   * The project's cited sources with no folder on this machine.
+   *
+   * A source read over the API has no working tree, so there is nothing to write a page into — but it is one download
+   * away, and the flow names that download instead of telling a person to go and find the project's folders.
+   */
+  private async missingCopies(): Promise<string[]> {
+    const project = this.deps.project();
+    if (project === undefined) {
+      return [];
+    }
+    let catalog: Catalog | undefined;
+    try {
+      catalog = await Catalog.open(this.context);
+      const detail = catalog.document(project);
+      if (detail === undefined) {
+        return [];
+      }
+      const open = catalog;
+      return detail.sources
+        .filter((source) => open.source(slugOf(source.name))?.path === undefined)
+        .map((source) => source.name);
+    } catch {
+      return [];
+    } finally {
+      catalog?.close();
+    }
+  }
+
+  /**
+   * Downloads one source, then asks the documentation module to read again.
+   *
+   * The clone is the repositories module's own act, with its own question about where the copy goes; this only names
+   * the source. After it, the source has a folder, so the flow has somewhere to write and the form is sent again.
+   */
+  private async download(source: string): Promise<void> {
+    if (source.length === 0) {
+      return;
+    }
+    const answer = await vscode.commands.executeCommand<{ path?: string; error?: string } | undefined>(
+      'temcoRepositories.ensureClone',
+      source
+    );
+    if (answer?.path === undefined) {
+      void vscode.window.showWarningMessage(`Temco: ${answer?.error ?? `there is no local copy of ${source} yet.`}`);
+      return;
+    }
+    // The read is the documentation module's: without it the new folder is not a root yet.
+    await vscode.commands.executeCommand('temcoDocs.refresh');
+    await this.sendForm();
   }
 
   /**
@@ -615,6 +675,7 @@ const CLIENT = `
 	const finish = $('wizard-finish');
 
 	let sources = [];
+	let missing = [];
 	let kinds = [];
 	let areaChapter = '(root)';
 	let seed = {};
@@ -922,6 +983,7 @@ const CLIENT = `
 		const message = event.data;
 		if (message.type === 'form') {
 			sources = message.sources || [];
+			missing = message.missing || [];
 			kinds = message.kinds || [];
 			areaChapter = message.areaChapter || '(root)';
 			seed = message.seed || {};
@@ -975,10 +1037,26 @@ const CLIENT = `
 			document.querySelector('.wizard').hidden = true;
 			const box = $('nothing');
 			box.hidden = false;
-			box.innerHTML = '<div class="callout callout--warn"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><use href="#i-alert"></use></svg>' +
-				'<div>No source on this machine is being read, so there is nowhere to write a page. A source read over the API has no working tree; work on a project whose sources are folders.</div></div>';
+			// Two different dead ends, said differently: a project whose sources are only in the catalog is one download
+			// from working, and a project with no sources is one citation from having any.
+			box.innerHTML = missing.length > 0
+				? '<div class="callout callout--warn"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><use href="#i-alert"></use></svg>' +
+					'<div>This project’s sources are read over the API, so there is no folder on this machine to write a page into. Download a local copy of <b>' +
+					esc(missing[0]) + '</b> — the page is written there.</div></div>' +
+					'<div class="row mt-16"><button type="button" class="btn btn--primary" id="download-copy">Download a local copy</button></div>'
+				: '<div class="callout callout--warn"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><use href="#i-alert"></use></svg>' +
+					'<div>This project cites no source yet, so there is nowhere to write a page. Cite one on the repositories page, then come back.</div></div>' +
+					'<div class="row mt-16"><button type="button" class="btn btn--primary" id="cite-source">Cite a source</button></div>';
+			const download = $('download-copy');
+			if (download) { download.addEventListener('click', function () { api.postMessage({ type: 'download', source: missing[0] }); }); }
+			const cite = $('cite-source');
+			if (cite) { cite.addEventListener('click', function () { api.postMessage({ type: 'cite' }); }); }
 			return;
 		}
+
+		// A source arrived after the empty state was drawn (a download finished): the wizard comes back.
+		document.querySelector('.wizard').hidden = false;
+		$('nothing').hidden = true;
 
 		const source = sources.filter(function (candidate) { return candidate.name === seed.source; })[0] || sources[0];
 		values.source = source.name;

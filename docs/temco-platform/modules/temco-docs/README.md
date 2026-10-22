@@ -13,6 +13,7 @@ because that is where the content has to be.
 | [`extension-design.md`](./extension-design.md) | you add a view, a command, a check or a diagnostic |
 | [`platform-design.md`](../../ui/platform-design.md) | you work on the platform itself: sources, the documents a person creates, builds and artifacts, the AI over history, and the catalog |
 | [`editor-design.md`](../../ui/editor-design.md) | you work on editing: the toolbar, creating a page, images, drafts, and the write rule they wait on |
+| [`authoring-flow.md`](../../ui/authoring-flow.md) | you work on screenshots, the side bar, or when a page must be re-illustrated: the capture stage, the two views, and what still waits on a decision |
 | [`app-layout.md`](../../ui/app-layout.md) | you need the target UI: the application window, the site's generated dashboard, and the seam between them |
 | [`design/temco-learn/`](../../../temco-learn/design/README.md) | you need the platform design itself: content model, registry, search, the offline CHM, editing, feedback, AI, governance |
 
