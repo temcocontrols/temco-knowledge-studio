@@ -1269,9 +1269,10 @@ export async function writePage(deps: PageDeps, spec: NewPageSpec): Promise<{ re
   await vscode.workspace.fs.writeFile(uri, Buffer.from(text, 'utf8'));
   const document = await vscode.workspace.openTextDocument(uri);
   await vscode.window.showTextDocument(document, { preview: false, viewColumn: fileColumn() });
-  // The right-hand panel comes forward with the page: it is where the ways to start one are, and a new page with
-  // nothing in it is exactly when somebody wants them.
-  void vscode.commands.executeCommand('temcoDocs.draft.focus');
+  // The page is written and open. What comes next is the Documentation list, where its row now exists — that is the
+  // panel this product is worked from, and pulling the right panel forward as well would mean two panels competing
+  // for one window while the page itself is already in front.
+  void vscode.commands.executeCommand('temcoDocs.pages.focus').then(undefined, () => undefined);
   deps.redraw();
 
   // The entry is what makes it a page rather than a file: index.json, the table of contents, the CHM manifest and

@@ -1269,16 +1269,10 @@ async function createProjectFolder(
   }
   await vscode.commands.executeCommand('temcoDocs.refresh');
 
-  // The folder joins the workspace, so **Explorer** shows the documentation itself: New File, New Folder, inline
-  // rename and drag, all native. This panel keeps the meaning — registered or not, stale, reviewed — and the two
-  // read the same files.
-  const folderUri = vscode.Uri.file(base);
-  const known = vscode.workspace.workspaceFolders?.some(
-    (folder) => folder.uri.fsPath.toLowerCase() === base.toLowerCase()
-  );
-  if (known !== true) {
-    vscode.workspace.updateWorkspaceFolders(vscode.workspace.workspaceFolders?.length ?? 0, 0, { uri: folderUri });
-  }
+  // The folder is **not** added to the workspace. It used to be, so that Explorer could show the new `docs/`, but
+  // that made the window an untitled multi-root workspace: the next project then created itself inside the previous
+  // one, and the folder could not be deleted while VS Code held it open. Explorer is still one row action away —
+  // *Reveal* and *Open Terminal* on any row open it where it matters, without changing the shape of the window.
 }
 
 /**

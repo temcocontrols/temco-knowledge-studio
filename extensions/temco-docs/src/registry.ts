@@ -353,9 +353,6 @@ export async function loadDocsRoot(folder: vscode.WorkspaceFolder): Promise<Docs
   // No warning for an empty `pages{}`: a registry is generated metadata, and "it lists nothing yet" is the normal
   // state of a project whose pages are files on disk.
 
-  const titleOwners = new Map<string, string[]>();
-  const orderOwners = new Map<string, string[]>();
-
   const entries = new Map<string, PageEntry>();
   for (const id of ids) {
     const raw = declaredPages[id] ?? {};
@@ -383,10 +380,6 @@ export async function loadDocsRoot(folder: vscode.WorkspaceFolder): Promise<Docs
     }
 
     const title = raw.title ?? id;
-    append(titleOwners, title.toLowerCase(), id);
-    if (raw.order !== undefined) {
-      append(orderOwners, `${area}/${chapter}`, String(raw.order));
-    }
 
     entries.set(id, {
       id,
@@ -406,32 +399,9 @@ export async function loadDocsRoot(folder: vscode.WorkspaceFolder): Promise<Docs
     });
   }
 
-  // Two pages with one title, or two pages fighting over one position, both make search and navigation
-  // ambiguous — so they are reported even though each page is individually valid.
-  for (const [title, owners] of titleOwners) {
-    if (owners.length > 1) {
-      for (const id of owners) {
-        entries.get(id)?.issues.push({
-          severity: 'warning',
-          message: `Title "${title}" is also used by ${owners.filter((other) => other !== id).join(', ')}.`,
-        });
-      }
-    }
-  }
-  for (const [chapter, orders] of orderOwners) {
-    const collisions = orders.filter((order, index) => orders.indexOf(order) !== index);
-    for (const order of new Set(collisions)) {
-      for (const id of ids) {
-        const entry = entries.get(id);
-        if (entry && `${entry.area}/${entry.chapter}` === chapter && String(entry.order) === order) {
-          entry.issues.push({
-            severity: 'warning',
-            message: `Order ${order} is used by more than one page in "${chapter}".`,
-          });
-        }
-      }
-    }
-  }
+  // Duplicate titles and shared order numbers are not reported. The order a page gets is the generator's default,
+  // so every page in a fresh folder shares one — the warning fired on every page anybody made and said nothing about
+  // the page. What a person needs to know about a page belongs to the page, not to every row in the list.
 
   // The generated neighbours are optional: without them every check above still runs on its own, only the
   // provenance the items display goes missing.
@@ -538,12 +508,6 @@ function sumCounts(entries: Map<string, PageEntry>): Counts {
     neverReviewed: pages.filter((page) => !page.reviewed).length,
     unshipped: pages.filter((page) => !page.ship).length,
   };
-}
-
-function append(map: Map<string, string[]>, key: string, value: string): void {
-  const values = map.get(key) ?? [];
-  values.push(value);
-  map.set(key, values);
 }
 
 /**

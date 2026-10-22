@@ -601,56 +601,43 @@ function fileOf(roots: readonly DocsRoot[], spec: NewPageSpec): string {
 
 /* ------------------------------------------------------------------ the three steps */
 
-const STEPS = ['Location', 'Template', 'Draft'];
-
 function html(): string {
-  const rail = STEPS.map((label, index) =>
-    `${index > 0 ? '<span class="step__arrow" aria-hidden="true">→</span>' : ''}<button type="button" class="step${index === 0 ? ' is-active' : ''}" data-step="${index}" role="tab" aria-selected="${index === 0}"><span class="step__n">${index + 1}.</span><span class="step__label">${label}</span></button>`
-  ).join('');
-
-  const body = `<div class="page-head">
+  const body = `<div class="page-head" style="margin-bottom:0;padding-bottom:0">
 	<div class="page-head__main">
 		<div class="eyebrow">Documentation</div>
 		<h1 class="page-head__title">${icon('document')}New Page</h1>
-		<p class="page-head__desc">A page belongs to a chapter in an area. Its place in that chapter is what the site and the PDF use.</p>
+		<p class="page-head__desc">A title, and the kind of page it is. Where it goes is already answered by the row you had selected.</p>
 	</div>
 	<div class="page-head__actions"><button type="button" class="btn btn--ghost" id="wizard-cancel">${icon('close')}<span>Cancel</span></button></div>
 </div>
 
 <div id="nothing" hidden></div>
 
-<div class="wizard">
-	<div class="wizard__steps" role="tablist">${rail}</div>
-	<div class="wizard__body">
+<div class="wizard" style="margin-top:0;padding-top:0">
+	<div class="wizard__body" style="margin-top:0;padding-top:0">
 		<div data-step-body="0">
-			<div class="wizard__title">Where does it go?</div>
-			<p class="wizard__hint">The area decides who is asked to review it; the chapter is the folder the file lands in.</p>
-			<div class="settings-rows" id="place"></div>
-			<div class="mt-16" id="lands"></div>
-		</div>
-		<div data-step-body="1" hidden>
-			<div class="wizard__title">Start from what?</div>
-			<p class="wizard__hint">A kind is a page outline, not a copy of someone else’s content.</p>
-			<div class="choice-grid" id="kinds"></div>
-			<div class="mt-16" id="template"></div>
-		</div>
-		<div data-step-body="2" hidden>
-			<div class="wizard__title">Name it</div>
-			<p class="wizard__hint">The slug comes from the title and never changes afterwards — links and help ids point at it.</p>
+			<div class="wizard__title">What is it called?</div>
+			<p class="wizard__hint">The file name follows the title — nothing else is needed to make a page.</p>
 			<div class="settings-rows" id="name"></div>
+
+			<div class="wizard__title mt-24">What kind of page?</div>
+			<p class="wizard__hint">A kind is a page outline, not a copy of someone else’s content.</p>
+			<div class="choice-grid" id="kinds" style="grid-template-columns:repeat(5,minmax(0,1fr))"></div>
+			<div class="mt-16" id="template" hidden></div>
+
 			<div class="mt-16" id="pickers"></div>
-			<div class="mt-16" id="address"></div>
+			<div class="mt-16" id="address" style="width:100%;max-width:none"></div>
 			<div class="mt-16" id="tools"></div>
 			<div class="mt-16" id="note"></div>
+			<div class="wizard__error" id="wizard-error" hidden></div>
 		</div>
-		<div class="wizard__error" id="wizard-error" hidden></div>
 	</div>
 	<div class="wizard__foot">
-		<span class="cell-muted" id="wizard-count">Step 1 of ${STEPS.length}</span>
+		<span class="cell-muted" id="wizard-count"></span>
 		<span class="wizard__spacer"></span>
-		<button type="button" class="btn" id="wizard-back" hidden>${icon('chevron-left')}<span>Back</span></button>
-		<button type="button" class="btn btn--primary" id="wizard-next"><span>Next</span></button>
-		<button type="button" class="btn btn--primary" id="wizard-finish" hidden>${icon('check')}<span>Create Page</span></button>
+		<button type="button" class="btn" id="wizard-back" hidden></button>
+		<button type="button" class="btn btn--primary" id="wizard-next" hidden></button>
+		<button type="button" class="btn btn--primary" id="wizard-finish">${icon('check')}<span>Create Page</span></button>
 	</div>
 </div>`;
 
@@ -740,6 +727,10 @@ const CLIENT = `
 	/* ------------------------------------------------------------------ step 1: where */
 
 	function drawPlace() {
+		// The location selectors are gone from the form: the row that was selected answers it, and there is no
+		// "Change…" any more. Kept as a guard so the change handlers above cannot write into an element that no
+		// longer exists.
+		if (!document.getElementById('place')) { return; }
 		const controls = [];
 		if (sources.length > 1) {
 			controls.push(formRow('Source', 'A page is written into a folder on this machine, never one read over the API.',
@@ -763,7 +754,24 @@ const CLIENT = `
 			: 'This chapter has no pages yet, so it is the first.', '<span class="cell-muted">' + (last ? 'after order ' + last.order : 'first') + '</span>'));
 
 		$('place').innerHTML = controls.join('');
+		drawWhere();
 		drawLands();
+	}
+
+	/**
+	 * The one line that answers "where does it go?".
+	 *
+	 * The row selected in the tree already answered it, so the selectors are behind *Change…* and this line is the
+	 * whole of the answer: the area, and the folder inside it.
+	 */
+	function drawWhere() {
+		const area = chosenArea();
+		const chapter = finalChapter();
+		const line = document.getElementById('where-line');
+		if (!line) { return; }
+		const folder = chapter && chapter !== areaChapter ? chapter : '';
+		line.textContent = 'In ' + (area ? (area.title || area.area) : 'this source') + (folder ? ' › ' + folder : '') +
+			(values.slug ? '  →  ' + landingPath() : '');
 	}
 
 	function chapterOptions() {
@@ -815,20 +823,46 @@ const CLIENT = `
 
 	/* ------------------------------------------------------------------ step 2: template */
 
+	/** A glyph on its own, in the sprite the page carries — the client has no icon() helper, only tone(). */
+	function glyph(name) {
+		return '<svg viewBox="0 0 24 24" class="icon icon--sm" aria-hidden="true"><use href="#i-' + name + '"></use></svg>';
+	}
+
 	function drawKinds() {
+		// One card per kind, five across: a glyph, the name, and what the page is for. The headings the kind writes
+		// are one line underneath, so the difference between "Task" and "Troubleshooting" is visible before the page
+		// exists. The border is inline because this page carries no stylesheet of its own beyond the kit's.
 		$('kinds').innerHTML = kinds.map(function (kind) {
-			return '<label class="choice"><input type="radio" name="kind" data-field="kind" value="' + esc(kind.label) + '"' +
-				(kind.label === values.kind ? ' checked' : '') + '>' +
-				'<span class="choice__text"><span class="choice__label">' + esc(kind.label) + '</span>' +
+			const on = kind.label === values.kind;
+			return '<label class="choice" style="border:1px solid ' + (on ? 'var(--accent)' : 'var(--border)') +
+				';border-radius:6px;padding:8px 10px;min-width:0;align-items:flex-start">' +
+				'<input type="radio" name="kind" data-field="kind" value="' + esc(kind.label) + '"' + (on ? ' checked' : '') + '>' +
+				'<span class="choice__text">' +
+				'<span class="choice__label">' + glyph(kindIcon(kind.label)) + esc(kind.label) + '</span>' +
 				'<span class="choice__desc">' + esc(kind.detail) + '</span></span></label>';
-		}).join('');
+		}).join('') + '<div class="mt-8 cell-muted" id="kind-headings"></div>';
 		drawTemplate();
+	}
+
+	/** The glyph a kind carries: the shape of the page, not decoration. */
+	function kindIcon(label) {
+		if (label === 'Task') { return 'check'; }
+		if (label === 'Reference') { return 'list'; }
+		if (label === 'Troubleshooting') { return 'warning'; }
+		if (label === 'Release note') { return 'sparkle'; }
+		return 'document';
 	}
 
 	/** What the chosen kind produces: its headings, and nothing invented. */
 	function drawTemplate() {
 		const kind = kinds.filter(function (candidate) { return candidate.label === values.kind; })[0];
 		const headings = kind ? kind.headings : [];
+		const line = document.getElementById('kind-headings');
+		if (line) {
+			line.textContent = headings.length > 0
+				? 'Starts with   ' + headings.join(' · ')
+				: 'No headings: a title and an empty body.';
+		}
 		const rows = headings.length > 0
 			? headings.map(function (heading, index) {
 				return row('list', undefined, heading, 'section ' + (index + 1) + ' · a heading with an empty body', '');
@@ -844,21 +878,22 @@ const CLIENT = `
 
 	function drawName() {
 		values.slug = slugify(values.title);
+		// The file name is a consequence of the title, so it is a line rather than a field: nothing to fill in, and
+		// nothing that can disagree with what the title produces. Where the body starts is the right panel's business
+		// — the page is written with its kind's headings, and a draft is asked for when the page is in front.
 		$('name').innerHTML =
 			formRow('Title', 'What a reader sees in the list and in the PDF.',
 				'<input class="input" data-field="title" value="' + esc(values.title) + '" placeholder="Point Scaling" aria-label="Page title">') +
-			formRow('File name', 'The slug comes from the title; two pages cannot share one inside a chapter.',
-				'<input class="input" data-field="slug" value="' + esc(values.slug) + '" aria-label="File name" readonly>') +
-			formRow('Start the body from', 'Where the first draft comes from — the file is written either way.',
-				'<select class="select" data-field="from" aria-label="Start the body from">' +
-				'<option value="empty"' + (values.from === 'empty' ? ' selected' : '') + '>Nothing — the kind’s headings</option>' +
-				'<option value="area"' + (values.from === 'area' ? ' selected' : '') + '>The pages already in this area</option>' +
-				'<option value="file"' + (values.from === 'file' ? ' selected' : '') + '>A file of the source</option>' +
-				'<option value="page"' + (values.from === 'page' ? ' selected' : '') + '>Another page</option>' +
-				'</select>');
-		drawPickers();
+			'<div class="mt-8 cell-mono" id="will-write">→ ' + esc(landingPath()) + '</div>';
 		drawAddress();
 		drawTools();
+	}
+
+	/** The file the page will be, as the form shows it while the title is typed. */
+	function landingPath() {
+		const chapter = finalChapter();
+		const name = values.slug.length > 0 ? values.slug : 'page-name';
+		return (chapter === areaChapter ? '' : chapter + '/') + name + '.md';
 	}
 
 	function drawPickers() {
@@ -890,16 +925,23 @@ const CLIENT = `
 	function drawAddress() {
 		const source = chosenSource();
 		const area = chosenArea();
-		const where = (source ? source.name : 'source') + '/docs/' + (area ? area.area : 'area') + '/' +
-			(finalChapter() && finalChapter() !== areaChapter ? finalChapter() + '/' : '') + (values.slug || '…') + '.md';
-		const lines = group('Address', 'draft', 'Where the site and the search index will list it.',
-			'<div class="record-row record-row--static">' + tone('link') +
-			'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name cell-mono">' + esc(where) + '</span></div>' +
+		// The real path, relative to the source's own folder: docs/<area>/<folder>/<file>.md. It used to carry the
+		// source's display name and a second "docs/", so the one thing this section exists to state was wrong.
+		const chapter = finalChapter() && finalChapter() !== areaChapter ? finalChapter() + '/' : '';
+		const where = 'docs/' + (area ? area.area : 'area') + '/' + chapter + (values.slug || '…') + '.md';
+		const lines = group('Address', 'draft', 'The file this page becomes, relative to ' + (source ? source.name : 'the source') + '.',
+			'<div class="record-row record-row--static" style="width:100%;max-width:none">' + tone('link') +
+			'<div class="record-row__main" style="min-width:0">' +
+			'<div class="record-row__title"><span class="record-row__name cell-mono" style="white-space:normal;word-break:break-all">' +
+			esc(where) + '</span></div>' +
 			'<div class="record-row__meta"><span>' + esc(values.kind || 'no kind yet') + ' · ' + esc(values.title || 'untitled page') + '</span></div></div>' +
 			'<div class="record-row__state"></div><div class="record-row__state"></div></div>');
-		const notes = '<div class="callout"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><use href="#i-info"></use></svg>' +
+		const notes = '<div class="callout" style="width:100%;max-width:none;box-sizing:border-box">' +
+			'<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><use href="#i-info"></use></svg>' +
 			'<div>The page is created as a file. It reaches the site only through a build and a release.</div></div>';
-		$('address').innerHTML = lines + notes;
+		// The whole block spans the form: a path is the one thing here that is wider than a card, and truncating it
+		// would hide exactly what the section exists to show.
+		$('address').innerHTML = '<div style="width:100%;max-width:none">' + lines + notes + '</div>';
 	}
 
 	function drawTools() {
@@ -934,22 +976,18 @@ const CLIENT = `
 
 	/* ------------------------------------------------------------------ the steps */
 
-	function show(index) {
-		at = Math.max(0, Math.min(index, steps.length - 1));
-		steps.forEach(function (step, number) {
-			step.classList.toggle('is-active', number === at);
-			step.classList.toggle('is-done', number < at);
-			step.setAttribute('aria-selected', String(number === at));
-		});
-		bodies.forEach(function (body, number) { body.hidden = number !== at; });
-		count.textContent = 'Step ' + (at + 1) + ' of ' + steps.length;
-		back.hidden = at === 0;
-		next.hidden = at === steps.length - 1;
-		finish.hidden = at !== steps.length - 1;
+	function show() {
+		// One screen: every section is drawn at once, and nothing is stepped through. The steps remain in the markup
+		// only as the elements the script already knows how to fill.
+		steps.forEach(function (step, number) { step.classList.toggle('is-active', number === 0); });
+		bodies.forEach(function (body) { body.hidden = false; });
+		count.textContent = '';
+		back.hidden = true;
+		next.hidden = true;
+		finish.hidden = false;
 		error.hidden = true;
-		if (at === 0) { drawPlace(); }
-		if (at === 1) { drawKinds(); }
-		if (at === 2) { drawName(); }
+		drawKinds();
+		drawName();
 	}
 
 	function fail(message) {
@@ -959,23 +997,21 @@ const CLIENT = `
 	}
 
 	function check() {
-		if (at === 0) {
-			if (!chosenSource()) { return fail('There is no source on this machine to write a page into.'); }
-			if (!chosenArea()) { return fail('A page belongs in an area, and this source has none.'); }
-			if (values.chapter === NEW_CHAPTER && slugify(values.chapterName).length === 0) {
-				return fail('A new chapter needs a folder name.');
-			}
+		// One screen means one check: everything the form asks is validated together, because there is no step to
+		// be on when it is asked.
+		if (!chosenSource()) { return fail('There is no source on this machine to write a page into.'); }
+		if (!chosenArea()) { return fail('A page belongs in an area, and this source has none.'); }
+		if (values.chapter === NEW_CHAPTER && slugify(values.chapterName).length === 0) {
+			return fail('A new chapter needs a folder name.');
 		}
-		if (at === 1 && !values.kind) { return fail('Choose the kind of page this is.'); }
-		if (at === 2) {
-			if (values.title.trim().length === 0) { return fail('A page needs a title.'); }
-			const clash = pagesOfArea().filter(function (page) {
-				return page.title.toLowerCase() === values.title.trim().toLowerCase() && page.chapter === finalChapter();
-			})[0];
-			if (clash) { return fail('A page called “' + clash.title + '” already exists in this chapter.'); }
-			if (values.from === 'file' && ticked.size === 0) { return fail('Tick at least one file to draft from.'); }
-			if (values.from === 'page' && !values.pageId) { return fail('Choose the page to draft from.'); }
-		}
+		if (!values.kind) { return fail('Choose the kind of page this is.'); }
+		if (values.title.trim().length === 0) { return fail('A page needs a title.'); }
+		const clash = pagesOfArea().filter(function (page) {
+			return page.title.toLowerCase() === values.title.trim().toLowerCase() && page.chapter === finalChapter();
+		})[0];
+		if (clash) { return fail('A page called “' + clash.title + '” already exists in this chapter.'); }
+		if (values.from === 'file' && ticked.size === 0) { return fail('Tick at least one file to draft from.'); }
+		if (values.from === 'page' && !values.pageId) { return fail('Choose the page to draft from.'); }
 		return true;
 	}
 
@@ -1185,8 +1221,9 @@ const CLIENT = `
 		if (event.target.dataset && event.target.dataset.field === 'title') {
 			values.title = event.target.value;
 			values.slug = slugify(values.title);
-			const slug = document.querySelector('[data-field=slug]');
-			if (slug) { slug.value = values.slug; }
+			// The file name is shown, not edited: this line is the whole of what the title decides.
+			const hint = document.getElementById('will-write');
+			if (hint) { hint.textContent = '→ ' + landingPath(); }
 			drawAddress();
 		}
 		if (event.target.dataset && event.target.dataset.field === 'chapterName') {

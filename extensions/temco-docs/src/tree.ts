@@ -430,7 +430,8 @@ export class DocsTreeProvider implements vscode.TreeDataProvider<DocsNode> {
         return level === undefined ? [] : this.rowsAt(node.root, [node.area], node.segments, level);
       }
       case 'page':
-        return node.page.issues.map((_, index) => new IssueNode(node.root, node.page, index));
+        // No folded children: a page row is a file, and what is worth saying about it is said in the panel about it.
+        return [];
       default:
         return [];
     }
@@ -590,12 +591,15 @@ function chapterItem(node: ChapterNode, hasChildren = false, total = node.chapte
 function pageItem(node: PageNode): vscode.TreeItem {
   const { page } = node;
   const recorded = page.origin === 'catalog';
-  const stale = page.provenance?.stale === true;
-  const item = new vscode.TreeItem(
-    page.title,
-    page.issues.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
-  );
+  // The row is a file, so it is named like one: `point-scaling.md`, not the curated title. A tree that shows titles
+  // and a file manager that shows names disagree about every row, and the tree is the one people copy paths from.
+  const file = `${page.id.split('/').pop() ?? page.id}.md`;
+  const item = new vscode.TreeItem(file, vscode.TreeItemCollapsibleState.None);
   item.id = `docs|page|${node.root.folder.uri.toString()}|${page.id}`;
+  // The curated title is still there, once it says something the name does not.
+  if (page.title !== file && page.title !== file.replace(/\.md$/, '')) {
+    item.description = page.title;
+  }
 
   if (recorded) {
     // Nothing was checked and nothing was reviewed, so the row says what it is: a page a read told us about.
@@ -624,31 +628,13 @@ function pageItem(node: PageNode): vscode.TreeItem {
       `owner: ${page.owner || '—'} · audience: ${page.audience}`,
       `ship: ${page.ship ? 'yes' : 'no'} · reviewed: ${page.reviewed ?? 'never'}`,
       ...provenanceLines(page.provenance),
-      '',
-      page.issues.length === 0
-        ? '_No structural problem._'
-        : page.issues.map((issue) => `- ${issue.severity === 'error' ? '$(error)' : '$(warning)'} ${issue.message}`).join('\n'),
     ].join('\n')
   );
-  // A page looks like what it is — a Markdown document, because every page is one — and its state is said in
-  // colour rather than by swapping the icon, so no row stops looking like the page it stands for. Two states do
-  // get their own shape, because the shape *is* the message: a declared page with no file, and the generator's
-  // stale verdict.
-  const colour = !page.exists ? 'problemsErrorIcon.foreground'
-    : page.issues.some((issue) => issue.severity === 'error') ? 'problemsErrorIcon.foreground'
-      : page.issues.length > 0 ? 'problemsWarningIcon.foreground'
-        : undefined;
-  item.iconPath = !page.exists
-    ? new vscode.ThemeIcon('new-file', new vscode.ThemeColor('problemsErrorIcon.foreground'))
-    : stale
-      ? new vscode.ThemeIcon('history', new vscode.ThemeColor('descriptionForeground'))
-      : colour !== undefined
-        ? new vscode.ThemeIcon('file', new vscode.ThemeColor(colour))
-        : new vscode.ThemeIcon('file');
+  // The icon is the file's own: the row carries the file's URI, so the editor's file-icon theme draws the Markdown
+  // icon and its colour — the same icon Explorer shows for the same file, rather than a generic page with a tint.
+  item.resourceUri = page.uri;
   item.contextValue = node.loose ? 'loosePage' : page.exists ? 'page' : 'missingPage';
   if (node.loose) {
-    // A page on disk is a page: the same file icon, dimmed, and its tooltip says what the registry does not know yet.
-    item.iconPath = new vscode.ThemeIcon('file', new vscode.ThemeColor('descriptionForeground'));
     item.tooltip = 'A page on disk that the registry does not name yet. Run the generator to register it.';
   }
   // A page that was cut is on its way somewhere else: Explorer dims it until it lands.
