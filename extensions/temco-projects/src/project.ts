@@ -11,6 +11,7 @@ import * as vscode from 'vscode';
 import { ProjectFlowPage } from './projectFlow';
 import { ProjectList } from './projectList';
 import { ProjectPage } from './projectPage';
+import { ProjectsPage } from './projectsPage';
 import { discardWorkFolder, folderConsequence, workFolderOf } from './removal';
 import { AddSourcePage } from './sourceFlow';
 import { Catalog, CatalogUnavailable, Selection, slugOf } from './store';
@@ -28,10 +29,15 @@ export function registerProjectCommands(
 ): void {
   // The Dashboard's list of projects. A row opens the page; the two inline actions are on the row's context menu.
   const list = new ProjectList(context);
+  const tree = vscode.window.createTreeView('temcoProjects.projects', { treeDataProvider: list });
+  context.subscriptions.push(tree);
+
   /**
-   * One redraw for every surface this module owns: its own signal — which the documentation panel listens to — and
-   * the list it draws itself. A project created, edited or removed has to leave both, or the Dashboard keeps a row
-   * for a project that no longer exists.
+   * One redraw for every surface this module owns: its own signal — which the documentation panel listens to — the
+   * list it draws itself, and the view title.
+   *
+   * The title is not decoration: the project being worked on is the one value the whole platform reads, and a list
+   * of five names with a tick somewhere in it was not answering "which one am I in?" without a search.
    */
   const redraw = (): void => {
     refresh();
@@ -39,6 +45,10 @@ export function registerProjectCommands(
   };
 
   const page = new ProjectPage(context, selection, redraw);
+  // The list of every project, opened from the Projects view's title bar: the tree answers "which page", this
+  // answers "which project needs me".
+  const projects = new ProjectsPage(context, selection);
+  context.subscriptions.push(projects);
   // New Project is the mock's `flow/new-project`: a wizard rather than the edit form opened empty.
   const flow = new ProjectFlowPage(context, selection, redraw);
   context.subscriptions.push(flow);
@@ -47,7 +57,6 @@ export function registerProjectCommands(
   context.subscriptions.push(source);
 
   context.subscriptions.push(
-    vscode.window.createTreeView('temcoProjects.projects', { treeDataProvider: list }),
     vscode.commands.registerCommand('temcoProjects.showProject', async () => {
       // Focusing the view is what brings its panel forward — VS Code registers `<viewId>.focus` for every
       // contributed view and opens the container with it. Naming the container's own command would have to guess an
@@ -58,6 +67,8 @@ export function registerProjectCommands(
 
   context.subscriptions.push(
     vscode.commands.registerCommand('temcoProjects.newProject', () => void flow.open()),
+    // The projects page: one list of everything the catalog holds.
+    vscode.commands.registerCommand('temcoProjects.projectsPage', () => void projects.open()),
     // *New project* from a repository row carries the repository in: the flow opens already answering "where do the
     // pages come from", and asks only what is inside it. The arguments are the row's own facts, so no lookup by name
     // has to guess which organisation the repository belongs to.
@@ -76,6 +87,11 @@ export function registerProjectCommands(
     ),
     vscode.commands.registerCommand('temcoProjects.removeProject', (target?: ProjectArgument) =>
       removeProject(context, selection, redraw, rowSlug(target))
+    ),
+    // Every project at once. It shares the single act's rules — the row is forgotten, then the folder it owns is
+    // deleted — and it confirms once, naming every folder, because one modal per project would be a wall of modals.
+    vscode.commands.registerCommand('temcoProjects.removeAllProjects', () =>
+      removeAllProjects(context, selection, redraw)
     ),
     // Adding a source is the mock's own flow: kind, location, read. A source is recorded once and cited by any
     // number of projects, so the flow is about the source itself rather than about the project it is added to.
@@ -138,6 +154,13 @@ async function removeProject(
       ? projects.find((project) => project.slug === slug)
       : await pickProject(projects, undefined, 'Remove which project?');
   if (!chosen) {
+    // A row was named and it is not in the catalog any more. Saying nothing made this look like a button that
+    // does nothing, which is exactly how it was reported.
+    if (slug !== undefined) {
+      void vscode.window.showWarningMessage(
+        `Temco Projects: “${slug}” is not in the catalog any more, so there is nothing to remove. Refresh the list.`
+      );
+    }
     return;
   }
 
@@ -163,7 +186,14 @@ async function removeProject(
   let catalog: Catalog | undefined;
   try {
     catalog = await Catalog.open(context);
-    catalog.deleteDocument(chosen.slug);
+    const removed = catalog.deleteDocument(chosen.slug);
+    if (removed === 0) {
+      void vscode.window.showWarningMessage(
+        `Temco Projects: the catalog deleted no row for “${chosen.slug}”, so the project is still there. ` +
+        'This is a fault in the store, not in the name you picked.'
+      );
+      return;
+    }
   } catch (error) {
     const message = error instanceof CatalogUnavailable ? error.message : String(error);
     void vscode.window.showErrorMessage(`Temco Projects: ${message}`);
@@ -188,6 +218,108 @@ async function removeProject(
   // Land where the removal happened, in the one useful sense: the list of what is left. The page about the
   // project that has just gone is not a page — it closes itself, and the Library takes its place.
   await focusLibrary();
+}
+
+/**
+ * Removes every project: the rows, then the folders they own.
+ *
+ * It is the single removal repeated, so it keeps the same two facts — a project is a catalog row, and the row is
+ * what names the folder that has to go with it. What it does *not* repeat is the confirmation: one modal names
+ * every project and every folder, because five projects would otherwise be five modals in a row, and the fifth
+ * would be clicked without being read.
+ *
+ * Sources are never touched: they are recorded once and cited by any number of projects, so forgetting them
+ * because the projects that cited them are gone would take pages away from a project created tomorrow.
+ */
+async function removeAllProjects(
+  context: vscode.ExtensionContext,
+  selection: Selection,
+  notify: (removed?: string) => void
+): Promise<void> {
+  const projects = await listDocuments(context);
+  if (projects.length === 0) {
+    void vscode.window.showInformationMessage('Temco Projects: there are no projects to remove.');
+    return;
+  }
+
+  // The folders are named before anything goes: they are the part of this act that cannot be undone from inside
+  // the application, and the modal is the only place a person can still refuse it.
+  const named: { slug: string; name: string; folder?: string; exists: boolean }[] = [];
+  for (const project of projects) {
+    const workFolder = await workFolderOf(project.slug);
+    named.push({ slug: project.slug, name: project.name, folder: workFolder?.folder, exists: workFolder?.exists === true });
+  }
+  const folders = named.filter((entry) => entry.exists);
+
+  const answer = await vscode.window.showWarningMessage(
+    `Remove all ${projects.length} project${projects.length === 1 ? '' : 's'}?`,
+    {
+      modal: true,
+      detail: [
+        named.map((entry) => `${entry.name}    ${entry.folder ?? '(no folder on this machine)'}`).join('\n'),
+        '',
+        folders.length === 0
+          ? 'The rows are forgotten. No project has a folder on this machine.'
+          : `${folders.length} folder${folders.length === 1 ? '' : 's'} is deleted from this machine, with every ` +
+            'local copy inside them. Sources stay in the catalog — they are shared — and no origin is touched.',
+      ].join('\n'),
+    },
+    'Remove All'
+  );
+  if (answer !== 'Remove All') {
+    return;
+  }
+
+  let rows = 0;
+  let gone = 0;
+  const kept: string[] = [];
+
+  let catalog: Catalog | undefined;
+  try {
+    catalog = await Catalog.open(context);
+    for (const entry of named) {
+      const deleted = catalog.deleteDocument(entry.slug);
+      if (deleted === 0) {
+        kept.push(`${entry.name} (the catalog deleted no row)`);
+        continue;
+      }
+      rows += deleted;
+      if (entry.exists) {
+        const discarded = await discardWorkFolder(entry.slug, entry.folder === undefined ? undefined : {
+          folder: entry.folder,
+          exists: true,
+        });
+        if (discarded) {
+          gone++;
+        } else {
+          kept.push(`${entry.name} (${entry.folder ?? 'its folder'} could not be deleted)`);
+        }
+      }
+    }
+  } catch (error) {
+    const message = error instanceof CatalogUnavailable ? error.message : String(error);
+    void vscode.window.showErrorMessage(`Temco Projects: ${message}`);
+    return;
+  } finally {
+    catalog?.close();
+  }
+
+  // Whatever was being worked on is no longer a project: the application must not keep reading one that is gone.
+  if (named.some((entry) => entry.slug === selection.project())) {
+    await selection.select(undefined);
+  }
+  notify();
+  await focusLibrary();
+
+  const said = `${rows} project${rows === 1 ? '' : 's'} removed` +
+    (gone > 0 ? `, ${gone} folder${gone === 1 ? '' : 's'} deleted` : '') + '.';
+  if (kept.length === 0) {
+    void vscode.window.showInformationMessage(`Temco Projects: ${said}`);
+    return;
+  }
+  void vscode.window.showWarningMessage(
+    `Temco Projects: ${said} What is left: ${kept.join('; ')}.`
+  );
 }
 
 /**

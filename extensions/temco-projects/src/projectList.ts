@@ -48,7 +48,9 @@ export class ProjectList implements vscode.TreeDataProvider<vscode.TreeItem> {
 					row.slug === current ? 'current' : '',
 				].filter((part) => part.length > 0).join(' · ');
 				project.tooltip = `${row.name}\n${row.slug}${row.origin === undefined ? '' : ` · ${row.origin}`}`;
-				project.contextValue = 'project';
+				// The current project is a different kind of row, not the same row with a word beside it: the menu
+				// offers *Stop Working* where the others offer *Start*, which is what makes the state resettable.
+				project.contextValue = row.slug === current ? 'project.current' : 'project';
 				// A click opens the project *page* — what it cites and produces — not the tree: the two inline actions
 				// beside it are how the pages are reached.
 				project.command = { command: 'temcoDocs.projectPage', title: 'Open the Project', arguments: [row.slug] };

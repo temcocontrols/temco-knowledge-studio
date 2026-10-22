@@ -16,6 +16,10 @@ interface UiApi {
 	escapeHtml(text: string): string;
 	icon(name: string, cls?: string): string;
 	toneMark(name: string, tone?: 'ok' | 'warn' | 'err' | 'info' | 'accent'): string;
+	/** The script a page runs to post `data-command` clicks back to the module that opened it. */
+	commandScript: string;
+	/** Runs one of those messages: `{ command, args }`. */
+	runCommand(message: { command?: unknown; args?: unknown }): void;
 }
 
 const extension = vscode.extensions.getExtension<UiApi>(UI_EXTENSION_ID);
@@ -42,6 +46,12 @@ export const icon = ui.icon;
 
 /** One glyph in a tinted circle: a state you can see before you read it. */
 export const toneMark = ui.toneMark;
+
+/** The script a page runs to post `data-command` clicks back to this module. */
+export const commandScript = ui.commandScript;
+
+/** Runs one of those messages — what a page's `onDidReceiveMessage` is. */
+export const runCommand = ui.runCommand;
 
 /**
  * Shows the list of projects.

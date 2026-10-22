@@ -37,6 +37,12 @@
         "icon": "$(new-folder)"
       },
       {
+        "command": "temcoProjects.projectsPage",
+        "title": "Projects Overview",
+        "category": "Temco Projects",
+        "icon": "$(layout)"
+      },
+      {
         "command": "temcoProjects.newProjectFromRepository",
         "title": "Create a Project from a Repository",
         "icon": "$(new-folder)"
@@ -48,17 +54,26 @@
       },
       {
         "command": "temcoProjects.openProject",
-        "title": "Open a Project",
-        "icon": "$(book)"
+        "title": "Start",
+        "category": "Temco Projects",
+        "icon": "$(play)"
       },
       {
         "command": "temcoProjects.editProject",
-        "title": "Edit a Project",
+        "title": "Edit",
+        "category": "Temco Projects",
         "icon": "$(edit)"
       },
       {
         "command": "temcoProjects.removeProject",
-        "title": "Remove the Project",
+        "title": "Remove",
+        "category": "Temco Projects",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "temcoProjects.removeAllProjects",
+        "title": "Remove All Projects",
+        "category": "Temco Projects",
         "icon": "$(trash)"
       },
       {
@@ -78,12 +93,14 @@
       },
       {
         "command": "temcoProjects.buildProject",
-        "title": "Build the Project",
+        "title": "Build",
+        "category": "Temco Projects",
         "icon": "$(tools)"
       },
       {
         "command": "temcoProjects.showProject",
-        "title": "Show the Project",
+        "title": "Show the Sources",
+        "category": "Temco Projects",
         "icon": "$(info)"
       }
     ],
@@ -95,41 +112,56 @@
           "group": "navigation@0"
         },
         {
-          "command": "temcoProjects.addSource",
+          "command": "temcoProjects.projectsPage",
           "when": "view == temcoProjects.projects",
           "group": "navigation@1"
+        },
+        {
+          "command": "temcoProjects.removeAllProjects",
+          "when": "view == temcoProjects.projects",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
         {
           "command": "temcoProjects.openProject",
-          "when": "view == temcoProjects.projects && viewItem == project",
+          "when": "view == temcoProjects.projects && viewItem =~ /^project(\\.current)?$/",
           "group": "inline@1"
         },
         {
-          "command": "temcoProjects.showProject",
-          "when": "view == temcoProjects.projects && viewItem == project",
+          "command": "temcoProjects.removeProject",
+          "when": "view == temcoProjects.projects && viewItem =~ /^project(\\.current)?$/",
           "group": "inline@2"
         },
         {
           "command": "temcoProjects.openProject",
           "when": "view == temcoProjects.projects && viewItem == project",
-          "group": "1_open@1"
+          "group": "1_project@1"
         },
         {
           "command": "temcoProjects.editProject",
-          "when": "view == temcoProjects.projects && viewItem == project",
-          "group": "2_edit@1"
+          "when": "view == temcoProjects.projects && viewItem =~ /^project(\\.current)?$/",
+          "group": "1_project@2"
+        },
+        {
+          "command": "temcoDocs.projectPage",
+          "when": "view == temcoProjects.projects && viewItem =~ /^project(\\.current)?$/",
+          "group": "1_project@3"
+        },
+        {
+          "command": "temcoProjects.clearProject",
+          "when": "view == temcoProjects.projects && viewItem == project.current",
+          "group": "2_acts@1"
         },
         {
           "command": "temcoProjects.buildProject",
-          "when": "view == temcoProjects.projects && viewItem == project",
-          "group": "3_build@1"
+          "when": "view == temcoProjects.projects && viewItem =~ /^project(\\.current)?$/",
+          "group": "2_acts@2"
         },
         {
           "command": "temcoProjects.removeProject",
-          "when": "view == temcoProjects.projects && viewItem == project",
-          "group": "4_remove@1"
+          "when": "view == temcoProjects.projects && viewItem =~ /^project(\\.current)?$/",
+          "group": "2_acts@3"
         }
       ]
     }

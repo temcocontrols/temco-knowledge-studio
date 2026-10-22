@@ -133,7 +133,8 @@ export interface Catalog {
 	document(slug: string): DocumentDetail | undefined;
 	source(slug: string): SourceDetail | undefined;
 	createDocument(document: DocumentInput): number;
-	deleteDocument(slug: string): void;
+	/** Forgets a project. The row count is what tells a real delete from one that matched nothing. */
+	deleteDocument(slug: string): number;
 	attachSource(documentSlug: string, sourceSlug: string, role?: string): void;
 	documentSourceSlugs(documentSlug: string): string[];
 	documentSources(documentSlug: string): { name: string; kind: string; branch?: string }[];
