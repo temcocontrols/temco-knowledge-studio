@@ -304,3 +304,51 @@ body,
 	width: 1.15rem;
 	height: 1.15rem;
 }
+
+/* --- the context menu ----------------------------------------------------------------------------------------
+   The page owns its editing menu, because the host's webview menu stops at Cut / Copy / Paste. It uses the window's
+   own menu colours so it sits beside the rest of the interface rather than on top of it. */
+
+.temco-menu {
+	position: fixed;
+	z-index: 100;
+	min-width: 11rem;
+	padding: 4px;
+	border: 1px solid var(--vscode-menu-border, var(--vscode-editorWidget-border, rgba(128, 128, 128, 0.3)));
+	border-radius: 4px;
+	background: var(--vscode-menu-background, var(--vscode-editorWidget-background));
+	box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.3));
+	font-family: var(--vscode-font-family);
+	font-size: 12px;
+}
+
+.temco-menu__rule {
+	height: 1px;
+	margin: 4px 0;
+	background: var(--vscode-menu-separatorBackground, rgba(128, 128, 128, 0.3));
+}
+
+.temco-menu__item {
+	display: block;
+	width: 100%;
+	padding: 5px 10px;
+	border: none;
+	border-radius: 3px;
+	background: none;
+	color: var(--vscode-menu-foreground, var(--vscode-foreground));
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.temco-menu__item:hover:not(:disabled),
+.temco-menu__item:focus-visible {
+	background: var(--vscode-menu-selectionBackground, var(--vscode-list-activeSelectionBackground));
+	color: var(--vscode-menu-selectionForeground, var(--vscode-list-activeSelectionForeground));
+	outline: none;
+}
+
+.temco-menu__item:disabled {
+	opacity: 0.45;
+	cursor: default;
+}

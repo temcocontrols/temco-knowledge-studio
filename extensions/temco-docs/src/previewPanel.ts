@@ -259,7 +259,7 @@ body {
 	margin: 0;
 	padding: 0;
 	font-family: var(--vscode-markdown-font-family, var(--vscode-font-family));
-	font-size: var(--vscode-markdown-font-size, 14px);
+	font-size: var(--vscode-editor-font-size, 14px);
 	line-height: 1.6;
 	color: var(--vscode-editor-foreground);
 	background: var(--vscode-editor-background);

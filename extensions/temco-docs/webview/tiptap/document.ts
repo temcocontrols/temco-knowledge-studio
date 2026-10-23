@@ -40,6 +40,29 @@ export function requestImage(): Promise<string> {
 }
 
 /**
+ * Asks the extension to save bytes that came from the clipboard beside the page, and hand back their address.
+ *
+ * A paste is the one image the extension cannot pick from disk: the bytes are already here, so they travel to the host
+ * as base64 in the same message channel, and the reply is the same `image` message the picker produces.
+ */
+export function requestImageSave(bytes: Uint8Array, name: string): Promise<string> {
+	return new Promise<string>((resolve) => {
+		pendingImage = resolve;
+		post('action', { action: 'pastedImage', name, data: base64(bytes) });
+	});
+}
+
+/** `btoa` over a whole image would blow the argument limit, so the bytes go through in blocks. */
+function base64(bytes: Uint8Array): string {
+	let binary = '';
+	const block = 0x8000;
+	for (let start = 0; start < bytes.length; start += block) {
+		binary += String.fromCharCode(...bytes.subarray(start, start + block));
+	}
+	return btoa(binary);
+}
+
+/**
  * Wires an editor to its document.
  *
  * Returns a disposer, so a remount cannot leave two listeners reporting the same file.

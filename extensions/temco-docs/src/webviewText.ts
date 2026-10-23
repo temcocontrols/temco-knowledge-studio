@@ -19,6 +19,8 @@ interface HostMessage {
 	type?: unknown;
 	text?: unknown;
 	action?: unknown;
+	name?: unknown;
+	data?: unknown;
 }
 
 const COMMANDS: Record<PageAction, string> = {
@@ -78,6 +80,10 @@ export abstract class WebviewTextEditor implements vscode.CustomTextEditorProvid
 			}
 			if (message.type === 'action' && message.action === 'image') {
 				void this.pickImage(document, panel);
+				return;
+			}
+			if (message.type === 'action' && message.action === 'pastedImage') {
+				void this.savePastedImage(document, panel, message.name, message.data);
 				return;
 			}
 			if (message.type === 'action') {
@@ -142,6 +148,53 @@ export abstract class WebviewTextEditor implements vscode.CustomTextEditorProvid
 				}`
 			);
 		}
+	}
+
+	/**
+	 * Puts a pasted image beside the page.
+	 *
+	 * A paste carries the bytes, not a path, so there is no file to copy — this writes them. The name is made safe and
+	 * made unique, because a screenshot is always called `image.png` and two of them must not overwrite each other.
+	 */
+	private async savePastedImage(
+		document: vscode.TextDocument,
+		panel: vscode.WebviewPanel,
+		name: unknown,
+		data: unknown
+	): Promise<void> {
+		if (typeof data !== 'string' || data.length === 0) {
+			return;
+		}
+		const folder = vscode.Uri.joinPath(vscode.Uri.file(path.dirname(document.uri.fsPath)), 'media');
+		try {
+			await vscode.workspace.fs.createDirectory(folder);
+			const target = await this.freeName(folder, typeof name === 'string' ? name : 'pasted.png');
+			await vscode.workspace.fs.writeFile(target, Buffer.from(data, 'base64'));
+			const relative = `media/${path.basename(target.fsPath)}`.split(path.sep).join('/');
+			await panel.webview.postMessage({ type: 'image', src: encodeURI(relative) });
+		} catch (error) {
+			void vscode.window.showErrorMessage(
+				`Temco Docs: the pasted image could not be saved beside the page — ${
+					error instanceof Error ? error.message : String(error)
+				}`
+			);
+		}
+	}
+
+	/** The first free `name`, `name-2`, `name-3` … in a folder, so a paste never replaces an existing image. */
+	private async freeName(folder: vscode.Uri, name: string): Promise<vscode.Uri> {
+		const safe = path.basename(name).replace(/[^\w.-]+/g, '-');
+		const extension = path.extname(safe) || '.png';
+		const stem = path.basename(safe, extension) || 'pasted';
+		for (let index = 1; index < 1000; index++) {
+			const candidate = vscode.Uri.joinPath(folder, index === 1 ? `${stem}${extension}` : `${stem}-${index}${extension}`);
+			try {
+				await vscode.workspace.fs.stat(candidate);
+			} catch {
+				return candidate;
+			}
+		}
+		return vscode.Uri.joinPath(folder, `${stem}-${Date.now()}${extension}`);
 	}
 
 	/**

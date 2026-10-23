@@ -16,11 +16,12 @@ import { Selection } from "@tiptap/extensions"
 
 // --- The document bridge ---
 import { tidy } from "../markdown.mts"
-import { attach, requestImage } from "./document"
+import { attach, requestImage, requestImageSave } from "./document"
 import { DocumentActions } from "./document-actions"
 import { OutlinePanel } from "./outline-panel"
 import { CalloutButtons, MathButtons, OutlineToggle, TableButton } from "./toolbar-extras"
 import { CalloutLook } from "./callout"
+import { EditorContextMenu } from "./context-menu"
 
 // --- UI Primitives ---
 import { Button } from "@/components/tiptap-ui-primitive/button"
@@ -85,6 +86,14 @@ const SEARCH_AND_REPLACE_SCROLL_OPTIONS: ScrollIntoViewOptions = {
   block: "center",
 }
 
+/** The images in a paste, or nothing — a paste of text must fall through to the editor untouched. */
+function pastedImages(data: DataTransfer | null): File[] {
+  if (data === null) {
+    return []
+  }
+  return Array.from(data.files).filter((file) => file.type.startsWith("image/"))
+}
+
 const MainToolbarContent = ({
   onLinkClick,
   onSearchAndReplaceClick,
@@ -132,7 +141,13 @@ const MainToolbarContent = ({
         <MarkButton type="code" />
         <MarkButton type="underline" />
         <HighlightToggle />
-        {!isMobile ? <LinkPopover /> : <LinkButton onClick={onLinkClick} />}
+        {!isMobile ? (
+          // The popover opens when the Link button is pressed, not when the caret merely sits inside a link: a page
+          // carries hundreds of links, and one that opens on every click takes the focus away from the text.
+          <LinkPopover autoOpenOnLinkActive={false} />
+        ) : (
+          <LinkButton onClick={onLinkClick} />
+        )}
       </ToolbarGroup>
 
       <ToolbarSeparator />
@@ -203,6 +218,7 @@ export function SimpleEditor() {
   const [isSearchAndReplaceOpen, setIsSearchAndReplaceOpen] = useState(false)
   // The outline starts open: a page without one is a page you scroll to find things in.
   const [outlineOpen, setOutlineOpen] = useState(true)
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const searchAndReplaceButtonRef = useRef<HTMLButtonElement>(null)
 
@@ -216,13 +232,49 @@ export function SimpleEditor() {
         "aria-label": "Main content area, start typing to enter text.",
         class: "simple-editor",
       },
+      /**
+       * A pasted screenshot arrives as a file, not as text, so ProseMirror's own paste handling drops it. The bytes go
+       * to the extension, which is the only side that can put a file beside the page; the reply is the page-relative
+       * address, which is what the Markdown has to contain.
+       */
+      handlePaste: (view, event) => {
+        const files = pastedImages(event.clipboardData)
+        if (files.length === 0) {
+          return false
+        }
+        event.preventDefault()
+        void (async () => {
+          for (const file of files) {
+            if (file.size > MAX_FILE_SIZE) {
+              console.error(`Pasted image is larger than ${MAX_FILE_SIZE} bytes:`, file.size)
+              continue
+            }
+            const source = await requestImageSave(
+              new Uint8Array(await file.arrayBuffer()),
+              file.name || "pasted.png"
+            )
+            // The editor can be closed while the file is being written.
+            if (!view.dom.isConnected) {
+              return
+            }
+            const node = view.state.schema.nodes.image?.create({ src: source })
+            if (node) {
+              view.dispatch(view.state.tr.replaceSelectionWith(node).scrollIntoView())
+            }
+          }
+        })()
+        return true
+      },
     },
     extensions: [
       StarterKit.configure({
         horizontalRule: false,
         link: {
           openOnClick: false,
-          enableClickSelection: true,
+          // Clicking a link must place the caret where the pointer is. With click-selection on, a click selects the
+          // whole link instead, which also makes the link popover open — and it takes the focus, so the next
+          // keystroke, Ctrl+A or paste goes into its URL field rather than into the page.
+          enableClickSelection: false,
         },
       }),
       HorizontalRule,
@@ -340,7 +392,39 @@ export function SimpleEditor() {
 
         <div className="temco-workspace">
           <OutlinePanel editor={editor} open={outlineOpen} onClose={() => setOutlineOpen(false)} />
-          <div className="temco-sheet">
+          <div className="temco-sheet"
+            onMouseDown={(event) => {
+              // A right-click must leave the editor usable whatever the browser would otherwise do to the selection:
+              // inside an existing selection it keeps that selection, so Cut and Copy still have something to act on;
+              // anywhere else it moves the caret to the pointer, so the menu knows whether it is on a link or a table.
+              if (event.button !== 2 || !editor) {
+                return
+              }
+              if (!(event.target as HTMLElement).closest('.ProseMirror')) {
+                return
+              }
+              const hit = editor.view.posAtCoords({ left: event.clientX, top: event.clientY })
+              if (hit === null) {
+                return
+              }
+              event.preventDefault()
+              const { from, to, empty } = editor.state.selection
+              if (!empty && hit.pos >= from && hit.pos <= to) {
+                // The browser drops the DOM selection on a right-click; put the editor's own selection back, so the
+                // highlight the person can still see is the one Cut and Copy will use.
+                editor.commands.setTextSelection({ from, to })
+                return
+              }
+              editor.commands.setTextSelection(hit.pos)
+            }}
+            onContextMenu={(event) => {
+              // Only the page owns a menu. Right-clicking the toolbar or the outline keeps the host's own menu.
+              if (!(event.target as HTMLElement).closest('.ProseMirror')) {
+                return
+              }
+              event.preventDefault()
+              setMenuAt({ x: event.clientX, y: event.clientY })
+            }}>
             <EditorContent
               editor={editor}
               role="presentation"
@@ -348,6 +432,8 @@ export function SimpleEditor() {
             />
           </div>
         </div>
+
+        <EditorContextMenu at={menuAt} onClose={() => setMenuAt(null)} />
       </EditorContext.Provider>
     </div>
   )

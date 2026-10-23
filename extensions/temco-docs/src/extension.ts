@@ -15,6 +15,7 @@ import { registerBuildCommands, registerScriptCommands, scriptsIn } from './buil
 import { publishDiagnostics } from './diagnostics';
 import { registerFeedbackCommands } from './feedback';
 import { registerDiffCommand } from './diffPage';
+import { registerDocxCommand } from './docx';
 import { GridEditor, openGrid } from './gridEditor';
 import { registerFormatCommands } from './format';
 import { registerImportCommand } from './importer';
@@ -31,7 +32,8 @@ import { writePortal } from './learnPortal';
 import { ProjectSection } from './projectSection';
 import { projects } from './projects';
 import { PreviewPanels } from './previewPanel';
-import { RichEditor, openRich, openSource } from './richEditor';
+import { TiptapEditor, openRich } from './tiptapEditor';
+import { openSource } from './webviewText';
 import { codeFiles } from './repositories';
 import { QueueTreeProvider } from './queue';
 import { registerReportCommands } from './report';
@@ -222,7 +224,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   // The two optional surfaces: a page as a document (Rich) and a CSV as cells (Grid). Both are *registered* here and
   // *reached* by an explicit `openWith`, so neither can take over a file that was opened to be read as text.
   context.subscriptions.push(
-    vscode.window.registerCustomEditorProvider(RichEditor.VIEW_TYPE, new RichEditor(context), {
+    vscode.window.registerCustomEditorProvider(TiptapEditor.VIEW_TYPE, new TiptapEditor(context), {
       webviewOptions: { retainContextWhenHidden: true },
     }),
     vscode.window.registerCustomEditorProvider(GridEditor.VIEW_TYPE, new GridEditor(context), {
@@ -958,6 +960,8 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   registerFeedbackCommands(context, () => roots);
   // The page against its last commit, in the editor's own diff, beside the source being written.
   registerDiffCommand(context);
+  // Importing a Word document as a page: mammoth for the text, turndown for the Markdown.
+  registerDocxCommand(context);
   // The Page pane: the page's headings as a jump list, and its length in the status bar.
   registerPagePane(context);
   // The Library's project rows are read from the catalog, so a project created, edited or removed in the

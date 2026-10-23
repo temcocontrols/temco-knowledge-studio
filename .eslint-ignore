@@ -64,3 +64,9 @@ src/vs/base/common/signals-core/**
 
 # Temco fork: documentation is prose and static prototypes (docs/mock), not product source.
 docs/**
+
+# Temco fork: the Tiptap UI Components template is used exactly as `npx @tiptap/cli add simple-editor` writes it, so it is
+# linted by its authors, not by this repository. `simple-editor.tsx` is the template's own entry component (adapted for a
+# Markdown document), which is why it follows the template's style rather than this repository's.
+extensions/temco-docs/webview/tiptap-template/**
+extensions/temco-docs/webview/tiptap/simple-editor.tsx
