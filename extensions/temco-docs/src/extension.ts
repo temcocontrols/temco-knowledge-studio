@@ -14,6 +14,8 @@ import { TemcoDocsApi } from './api';
 import { registerBuildCommands, registerScriptCommands, scriptsIn } from './builds';
 import { publishDiagnostics } from './diagnostics';
 import { registerFeedbackCommands } from './feedback';
+import { registerDiffCommand } from './diffPage';
+import { GridEditor, openGrid } from './gridEditor';
 import { registerFormatCommands } from './format';
 import { registerImportCommand } from './importer';
 import { looseByRoot } from './loose';
@@ -22,11 +24,14 @@ import { DocsPages } from './docsPages';
 import { DraftView } from './draftView';
 import { registerMediaCommands } from './media';
 import { NewPagePage } from './newPagePage';
+import { registerPagePane } from './outline';
 import { OverviewPage } from './overview';
 import { AREA_CHAPTER, KINDS, PageDeps, PageOperations, registerPageCommands, sourceAt, writePage } from './pageOps';
 import { writePortal } from './learnPortal';
 import { ProjectSection } from './projectSection';
 import { projects } from './projects';
+import { PreviewPanels } from './previewPanel';
+import { RichEditor, openRich, openSource } from './richEditor';
 import { codeFiles } from './repositories';
 import { QueueTreeProvider } from './queue';
 import { registerReportCommands } from './report';
@@ -208,6 +213,22 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     redraw: () => void vscode.commands.executeCommand('temcoDocs.refresh'),
   });
   context.subscriptions.push(vscode.window.registerWebviewViewProvider(DraftView.TYPE, draftView));
+
+  // The page as a reader sees it, in a tab of its own beside the source, and the same page against its last commit.
+  // Both follow the editor rather than the tree: they are about the file being written, not the row being read.
+  const preview = new PreviewPanels();
+  context.subscriptions.push(preview);
+
+  // The two optional surfaces: a page as a document (Rich) and a CSV as cells (Grid). Both are *registered* here and
+  // *reached* by an explicit `openWith`, so neither can take over a file that was opened to be read as text.
+  context.subscriptions.push(
+    vscode.window.registerCustomEditorProvider(RichEditor.VIEW_TYPE, new RichEditor(context), {
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
+    vscode.window.registerCustomEditorProvider(GridEditor.VIEW_TYPE, new GridEditor(context), {
+      webviewOptions: { retainContextWhenHidden: true },
+    })
+  );
 
   // The right panel is about the page in front: **Draft** reads it, **Properties** curates it. The tree is this
   // module's own view; the Dashboard lists projects, and these two read this module's model.
@@ -614,6 +635,23 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   // The page's properties are a tab of the right panel, beside the draft: one place about the page in front.
   context.subscriptions.push(
     vscode.commands.registerCommand('temcoDocs.pageProperties', () => draftView.showProperties()),
+    // The page as a reader sees it, in a tab beside the source. A Markdown file is the only thing this can show;
+    // anything else is told so rather than given an empty tab.
+    vscode.commands.registerCommand('temcoDocs.previewPage', async (target?: unknown) => {
+      const document = markdownInFront(target);
+      if (document === undefined) {
+        void vscode.window.showInformationMessage(
+          'Temco Docs: open a Markdown page first — the preview shows the page in front.'
+        );
+        return;
+      }
+      await preview.show(document);
+    }),
+    // Rich mode, the way back from it, and the grid. Each is explicit: no file ever changes surface because of an
+    // association it did not ask for.
+    vscode.commands.registerCommand('temcoDocs.openRich', (target?: unknown) => openRich(uriFrom(target))),
+    vscode.commands.registerCommand('temcoDocs.openSource', (target?: unknown) => openSource(uriFrom(target))),
+    vscode.commands.registerCommand('temcoDocs.openGrid', (target?: unknown) => openGrid(uriFrom(target))),
     // Importing a document set: the conversion the project wizard calls after it has a destination.
     registerImportCommand(),
     vscode.commands.registerCommand('temcoDocs.showStatus', report),
@@ -918,6 +956,10 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   registerReportCommands(context, () => roots);
   registerScaffoldCommands(context);
   registerFeedbackCommands(context, () => roots);
+  // The page against its last commit, in the editor's own diff, beside the source being written.
+  registerDiffCommand(context);
+  // The Page pane: the page's headings as a jump list, and its length in the status bar.
+  registerPagePane(context);
   // The Library's project rows are read from the catalog, so a project created, edited or removed in the
   // projects module has to bring them back: its own signal, listened to here.
   context.subscriptions.push(projects().onDidChange(() => void refresh()));
@@ -1206,6 +1248,46 @@ function expandHome(value: string): string {
   return value.startsWith('~/') || value.startsWith('~\\')
     ? path.join(os.homedir(), value.slice(2))
     : value;
+}
+
+/**
+ * The URI a command was aimed at: a row, a URI, or whatever editor is in front.
+ *
+ * The same rule `markdownInFront` follows, but keeping the URI rather than insisting on a Markdown document — the grid
+ * opens a CSV, which is not one.
+ */
+function uriFrom(target: unknown): vscode.Uri | undefined {
+  if (target instanceof vscode.Uri) {
+    return target;
+  }
+  if (typeof target === 'object' && target !== null) {
+    const candidate = (target as { uri?: unknown }).uri;
+    if (candidate instanceof vscode.Uri) {
+      return candidate;
+    }
+  }
+  const document = vscode.window.activeTextEditor?.document;
+  return document === undefined || document.uri.scheme !== 'file' ? undefined : document.uri;
+}
+
+/**
+ * The Markdown page the preview should show.
+ *
+ * The editor in front is the answer nine times in ten. The argument is read too, because the command is reachable
+ * from a row and from a menu, where there is no editor to ask — but only a Markdown file on disk has anything to
+ * preview, so anything else counts as "no page" rather than as an empty tab.
+ */
+function markdownInFront(target: unknown): vscode.TextDocument | undefined {
+  const editor = vscode.window.activeTextEditor;
+  const candidate = uriFrom(target);
+  if (editor !== undefined && editor.document.languageId === 'markdown' && editor.document.uri.scheme === 'file') {
+    return editor.document;
+  }
+  if (candidate === undefined || candidate.scheme !== 'file' || !candidate.fsPath.endsWith('.md')) {
+    return undefined;
+  }
+  // The open document is preferred over a fresh read: it carries the unsaved text the preview has to show.
+  return vscode.workspace.textDocuments.find((document) => document.uri.toString() === candidate.toString());
 }
 
 /**

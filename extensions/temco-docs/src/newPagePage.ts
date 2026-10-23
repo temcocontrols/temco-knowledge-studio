@@ -616,7 +616,9 @@ function html(): string {
 <div class="wizard" style="margin-top:0;padding-top:0">
 	<div class="wizard__body" style="margin-top:0;padding-top:0">
 		<div data-step-body="0">
-			<div class="wizard__title">What is it called?</div>
+			<div class="wizard__error" id="wizard-error" hidden></div>
+
+			<div class="wizard__title" style="margin-top:16px">What is it called?</div>
 			<p class="wizard__hint">The file name follows the title — nothing else is needed to make a page.</p>
 			<div class="settings-rows" id="name"></div>
 
@@ -629,7 +631,6 @@ function html(): string {
 			<div class="mt-16" id="address" style="width:100%;max-width:none"></div>
 			<div class="mt-16" id="tools"></div>
 			<div class="mt-16" id="note"></div>
-			<div class="wizard__error" id="wizard-error" hidden></div>
 		</div>
 	</div>
 	<div class="wizard__foot">
@@ -993,6 +994,9 @@ const CLIENT = `
 	function fail(message) {
 		error.textContent = message;
 		error.hidden = false;
+		// The message is above the form, so it is where the eye already is when the page opens; bringing it into view
+		// only matters when the person is scrolled down at the fields.
+		if (typeof error.scrollIntoView === 'function') { error.scrollIntoView({ block: 'nearest' }); }
 		return false;
 	}
 

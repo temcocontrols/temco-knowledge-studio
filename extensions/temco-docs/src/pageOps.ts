@@ -381,14 +381,26 @@ async function removeFolder(deps: PageDeps, node: DocsNode | undefined): Promise
 async function removeFile(deps: PageDeps, node: DocsNode | undefined): Promise<void> {
   const row = targeted(deps, node);
   const page = pageFromNode(row)?.page;
-  const found = page === undefined ? undefined : findPage(deps.roots(), page.id);
-  if (row?.kind !== 'page' || page === undefined || found === undefined) {
+  if (row?.kind !== 'page' || page === undefined) {
     void vscode.window.showInformationMessage(
       'Temco Docs: this removes one page — pick a page in the Documentation panel first.'
     );
     return;
   }
-  if (found.root.origin === 'catalog') {
+  // The root the file lives in. A page the registry does not name — which is every page until a generator runs —
+  // has no entry to look up by id, and it is still a file to delete: the path answers it, not the registry.
+  const found = findPage(deps.roots(), page.id);
+  const root = found?.root ?? deps.roots().find((candidate) => {
+    const base = `${candidate.rootUri.fsPath.toLowerCase()}${path.sep}`;
+    return page.uri.fsPath.toLowerCase().startsWith(base);
+  });
+  if (root === undefined) {
+    void vscode.window.showInformationMessage(
+      'Temco Docs: that page is not inside a folder this window is reading, so there is nothing here to remove.'
+    );
+    return;
+  }
+  if (root.origin === 'catalog') {
     void vscode.window.showInformationMessage(
       `Temco Docs: “${page.title}” was read from a source that is not on this machine, so there is nothing here to remove.`
     );
@@ -403,7 +415,7 @@ async function removeFile(deps: PageDeps, node: DocsNode | undefined): Promise<v
         onDisk ? `${page.uri.fsPath} moves to the Recycle Bin.` : 'Its file is already gone.',
         row.loose
           ? 'It has no registry entry yet, so nothing else changes.'
-          : `Its entry in ${path.basename(found.root.registryUri.fsPath)} is removed with it.`,
+          : `Its entry in ${path.basename(root.registryUri.fsPath)} is removed with it.`,
         onDisk ? 'To keep its address working, retire it instead — a retired page keeps its redirect.' : '',
       ].filter((line) => line.length > 0).join('\n'),
     },
@@ -418,7 +430,7 @@ async function removeFile(deps: PageDeps, node: DocsNode | undefined): Promise<v
     await vscode.workspace.fs.delete(page.uri, { recursive: false, useTrash: true });
   }
   if (!row.loose) {
-    const edit = await RegistryEdit.open(found.root.registryUri);
+    const edit = await RegistryEdit.open(root.registryUri);
     const removed = edit !== undefined && edit.remove(page.id);
     if (edit !== undefined && removed) {
       await edit.save();

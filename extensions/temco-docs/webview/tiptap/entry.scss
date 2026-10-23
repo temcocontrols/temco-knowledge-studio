@@ -1,0 +1,306 @@
+// The template's own styles, plus the two files the CLI says to import.
+//
+// One change: the template's `simple-editor.scss` starts with a Google Fonts `@import url(...)`, removed in that file.
+// A webview runs under `default-src 'none'` and this documentation tool has to work with no network, so the page uses
+// the window's own font stack (see `--vscode-font-family` below) instead of fetching Inter and DM Sans.
+
+@import '../tiptap-template/styles/variables';
+@import '../tiptap-template/styles/keyframe-animations';
+@import '../tiptap-template/components/tiptap-templates/simple/simple-editor';
+
+/* The window's chrome, in the places the template would otherwise use its own palette for. */
+:root {
+	--tt-theme-font: var(--vscode-font-family);
+}
+
+body,
+.simple-editor-wrapper,
+.tiptap-toolbar,
+.tiptap-button {
+	font-family: var(--vscode-font-family);
+}
+
+/* The template paints the page background; the editor tab's should win. */
+body,
+.simple-editor-wrapper {
+	background: var(--vscode-editor-background);
+	color: var(--vscode-editor-foreground);
+}
+
+.tiptap.ProseMirror {
+	color: var(--vscode-editor-foreground);
+	caret-color: var(--vscode-editorCursor-foreground);
+}
+
+.tiptap.ProseMirror ::selection {
+	background: var(--vscode-editor-selectionBackground);
+}
+
+/* Code, in the window's monospace, with the theme's own syntax colours from lowlight's classes. */
+.tiptap.ProseMirror code,
+.tiptap.ProseMirror pre {
+	font-family: var(--vscode-editor-font-family, monospace);
+}
+
+.tiptap.ProseMirror pre {
+	background: var(--vscode-textCodeBlock-background, rgba(128, 128, 128, 0.16));
+}
+
+/* A callout is a blockquote with a DocFX marker; the marker is content, so only the view is decorated. */
+.tiptap.ProseMirror blockquote[data-callout] {
+	border-left-width: 4px;
+	border-radius: 3px;
+	padding: 10px 14px;
+}
+
+.tiptap.ProseMirror blockquote[data-callout='note'] {
+	border-left-color: #4f8cc9;
+	background: rgba(79, 140, 201, 0.1);
+}
+
+.tiptap.ProseMirror blockquote[data-callout='tip'] {
+	border-left-color: #4fa96a;
+	background: rgba(79, 169, 106, 0.1);
+}
+
+.tiptap.ProseMirror blockquote[data-callout='warning'] {
+	border-left-color: #d2604f;
+	background: rgba(210, 96, 79, 0.12);
+}
+
+/* --- the canvas ---------------------------------------------------------------------------------------------
+   The window is a desk and the document is a sheet on it: one shade of separation, a hairline, a small shadow. Three
+   numbers matter, and all three come from the template's own stylesheet:
+
+     simple-editor.scss:57   width: 100vw   ← the bar, wider than the panel in a split view. This is what clipped the
+                                              text and produced a horizontal scrollbar. It becomes 100%.
+     simple-editor.scss:71   max-width: 648px
+     simple-editor.scss:82   padding: 3rem 3rem 30vh
+
+   52rem (832px) is the readable middle: about ninety characters of prose, and wide enough for the tables these pages
+   carry. */
+
+.simple-editor-wrapper {
+	display: flex;
+	flex-direction: column;
+	/* The template asks for 100vw / 100vh — the viewport's size, not the panel's. In a split view that is wider than
+	   the space available, which is what clipped the text and added a horizontal scrollbar. */
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+}
+
+/* The template asks for "DM Sans", which is not bundled (the Google Fonts import was removed so the editor works
+   offline). The window's own font is the right answer in a webview anyway. */
+.tiptap.ProseMirror.simple-editor {
+	font-family: var(--vscode-font-family);
+}
+
+/* The bar spans the panel, not the viewport. */
+.simple-editor-wrapper .tiptap-toolbar {
+	width: 100%;
+	background: var(--vscode-editor-background);
+	border-bottom: 1px solid var(--vscode-editorGroupHeader-tabsBorder, rgba(128, 128, 128, 0.25));
+}
+
+.temco-workspace {
+	display: flex;
+	align-items: stretch;
+	flex: 1;
+	min-height: 0;
+	padding: 20px 24px 24px;
+	gap: 16px;
+}
+
+/* The sheet: the page itself, on the desk. */
+.temco-sheet {
+	box-sizing: border-box;
+	flex: 1;
+	min-width: 0;
+	margin: 0 auto;
+	max-width: 52rem;
+	background: var(--vscode-editor-background);
+	border: 1px solid var(--vscode-editorWidget-border, rgba(128, 128, 128, 0.28));
+	border-radius: 8px;
+	box-shadow: 0 1px 3px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.16));
+	overflow-y: auto;
+	overflow-x: hidden;
+	scrollbar-width: thin;
+}
+
+/* Inside the sheet the template's own padding is too generous now that the sheet has edges. */
+.temco-sheet .simple-editor-content {
+	max-width: none;
+	height: auto;
+}
+
+.temco-sheet .simple-editor-content .tiptap.ProseMirror.simple-editor {
+	max-width: none;
+	padding: 32px 36px 12vh;
+}
+
+/* --- the outline panel -------------------------------------------------------------------------------------- */
+
+.temco-outline {
+	display: flex;
+	flex-direction: column;
+	flex: 0 0 15rem;
+	width: 15rem;
+	min-height: 0;
+	font-family: var(--vscode-font-family);
+	font-size: 12px;
+	color: var(--vscode-foreground);
+}
+
+.temco-outline__head {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding: 2px 2px 8px 6px;
+}
+
+.temco-outline__title {
+	flex: 1;
+	font-size: 10.5px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--vscode-descriptionForeground);
+}
+
+.temco-outline__toggle {
+	width: 18px;
+	height: 18px;
+	padding: 0;
+	border: none;
+	border-radius: 3px;
+	background: none;
+	color: var(--vscode-icon-foreground, currentColor);
+	cursor: pointer;
+	font-size: 11px;
+	line-height: 1;
+	opacity: 0.75;
+}
+
+.temco-outline__toggle:hover {
+	background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.14));
+	opacity: 1;
+}
+
+.temco-outline__list {
+	flex: 1;
+	overflow-y: auto;
+	scrollbar-width: thin;
+}
+
+.temco-outline__row {
+	display: block;
+	width: 100%;
+	padding: 3px 8px;
+	border: none;
+	border-radius: 3px;
+	background: none;
+	color: var(--vscode-foreground);
+	text-align: left;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	line-height: 1.5;
+}
+
+.temco-outline__row--h1 {
+	font-weight: 600;
+}
+
+.temco-outline__row--h2 {
+	font-weight: 500;
+}
+
+.temco-outline__row--h3,
+.temco-outline__row--h4,
+.temco-outline__row--h5,
+.temco-outline__row--h6 {
+	color: var(--vscode-descriptionForeground);
+}
+
+.temco-outline__row:hover {
+	background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.12));
+}
+
+.temco-outline__row.is-active {
+	background: var(--vscode-list-activeSelectionBackground, rgba(128, 128, 128, 0.2));
+	color: var(--vscode-list-activeSelectionForeground, var(--vscode-foreground));
+}
+
+.temco-outline__note {
+	margin: 4px 8px;
+	color: var(--vscode-descriptionForeground);
+	font-size: 11.5px;
+}
+
+.temco-outline__foot {
+	padding: 8px 8px 2px;
+	margin-top: 6px;
+	border-top: 1px solid var(--vscode-editorWidget-border, rgba(128, 128, 128, 0.22));
+	font-size: 11px;
+	color: var(--vscode-descriptionForeground);
+}
+
+/* The rail: one dot per heading, for a narrow window. */
+.temco-outline--rail {
+	flex: 0 0 2rem;
+	width: 2rem;
+	align-items: center;
+	gap: 3px;
+	padding-top: 2px;
+}
+
+.temco-outline--rail .temco-outline__toggle {
+	margin-bottom: 6px;
+}
+
+.temco-outline__dot {
+	width: 6px;
+	height: 6px;
+	padding: 0;
+	border: none;
+	border-radius: 50%;
+	background: var(--vscode-descriptionForeground);
+	opacity: 0.5;
+	cursor: pointer;
+}
+
+.temco-outline__dot.is-major {
+	width: 8px;
+	height: 8px;
+	opacity: 0.75;
+}
+
+.temco-outline__dot:hover {
+	opacity: 1;
+}
+
+.temco-outline__dot.is-active {
+	background: var(--vscode-focusBorder);
+	opacity: 1;
+}
+
+/* A narrow window keeps the page, and folds the outline to its rail. */
+@media (max-width: 720px) {
+	.temco-workspace {
+		padding: 12px 12px 16px;
+		gap: 8px;
+	}
+
+	.temco-sheet .simple-editor-content .tiptap.ProseMirror {
+		padding: 20px 18px 30vh;
+	}
+}
+
+/* The three document actions: the only buttons in the bar that are ours rather than the template's. */
+.tiptap-docaction svg {
+	width: 1.15rem;
+	height: 1.15rem;
+}

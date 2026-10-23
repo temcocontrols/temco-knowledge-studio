@@ -1,0 +1,28 @@
+/* The Grid surface dressed in the editor's own colours.
+   Univer ships a light theme; these are the tokens it reads, pointed at VS Code's. */
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+	height: 100%;
+	overflow: hidden;
+	background: var(--vscode-editor-background);
+	color: var(--vscode-editor-foreground);
+	font-family: var(--vscode-font-family);
+}
+
+#root {
+	width: 100%;
+	height: 100%;
+}
+
+.univer-container,
+.univer-app {
+	height: 100%;
+}
+
+/* The formula bar and toolbar are the sheet's own business; keep them on the theme's colours. */
+.univer-app * {
+	--univer-color-primary: var(--vscode-focusBorder);
+}

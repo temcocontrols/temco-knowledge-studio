@@ -333,12 +333,13 @@ export class DocsTreeProvider implements vscode.TreeDataProvider<DocsNode> {
           single === undefined ? vscode.TreeItemCollapsibleState.None : vscode.TreeItemCollapsibleState.Expanded
         );
         item.id = 'docs|project';
-        item.description = node.project.detail;
+        // No count beside the name: a tree shows what exists, and the only number these rows carried was a total
+        // nobody asked for. The tooltip still says it.
         // A folder, because that is what the row is: with one area it *is* that area, and the folder icon is what
         // says so. A book read as a different kind of row sitting among folders.
         item.iconPath = new vscode.ThemeIcon('folder');
         item.contextValue = 'project';
-        item.tooltip = `${node.project.name} — click to switch project`;
+        item.tooltip = `${node.project.name}${node.project.detail ? ` · ${node.project.detail}` : ''} — click to switch project`;
         item.command = { command: 'temcoDocs.projects', title: 'Switch Project' };
         return item;
       }
@@ -346,10 +347,8 @@ export class DocsTreeProvider implements vscode.TreeDataProvider<DocsNode> {
         return folderItem(node);
       case 'area':
         return areaItem(node, this.levelFor(node.root, node.area).folders.size > 0);
-      case 'chapter': {
-        const level = this.levelAt(node.root, node.area, node.segments);
-        return chapterItem(node, this.hasChildren(node), level === undefined ? node.chapter.pages.length : countPages(level));
-      }
+      case 'chapter':
+        return chapterItem(node, this.hasChildren(node));
       case 'page':
         return pageItem(node);
       case 'issue':
@@ -470,15 +469,6 @@ export class DocsTreeProvider implements vscode.TreeDataProvider<DocsNode> {
   }
 }
 
-/** Every page at or below one folder level — what a folder's row counts, folders inside it included. */
-function countPages(level: FolderLevel): number {
-  let total = level.pages.length;
-  for (const child of level.folders.values()) {
-    total += countPages(child);
-  }
-  return total;
-}
-
 /** The page a loose file will be once the generator names it — the same id rule, and nothing claimed beyond it. */
 function loosePage(area: string, file: LooseFile): PageEntry {
   const id = [area, file.chapter === ROOT_CHAPTER ? '' : file.chapter, file.name].filter((part) => part.length > 0).join('/');
@@ -508,7 +498,7 @@ function folderItem(node: FolderNode): vscode.TreeItem {
   const { root } = node;
   const recorded = root.origin === 'catalog';
   item.id = `docs|folder|${root.folder.uri.toString()}`;
-  item.description = String(root.pages);
+  item.id = `docs|folder|${root.folder.uri.toString()}`;
   const stale = countStale(collectPages(root));
   item.tooltip = new vscode.MarkdownString(
     [
@@ -531,12 +521,9 @@ function areaItem(node: AreaNode, hasLoose = false): vscode.TreeItem {
   const item = new vscode.TreeItem(
     area.title,
     area.chapters.length > 0 || hasLoose
-      ? node.top
-        ? vscode.TreeItemCollapsibleState.Expanded
-        : vscode.TreeItemCollapsibleState.Collapsed
+      ? vscode.TreeItemCollapsibleState.Expanded
       : vscode.TreeItemCollapsibleState.None
   );
-  item.description = String(area.pages);
   item.id = `docs|area|${node.root.folder.uri.toString()}|${area.area}`;
   const stale = countStale(node.area.chapters.flatMap((chapter) => chapter.pages));
   item.tooltip = new vscode.MarkdownString(
@@ -560,14 +547,14 @@ function areaItem(node: AreaNode, hasLoose = false): vscode.TreeItem {
   return item;
 }
 
-function chapterItem(node: ChapterNode, hasChildren = false, total = node.chapter.pages.length): vscode.TreeItem {
+function chapterItem(node: ChapterNode, hasChildren = false): vscode.TreeItem {
   const item = new vscode.TreeItem(
     node.chapter.chapter,
+    // Folders open by default: the tree is a list of pages, and a closed folder hides the very thing it is for.
     node.chapter.pages.length > 0 || hasChildren
-      ? vscode.TreeItemCollapsibleState.Collapsed
+      ? vscode.TreeItemCollapsibleState.Expanded
       : vscode.TreeItemCollapsibleState.None
   );
-  item.description = node.loose ? undefined : String(total);
   // A folder's identity is its whole path: `advanced` inside `getting-started` is not the `advanced` beside it.
   item.id = `docs|chapter|${node.root.folder.uri.toString()}|${node.area.area}|${node.segments.join('/')}`;
   // One folder looks like one folder. A folder the registry does not name yet is still a folder, so it carries the

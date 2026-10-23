@@ -22,7 +22,7 @@ export interface DraftDeps {
 	redraw: () => void;
 }
 
-type Tab = 'draft' | 'properties';
+type Tab = 'draft' | 'preview' | 'properties';
 
 interface PanelMessage {
 	command?: unknown;
@@ -57,12 +57,33 @@ export class DraftView implements vscode.WebviewViewProvider {
 	/** Opens the panel on its Properties tab — what *Page Properties* does now that the form lives here. */
 	showProperties(): void {
 		this.tab = 'properties';
-		void vscode.commands.executeCommand('temcoDocs.draft.focus');
+		this.reveal();
 		void this.render();
 	}
 
+	/** Opens the panel on its Preview tab: the page as a reader sees it, beside the Markdown being written. */
+	showPreview(): void {
+		this.tab = 'preview';
+		this.reveal();
+		void this.render();
+	}
+
+	/**
+	 * Brings the panel into view.
+	 *
+	 * The panel lives in the **secondary side bar**, which a window can have closed — and a closed bar swallows
+	 * `<view>.focus` without a word, which is why running the command looked like it did nothing. Opening the
+	 * container by its id is what actually shows the bar; the view focus is the fallback for older windows.
+	 */
+	private reveal(): void {
+		void vscode.commands.executeCommand('workbench.view.extension.temcoDraft').then(
+			() => vscode.commands.executeCommand('temcoDocs.draft.focus'),
+			() => vscode.commands.executeCommand('temcoDocs.draft.focus')
+		);
+	}
+
 	private async receive(message: PanelMessage): Promise<void> {
-		if (message.type === 'tab' && (message.tab === 'draft' || message.tab === 'properties')) {
+		if (message.type === 'tab' && (message.tab === 'draft' || message.tab === 'preview' || message.tab === 'properties')) {
 			this.tab = message.tab;
 			await this.render();
 			return;
@@ -134,14 +155,39 @@ export class DraftView implements vscode.WebviewViewProvider {
 				? `<p class="note">This page is not in a docs registry, so it has no properties to edit.</p>`
 				: propertiesForm(read(edit, located.entry));
 		}
+		const preview = this.tab === 'preview' && page !== undefined ? await rendered(page) : '';
 		const start = page === undefined ? false : await isBlank(page);
 		view.webview.html = html(
 			page,
 			page === undefined ? [] : await waiting(this.context, page),
 			start,
 			this.tab,
-			properties
+			properties,
+			preview
 		);
+	}
+}
+
+/**
+ * The page as a reader sees it.
+ *
+ * The rendering is the editor's own: the built-in Markdown extension exposes `markdown.api.render`, so the preview
+ * and the Markdown preview beside the editor cannot disagree about what the page means. Nothing new is bundled and
+ * nothing here can diverge from what VS Code shows.
+ */
+async function rendered(page: PageEntry): Promise<string> {
+	let text = '';
+	try {
+		text = Buffer.from(await vscode.workspace.fs.readFile(page.uri)).toString('utf8');
+	} catch {
+		return `<p class="note">The file could not be read, so there is nothing to preview.</p>`;
+	}
+	try {
+		const body = await vscode.commands.executeCommand<string>('markdown.api.render', text);
+		return body ?? `<p class="note">The Markdown renderer returned nothing for this page.</p>`;
+	} catch {
+		return `<p class="note">Markdown rendering is not available — the built-in Markdown extension is not active in ` +
+			`this window.</p>`;
 	}
 }
 
@@ -190,7 +236,8 @@ function html(
 	drafts: readonly DraftRow[],
 	start: boolean,
 	tab: Tab,
-	properties: string
+	properties: string,
+	preview: string
 ): string {
 	const draftBody = page === undefined
 		? `<p class="note">No page is in front. Open one from <b>Pages</b> and its draft panel appears here.</p>`
@@ -221,10 +268,14 @@ ${drafts.length === 0
   </div>
 </div>`).join('')}`;
 
-	const tabs = `<div class="tabs"><button class="tab${tab === 'draft' ? ' tab--on' : ''}" data-type="tab" data-tab="draft">Draft</button><button class="tab${tab === 'properties' ? ' tab--on' : ''}" data-type="tab" data-tab="properties">Properties</button></div>`;
-	const body = page === undefined || tab === 'draft'
+	const tabs = `<div class="tabs"><button class="tab${tab === 'draft' ? ' tab--on' : ''}" data-type="tab" data-tab="draft">Draft</button><button class="tab${tab === 'preview' ? ' tab--on' : ''}" data-type="tab" data-tab="preview">Preview</button><button class="tab${tab === 'properties' ? ' tab--on' : ''}" data-type="tab" data-tab="properties">Properties</button></div>`;
+	const body = page === undefined
 		? draftBody
-		: `<div class="head"><div class="title">${esc(page.title)}</div><div class="note">${esc(page.id)}</div></div>${properties}`;
+		: tab === 'preview'
+			? `<div class="preview">${preview}</div>`
+			: tab === 'properties'
+				? `<div class="head"><div class="title">${esc(page.title)}</div><div class="note">${esc(page.id)}</div></div>${properties}`
+				: draftBody;
 
 	return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><style>
 	.tabs { display: flex; gap: 2px; margin: -2px 0 10px; border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,.25)); }
@@ -248,6 +299,16 @@ ${drafts.length === 0
 	button:hover { background: var(--vscode-button-hoverBackground); }
 	.draft { border-top: 1px solid var(--vscode-panel-border, rgba(128,128,128,.25)); padding: 8px 0; }
 	.draft__title { font-weight: 500; }
+	.preview { line-height: 1.5; }
+	.preview h1, .preview h2, .preview h3 { line-height: 1.25; margin: 14px 0 6px; }
+	.preview h1 { font-size: 18px; } .preview h2 { font-size: 15px; } .preview h3 { font-size: 13px; }
+	.preview h1, .preview h2 { padding-bottom: 4px; border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,.25)); }
+	.preview code { font-family: var(--vscode-editor-font-family); background: var(--vscode-textCodeBlock-background); padding: 1px 4px; border-radius: 2px; }
+	.preview pre { background: var(--vscode-textCodeBlock-background); padding: 8px; overflow: auto; }
+	.preview pre code { background: none; padding: 0; }
+	.preview blockquote { margin: 8px 0; padding: 2px 10px; border-left: 3px solid var(--vscode-textBlockQuote-border); background: var(--vscode-textBlockQuote-background); }
+	.preview table { border-collapse: collapse; } .preview th, .preview td { border: 1px solid var(--vscode-panel-border, rgba(128,128,128,.25)); padding: 4px 8px; }
+	.preview img { max-width: 100%; }
 	</style></head><body>${page === undefined ? '' : tabs}${body}
 	<script>
 	const api = acquireVsCodeApi();

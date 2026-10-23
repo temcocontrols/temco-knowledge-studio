@@ -1,0 +1,8 @@
+{
+	"compilerOptions": {
+		"baseUrl": ".",
+		"paths": {
+			"@/*": ["./tiptap/*", "./tiptap-template/*"]
+		}
+	}
+}

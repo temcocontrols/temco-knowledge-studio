@@ -21,6 +21,47 @@
     "Other"
   ],
   "main": "./out/extension.js",
+  "devDependencies": {
+    "@base-ui/react": "1.0.0",
+    "@floating-ui/react": "0.27.16",
+    "@radix-ui/react-dropdown-menu": "2.1.16",
+    "@radix-ui/react-popover": "1.1.15",
+    "@tiptap/core": "3.30.3",
+    "@tiptap/extension-code-block-lowlight": "3.30.3",
+    "@tiptap/extension-find-and-replace": "3.30.3",
+    "@tiptap/extension-highlight": "3.30.3",
+    "@tiptap/extension-horizontal-rule": "3.30.3",
+    "@tiptap/extension-image": "3.30.3",
+    "@tiptap/extension-link": "3.30.3",
+    "@tiptap/extension-list": "3.30.3",
+    "@tiptap/extension-mathematics": "3.30.3",
+    "@tiptap/extension-subscript": "3.30.3",
+    "@tiptap/extension-superscript": "3.30.3",
+    "@tiptap/extension-table": "3.30.3",
+    "@tiptap/extension-task-item": "3.30.3",
+    "@tiptap/extension-task-list": "3.30.3",
+    "@tiptap/extension-text-align": "3.30.3",
+    "@tiptap/extension-underline": "3.30.3",
+    "@tiptap/extensions": "3.30.3",
+    "@tiptap/markdown": "3.30.3",
+    "@tiptap/pm": "3.30.3",
+    "@tiptap/react": "3.30.3",
+    "@tiptap/starter-kit": "3.30.3",
+    "@univerjs/preset-sheets-core": "1.2.0",
+    "@univerjs/presets": "1.2.0",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "esbuild": "0.28.2",
+    "highlight.js": "11.11.1",
+    "jsdom": "26.1.0",
+    "katex": "0.16.22",
+    "lodash.throttle": "4.1.1",
+    "lowlight": "3.3.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-hotkeys-hook": "5.2.1",
+    "sass": "1.95.1"
+  },
   "extensionDependencies": [
     "temcocontrols.temco-store",
     "temcocontrols.temco-ui",
@@ -32,14 +73,42 @@
     "onView:temcoDocs.project",
     "onView:temcoDocs.queue",
     "onView:temcoDocs.draft",
+    "onView:temcoDocs.outline",
+    "onCustomEditor:temcoDocs.richTiptap",
+    "onCustomEditor:temcoDocs.grid",
     "onView:temcoDocs.section.pipeline"
   ],
   "contributes": {
+    "customEditors": [
+      {
+        "viewType": "temcoDocs.richTiptap",
+        "displayName": "Temco Page",
+        "selector": [
+          {
+            "filenamePattern": "*.md"
+          }
+        ],
+        "priority": "option"
+      },
+      {
+        "viewType": "temcoDocs.grid",
+        "displayName": "Temco Grid",
+        "selector": [
+          {
+            "filenamePattern": "*.csv"
+          },
+          {
+            "filenamePattern": "*.tsv"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
     "viewsContainers": {
       "auxiliarybar": [
         {
           "id": "temcoDraft",
-          "title": "Draft",
+          "title": "Page",
           "icon": "media/docs.svg"
         }
       ]
@@ -72,9 +141,15 @@
       ],
       "temcoDraft": [
         {
+          "id": "temcoDocs.outline",
+          "name": "Outline",
+          "initialSize": 2
+        },
+        {
           "id": "temcoDocs.draft",
           "name": "Draft",
-          "type": "webview"
+          "type": "webview",
+          "visibility": "collapsed"
         }
       ]
     },
@@ -120,6 +195,42 @@
         "command": "temcoDocs.pageProperties",
         "title": "Page Properties",
         "icon": "$(gear)"
+      },
+      {
+        "command": "temcoDocs.previewPage",
+        "title": "Preview the Page",
+        "category": "Temco Docs",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "temcoDocs.diffPage",
+        "title": "Diff the Page with HEAD",
+        "category": "Temco Docs",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "temcoDocs.outline",
+        "title": "Show the Page Outline",
+        "category": "Temco Docs",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "temcoDocs.openRich",
+        "title": "Open in Rich Mode",
+        "category": "Temco Docs",
+        "icon": "$(book)"
+      },
+      {
+        "command": "temcoDocs.openSource",
+        "title": "Open in Source Mode",
+        "category": "Temco Docs",
+        "icon": "$(code)"
+      },
+      {
+        "command": "temcoDocs.openGrid",
+        "title": "Open in the Grid",
+        "category": "Temco Docs",
+        "icon": "$(table)"
       },
       {
         "command": "temcoDocs.import",
@@ -456,9 +567,25 @@
         "command": "temcoDocs.attachCapture",
         "title": "Attach the Screenshot to a Page…",
         "icon": "$(link)"
+      },
+      {
+        "command": "temcoDocs.importDocx",
+        "title": "Import a Word Document",
+        "category": "Temco Docs",
+        "icon": "$(file-add)"
       }
     ],
     "keybindings": [
+      {
+        "command": "temcoDocs.previewPage",
+        "key": "ctrl+alt+p",
+        "when": "editorLangId == markdown && resourceScheme == file"
+      },
+      {
+        "command": "temcoDocs.diffPage",
+        "key": "ctrl+alt+d",
+        "when": "editorLangId == markdown && resourceScheme == file"
+      },
       {
         "command": "temcoDocs.captureImage",
         "key": "ctrl+alt+s",
@@ -542,14 +669,44 @@
           "group": "temcoDocs@5"
         },
         {
-          "command": "temcoDocs.captureImage",
+          "command": "temcoDocs.previewPage",
           "when": "editorLangId == markdown && resourceScheme == file",
           "group": "temcoDocs@6"
+        },
+        {
+          "command": "temcoDocs.diffPage",
+          "when": "editorLangId == markdown && resourceScheme == file",
+          "group": "temcoDocs@6"
+        },
+        {
+          "command": "temcoDocs.captureImage",
+          "when": "editorLangId == markdown && resourceScheme == file",
+          "group": "temcoDocs@7"
         },
         {
           "command": "temcoDocs.pasteImage",
           "when": "editorLangId == markdown && resourceScheme == file",
           "group": "temcoDocs@7"
+        },
+        {
+          "command": "temcoDocs.openRich",
+          "when": "editorLangId == markdown && resourceScheme == file && activeCustomEditorId == ''",
+          "group": "temcoDocs@8"
+        },
+        {
+          "command": "temcoDocs.openSource",
+          "when": "activeCustomEditorId == 'temcoDocs.richTiptap'",
+          "group": "temcoDocs@1"
+        },
+        {
+          "command": "temcoDocs.previewPage",
+          "when": "activeCustomEditorId == 'temcoDocs.richTiptap'",
+          "group": "temcoDocs@3"
+        },
+        {
+          "command": "temcoDocs.diffPage",
+          "when": "activeCustomEditorId == 'temcoDocs.richTiptap'",
+          "group": "temcoDocs@3"
         }
       ],
       "editor/title/context": [
@@ -776,6 +933,11 @@
           "command": "temcoDocs.openRegistry",
           "when": "view == temcoDocs.pages",
           "group": "9_registry@1"
+        },
+        {
+          "command": "temcoDocs.importDocx",
+          "when": "view == temcoDocs.pages",
+          "group": "navigation@9"
         }
       ],
       "view/item/context": [
@@ -897,9 +1059,19 @@
       ]
     },
     "viewsWelcome": [],
-    "configuration": []
+    "configuration": [],
+    "activationEvents": null
   },
   "scripts": {
-    "check-commands": "node --experimental-strip-types scripts/check-commands.mts"
+    "vscode:prepublish": "npm run build-webview",
+    "check-commands": "node --experimental-strip-types scripts/check-commands.mts",
+    "check-roundtrip": "node --experimental-strip-types scripts/check-roundtrip.mts",
+    "check-webview": "node --experimental-strip-types scripts/check-webview.mts",
+    "build-webview": "node --experimental-strip-types scripts/build-webview.mts"
+  },
+  "dependencies": {
+    "@tiptap/extension-typography": "^3.30.3",
+    "mammoth": "1.11.0",
+    "turndown": "7.2.0"
   }
 }
