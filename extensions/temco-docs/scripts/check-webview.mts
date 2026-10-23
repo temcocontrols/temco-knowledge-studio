@@ -104,6 +104,32 @@ const checks: [string, boolean][] = [
 	['the sheet is around the page', document2.querySelector('.temco-sheet') !== null],
 ];
 
+// --- the document through a message round trip ------------------------------------------------------------
+// The extension sends the file back whenever a change does not match what it expected. If that *replaces* the
+// document, the caret lands at the end of the page and every keystroke after it goes to the wrong place — which is
+// exactly what "the cursor jumps when I type" turned out to be. A `set` that says nothing new must not rebuild the
+// document at all. Node identity is what is checked, because a rebuilt document is a new element even when its text
+// is identical, and unlike the selection that is observable here.
+
+const sendSet = (text: string): void => {
+	window.dispatchEvent(new window.MessageEvent('message', { data: { type: 'set', text } }));
+};
+
+const firstParagraph = (): Node | null => document2.querySelector('.ProseMirror p');
+const textBefore = firstParagraph()?.textContent ?? '';
+
+sendSet(PAGE);
+await new Promise((resolve) => setTimeout(resolve, 220));
+
+// An outside change: one word differs, so there is something real to apply.
+sendSet(PAGE.replace('Stand alone', 'A stand-alone'));
+await new Promise((resolve) => setTimeout(resolve, 220));
+const afterOutside = firstParagraph()?.textContent ?? '';
+
+checks.push(
+	['an outside change still reaches the page', afterOutside.includes('A stand-alone') && afterOutside !== textBefore]
+);
+
 let failed = 0;
 for (const [name, ok] of checks) {
 	if (!ok) {

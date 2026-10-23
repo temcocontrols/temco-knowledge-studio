@@ -68,6 +68,24 @@ export abstract class WebviewTextEditor implements vscode.CustomTextEditorProvid
 
 		/** The last text this editor put into the document, so its own write is not read back as an outside change. */
 		let applied = '';
+		/**
+		 * Every text this editor asked VS Code to write.
+		 *
+		 * `applyEdit` is asynchronous, and two writes can land out of order while somebody is typing. `applied` names
+		 * only the newest, so a write that is the editor's own but not the last one would look like an outside change —
+		 * and answering it with `set` replaces the document under the caret. That is the whole bug: the caret jumps to
+		 * the end of the page and the selection being dragged collapses.
+		 */
+		const written = new Set<string>();
+		const remember = (text: string): void => {
+			written.add(text);
+			for (const oldest of written) {
+				if (written.size <= 20) {
+					break;
+				}
+				written.delete(oldest);
+			}
+		};
 
 		const redraw = (): void => {
 			void panel.webview.postMessage({ type: 'set', text: document.getText() });
@@ -98,6 +116,7 @@ export abstract class WebviewTextEditor implements vscode.CustomTextEditorProvid
 				return;
 			}
 			applied = this.eolOf(document, next);
+			remember(applied);
 			void this.replace(document, next);
 		});
 
@@ -106,7 +125,12 @@ export abstract class WebviewTextEditor implements vscode.CustomTextEditorProvid
 				if (event.document.uri.toString() !== document.uri.toString() || event.contentChanges.length === 0) {
 					return;
 				}
-				if (event.document.getText() === applied) {
+				const now = event.document.getText();
+				// One of this editor's own writes — possibly an earlier one that landed late. Never an outside change.
+				if (written.delete(now)) {
+					return;
+				}
+				if (now === applied) {
 					return;
 				}
 				redraw();

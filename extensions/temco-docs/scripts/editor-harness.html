@@ -1,0 +1,64 @@
+<!doctype html>
+<!-- A stand-in for the webview, so the editor can be driven by a real browser.
+     The bundle needs three things from VS Code: `acquireVsCodeApi`, a `#root`, and a `set` message carrying the file.
+     `?echo=1` makes this answer every `change` with a `set`, which is what the extension does whenever the text it
+     receives is not the one it expected — the case that used to throw the caret to the end of the page.
+     Driven by `scripts/check-editor.mts`. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>temco-docs editor harness</title>
+<link rel="stylesheet" href="../out/webview/tiptap/tiptap.css">
+<style>
+	html, body { margin: 0; height: 100%; }
+</style>
+</head>
+<body class="vscode-dark">
+<div id="root"></div>
+<script>
+	window.__sent = [];
+	window.__echo = new URLSearchParams(location.search).has('echo');
+	window.acquireVsCodeApi = () => ({
+		postMessage(message) {
+			window.__sent.push(message);
+			if (message && message.type === 'ready') {
+				setTimeout(() => {
+					window.dispatchEvent(new MessageEvent('message', { data: { type: 'set', text: window.__page } }));
+				}, 50);
+			}
+			if (message && message.type === 'change' && window.__echo) {
+				setTimeout(() => {
+					window.dispatchEvent(new MessageEvent('message', { data: { type: 'set', text: message.text } }));
+				}, 20);
+			}
+			if (message && message.action === 'pastedImage') {
+				window.__pasted = window.__pasted || [];
+				window.__pasted.push({ name: message.name, bytes: atob(message.data).length });
+				setTimeout(() => {
+					window.dispatchEvent(new MessageEvent('message', {
+						data: { type: 'image', src: encodeURI('media/' + message.name) },
+					}));
+				}, 30);
+			}
+		},
+		getState() { return undefined; },
+		setState() {},
+	});
+	window.__page = [
+		'# Point Scaling',
+		'',
+		'Rated for 24 V only. A paragraph long enough to click different words in, so caret placement can be measured.',
+		'',
+		'## Steps',
+		'',
+		'1. Open the panel',
+		'2. Set the [range](https://example.com/range) to ten volts',
+		'3. Close the panel',
+		'',
+		'The last paragraph is here so there is text below the table as well.',
+		'',
+	].join('\n');
+</script>
+<script src="../out/webview/tiptap/tiptap.js"></script>
+</body>
+</html>

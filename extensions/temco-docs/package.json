@@ -1068,6 +1068,7 @@
     "check-roundtrip": "node --experimental-strip-types scripts/check-roundtrip.mts",
     "check-webview": "node --experimental-strip-types scripts/check-webview.mts",
     "check-learn": "node --experimental-strip-types scripts/check-learn.mts",
+    "check-editor": "node --experimental-strip-types scripts/check-editor.mts",
     "build-webview": "node --experimental-strip-types scripts/build-webview.mts"
   },
   "dependencies": {

@@ -30,6 +30,7 @@
 | `scripts/check-roundtrip.mts` | the check that matters most: 16 page shapes through the real editor stack, every one **byte-identical** and idempotent. `npm run check-roundtrip` |
 | `scripts/check-webview.mts` | the bundle loaded into a DOM and driven the way the extension drives it. Bundling is not rendering: a webview that throws on its first render is a blank tab, and `tsc` and `eslint` both pass. `npm run check-webview` |
 | `scripts/check-learn.mts` | the Temco Learn portal: what a `manifest.json` means, and what the page it writes says. The first coverage of a file written on every publish and read by nobody. `npm run check-learn` |
+| `scripts/check-editor.mts` | the editing operations, driven through real Chromium: typing lands at the caret, Backspace deletes beside it, and a selection survives a message round trip. The only place the caret actually exists — `check-webview` passes either way. `npm run check-editor` |
 | `src/learnPage.ts` | the portal page and the manifest rules, as pure functions — no `vscode`, so the publish path has something to test |
 | `src/webviewText.ts` | the bridge both Rich modes share: one `WorkspaceEdit` per save, line endings preserved, the echo guard, and the three bar actions (preview / diff / source). Nothing that could corrupt a file is decided twice |
 | `src/csv.ts` | CSV as a grid can hold it and back again: RFC 4180 quoting, delimiter and end-of-line detected, and the *quoting style* preserved per cell so a one-cell edit is a one-line diff. No VS Code here at all |
@@ -140,6 +141,34 @@ Two details of the menu are deliberate. The focus stays in the page rather than 
 keeps its highlight — the keyboard reaches the menu with the arrow keys. And a right-click inside a selection keeps that
 selection instead of collapsing it, so Cut and Copy have something to act on; anywhere else it moves the caret, which is
 what tells the menu whether it is on a link.
+
+### The caret through a message round trip
+
+The most damaging defect in this surface was not in the editor at all. The extension answers any change it does not
+recognise as its own by sending the file back, and the bridge applied that with `setContent` — which replaces the
+document and leaves the caret at the **end of the page**. Typing then looked like this: the selection you were dragging
+stopped halfway, and the next keystroke went somewhere else entirely, because the caret had been moved to the bottom.
+
+Two changes, each guarding one half:
+
+| Change | Why |
+|---|---|
+| a `set` whose text the editor already holds is ignored outright | the common case is an echo after the editor's own write; nothing about the document needs to change |
+| a `set` that does carry an outside change restores the caret to where it was, clamped to the new document | an external edit must not take the keyboard away from the person typing |
+
+The host had a third part of the same bug: `applyEdit` is asynchronous, so two writes can land out of order while
+somebody types, and a single `applied` string only names the newest. A late write from this editor was therefore
+mistaken for an outside change and answered with a redraw. The editor now remembers every text it asked VS Code to
+write, and a document change matching any of them is its own.
+
+And the rule that settles it: **the template's editor owns its document.** It is built once with the file and then
+edited; the bridge never replaces it while the editor has focus, and an outside change waits in a variable until the
+person leaves the page. That is what the template does, and wrapping it in a document-sync loop was the mistake.
+
+`scripts/check-editor.mts` reproduces the whole thing in Chromium and asserts the caret does not move across the round
+trip, that a selection survives it, and that an outside change does not touch a focused editor at all. Removing the
+guard makes it fail (`caret was 70, became 253`), which is the check earning its place: `check-webview` passes with the
+defect present, because jsdom reconciles an identical document to identical nodes and never has a selection to lose.
 
 ### Importing Word documents
 

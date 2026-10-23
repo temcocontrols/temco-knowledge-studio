@@ -75,6 +75,34 @@ export function attach(
 	let applying = false;
 	let trailingNewline = true;
 
+	/**
+	 * Whether the host is saying what the editor already holds.
+	 *
+	 * The extension sends the file back on `ready`, and again after any change it did not recognise as this editor's
+	 * own — including one that differs only in its line endings. `setContent` replaces the whole document, and a
+	 * replaced document has its caret at the end, so a `set` that says the same thing must not be applied at all:
+	 * that is the difference between typing and being teleported to the bottom of the page.
+	 */
+	const holds = (text: string, trailing: boolean): boolean =>
+		tidyText(editor.getMarkdown(), trailing) === text;
+
+	/** An outside change that arrived while the person was in the editor; applied when they leave it. */
+	let deferred: { text: string; ending: boolean } | undefined;
+
+	/** Replaces the document, keeping the caret where it was rather than letting it land at the end. */
+	const apply = (text: string, ending: boolean): void => {
+		trailingNewline = ending;
+		const from = editor.state.selection.from;
+		applying = true;
+		try {
+			editor.commands.setContent(text, { contentType: 'markdown', emitUpdate: false });
+		} finally {
+			applying = false;
+		}
+		const furthest = editor.state.doc.content.size - 1;
+		editor.commands.setTextSelection(Math.max(1, Math.min(from, furthest)));
+	};
+
 	const onMessage = (event: MessageEvent<HostMessage>): void => {
 		const message = event.data;
 		if (message === null || typeof message !== 'object') {
@@ -90,12 +118,28 @@ export function attach(
 			return;
 		}
 		const text = typeof message.text === 'string' ? message.text : '';
-		trailingNewline = text.endsWith('\n');
-		applying = true;
-		try {
-			editor.commands.setContent(text, { contentType: 'markdown', emitUpdate: false });
-		} finally {
-			applying = false;
+		const ending = text.endsWith('\n');
+		if (holds(text, ending)) {
+			// Same document, so the only thing worth keeping is how the file ends.
+			trailingNewline = ending;
+			return;
+		}
+		// The template's editor owns its document: it is built once with the file and then edited. Replacing it while
+		// somebody is in it takes the caret, the selection and the undo history with it, and that is the whole of what
+		// "the cursor jumps while I type" ever was. An outside change waits until they leave the page instead.
+		if (editor.isFocused) {
+			deferred = { text, ending };
+			return;
+		}
+		apply(text, ending);
+	};
+
+	/** The page changed underneath them while they were typing: apply it now that they have stepped away. */
+	const onBlur = (): void => {
+		const pending = deferred;
+		deferred = undefined;
+		if (pending !== undefined && !holds(pending.text, pending.ending)) {
+			apply(pending.text, pending.ending);
 		}
 	};
 
@@ -114,6 +158,7 @@ export function attach(
 
 	window.addEventListener('message', onMessage);
 	editor.on('update', onUpdate);
+	editor.on('blur', onBlur);
 	// The extension answers `ready` by sending the file; anything before this would be lost.
 	post('ready');
 
@@ -123,5 +168,6 @@ export function attach(
 		}
 		window.removeEventListener('message', onMessage);
 		editor.off('update', onUpdate);
+		editor.off('blur', onBlur);
 	};
 }
