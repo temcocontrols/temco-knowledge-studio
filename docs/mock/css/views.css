@@ -37,6 +37,10 @@
 
 .page-head {
 	display: flex;
+	/* The actions drop to their own line before the text is crushed into a column. Without this a
+	   head with two buttons squeezes the title and the description to a few characters a line as
+	   soon as the editor is narrowed, which is the one width the window is always allowed to be. */
+	flex-wrap: wrap;
 	align-items: flex-start;
 	gap: 24px;
 	margin-bottom: 22px;
@@ -44,8 +48,9 @@
 
 .page-head__main {
 	/* The text column gives way before the actions do: a head with two buttons should not stack
-	   them into a column just because the description is long. */
-	flex: 1 1 auto;
+	   them into a column just because the description is long. Past this basis it stops giving way
+	   and the actions wrap instead. */
+	flex: 1 1 22rem;
 	min-width: 0;
 }
 

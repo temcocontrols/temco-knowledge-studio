@@ -1223,4 +1223,106 @@
 			return ui.view(body);
 		}
 	};
+
+	/* Importing: the two front doors into the repository's own shape, and the ledger of what each
+	   one did. It sits under Sources because what it changes is where the text came from, not the
+	   project that will publish it. */
+	M.views['docs/import'] = {
+		title: 'Import',
+		render: function () {
+			var rows = data.imports;
+			var written = rows.filter(function (row) { return row.tone === 'ok'; }).length;
+			var refused = rows.length - written;
+			var warnings = rows.reduce(function (total, row) { return total + row.warnings; }, 0);
+
+			var door = function (icon, title, desc, detail, action, label, kind) {
+				return ui.card({
+					icon: icon,
+					title: title,
+					cls: 'card--plain',
+					desc: desc,
+					actions: ui.button(label, { kind: kind || 'ghost', icon: icon, action: action }),
+					body:
+						'<div class="record-list">' +
+						detail.map(function (line) {
+							return (
+								'<div class="record-row record-row--static">' +
+								ui.toneMark('check', 'ok') +
+								'<div class="record-row__main">' +
+								'<div class="record-row__meta"><span>' + ui.esc(line) + '</span></div>' +
+								'</div>' +
+								'</div>'
+							);
+						}).join('') +
+						'</div>'
+				});
+			};
+
+			var body =
+				ui.pageHead({
+					eyebrow: 'T3000 Documentation · 13.0',
+					title: 'Import',
+					icon: 'download',
+					desc: 'Existing documentation comes in as the repository\'s own shape: Markdown under <span class="cell-mono">docs/</span> and the registry at <span class="cell-mono">docs/help/registry.json</span>. The site build and the offline help then pick it up, with no second content store and nothing to keep in step.',
+					actions:
+						ui.button('Import a document set', { kind: 'primary', icon: 'folder', action: 'import-set' }) +
+						ui.button('Import a Word document', { icon: 'document', action: 'import-docx' })
+				}) +
+				ui.kpis([
+					{ label: 'Imports run', value: String(rows.length), meta: 'this project' },
+					{ label: 'Landed', value: String(written), meta: 'written as pages' },
+					{ label: 'Refused', value: String(refused), meta: 'nothing was touched' },
+					{ label: 'Warnings', value: String(warnings), meta: 'said out loud, not dropped' }
+				]) +
+				'<div class="mt-24">' +
+				'<div class="grid grid--2">' +
+				door(
+					'folder',
+					'Import a document set',
+					'A folder of Word, RTF or HTML, or a CHM. Every file becomes a page, and the folders it came from become the areas and chapters — the place is derived from where it came from, never invented.',
+					['Pandoc converts what it can; a CHM is unpacked first', 'Order is 10, 20, 30 … in the order the material was found', 'Refused outright if the destination already has a registry'],
+					'import-set',
+					'Choose a folder',
+					'primary'
+				) +
+				door(
+					'document',
+					'Import a Word document',
+					'One .docx becomes one page beside the file. Word\'s fonts, colours, spacing and text boxes have no Markdown equivalent, so they are dropped rather than faked — this is a starting point, not a conversion.',
+					['Headings, lists, tables and links are kept', 'A new page is written; nothing is replaced', 'What was dropped comes back as a warning you can read'],
+					'import-docx',
+					'Choose a file'
+				) +
+				'</div>' +
+				'</div>' +
+				'<div class="mt-24">' +
+				ui.callout(
+					'<b>Three rules, and they are why this is safe to run against a real project.</b> Nothing is written over anything. A page\'s place comes from where it came from. And whatever cannot be converted is reported — a missing Pandoc, a CHM decompiler that is not installed, a file whose text cannot be read.',
+					{ icon: 'info' }
+				) +
+				'</div>' +
+				'<div class="mt-24">' +
+				ui.card({
+					title: 'Recent imports',
+					icon: 'clock',
+					cls: 'card--plain',
+					desc: 'A refused import is not a failure to hide: it is the rule working.',
+					body: ui.table({
+						plain: true,
+						compact: true,
+						columns: [
+							{ label: 'Source', render: function (row) { return '<span class="cell-strong">' + ui.esc(row.source) + '</span><div class="cell-muted" style="font-size:12px">' + ui.esc(row.kind) + '</div>'; } },
+							{ label: 'Result', render: function (row) { return ui.esc(row.result); } },
+							{ label: 'Where', render: function (row) { return '<span class="cell-mono">' + ui.esc(row.where) + '</span>'; } },
+							{ label: 'State', render: function (row) { return ui.badge(row.state, row.tone); } },
+							{ label: 'Warnings', align: 'right', render: function (row) { return row.warnings > 0 ? ui.badge(String(row.warnings), 'warn') : '<span class="cell-muted">none</span>'; } },
+							{ label: 'When', align: 'right', render: function (row) { return '<span class="cell-muted">' + ui.esc(row.when) + '</span>'; } }
+						],
+						rows: rows
+					})
+				}) +
+				'</div>';
+			return ui.view(body, { wide: true });
+		}
+	};
 })(window.TemcoMock = window.TemcoMock || { views: {} });

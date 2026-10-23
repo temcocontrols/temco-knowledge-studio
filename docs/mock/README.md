@@ -130,6 +130,14 @@ Every row answers "what did reading it produce?": `main · 412 files · 138 page
 
 The page is the single source of truth for the count. The sidebar badge, the pipeline stage meta, the output line, the health scan's eyebrow and the `Read All Sources` palette command all read `7` from `data.sources` — the mock used to claim 38 in five places while listing seven.
 
+## The other way text arrives
+
+**Import** is where a manual that already exists becomes pages, and it is deliberately not a wizard. A document set — a folder of Word, RTF or HTML, or a CHM — lands as the repository's own shape: Markdown under `docs/`, the registry at `docs/help/registry.json`. A better conversion would produce a second content store, and then the site build and the offline help would have something to keep in step.
+
+The three rules are on the page because they are what makes it safe to run against a real project, not because they are reassuring: nothing is written over anything (an import into a folder that already has a registry is refused outright), a page's place is derived from where it came from rather than invented, and whatever cannot be converted is said out loud. The ledger underneath shows all three happening — including the refused row, because a refused import is the rule working rather than a failure to hide.
+
+The head carries two buttons, and that is where the layout earned a fix: the text column used to give way until the description was a 13-character ribbon. `.page-head` now wraps its actions onto their own line instead, which also repaired the same squeeze on **Knowledge**, where a four-button action group had left 206 px for the page.
+
 ## The registry
 
 **Knowledge** browses 1,254 pages, so it is a master–detail on one surface: the areas on the left (a 260–300 px column), the pages of the area you picked on the right.

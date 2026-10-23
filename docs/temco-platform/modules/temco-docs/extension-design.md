@@ -29,6 +29,8 @@
 | `webview/markdown.mts` | `tidy()`: what the official serializer produces, turned back into the file the author wrote — three narrow repairs, each covered by a fixture in `scripts/check-roundtrip.mts` |
 | `scripts/check-roundtrip.mts` | the check that matters most: 16 page shapes through the real editor stack, every one **byte-identical** and idempotent. `npm run check-roundtrip` |
 | `scripts/check-webview.mts` | the bundle loaded into a DOM and driven the way the extension drives it. Bundling is not rendering: a webview that throws on its first render is a blank tab, and `tsc` and `eslint` both pass. `npm run check-webview` |
+| `scripts/check-learn.mts` | the Temco Learn portal: what a `manifest.json` means, and what the page it writes says. The first coverage of a file written on every publish and read by nobody. `npm run check-learn` |
+| `src/learnPage.ts` | the portal page and the manifest rules, as pure functions — no `vscode`, so the publish path has something to test |
 | `src/webviewText.ts` | the bridge both Rich modes share: one `WorkspaceEdit` per save, line endings preserved, the echo guard, and the three bar actions (preview / diff / source). Nothing that could corrupt a file is decided twice |
 | `src/csv.ts` | CSV as a grid can hold it and back again: RFC 4180 quoting, delimiter and end-of-line detected, and the *quoting style* preserved per cell so a one-cell edit is a one-line diff. No VS Code here at all |
 | `src/gridEditor.ts` | **Grid mode**: a CSV edited as cells (Univer). Same bridge as `webviewText.ts`; the file stays line-per-row because `csv.ts` does the writing |
@@ -106,6 +108,8 @@ components, node views and SCSS. Six files of ours sit beside it:
 | `webview/tiptap/document-actions.tsx` | preview / diff / source, as a trailing toolbar group |
 | `webview/tiptap/highlight-toggle.tsx` | the template's colour popover, reduced to the one highlight Markdown can hold |
 | `webview/tiptap/callout.ts` | decorates `> [!NOTE]` blockquotes so they look like the published alerts |
+| `webview/tiptap/context-menu.tsx` | the editing menu for the page: cut, copy, paste, select all, insert image, remove link |
+| `webview/tiptap/outline-panel.tsx` | the outline, its rail and the word count |
 
 Four deviations from the template, each measured by `scripts/check-roundtrip.mts` before it was made:
 
@@ -118,6 +122,24 @@ Four deviations from the template, each measured by `scripts/check-roundtrip.mts
 
 Three things were **added** because this documentation needs them and the template does not ship them: `Table` (1,458
 table lines in `docs/`), `Mathematics` (`$...$`, `$$...$$`), and the official `Markdown` extension with `tidy()`.
+
+### Where the template's editing behaviour had to change
+
+Four interaction defects were reproduced in a real browser against the built bundle, not guessed at. The first three
+were one bug with four symptoms.
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Clicking text near a link moved the caret somewhere else | `enableClickSelection` selected the whole link on click | turned off, so a click places the caret |
+| A link popover opened on every click and took the focus | `LinkPopover` auto-opens whenever the caret is inside a link | `autoOpenOnLinkActive={false}`; the toolbar button still opens it |
+| Ctrl+A, paste and typing then went to the URL field | a consequence of the focus being taken | gone with the two fixes above |
+| A pasted screenshot did nothing | ProseMirror drops pasted files; only the template's picker was wired to the host | `handlePaste` sends the bytes to the extension, which writes them beside the page and replies with the page-relative address |
+| Right-click offered only Cut / Copy / Paste | the host's webview menu stops there, and hides itself once the page handles `contextmenu` | the page owns the menu: cut, copy, paste, select all, insert image, remove link |
+
+Two details of the menu are deliberate. The focus stays in the page rather than moving to the menu, so the selected text
+keeps its highlight — the keyboard reaches the menu with the arrow keys. And a right-click inside a selection keeps that
+selection instead of collapsing it, so Cut and Copy have something to act on; anywhere else it moves the caret, which is
+what tells the menu whether it is on a link.
 
 ### Importing Word documents
 

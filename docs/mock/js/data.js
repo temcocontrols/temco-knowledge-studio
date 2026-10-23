@@ -73,7 +73,10 @@
 					label: 'Sources',
 					views: [
 						{ id: 'docs/repositories', label: 'Repositories', icon: 'repo', badge: 4 },
-						{ id: 'docs/sources', label: 'Sources', icon: 'link', badge: 7 }
+						{ id: 'docs/sources', label: 'Sources', icon: 'link', badge: 7 },
+						/* The other way text arrives: pulled out of the tools the manuals were written in,
+						   and landed in the repository's own shape. */
+						{ id: 'docs/import', label: 'Import', icon: 'download' }
 					]
 				},
 				{
@@ -915,6 +918,16 @@
 			{ id: 'bacnet', name: 'BACnet', desc: 'Protocol reference, object model and conformance', version: '4.2', pages: 186 },
 			{ id: 'devices', name: 'Devices', desc: 'Every T3 controller, its wiring and its specifications', version: '2.14', pages: 94 },
 			{ id: 'sdk', name: 'SDK', desc: 'Build on the platform: APIs, schemas and samples', version: '1.4', pages: 80 }
+		],
+
+		/* Importing has done this so far. `tone` is the outcome a person has to be able to read
+		   before opening the row: an import refused because a registry already exists touched
+		   nothing, and saying so is the difference between a failed import and a lost folder. */
+		imports: [
+			{ when: '2 days ago', source: 'Point Scaling (Word)', kind: 'Word document', result: '1 page written', where: 'docs/t3000/overview/point-scaling.md', state: 'Done', tone: 'ok', warnings: 2 },
+			{ when: '5 days ago', source: 'BACnet Help (CHM)', kind: 'Document set', result: '186 pages · 12 areas', where: 'docs/help/registry.json', state: 'Done', tone: 'ok', warnings: 0 },
+			{ when: '1 week ago', source: 'Devices (HTML folder)', kind: 'Document set', result: 'Refused: a registry already exists', where: 'docs/help/registry.json', state: 'Refused', tone: 'warn', warnings: 0 },
+			{ when: '3 weeks ago', source: 'SDK Reference (RTF)', kind: 'Document set', result: '64 pages · 6 chapters', where: 'docs/sdk/registry.json', state: 'Done', tone: 'ok', warnings: 4 }
 		],
 
 		/* The offline artifacts the site offers. `version` and `date` belong to the release, so the
