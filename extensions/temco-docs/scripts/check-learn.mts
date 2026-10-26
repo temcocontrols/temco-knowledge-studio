@@ -39,6 +39,18 @@ try {
 
 const { toProduct, portalPage } = createRequire(import.meta.url)(built) as LearnPage;
 
+// The reader is a second pure module, checked the same way and guarded the same way.
+const readerSource = fileURLToPath(new URL('../src/learnReader.ts', import.meta.url));
+const readerBuilt = fileURLToPath(new URL('../out/learnReader.js', import.meta.url));
+try {
+	assert.ok(statSync(readerBuilt).mtimeMs >= statSync(readerSource).mtimeMs, 'out/learnReader.js is older than src/learnReader.ts');
+} catch (error) {
+	console.log(`Cannot run: ${(error as Error).message}`);
+	console.log('Compile first:  tsc -p .');
+	process.exit(1);
+}
+const reader = createRequire(import.meta.url)(readerBuilt) as { readerPage(model: unknown): string };
+
 let failures = 0;
 
 function check(name: string, run: () => void): void {
@@ -131,5 +143,70 @@ check('an id or version that needs encoding is encoded in the link', () => {
 	assert.match(html, /href="a%20b\/1\.0%20beta\/"/);
 });
 
-console.log(failures === 0 ? '\nTHE PORTAL PAGE IS CORRECT' : `\n${failures} PROBLEM(S)`);
+// --- the reader: the MSDN-shaped page a published version gets ------------------------------------------
+const read = reader.readerPage({
+	product: 'T3000',
+	version: '13.0',
+	versions: ['13.0', '12.0'],
+	pages: [
+		{ href: 'index.html', title: 'T3000 documentation' },
+		{ href: 'guide/commissioning.html', title: 'Commissioning the T3000' },
+		{ href: 'guide/verify.html', title: 'Verify the reset' },
+	],
+});
+
+check('the reader has the three columns of a documentation site', () => {
+	assert.match(read, /class="nav"[^>]*aria-label="Documentation"/);
+	assert.match(read, /<main class="main">/);
+	assert.match(read, /class="toc"[^>]*aria-label="In this article"/);
+});
+
+check('the navigation lists every page, in the order it was given', () => {
+	const links = [...read.matchAll(/class="nav__link[^"]*" href="([^"]+)"/g)].map((match) => match[1]);
+	assert.deepEqual(links, ['index.html', 'guide/commissioning.html', 'guide/verify.html']);
+});
+
+check('the first page is the one the reader opens, and it is marked in the navigation', () => {
+	assert.match(read, /<iframe class="page" id="page" title="Page" src="index\.html">/);
+	assert.match(read, /class="nav__link is-active" href="index\.html"/);
+});
+
+check('the breadcrumb starts on the product, not on an empty trail', () => {
+	assert.match(read, /<b>T3000<\/b> › T3000 documentation/);
+});
+
+check('every published version is in the picker, and the current one is chosen', () => {
+	assert.match(read, /<option value="13\.0" selected>13\.0<\/option>/);
+	assert.match(read, /<option value="12\.0">12\.0<\/option>/);
+});
+
+check('the article is framed, so the generator keeps rendering its own pages', () => {
+	assert.match(read, /<iframe/);
+	assert.ok(!/class="article/.test(read), 'the reader drew the article itself');
+});
+
+check('a title from a folder cannot inject markup', () => {
+	const hostile = reader.readerPage({
+		product: '<script>alert(1)</script>',
+		version: '1.0',
+		versions: ['1.0'],
+		pages: [{ href: 'a.html', title: '</script><script>alert(2)</script>' }],
+	});
+	assert.ok(!hostile.includes('<script>alert(1)</script>'), 'a product title was written as markup');
+	assert.ok(!hostile.includes('</script><script>alert(2)'), 'a page title closed the payload block');
+	assert.match(hostile, /&lt;\/script&gt;/);
+});
+
+check('a version with no pages still renders, and says so', () => {
+	const empty = reader.readerPage({ product: 'SDK', version: '1.0', versions: ['1.0'], pages: [] });
+	assert.match(empty, /This version has no pages yet\./);
+	assert.match(empty, /title="Page" src="about:blank"/);
+});
+
+check('a page can be linked to: the hash carries the page, not a position', () => {
+	assert.match(read, /history\.replaceState\(null, '', '#' \+ encodeURIComponent\(page\.href\)\)/);
+	assert.match(read, /decodeURIComponent\(location\.hash\.replace\(\/\^#\/, ''\)\)/);
+});
+
+console.log(failures === 0 ? '\nTHE PORTAL PAGE AND THE READER ARE CORRECT' : `\n${failures} PROBLEM(S)`);
 process.exitCode = failures === 0 ? 0 : 1;

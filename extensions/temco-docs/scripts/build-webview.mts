@@ -1,17 +1,17 @@
 // The one bundler step this extension has.
 //
 // `tsc` produces the extension host code in `out/`; it cannot produce a webview bundle, because the editor surfaces
-// are browser code with npm dependencies. This builds those two surfaces into `out/webview/`, beside the extension
-// host code and inside the one directory this repository already treats as build output:
+// are browser code with npm dependencies. This builds each surface into `out/webview/`, beside the extension host
+// code and inside the one directory this repository already treats as build output:
 //
-//   out/webview/tiptap/  the official Tiptap UI Components template, for a Markdown page in Rich mode
 //   out/webview/grid/    Univer's spreadsheet, for a CSV in Grid mode
+//   out/webview/page/    Temco Page, the rich editor for a `.md` page
 //
 // Run by `npm run build-webview`, and again by `vscode:prepublish` so a packaged extension always carries fresh
 // bundles. The output is *not* committed: `out/` is ignored by git, and a committed `.js` would be rejected by the
 // repository's `local/code-no-new-javascript-files` rule. Build it once when working from a source tree.
 //
-// Both bundles are `iife` on purpose: a webview has no module loader, and there is no CDN to fall back on.
+// Every bundle is `iife` on purpose: a webview has no module loader, and there is no CDN to fall back on.
 import { rm, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,17 +23,11 @@ const here = fileURLToPath(new URL('..', import.meta.url));
 /** Where `src/webviewText.ts` and `src/gridEditor.ts` look for their bundles. Keep the three in step. */
 const output = join(here, 'out', 'webview');
 
-/** The two surfaces, by the folder each writes into. */
+/** The surfaces, by the folder each writes into. */
 const SURFACES = [
-	{ name: 'tiptap', entry: join(here, 'webview', 'tiptap', 'main.tsx') },
 	{ name: 'grid', entry: join(here, 'webview', 'grid.ts') },
+	{ name: 'page', entry: join(here, 'webview', 'page', 'main.tsx') },
 ];
-
-/**
- * `@/` is the alias the Tiptap templates are written against — they expect to sit in a Next.js `src/`. It is declared as
- * a TypeScript path so esbuild resolves directories, `index.tsx` and extensions the way the template expects.
- */
-const aliasTsconfig = join(here, 'webview', 'tiptap.tiptap-tsconfig.json');
 
 /** esbuild has no Sass; this compiles a `.scss` import into CSS the bundle can carry. */
 const scss = {
@@ -86,8 +80,6 @@ for (const surface of SURFACES) {
 	await rm(outdir, { recursive: true, force: true });
 	await build({
 		...shared,
-		// Only the Tiptap surface is written against the `@/` alias.
-		...(surface.name === 'tiptap' ? { tsconfig: aliasTsconfig } : {}),
 		entryPoints: { [surface.name]: surface.entry },
 		outdir,
 	});
