@@ -12,6 +12,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 
 import { execFile } from 'child_process';
+import { statSync } from 'fs';
 import { promises as fs } from 'fs';
 import * as os from 'os';
 import { promisify } from 'util';
@@ -53,6 +54,23 @@ function actionOf(value: unknown): PageAction | undefined {
  */
 export function webviewAssets(extensionUri: vscode.Uri, assets: string): vscode.Uri {
 	return vscode.Uri.joinPath(extensionUri, 'out', 'webview', assets);
+}
+
+/**
+ * A bundle URL, addressed by its own modification time.
+ *
+ * The webview's renderer caches a stylesheet or a script by its URL, so a rebuilt bundle kept the old address and the
+ * editor kept drawing the old surface until the whole window was reloaded — which, from the outside, looks exactly like
+ * "the change did nothing". The stamp is the file rather than a version number, so any rebuild is a new URL and any
+ * rebuild is visible on the next load of the tab.
+ */
+function stamped(uri: vscode.Uri): string {
+	const address = uri.toString(true);
+	try {
+		return `${address}${address.includes('?') ? '&' : '?'}v=${Math.round(statSync(uri.fsPath).mtimeMs)}`;
+	} catch {
+		return address;
+	}
 }
 
 /**
@@ -453,8 +471,8 @@ export abstract class WebviewTextEditor implements vscode.CustomTextEditorProvid
 
 	private html(document: vscode.TextDocument, webview: vscode.Webview): string {
 		const base = this.bundleRoot();
-		const script = webview.asWebviewUri(vscode.Uri.joinPath(base, `${this.assets}.js`));
-		const style = webview.asWebviewUri(vscode.Uri.joinPath(base, `${this.assets}.css`));
+		const script = stamped(webview.asWebviewUri(vscode.Uri.joinPath(base, `${this.assets}.js`)));
+		const style = stamped(webview.asWebviewUri(vscode.Uri.joinPath(base, `${this.assets}.css`)));
 		const page = `${webview.asWebviewUri(vscode.Uri.file(path.dirname(document.uri.fsPath)))}/`;
 		return `<!DOCTYPE html>
 <html lang="en">

@@ -5,7 +5,7 @@
 // code and inside the one directory this repository already treats as build output:
 //
 //   out/webview/grid/    Univer's spreadsheet, for a CSV in Grid mode
-//   out/webview/page/    Temco Page, the rich editor for a `.md` page
+//   out/webview/page/    Temco Editor, the rich editor for a `.md` page
 //
 // Run by `npm run build-webview`, and again by `vscode:prepublish` so a packaged extension always carries fresh
 // bundles. The output is *not* committed: `out/` is ignored by git, and a committed `.js` would be rejected by the

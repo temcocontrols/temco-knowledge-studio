@@ -18,6 +18,8 @@ import { AnnotateDialog } from '../shared/annotate';
 import { FindBar } from '../shared/find';
 import { OutlineList } from '../shared/outline';
 import { fluentTheme } from '../shared/theme';
+import { Dismiss24Regular } from '@fluentui/react-icons';
+import { OUTLINE_WHEN, type HeadingAt } from '../../src/outlineModel';
 import { toHtml, toMarkdown } from '../../src/pageMarkdown';
 import { actionsFor, headingsIn, matchesIn, stateOf, usePageDocument, type Match, type PageActions, type PageState } from './document';
 import { staticNode } from './reading';
@@ -25,11 +27,22 @@ import { PageRibbon, type Tab } from './ribbon';
 
 interface Host {
 	postMessage(message: unknown): void;
+	/** The webview's own storage: what the surface remembers about itself, never about the file. */
+	getState?(): unknown;
+	setState?(state: unknown): void;
 }
 
 declare function acquireVsCodeApi(): Host;
 
 const host = acquireVsCodeApi();
+
+/**
+ * What this surface remembers about itself between being hidden and shown again. Never the document.
+ *
+ * `outline: undefined` is the difference between "never asked" and "asked, and closed": a page with a table of contents
+ * opens its rail the first time, and stays shut for someone who closed it.
+ */
+const saved = (host.getState?.() ?? {}) as { outline?: boolean; collapsed?: string[] };
 
 /** How long an edit rests before the whole page is sent. Long enough to batch typing, short enough to feel saved. */
 const SETTLE_MS = 400;
@@ -103,6 +116,7 @@ const EMPTY: PageState = {
 	canUndo: false,
 	canRedo: false,
 	words: 0,
+	cursor: 0,
 };
 
 function Surface(): React.ReactElement {
@@ -114,8 +128,10 @@ function Surface(): React.ReactElement {
 	const [query, setQuery] = React.useState('');
 	const [found, setFound] = React.useState<Match[]>([]);
 	const [at, setAt] = React.useState(0);
-	const [outlining, setOutlining] = React.useState(false);
-	const [headings, setHeadings] = React.useState<Array<{ level: number; text: string; at: number }>>([]);
+	// The rail, and what it remembers. The page owns the fold state so that hiding and showing the tab keeps it.
+	const [outlining, setOutlining] = React.useState(saved.outline ?? false);
+	const [folded, setFolded] = React.useState<readonly string[]>(saved.collapsed ?? []);
+	const [headings, setHeadings] = React.useState<HeadingAt[]>([]);
 	const [annotating, setAnnotating] = React.useState<string | undefined>(undefined);
 	const [ask, setAsk] = React.useState<{ title: string; accept: (answer: string) => void } | undefined>(undefined);
 	const [draft, setDraft] = React.useState('');
@@ -264,10 +280,57 @@ function Surface(): React.ReactElement {
 			setFound(matchesIn(editor, query));
 		};
 		editor.on('transaction', refresh);
+		// The caret moves without the document changing, and "which section am I in" is a question about the caret.
+		const moved = (): void => setState(stateOf(editor));
+		editor.on('selectionUpdate', moved);
 		return () => {
 			editor.off('transaction', refresh);
+			editor.off('selectionUpdate', moved);
 		};
 	}, [editor, query]);
+
+	/**
+	 * The rail is a preference, not a document property: where it is and what is folded in it are remembered in the
+	 * webview's own state, never written to the file.
+	 */
+	const setOutline = React.useCallback((open: boolean): void => {
+		setOutlining(open);
+		host.setState?.({ outline: open, collapsed: [...folded] });
+	}, [folded]);
+
+	const fold = (key: string): void => {
+		const next = folded.includes(key) ? folded.filter(entry => entry !== key) : [...folded, key];
+		setFolded(next);
+		host.setState?.({ outline: outlining, collapsed: [...next] });
+	};
+
+	// A table of contents is only furniture until there is a page to navigate: the rail opens itself once, for a page that
+	// has three or more headings, and never again for someone who closed it.
+	const asked = React.useRef(saved.outline !== undefined);
+	React.useEffect(() => {
+		if (asked.current || headings.length < OUTLINE_WHEN) {
+			return;
+		}
+		asked.current = true;
+		setOutlining(true);
+	}, [headings.length]);
+
+	/**
+	 * `Ctrl+Alt+O`.
+	 *
+	 * The key is handled here rather than as a host command because the rail is the webview's own state — a command would
+	 * have to be published, bound and posted back to do what this does directly.
+	 */
+	React.useEffect(() => {
+		const onKey = (event: KeyboardEvent): void => {
+			if (event.ctrlKey && event.altKey && !event.shiftKey && event.code === 'KeyO') {
+				event.preventDefault();
+				setOutline(!outlining);
+			}
+		};
+		window.addEventListener('keydown', onKey);
+		return () => window.removeEventListener('keydown', onKey);
+	}, [outlining, setOutline]);
 
 	if (editor === null || actions === undefined) {
 		return <div className="page-surface page-surface--empty">Opening the page…</div>;
@@ -281,6 +344,21 @@ function Surface(): React.ReactElement {
 		setAt(next);
 		const range = found[next];
 		actions.goto(range.from, range.to);
+	};
+
+	/**
+	 * A jump from the outline.
+	 *
+	 * In Read mode there is no editor to put a caret in, so the jump is a scroll to the same heading in the markup — the
+	 * headings are in document order in both, which is what makes the index line up.
+	 */
+	const gotoHeading = (position: number): void => {
+		if (!reading) {
+			actions.goto(position + 1);
+			return;
+		}
+		const index = headings.findIndex(heading => heading.at === position);
+		document.querySelectorAll('.page-surface__doc--reading :is(h1, h2, h3, h4)')[index]?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 	};
 
 	const startAnnotating = (): void => {
@@ -350,7 +428,27 @@ function Surface(): React.ReactElement {
 				{outlining
 					? (
 						<aside className="page-surface__outline" aria-label="Page outline">
-							<OutlineList headings={headings} onGo={position => actions.goto(position + 1)} />
+							<div className="page-surface__outline-head">
+								<span className="page-surface__outline-title">Outline</span>
+								<span className="page-surface__outline-count">{headings.length}</span>
+								<button
+									type="button"
+									className="btn btn--sm btn--ghost btn--icon page-surface__outline-close"
+									aria-label="Close the outline"
+									title="Close the outline (Ctrl+Alt+O)"
+									onClick={() => setOutline(false)}
+								>
+									<Dismiss24Regular />
+								</button>
+							</div>
+							<OutlineList
+								headings={headings}
+								// Read mode has no caret, so there is no section to mark as current.
+								cursor={reading ? undefined : state.cursor}
+								collapsed={new Set(folded)}
+								onCollapse={fold}
+								onGo={gotoHeading}
+							/>
 						</aside>
 					)
 					: null}

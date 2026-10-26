@@ -243,7 +243,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   // The optional surface: a CSV as cells (Grid). Registered here and reached through its own custom editor id, so it
   // cannot take over a file that was opened to be read as text.
   //
-  // Temco Page is the default for `*.md`, and on purpose: it is the authoring surface (design 22). `Open With Text
+  // Temco Editor is the default for `*.md`, and on purpose: it is the authoring surface (design 22). `Open With Text
   // Editor` is one step away, and the file never changes meaning - the editor writes Markdown through the document, so
   // the source and this surface see the same bytes.
   context.subscriptions.push(

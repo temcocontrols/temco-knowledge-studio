@@ -158,7 +158,7 @@ async function pick(actions: readonly Action[]): Promise<void> {
 /**
  * Runs one transform on the editor in front.
  *
- * The transform itself lives in `markdownEdits.ts`, because Temco Page applies the same ones to a
+ * The transform itself lives in `markdownEdits.ts`, because Temco Editor applies the same ones to a
  * `<textarea>` and two copies of "what bold means" would drift. All this adds is the editor: it reads the selection as
  * offsets, and writes back **only the span that actually changed** — so one bold word is one small edit, and `Ctrl+Z`,
  * folding and any other cursor see what they would have seen had the person typed the marks.

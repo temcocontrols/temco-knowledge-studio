@@ -1,7 +1,7 @@
 // One implementation of every Markdown formatting action.
 //
 // There are two editors in this extension and they must produce the *same bytes*: Monaco, behind the
-// `temcoDocs.format.*` commands, and Temco Page's editor. A second copy of "what bold means" would drift
+// `temcoDocs.format.*` commands, and Temco Editor's editor. A second copy of "what bold means" would drift
 // the first time either side was touched, so the action lives here as a pure transform over a document string and a
 // pair of offsets, and each editor only adapts its own idea of a selection to it.
 //

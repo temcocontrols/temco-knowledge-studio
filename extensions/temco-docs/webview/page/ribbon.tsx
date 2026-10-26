@@ -21,9 +21,11 @@ import {
 	Eye24Regular,
 	Image24Regular,
 	List24Regular,
+	LineHorizontal124Regular,
 	MoreHorizontal24Regular,
 	Search24Regular,
 	Settings24Regular,
+	Table24Regular,
 	TextBold24Regular,
 	TextItalic24Regular,
 	TextQuote24Regular,
@@ -35,12 +37,11 @@ import { LinkPopover, ListMenu, StyleMenu } from '../shared/menus';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import type { Mark, PageActions, PageState } from './document';
 
-/** The tabs, in the order a document application puts them. */
-export type Tab = 'home' | 'insert' | 'view';
+/** The tabs. Two, because there are only two kinds of thing here: what writes the page, and what reads or hands it off. */
+export type Tab = 'home' | 'view';
 
 const TABS: ReadonlyArray<{ id: Tab; label: string }> = [
 	{ id: 'home', label: 'Home' },
-	{ id: 'insert', label: 'Insert' },
 	{ id: 'view', label: 'View' },
 ];
 
@@ -97,15 +98,14 @@ export interface RibbonProps {
 /**
  * How much of the bar fits. A narrow editor gets a denser bar rather than a clipped one.
  *
- * There is one paragraph-style control — the style menu names the block the caret is in and sets it — so the bar no longer
- * carries a second row of style buttons beside it. The threshold is measured, not guessed: undo/redo 76 + the marks 215 +
- * the style menu 128 + the list menu 128 + the block group 110, plus the dividers and the padding, is about 700. Below
- * that the block group folds into the `⋯` menu.
+ * Measured, not guessed, at 30 px a control: history 83 + the marks 215 + the style menu 128 + the list menu 128 + the
+ * block group 149 + the insert group 182, plus the five hairlines and the panel's padding, is about 905 — so `full` starts
+ * a little above that. A compact bar keeps nine controls and folds five into `⋯`, which needs about 715.
  */
 export type Density = 'full' | 'compact';
 
 export function densityFor(width: number): Density {
-	return width < 720 ? 'compact' : 'full';
+	return width < 940 ? 'compact' : 'full';
 }
 
 /**
@@ -141,15 +141,65 @@ const MARKS: ReadonlyArray<{ mark: Mark; label: string; glyph: React.ReactElemen
 	{ mark: 'highlight', label: 'Highlight', glyph: <ColorBackground24Regular />, shortcut: 'Ctrl+Shift+H' },
 ];
 
-/** The block commands, declared once: the group draws them, and the `⋯` menu offers the same ones when they do not fit. */
-const BLOCKS: ReadonlyArray<{ key: string; label: string; glyph: React.ReactElement; shortcut?: string; run: (actions: PageActions) => void }> = [
-	{ key: 'quote', label: 'Block quote', glyph: <TextQuote24Regular />, shortcut: 'Ctrl+Shift+B', run: actions => actions.toggleQuote() },
-	{ key: 'code', label: 'Code block', glyph: <Code24Regular />, shortcut: 'Ctrl+Alt+C', run: actions => actions.toggleCodeBlock() },
-	{ key: 'rule', label: 'Horizontal rule', glyph: <span className="page-surface__word">—</span>, run: actions => actions.horizontalRule() },
-];
+/** One control on the bar. */
+interface Item {
+	key: string;
+	label: string;
+	glyph: React.ReactElement;
+	shortcut?: string;
+	run: () => unknown;
+	/** 1 is drawn while there is room; 2 is folded into `⋯` as soon as the bar is compact. */
+	tier: 1 | 2;
+	active?: boolean;
+	disabled?: boolean;
+}
 
-/** What a `⋯` shows: the commands the current width had to hide. */
-function MoreMenu({ actions }: { actions: PageActions }): React.ReactElement {
+/** A group of controls under one hairline, with the control that is not a plain button (the link editor, a menu) first. */
+interface GroupSpec {
+	id: string;
+	lead?: React.ReactElement;
+	items: readonly Item[];
+	/** `end` pushes the group to the right edge — the rail toggle lives there, away from the writing controls. */
+	align?: 'end';
+}
+
+function Group({ lead, items, align }: { lead?: React.ReactElement; items: readonly Item[]; align?: 'end' }): React.ReactElement | null {
+	if (lead === undefined && items.length === 0) {
+		return null;
+	}
+	return (
+		<div className={`ribbon__group${align === 'end' ? ' ribbon__group--end' : ''}`}>
+			{lead}
+			{items.map(item => (
+				<Tool
+					key={item.key}
+					label={item.label}
+					glyph={item.glyph}
+					shortcut={item.shortcut}
+					active={item.active}
+					disabled={item.disabled}
+					run={item.run}
+				/>
+			))}
+		</div>
+	);
+}
+
+/**
+ * What the bar draws at this width, and what it hands to `⋯`.
+ *
+ * Each group declares its controls once, with a tier, so the overflow menu is not a second copy that has to be kept in
+ * step by hand: a compact bar is the same table with the tier-2 rows taken out.
+ */
+function split(items: readonly Item[], density: Density): { drawn: readonly Item[]; folded: readonly Item[] } {
+	if (density === 'full') {
+		return { drawn: items, folded: [] };
+	}
+	return { drawn: items.filter(item => item.tier === 1), folded: items.filter(item => item.tier === 2) };
+}
+
+/** What a `⋯` shows: the controls the current width had to hide. */
+function MoreMenu({ items }: { items: readonly Item[] }): React.ReactElement {
 	return (
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger asChild>
@@ -159,10 +209,10 @@ function MoreMenu({ actions }: { actions: PageActions }): React.ReactElement {
 			</DropdownMenu.Trigger>
 			<DropdownMenu.Portal>
 				<DropdownMenu.Content className="menu" sideOffset={4} align="end">
-					{BLOCKS.map(block => (
-						<DropdownMenu.Item key={block.key} className="menu__item" onSelect={() => block.run(actions)}>
-							<span>{block.label}</span>
-							{block.shortcut === undefined ? null : <span className="menu__hint">{block.shortcut}</span>}
+					{items.map(item => (
+						<DropdownMenu.Item key={item.key} className="menu__item" disabled={item.disabled === true} onSelect={() => item.run()}>
+							<span>{item.label}</span>
+							{item.shortcut === undefined ? null : <span className="menu__hint">{item.shortcut}</span>}
 						</DropdownMenu.Item>
 					))}
 				</DropdownMenu.Content>
@@ -195,6 +245,90 @@ export function PageRibbon(props: RibbonProps): React.ReactElement {
 		document.getElementById(`ribbon-tab-${next.id}`)?.focus();
 	};
 
+	// Everything that writes the page, on one tab: the marks, the block commands and the things you insert are one
+	// activity, and a tab per ~6 controls meant guessing where a control lived. What reads the page or hands it to
+	// another surface is the other tab.
+	const home: GroupSpec[] = [
+		{
+			id: 'history',
+			items: [
+				{ key: 'undo', label: 'Undo', glyph: <ArrowUndo24Regular />, shortcut: 'Ctrl+Z', tier: 1, disabled: !state.canUndo, run: actions.undo },
+				{ key: 'redo', label: 'Redo', glyph: <ArrowClockwise24Regular />, shortcut: 'Ctrl+Y', tier: 1, disabled: !state.canRedo, run: actions.redo },
+			],
+		},
+		{
+			id: 'text',
+			items: MARKS.map(entry => ({
+				key: entry.mark,
+				label: entry.label,
+				glyph: entry.glyph,
+				shortcut: entry.shortcut,
+				tier: 1,
+				active: state.marks[entry.mark],
+				run: () => actions.toggleMark(entry.mark),
+			})),
+		},
+		{ id: 'style', lead: <StyleMenu state={state} actions={actions} />, items: [] },
+		{ id: 'lists', lead: <ListMenu state={state} actions={actions} />, items: [] },
+		{
+			id: 'blocks',
+			items: [
+				{ key: 'quote', label: 'Block quote', glyph: <TextQuote24Regular />, shortcut: 'Ctrl+Shift+B', tier: 1, run: actions.toggleQuote },
+				{ key: 'codeBlock', label: 'Code block', glyph: <Code24Regular />, shortcut: 'Ctrl+Alt+C', tier: 1, run: actions.toggleCodeBlock },
+				{ key: 'rule', label: 'Horizontal rule', glyph: <LineHorizontal124Regular />, tier: 2, run: actions.horizontalRule },
+				{ key: 'table', label: 'Table', glyph: <Table24Regular />, tier: 2, run: actions.insertTable },
+			],
+		},
+		{
+			id: 'insert',
+			lead: <LinkPopover state={state} actions={actions} />,
+			items: [
+				{ key: 'picture', label: 'Picture', glyph: <Image24Regular />, tier: 1, run: () => props.onHostAction('image') },
+				{ key: 'screenshot', label: 'Screenshot', glyph: <Camera24Regular />, tier: 2, run: () => props.onHostAction('capture') },
+				{ key: 'annotate', label: 'Annotate the picture', glyph: <DrawShape24Regular />, tier: 2, disabled: !state.onImage, run: props.onAnnotate },
+				{ key: 'linkPage', label: 'Link to page', glyph: <DocumentLink24Regular />, tier: 2, run: () => props.onHostAction('linkPage') },
+			],
+		},
+		{
+			// The rail is used while writing, so its toggle sits where the writing happens — and at the far right, because it
+			// is about the view of the page, not part of the sentence.
+			id: 'rail',
+			align: 'end',
+			items: [
+				{ key: 'outline', label: 'Outline', glyph: <List24Regular />, shortcut: 'Ctrl+Alt+O', tier: 1, active: props.outlining, run: props.onOutline },
+			],
+		},
+	];
+
+	const view: GroupSpec[] = [
+		{
+			id: 'navigate',
+			items: [
+				{ key: 'find', label: 'Find', glyph: <Search24Regular />, shortcut: 'Ctrl+F', tier: 1, active: props.finding, run: props.onFind },
+				{ key: 'outline', label: 'Outline', glyph: <List24Regular />, tier: 1, active: props.outlining, run: props.onOutline },
+			],
+		},
+		{
+			id: 'read',
+			// Reading a page is not editing one: the same surface, a second engine behind it, and no caret.
+			items: [
+				{ key: 'read', label: reading ? 'Edit the page' : 'Read the page', glyph: <BookOpen24Regular />, tier: 1, active: reading, run: props.onReading },
+			],
+		},
+		{
+			id: 'handoff',
+			items: [
+				{ key: 'preview', label: 'Preview the page', glyph: <Eye24Regular />, shortcut: 'Ctrl+Alt+P', tier: 1, run: () => props.onHostAction('preview') },
+				{ key: 'diff', label: 'Diff with HEAD', glyph: <BranchCompare24Regular />, shortcut: 'Ctrl+Alt+D', tier: 1, run: () => props.onHostAction('diff') },
+				{ key: 'source', label: 'Open the source', glyph: <Code24Regular />, tier: 2, run: () => props.onHostAction('source') },
+				{ key: 'properties', label: 'Page properties', glyph: <Settings24Regular />, tier: 2, run: () => props.onHostAction('properties') },
+			],
+		},
+	];
+
+	const groups = shown === 'home' ? home : view;
+	const folded = groups.flatMap(group => split(group.items, density).folded);
+
 	return (
 		<div className={`ribbon${density === 'full' ? '' : ' is-compact'}`} ref={ref} data-density={density}>
 			<div className="ribbon__tabs" role="tablist" aria-label="Ribbon" onKeyDown={event => onTabKey(event)}>
@@ -217,89 +351,21 @@ export function PageRibbon(props: RibbonProps): React.ReactElement {
 				{reading ? <span className="ribbon__mode">Reading</span> : null}
 			</div>
 
-			{shown === 'home'
-				? (
-					<div className="ribbon__panel" role="tabpanel" id={`ribbon-panel-${shown}`} aria-labelledby={`ribbon-tab-${shown}`} aria-label="Writing">
-						<div className="ribbon__group">
-							<Tool label="Undo" glyph={<ArrowUndo24Regular />} shortcut="Ctrl+Z" disabled={!state.canUndo} run={actions.undo} />
-							<Tool label="Redo" glyph={<ArrowClockwise24Regular />} shortcut="Ctrl+Y" disabled={!state.canRedo} run={actions.redo} />
-						</div>
-						<div className="ribbon__group">
-							{MARKS.map(entry => (
-								<Tool
-									key={entry.mark}
-									label={entry.label}
-									glyph={entry.glyph}
-									shortcut={entry.shortcut}
-									active={state.marks[entry.mark]}
-									run={() => actions.toggleMark(entry.mark)}
-								/>
-							))}
-						</div>
-						<div className="ribbon__group">
-							<StyleMenu state={state} actions={actions} />
-						</div>
-						<div className="ribbon__group">
-							<ListMenu state={state} actions={actions} />
-						</div>
-						{density === 'full'
-							? (
-								<div className="ribbon__group">
-									{BLOCKS.map(block => (
-										<Tool key={block.key} label={block.label} glyph={block.glyph} shortcut={block.shortcut} run={() => block.run(actions)} />
-									))}
-								</div>
-							)
-							: null}
-						{density === 'compact' ? <MoreMenu actions={actions} /> : null}
-					</div>
-				)
-				: shown === 'insert'
-					? (
-						<div className="ribbon__panel" role="tabpanel" id={`ribbon-panel-${shown}`} aria-labelledby={`ribbon-tab-${shown}`} aria-label="Insert">
-							<div className="ribbon__group">
-								<LinkPopover state={state} actions={actions} />
-								<Tool label="Link to page" glyph={<DocumentLink24Regular />} run={() => props.onHostAction('linkPage')} />
-							</div>
-							<div className="ribbon__group">
-								<Tool label="Picture" glyph={<Image24Regular />} run={() => props.onHostAction('image')} />
-								<Tool label="Screenshot" glyph={<Camera24Regular />} run={() => props.onHostAction('capture')} />
-								<Tool
-									label="Annotate the picture"
-									glyph={<DrawShape24Regular />}
-									disabled={!state.onImage}
-									run={props.onAnnotate}
-								/>
-							</div>
-							<div className="ribbon__group">
-								<Tool label="Table" glyph={<span className="page-surface__word">▦</span>} run={actions.insertTable} />
-								<Tool label="Horizontal rule" glyph={<span className="page-surface__word">—</span>} run={actions.horizontalRule} />
-							</div>
-						</div>
-					)
-					: (
-						<div className="ribbon__panel" role="tabpanel" id={`ribbon-panel-${shown}`} aria-labelledby={`ribbon-tab-${shown}`} aria-label="View">
-							<div className="ribbon__group">
-								<Tool label="Find" glyph={<Search24Regular />} shortcut="Ctrl+F" active={props.finding} run={props.onFind} />
-								<Tool label="Outline" glyph={<List24Regular />} active={props.outlining} run={props.onOutline} />
-							</div>
-							<div className="ribbon__group">
-								{/* Reading a page is not editing one: the same surface, a second engine behind it, and no caret. */}
-								<Tool
-									label={reading ? 'Edit the page' : 'Read the page'}
-									glyph={<BookOpen24Regular />}
-									active={reading}
-									run={props.onReading}
-								/>
-							</div>
-							<div className="ribbon__group">
-								<Tool label="Preview the page" glyph={<Eye24Regular />} shortcut="Ctrl+Alt+P" run={() => props.onHostAction('preview')} />
-								<Tool label="Diff with HEAD" glyph={<BranchCompare24Regular />} shortcut="Ctrl+Alt+D" run={() => props.onHostAction('diff')} />
-								<Tool label="Open the source" glyph={<Code24Regular />} run={() => props.onHostAction('source')} />
-								<Tool label="Page properties" glyph={<Settings24Regular />} run={() => props.onHostAction('properties')} />
-							</div>
-						</div>
-					)}
+			<div
+				className="ribbon__panel"
+				role="tabpanel"
+				id={`ribbon-panel-${shown}`}
+				aria-labelledby={`ribbon-tab-${shown}`}
+				aria-label={shown === 'home' ? 'Writing' : 'View'}
+			>
+				{groups.filter(group => group.align !== 'end').map(group => (
+					<Group key={group.id} lead={group.lead} items={split(group.items, density).drawn} />
+				))}
+				{folded.length === 0 ? null : <MoreMenu items={folded} />}
+				{groups.filter(group => group.align === 'end').map(group => (
+					<Group key={group.id} align="end" lead={group.lead} items={split(group.items, density).drawn} />
+				))}
+			</div>
 		</div>
 	);
 }

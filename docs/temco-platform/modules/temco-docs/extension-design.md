@@ -86,11 +86,11 @@ one-word change becomes a whole-file diff. What was missing was never the engine
 | the **Page** pane | `outline.ts`: headings as a nested jump list, plus a word count in the status bar | line, column, encoding and end-of-line are already the status bar's, so nothing repeats them |
 | **Grid** | `gridEditor.ts` + `webview/grid.ts`: a CSV as cells, reached by *Open in the Grid* | the file stays CSV, one row per line, so a one-cell edit stays a one-line diff |
 | **Temco Markdown** | `fluentEditor.ts` + `webview/docs/`: the page as a document on **Fluent UI**, with capture and annotation built in — the **default** for `*.md` | see *The Fluent Markdown surface* below |
-| **Temco Page** | `pageEditor.ts` + `webview/page/`: the same file in the real **Tiptap** editor — *Open With… → Temco Page*, or the tab's menu | see *The rich page* below |
+| **Temco Editor** | `pageEditor.ts` + `webview/page/`: the same file in the real **Tiptap** editor — *Open With… → Temco Editor*, or the tab's menu | see *The rich page* below |
 
 ### One bridge, two surfacesTwo editors over one file is a decision, not an accident: **what you see while editing** is a real choice, and it cannot
 be both. A source-visible editor (`Temco Markdown`) is the only way to be sure `git diff` will show what you did; a
-WYSIWYG editor (`Temco Page`) is the only way to write a table without thinking about pipes. Everything *else* about them
+WYSIWYG editor (`Temco Editor`) is the only way to write a table without thinking about pipes. Everything *else* about them
 is shared, and it is shared in code, not by convention:
 
 | Shared, in `src/webviewText.ts` | Why it cannot be per-surface |
@@ -116,19 +116,28 @@ two would drift.
 
 ### The page's chrome: a document application, not a card
 
-The rich page is arranged the way a document application is, because that is what it is: `Home · Insert · View` at the
-top, groups under each, a sheet on a canvas, and a status strip.
+The rich page is arranged the way a document application is, because that is what it is: `Home · View` at the top,
+groups under each, a sheet on a canvas, and a status strip. Two tabs and not three: there are about twenty controls, and
+the insert ones (link, picture, screenshot, table) are part of writing, so they sit on `Home` beside the marks and the
+block commands. `View` is what reads the page or hands it to another surface. A third tab for six controls was a tab
+nobody visits, and it made every control a guess about which of the two tabs held it.
 
 | Element | Rule | Why |
 |---|---|---|
 | the ribbon | flush to the tab: no border on three sides, no corners, `border-bottom` only | a card floating in a window is a page; a document's ribbon is part of the window |
 | the controls | **30 px icon buttons, 20 px glyphs, 44 px panel**, no group captions | a writing bar should cost as little vertical space as possible; the captions are dropped because a caption under every group is a teaching aid a narrow editor pane cannot afford — the hairline between groups and each control's tooltip carry the same information. Only an icon-only control gets a square (`btn--icon`); a word button keeps its own width, which is what stops two of them drawing on top of each other |
-| density | `full` ≥ 1180 px, `compact` ≥ 720 px, `narrow` below — measured, not guessed | 1030 px is what the gallery needs beside the other groups; below it the bar wrapped onto a second row, so the gallery folds into the Style menu and the hidden commands move behind `⋯` || the sheet | `.page-surface__paper`: **no border, no radius**, on `.page-surface__canvas`, `min-height: calc(100% - 16px)` | a sheet is a sheet; the canvas is a plain scroll container, **not** a flex row — a flex item is stretched to the container's height, which cut the sheet off at the fold and let the rest of the document spill onto the grey |
-| the style gallery | `Normal / Heading 1–3`, each drawn **at the size it applies** | a style is chosen by sight; every entry maps to real Markdown |
+| density | `full` ≥ 940 px, `compact` below — measured, not guessed | 905 px is what the whole `Home` tab needs (83 history + 215 marks + 128 style + 128 lists + 149 blocks + 182 insert + hairline and padding). A compact bar keeps nine controls and folds five into `⋯`. Every group declares its controls **once**, with a tier, and `⋯` is the same table with the tier-2 rows taken out — an overflow menu written by hand is a second copy that drifts |
+| the sheet | `.page-surface__paper`: **no border, no radius**, on `.page-surface__canvas`, `min-height: calc(100% - 16px)` | a sheet is a sheet; the canvas is a plain scroll container, **not** a flex row — a flex item is stretched to the container's height, which cut the sheet off at the fold and let the rest of the document spill onto the grey |
+| one paragraph style | the **Text** menu names the block the caret is in and sets it; there is no second row of `Normal / Heading 1–3` buttons | two controls for one thing made the bar teach two ways to do it, and the buttons pushed the insert group off a narrow pane |
 | zoom | `− 100% +` in the status strip, a view only | it never reaches the file, which is why it can exist at all |
-| Find / Outline | on the **View** tab; the outline is a rail, not a tab | navigating a document is not editing it |
+| Find / Outline | Find is on the **View** tab; the outline is a **rail on the right** with its toggle at the far right of **Home** and `Ctrl+Alt+O` anywhere | navigating a document is not editing it — but a table of contents is *used* while writing, so its toggle lives where the writing is. Right, not left: the rail is the TOC the published page shows, so the structure you edit is the structure you ship |
+| the outline as a tree | nesting from `src/outlineModel.ts` (`scripts/check-outline.mts` proves it): a heading hangs off the nearest one above it with a lower level, **however many levels are skipped**; the row the caret is in is marked current; folding is per row and remembered; the filter keeps the branch that leads to a match | a list of indented headings cannot say "this belongs to that", and a `###` after a `#` is a real document, not an error. The model is pure so the three rules that fail silently — a skipped level, a branch that springs open while typing, a caret with no current row — are checked without a browser |
+| the outline rail | a **fixed 300 px** on the right, never resized and never floated — it is a list of headings, not a pane | a rail that grows with the window keeps taking space from the page it is only supposed to navigate; and a fixed list is `Ctrl+Alt+O` away if it is in the way |
+| a toggle that is on | the glyph takes the **accent**, a hairline ring says pressed — never a filled block | a block of the selection colour reads as a button that was just clicked, not as a mode that is *on*. Bold, italic, Find, Outline and the rail all use it, so an "on" looks the same wherever it is |
+| the rail opens itself | on a page with **three or more** headings, once, and never again for someone who closed it (`outline: undefined` means "never asked") | a TOC of one line is furniture; a rail that reopens itself after being closed is a fight |
 | **Read mode** | View → *Read the page*: a second engine (`reading.tsx`) over the same seam, no caret, no editing tabs | reading a page should not be one keystroke from changing it; and it is the proof that the seam is real |
-| Annotate | on the **Insert** tab, enabled only when a picture is selected, and it **replaces** that picture | the page keeps one figure, not a pair |
+| Link · Picture · Screenshot · Table | the **Home** tab, beside the marks: a link and a picture are what writing a page is made of | Word's `Insert` tab exists for the fifty things Word can insert; six do not earn a tab. The horizontal rule, which used to be in two tabs, is now in one place |
+| Annotate | **Home**, enabled only when a picture is selected, and it **replaces** that picture | the page keeps one figure, not a pair |
 
 What is deliberately **not** in this ribbon: font, font size, text colour, alignment, spacing, margins. Markdown cannot
 hold them, and a control whose effect disappears on the next save is a lie — the same reason the alignment group was
@@ -620,7 +629,7 @@ Three defects were found by running that scenario, and all three are fixed in th
 |---|---|---|
 | the editor tab was there and the area inside it was empty, with no webview at all | the bundle threw at load: `ColorBackground24Regular` was used but never imported, and `webview/page` was not in `tsconfig.webview.json`, so nothing type-checked it | the import is restored and the surface is type-checked like the other one |
 | the page opened blank although the host had sent the text | the host answers `ready` at once, and the answer arrived while Tiptap was still creating its editor, where the handler dropped it | the answer is held in a module-level inbox and handed over when there is an editor to accept it |
-| the scenario clicked an editor that was not on screen | two tabs carried the same file name — the source surface and the page — and a hidden webview still answers a selector | the page is left as the only tab, and "in front" is checked by the editor's own header naming *Temco Page* |
+| the scenario clicked an editor that was not on screen | two tabs carried the same file name — the source surface and the page — and a hidden webview still answers a selector | the page is left as the only tab, and "in front" is checked by the editor's own header naming *Temco Editor* |
 
 The first one is the lesson worth keeping: a webview that fails to start looks exactly like a webview that has not been caught up yet, and neither looks like an error. The `try`/`catch` in `resolveCustomTextEditor` exists because of it — a surface that cannot start now says so in its own tab.
 

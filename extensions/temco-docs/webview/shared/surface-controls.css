@@ -36,47 +36,102 @@
 }
 
 /* --- the outline ---------------------------------------------------------------------------------- */
-.outline__surface {
-	max-height: 60vh;
-	overflow: auto;
-	min-width: 240px;
-	max-width: 420px;
-	padding: 6px;
-}
+/*
+ * A tree of `treeitem`s. The row is the interactive element — it takes the focus ring, the hover and the click — because a
+ * button inside a treeitem is two tab stops where a tree has one, and the arrow keys are the only way a tree should need.
+ */
 
 .outline {
-	margin: 0;
-	padding: 0;
-	list-style: none;
-}
-
-.outline__go {
 	display: flex;
-	gap: 8px;
-	width: 100%;
-	padding: 3px 6px;
-	border: 0;
-	border-radius: var(--radius-sm);
-	background: none;
-	color: inherit;
-	font: inherit;
-	text-align: left;
-	cursor: pointer;
+	flex-direction: column;
+	gap: 6px;
+	min-height: 0;
 }
 
-.outline__go:hover {
+.outline__filter {
+	flex: none;
+	width: 100%;
+	min-width: 0;
+}
+
+.outline__tree {
+	flex: 1 1 auto;
+	margin: 0;
+	padding: 0 0 8px;
+	list-style: none;
+	overflow: auto;
+	min-height: 0;
+}
+
+.outline__row {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	min-height: 24px;
+	padding-right: 6px;
+	border-radius: var(--radius-sm);
+	color: var(--fg-muted);
+	cursor: pointer;
+	user-select: none;
+}
+
+.outline__row:hover {
 	background: var(--bg-hover);
 }
 
-.outline__go:focus-visible {
+.outline__row:focus-visible {
 	outline: 1px solid var(--vscode-focusBorder, var(--accent));
+	outline-offset: -1px;
 }
 
-.outline__level {
-	flex: 0 0 auto;
+/* The section the caret is in: the one row that is not muted, and the accent bar that says "here" in a table of contents. */
+.outline__row.is-current {
+	background: color-mix(in srgb, var(--accent) 10%, transparent);
+	color: var(--fg-strong);
+}
+
+.outline__row.is-current::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 3px;
+	bottom: 3px;
+	width: 2px;
+	border-radius: 1px;
+	background: var(--accent);
+}
+
+/* One hairline per level of indent, drawn only under the indent, so a branch reads as a branch. 10 px a level, because the
+   rail is 156 px wide: a 12 px step leaves too little of a heading to read. */
+.outline__row::before {
+	content: '';
+	position: absolute;
+	left: 7px;
+	top: 0;
+	bottom: 0;
+	width: 0;
+	background-image: repeating-linear-gradient(90deg, var(--border) 0 1px, transparent 1px 10px);
+	pointer-events: none;
+}
+
+.outline__row[data-depth='2']::before { width: 10px; }
+.outline__row[data-depth='3']::before { width: 20px; }
+.outline__row[data-depth='4']::before { width: 30px; }
+
+.outline__twisty {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	width: 14px;
+	height: 14px;
 	color: var(--fg-subtle);
-	font-family: var(--font-mono);
-	font-size: var(--fs-xs);
+}
+
+.outline__twisty svg {
+	width: 12px;
+	height: 12px;
 }
 
 .outline__text {
@@ -90,6 +145,7 @@
 	padding: 8px;
 	font-size: var(--fs-sm);
 	color: var(--fg-subtle);
+	text-wrap: pretty;
 }
 
 /* --- the annotation surface ----------------------------------------------------------------------- */

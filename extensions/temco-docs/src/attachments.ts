@@ -1,6 +1,6 @@
 // Where an image lands, and what is recorded about it.
 //
-// Two insert paths write images into a page's `media/`: the Monaco commands in `media.ts`, and Temco Page's
+// Two insert paths write images into a page's `media/`: the Monaco commands in `media.ts`, and Temco Editor's
 // capture and paste. They must agree on the name, the size limit and the record written beside the file, so all three
 // live here once rather than twice — the second copy is what would drift.
 //

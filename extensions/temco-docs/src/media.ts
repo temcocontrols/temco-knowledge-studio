@@ -259,7 +259,7 @@ async function land(deps: MediaDeps, bytes: Uint8Array, source: string, fallback
 		return;
 	}
 
-	// One landing path for every insert: the same naming, the same record, the same width warning as Temco Page.
+	// One landing path for every insert: the same naming, the same record, the same width warning as Temco Editor.
 	const landed = await landImage({
 		pageFsPath: page.uri.fsPath,
 		slug: slugOf(page.title) || slugOf(page.id) || 'screen',

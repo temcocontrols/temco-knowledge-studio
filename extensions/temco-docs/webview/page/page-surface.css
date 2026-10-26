@@ -86,6 +86,12 @@ body {
 	border-left: 1px solid var(--border);
 }
 
+/* The rail toggle sits at the far right: it changes the view of the page, it is not part of the sentence. */
+.page-surface .ribbon__group--end {
+	margin-left: auto;
+	border-left: 1px solid var(--border);
+}
+
 /* Only an icon-only control gets a square. A button with words keeps its own width — forcing 30 px on every `.btn` is
    what made "Preview", "Diff with HEAD" and "Open source" draw on top of each other. */
 .page-surface .ribbon .btn--icon {
@@ -265,17 +271,15 @@ body {
 	color: var(--fg-subtle);
 }
 
-/* A toolbar button that is on: the vocabulary's ghost button, plus the state a toggle needs. */
+/* A toolbar button that is on: the glyph takes the accent, a hairline ring says "pressed". Not a filled block — a toggle
+   is a state, and a block of the selection colour reads as a button that was just clicked rather than a mode that is on. */
 .ribbon .btn.is-on {
-	background: var(--bg-active, var(--bg-hover));
-	color: var(--fg-strong);
+	background: var(--bg-hover);
+	color: var(--accent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
-.page-surface__word {
-	font-size: 11px;
-	font-weight: 600;
-	letter-spacing: 0.02em;
-}
+/* The status strip's own bits. */
 
 .statusbar__spacer {
 	flex: 1 1 auto;
@@ -353,17 +357,68 @@ body {
 	flex: 1 1 auto;
 	min-height: 0;
 	display: flex;
+	position: relative;
 }
 
 .page-surface__canvas {
 	flex: 1 1 auto;
+	/* The sheet can be wider than the pane; the canvas scrolls it. Without this the canvas's own minimum width pushes the
+	   rail out of the window instead of letting the page scroll. */
+	min-width: 0;
 }
 
-/* The outline is a rail, not a tab: the document keeps its width and the list sits beside it. */
+/* The outline rail. It mirrors the table of contents the published page shows — on the right, where a reader finds it — so
+   the structure you edit is the structure you ship. A fixed 216 px: it is a list of headings, not a pane to be dragged, and
+   a rail that grew with the window would keep taking space from the page it is only supposed to navigate. */
 .page-surface__outline {
-	flex: 0 0 260px;
-	overflow: auto;
-	padding: 10px;
+	display: flex;
+	flex-direction: column;
+	/* Pinned four ways on purpose: a flex item's automatic minimum is its content, so a long heading or the filter's
+	   intrinsic width can quietly hold a narrow rail open. Declaring the width is what makes it the width. */
+	flex: 0 0 300px;
+	width: 300px;
+	min-width: 300px;
+	max-width: 300px;
+	min-height: 0;
 	border-left: 1px solid var(--border);
-	background: var(--bg-card);
+	background: var(--vscode-sideBar-background, var(--page-canvas));
+}
+
+.page-surface__outline-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex: none;
+	padding: 4px 4px 4px 10px;
+	border-bottom: 1px solid var(--border);
+}
+
+.page-surface__outline-title {
+	font-size: var(--fs-sm);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--fg-muted);
+}
+
+.page-surface__outline-count {
+	min-width: 18px;
+	padding: 0 5px;
+	border-radius: 999px;
+	background: var(--bg-inset);
+	color: var(--fg-subtle);
+	font-size: var(--fs-xs);
+	font-variant-numeric: tabular-nums;
+	text-align: center;
+}
+
+.page-surface__outline-close {
+	margin-left: auto;
+}
+
+.page-surface__outline > .outline {
+	flex: 1 1 auto;
+	padding: 4px 4px 0;
 }

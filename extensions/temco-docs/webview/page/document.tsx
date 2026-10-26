@@ -54,6 +54,8 @@ export interface PageState {
 	canUndo: boolean;
 	canRedo: boolean;
 	words: number;
+	/** Where the caret is. The outline needs it to say which section the page is being written in. */
+	cursor: number;
 }
 
 /** What the bar can ask the engine to do. Named operations only: no command strings, no chaining. */
@@ -181,6 +183,7 @@ export function stateOf(editor: Editor): PageState {
 		canUndo: editor.can().undo(),
 		canRedo: editor.can().redo(),
 		words: wordsOf(editor),
+		cursor: editor.state.selection.from,
 	};
 }
 
