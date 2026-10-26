@@ -371,10 +371,12 @@ body {
    the structure you edit is the structure you ship. A fixed 216 px: it is a list of headings, not a pane to be dragged, and
    a rail that grew with the window would keep taking space from the page it is only supposed to navigate. */
 .page-surface__outline {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	/* Pinned four ways on purpose: a flex item's automatic minimum is its content, so a long heading or the filter's
-	   intrinsic width can quietly hold a narrow rail open. Declaring the width is what makes it the width. */
+	   intrinsic width can quietly hold a narrow rail open. Declaring the width is what makes it the width. The page sets
+	   the same four from its own state once the rail has been dragged; these are the default it starts from. */
 	flex: 0 0 300px;
 	width: 300px;
 	min-width: 300px;
@@ -382,6 +384,24 @@ body {
 	min-height: 0;
 	border-left: 1px solid var(--border);
 	background: var(--vscode-sideBar-background, var(--page-canvas));
+}
+
+/* The divider that resizes the rail: a strip over the hairline, wide enough to grab and invisible until it is used. */
+.page-surface__outline-grip {
+	position: absolute;
+	left: -3px;
+	top: 0;
+	bottom: 0;
+	width: 6px;
+	z-index: 1;
+	cursor: col-resize;
+	background: transparent;
+}
+
+.page-surface__outline-grip:hover,
+.page-surface__outline-grip:focus-visible {
+	background: var(--accent);
+	outline: none;
 }
 
 .page-surface__outline-head {

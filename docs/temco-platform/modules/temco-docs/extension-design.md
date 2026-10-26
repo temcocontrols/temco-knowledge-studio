@@ -132,7 +132,7 @@ nobody visits, and it made every control a guess about which of the two tabs hel
 | zoom | `− 100% +` in the status strip, a view only | it never reaches the file, which is why it can exist at all |
 | Find / Outline | Find is on the **View** tab; the outline is a **rail on the right** with its toggle at the far right of **Home** and `Ctrl+Alt+O` anywhere | navigating a document is not editing it — but a table of contents is *used* while writing, so its toggle lives where the writing is. Right, not left: the rail is the TOC the published page shows, so the structure you edit is the structure you ship |
 | the outline as a tree | nesting from `src/outlineModel.ts` (`scripts/check-outline.mts` proves it): a heading hangs off the nearest one above it with a lower level, **however many levels are skipped**; the row the caret is in is marked current; folding is per row and remembered; the filter keeps the branch that leads to a match | a list of indented headings cannot say "this belongs to that", and a `###` after a `#` is a real document, not an error. The model is pure so the three rules that fail silently — a skipped level, a branch that springs open while typing, a caret with no current row — are checked without a browser |
-| the outline rail | a **fixed 300 px** on the right, never resized and never floated — it is a list of headings, not a pane | a rail that grows with the window keeps taking space from the page it is only supposed to navigate; and a fixed list is `Ctrl+Alt+O` away if it is in the way |
+| the outline rail | **300 px by default**, docked on the right, **dragged by its divider** (180–560 px, arrow keys too) and remembered in the webview state; never floated | the width is a preference, so it is set by hand once rather than guessed at; the two limits are what stop a drag from eating the page. It is `Ctrl+Alt+O` away if it is in the way |
 | a toggle that is on | the glyph takes the **accent**, a hairline ring says pressed — never a filled block | a block of the selection colour reads as a button that was just clicked, not as a mode that is *on*. Bold, italic, Find, Outline and the rail all use it, so an "on" looks the same wherever it is |
 | the rail opens itself | on a page with **three or more** headings, once, and never again for someone who closed it (`outline: undefined` means "never asked") | a TOC of one line is furniture; a rail that reopens itself after being closed is a fight |
 | **Read mode** | View → *Read the page*: a second engine (`reading.tsx`) over the same seam, no caret, no editing tabs | reading a page should not be one keystroke from changing it; and it is the proof that the seam is real |
@@ -276,6 +276,29 @@ wants the page instead changes one `priority` in `package.json`, or a person pic
 
 The two editors also share one ribbon: `.ribbon` and its groups live in `temco-ui/media/page.css`, so the strip a
 writer recognises in the source surface is the strip in the page, drawn from the same buttons and badges.
+
+### The engine and the design language: both stay
+
+Two questions come back often enough to answer once.
+
+**Tiptap is not the editor; it is the document model.** It owns the schema, the text, the caret, the undo history and the
+HTML — `webview/page/document.tsx`, 315 lines, is the only file in the product that imports `@tiptap/*`. Everything that a
+person sees or presses is ours: `ribbon.tsx` (348 lines), `main.tsx` (509), `outline.tsx`, `find.tsx`, and the round trip
+in `src/pageMarkdown.ts`, which converts HTML ⇄ Markdown with `marked`/`turndown` and has no Tiptap import at all. The
+contract between the two is `PageState` (a snapshot) and `PageActions` (25 named operations), and `reading.tsx` runs the
+same ribbon, outline and status strip behind an implementation with **no editor**, which is the seam being real rather
+than drawn.
+
+Swapping the engine is therefore possible and pointless: it would rewrite those 315 lines, change no button, and re-prove
+the behaviour `check-page` already proves. Tiptap earns its place at roughly a third of the bundle, because a rich-text
+model with tables, task lists, images, marks and undo is not a weekend's work.
+
+**Fluent is not the design language either.** It supplies the **icons** (plain SVGs, no provider needed, five files) and
+**one dialog** — the annotator, ten Fluent components plus the `FluentProvider` that gives it the editor's light or dark
+theme. The ribbon, the menus (Radix, for positioning), the outline tree, the sheet and the status strip are the
+vocabulary's own HTML and CSS. `scripts/check-fluent.mts` fails the build if anything outside `webview/page` and
+`webview/shared` imports it, so a second design language cannot creep in unnoticed. Removing Fluent entirely would mean
+replacing those glyphs and one dialog — worth doing when the annotator next needs a change, not before.
 
 ### What was removed: ONLYOFFICE
 
@@ -834,6 +857,7 @@ trusted.
 | One content library | `scripts/check-fluent.mts` fails if anything outside `webview/docs` imports `@fluentui` — a second Fluent surface is the trigger to extract it, not a stray import |
 | A surface cannot corrupt a file | every webview editor shares `WebviewTextEditor`, which owns the echo guard, the line endings and the single-`WorkspaceEdit` write; a surface only names its bundle, and `scripts/check-grid.mts` proves the CSV round trip keeps the file byte-for-byte when nothing is edited |
 | One meaning per action | every formatting action is a pure transform in `src/markdownEdits.ts`, called by both editors — there is no second copy to drift |
+| The bar cannot teach a key that does nothing | `scripts/check-shortcuts.mts` reads every `shortcut:` the ribbon advertises and traces it to an engine keymap, a `package.json` keybinding or a named shell listener; `Ctrl+F` and `Ctrl+Shift+X` were both taught and unbound when it was written |
 | The page in front is a page, not a text editor | `frontUri()` reads the active tab as well as `activeTextEditor`, because a custom editor has none; without it Properties, the capture target and every row command silently saw nothing |
 | Every image has words, and a version | `landImage()` is the only writer into `media/`; it records the caption and the version the picture depicts, and `check-record` proves a picture with no recorded version is never called stale |
 

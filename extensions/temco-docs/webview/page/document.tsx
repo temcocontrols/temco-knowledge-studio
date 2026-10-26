@@ -22,16 +22,28 @@ import TaskItem from '@tiptap/extension-task-item';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import Highlight from '@tiptap/extension-highlight';
 import Underline from '@tiptap/extension-underline';
+import { Extension } from '@tiptap/core';
 import { common, createLowlight } from 'lowlight';
+import type { HeadingAt } from '../../src/outlineModel';
 
 const lowlight = createLowlight(common);
 
-/** A heading, as the outline needs it: the words, how deep, and where the document puts it. */
-export interface HeadingAt {
-	level: number;
-	text: string;
-	at: number;
-}
+/**
+ * `Ctrl+Shift+X` for strikethrough, because that is the key the bar teaches.
+ *
+ * The engine binds `Mod-Shift-s` for strike and nothing else, so the button's tooltip was naming a key that did nothing.
+ * Either the label or the key had to move; the key moved, because `Ctrl+Shift+S` is "Save As" in every other application
+ * a writer has used. Every other mark's key comes from its own extension, so this one does too rather than from the shell.
+ */
+const STRIKE_KEY = Extension.create({
+	name: 'temcoStrikeKey',
+	addKeyboardShortcuts() {
+		return { 'Mod-Shift-x': () => this.editor.commands.toggleStrike() };
+	},
+});
+
+/** A heading, as the outline needs it: the words, how deep, and where the document puts it. One shape, in `src/`. */
+export type { HeadingAt } from '../../src/outlineModel';
 
 /** A match, as a document position pair. */
 export interface Match {
@@ -303,6 +315,7 @@ function extensions(): Extensions {
 		TaskItem.configure({ nested: true }),
 		CodeBlockLowlight.configure({ lowlight }),
 		Highlight,
+		STRIKE_KEY,
 	];
 }
 

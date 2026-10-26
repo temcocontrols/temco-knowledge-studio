@@ -1041,7 +1041,7 @@
     "activationEvents": null
   },
   "scripts": {
-    "vscode:prepublish": "npm run check-commands && npm run check-fluent && npm run check-record && npm run check-types && npm run compile && npm run check-learn && npm run check-page && npm run check-grid && npm run check-outline && npm run build-webview",
+    "vscode:prepublish": "npm run check-commands && npm run check-fluent && npm run check-record && npm run check-types && npm run compile && npm run check-learn && npm run check-page && npm run check-grid && npm run check-outline && npm run check-shortcuts && npm run build-webview",
     "check-commands": "node --experimental-strip-types scripts/check-commands.mts",
     "check-fluent": "node --experimental-strip-types scripts/check-fluent.mts",
     "check-record": "node --experimental-strip-types scripts/check-record.mts",
@@ -1051,6 +1051,7 @@
     "check-page": "node --experimental-strip-types scripts/check-page.mts",
 		"check-grid": "node --experimental-strip-types scripts/check-grid.mts",
 		"check-outline": "node --experimental-strip-types scripts/check-outline.mts",
+		"check-shortcuts": "node --experimental-strip-types scripts/check-shortcuts.mts",
     "build-webview": "node --experimental-strip-types scripts/build-webview.mts"
   },
   "dependencies": {

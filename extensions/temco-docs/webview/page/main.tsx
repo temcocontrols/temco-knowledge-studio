@@ -42,7 +42,12 @@ const host = acquireVsCodeApi();
  * `outline: undefined` is the difference between "never asked" and "asked, and closed": a page with a table of contents
  * opens its rail the first time, and stays shut for someone who closed it.
  */
-const saved = (host.getState?.() ?? {}) as { outline?: boolean; collapsed?: string[] };
+const saved = (host.getState?.() ?? {}) as { outline?: boolean; collapsed?: string[]; width?: number };
+
+/** The narrowest and widest the rail may be dragged to, and the step the arrow keys move it by. */
+const RAIL_MIN = 180;
+const RAIL_MAX = 560;
+const RAIL_STEP = 16;
 
 /** How long an edit rests before the whole page is sent. Long enough to batch typing, short enough to feel saved. */
 const SETTLE_MS = 400;
@@ -131,6 +136,7 @@ function Surface(): React.ReactElement {
 	// The rail, and what it remembers. The page owns the fold state so that hiding and showing the tab keeps it.
 	const [outlining, setOutlining] = React.useState(saved.outline ?? false);
 	const [folded, setFolded] = React.useState<readonly string[]>(saved.collapsed ?? []);
+	const [railWidth, setRailWidth] = React.useState(saved.width ?? 300);
 	const [headings, setHeadings] = React.useState<HeadingAt[]>([]);
 	const [annotating, setAnnotating] = React.useState<string | undefined>(undefined);
 	const [ask, setAsk] = React.useState<{ title: string; accept: (answer: string) => void } | undefined>(undefined);
@@ -290,18 +296,39 @@ function Surface(): React.ReactElement {
 	}, [editor, query]);
 
 	/**
-	 * The rail is a preference, not a document property: where it is and what is folded in it are remembered in the
-	 * webview's own state, never written to the file.
+	 * The rail is a preference, not a document property: whether it is open, what is folded in it and how wide it is are
+	 * remembered in the webview's own state, never written to the file.
 	 */
+	const remember = (next: { outline: boolean; collapsed: readonly string[]; width: number }): void => {
+		host.setState?.(next);
+	};
+
 	const setOutline = React.useCallback((open: boolean): void => {
 		setOutlining(open);
-		host.setState?.({ outline: open, collapsed: [...folded] });
-	}, [folded]);
+		remember({ outline: open, collapsed: folded, width: railWidth });
+	}, [folded, railWidth]);
 
 	const fold = (key: string): void => {
 		const next = folded.includes(key) ? folded.filter(entry => entry !== key) : [...folded, key];
 		setFolded(next);
-		host.setState?.({ outline: outlining, collapsed: [...next] });
+		remember({ outline: outlining, collapsed: next, width: railWidth });
+	};
+
+	/** How wide the rail may be: clamped here so the drag, the arrow keys and a restored value all obey the same limits. */
+	const widthWithin = (width: number): number => Math.min(Math.max(Math.round(width), RAIL_MIN), RAIL_MAX);
+
+	/**
+	 * The width during a drag.
+	 *
+	 * A pointerup can arrive in the same batch as the last pointermove, so the handler's own `railWidth` may be one event
+	 * behind; the ref is what the drag and its release both read.
+	 */
+	const liveWidth = React.useRef(railWidth);
+	const drag = React.useRef<{ at: number; from: number } | undefined>(undefined);
+
+	const resizeTo = (width: number): void => {
+		liveWidth.current = widthWithin(width);
+		setRailWidth(liveWidth.current);
 	};
 
 	// A table of contents is only furniture until there is a page to navigate: the rail opens itself once, for a page that
@@ -316,21 +343,41 @@ function Surface(): React.ReactElement {
 	}, [headings.length]);
 
 	/**
-	 * `Ctrl+Alt+O`.
+	 * The keys that are about the shell rather than the document: `Ctrl+F` for find, `Ctrl+Alt+O` for the rail, `Escape`
+	 * to close find.
 	 *
-	 * The key is handled here rather than as a host command because the rail is the webview's own state — a command would
-	 * have to be published, bound and posted back to do what this does directly.
+	 * They are handled here rather than as host commands because both are the webview's own state — a command would have to
+	 * be published, bound and posted back to do what this does directly. `Ctrl+F` has no fallback in a custom editor: there
+	 * is no text editor for VS Code's own find to open on, so without this the bar taught a key that did nothing.
 	 */
 	React.useEffect(() => {
 		const onKey = (event: KeyboardEvent): void => {
 			if (event.ctrlKey && event.altKey && !event.shiftKey && event.code === 'KeyO') {
 				event.preventDefault();
 				setOutline(!outlining);
+				return;
+			}
+			if (event.ctrlKey && !event.altKey && !event.shiftKey && event.code === 'KeyF') {
+				event.preventDefault();
+				if (finding) {
+					// Already open: the key re-selects the query rather than doing nothing.
+					document.querySelector<HTMLInputElement>('.find__query')?.select();
+					return;
+				}
+				setFinding(true);
+				return;
+			}
+			// Escape closes find, but not while a question is on screen — that dialog owns its own Escape.
+			if (event.key === 'Escape' && finding && ask === undefined) {
+				event.preventDefault();
+				setFinding(false);
+				setQuery('');
+				setFound([]);
 			}
 		};
 		window.addEventListener('keydown', onKey);
 		return () => window.removeEventListener('keydown', onKey);
-	}, [outlining, setOutline]);
+	}, [outlining, setOutline, finding, ask]);
 
 	if (editor === null || actions === undefined) {
 		return <div className="page-surface page-surface--empty">Opening the page…</div>;
@@ -427,7 +474,53 @@ function Surface(): React.ReactElement {
 				</div>
 				{outlining
 					? (
-						<aside className="page-surface__outline" aria-label="Page outline">
+						<aside
+							className="page-surface__outline"
+							aria-label="Page outline"
+							style={{ flexBasis: railWidth, width: railWidth, minWidth: railWidth, maxWidth: railWidth }}
+						>
+							{/* A real handle, not a hint: dragging it left makes the rail wider, because the rail is on the right.
+							    The arrow keys move it too, so a keyboard can set the width without a mouse. */}
+							<div
+								className="page-surface__outline-grip"
+								role="separator"
+								aria-orientation="vertical"
+								aria-label="Resize the outline"
+								aria-valuemin={RAIL_MIN}
+								aria-valuemax={RAIL_MAX}
+								aria-valuenow={railWidth}
+								tabIndex={0}
+								title="Drag to resize the outline"
+								onPointerDown={event => {
+									event.preventDefault();
+									event.currentTarget.setPointerCapture(event.pointerId);
+									drag.current = { at: event.clientX, from: liveWidth.current };
+								}}
+								onPointerMove={event => {
+									const held = drag.current;
+									if (held === undefined) {
+										return;
+									}
+									resizeTo(held.from + (held.at - event.clientX));
+								}}
+								onPointerUp={event => {
+									if (drag.current === undefined) {
+										return;
+									}
+									drag.current = undefined;
+									event.currentTarget.releasePointerCapture(event.pointerId);
+									remember({ outline: outlining, collapsed: folded, width: liveWidth.current });
+								}}
+								onKeyDown={event => {
+									const step = event.key === 'ArrowLeft' ? RAIL_STEP : event.key === 'ArrowRight' ? -RAIL_STEP : 0;
+									if (step === 0) {
+										return;
+									}
+									event.preventDefault();
+									resizeTo(liveWidth.current + step);
+									remember({ outline: outlining, collapsed: folded, width: liveWidth.current });
+								}}
+							/>
 							<div className="page-surface__outline-head">
 								<span className="page-surface__outline-title">Outline</span>
 								<span className="page-surface__outline-count">{headings.length}</span>
