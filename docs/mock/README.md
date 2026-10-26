@@ -301,6 +301,28 @@ M.views['docs/releases'] = {
 4. Any behaviour is a `data-` attribute — `data-open`, `data-action`, `data-prompt`, `data-toast` — handled in one place in `js/shell.js`. A view never adds a listener.
 5. Icons are `<use href="#i-name">` against the sprite in `index.html`; add a symbol there rather than an image file.
 
+## The Studio mock (real Fluent UI)
+
+A separate, single-file prototype: `studio.html`.
+
+**Status: design reference, not the product.** The documentation editor this prototype was written to prove now
+ships in the extension — `extensions/temco-docs`, the *Temco Markdown* surface — and that is the thing to change,
+run and trust. `studio.html` stays because it is still the fastest place to argue about a layout: it needs no build,
+no extension host and no reload. Do not port from it by copying; read it for the decision, then make the change in
+`webview/docs/`. What it shows beyond the shipped surface (convert, publish queue, history restore, the revision
+graph) is drawn for a module that does not exist yet, and belongs to the design in
+[`../temco-platform/platform-design.md`](../temco-platform/platform-design.md).
+
+It is **not** built from `M.views` — it is a small React 19 app that imports the real `@fluentui/react-components` through an import map, and it *does* things rather than drawing them: editing creates revisions, convert really makes a derived asset, publish really queues jobs that advance, history really restores.
+
+Open it directly, or `python -m http.server` from this folder and go to `/studio.html`. It needs network access for the Fluent modules (esm.sh); with no network it renders an explanation rather than a broken shell.
+
+Why one file: this repository forbids new `.js` files unless they are added to `.eslint-allowed-javascript-files`, so the prototype keeps its module inline in the HTML.
+
+The shipped surface differs from this prototype in two ways worth knowing before reading either: it is a **custom text
+editor** (the file stays the document, so `Ctrl+Z`, the dirty dot and *Diff* are VS Code's own), and it is styled from
+`--vscode-*` variables rather than a fixed Fluent theme, so it follows the window's theme instead of overriding it.
+
 ## The questions this site exists to answer
 
 - **One editor column, or several?** `temco-ui` decides that a surface of ours opens in one group and never splits. I/O Studio and Device Manager are the surfaces that will argue with that rule.

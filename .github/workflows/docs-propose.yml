@@ -1,0 +1,270 @@
+# Docs version proposals.
+#
+# When a release tag lands, the docs still describe the previous version. This workflow finds every
+# place a document or a screenshot claims the old version and opens a PULL REQUEST with the change.
+#
+# It never commits to the default branch and never publishes. An agent proposes; a person approves.
+# The scanner is inline on purpose: this repository forbids new .js/.cjs/.mjs files, and a scanner
+# that lives outside the tree cannot silently rot with it.
+
+name: Docs version proposals
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      from:
+        description: 'Version currently written in the docs'
+        required: true
+        default: '13.0'
+      to:
+        description: 'Version this release introduces'
+        required: true
+        default: '13.1'
+      dry_run:
+        description: 'Report only, do not open a pull request'
+        type: boolean
+        default: false
+      scope:
+        description: 'Folder to scan, relative to the repository root'
+        required: false
+        default: 'docs'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: docs-propose-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  propose:
+    name: Propose version updates
+    runs-on: ubuntu-latest
+    outputs:
+      hits: ${{ steps.scan.outputs.hits }}
+      shots: ${{ steps.scan.outputs.shots }}
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide which versions to compare
+        id: versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            from="${{ inputs.from }}"
+            to="${{ inputs.to }}"
+          else
+            to="${GITHUB_REF_NAME#v}"
+            major="${to%%.*}"
+            rest="${to#*.}"
+            minor="${rest%%.*}"
+            if [ "${minor:-0}" -gt 0 ]; then
+              from="${major}.$((minor - 1))"
+            else
+              from="${major}.0"
+            fi
+          fi
+          if [ -z "$from" ] || [ -z "$to" ]; then
+            echo "::error::Could not decide the version pair (from='$from', to='$to')."
+            exit 1
+          fi
+          echo "from=$from" >> "$GITHUB_OUTPUT"
+          echo "to=$to" >> "$GITHUB_OUTPUT"
+          echo "Comparing $from -> $to"
+
+      - name: Scan for stale version references
+        id: scan
+        shell: bash
+        env:
+          FROM: ${{ steps.versions.outputs.from }}
+          TO: ${{ steps.versions.outputs.to }}
+          ROOT: ${{ github.workspace }}
+          SCOPE: ${{ inputs.scope || 'docs' }}
+          REPORT: ${{ github.workspace }}/docs-proposal.json
+          SUMMARY: ${{ github.workspace }}/docs-proposal.md
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/scan.mjs" <<'SCRIPT'
+          import { readdirSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+          import { join, relative, extname } from 'node:path';
+
+          const root = process.env.ROOT || process.cwd();
+          const from = process.env.FROM;
+          const to = process.env.TO;
+          const apply = process.env.APPLY === '1';
+          const exts = new Set(['.md', '.mdx']);
+          const imageRe = /!\[[^\]]*\]\([^)]+\)/;
+
+          if (!from || !to) {
+            console.error('FROM and TO are required');
+            process.exit(2);
+          }
+
+          function walk(dir, out = []) {
+            let entries;
+            try {
+              entries = readdirSync(dir, { withFileTypes: true });
+            } catch (error) {
+              return out;
+            }
+            for (const entry of entries) {
+              if (entry.name === 'node_modules' || entry.name === '.git') { continue; }
+              const path = join(dir, entry.name);
+              if (entry.isDirectory()) { walk(path, out); }
+              else if (exts.has(extname(entry.name))) { out.push(path); }
+            }
+            return out;
+          }
+
+          const files = walk(join(root, process.env.SCOPE || 'docs'));
+          const results = [];
+
+          for (const file of files) {
+            const text = readFileSync(file, 'utf8');
+            if (!text.includes(from)) { continue; }
+            const lines = text.split('\n');
+            const hits = [];
+            let shots = 0;
+            lines.forEach((line, index) => {
+              if (!line.includes(from)) { return; }
+              hits.push({ line: index + 1, text: line.trim().slice(0, 200) });
+              if (imageRe.test(line)) { shots += 1; }
+            });
+            results.push({ path: relative(root, file).split('\\').join('/'), hits, shots });
+            if (apply) { writeFileSync(file, text.split(from).join(to)); }
+          }
+
+          const hitCount = results.reduce((n, r) => n + r.hits.length, 0);
+          const shotCount = results.reduce((n, r) => n + r.shots, 0);
+          const report = { from, to, applied: apply, files: results.length, hits: hitCount, shots: shotCount, results };
+
+          writeFileSync(process.env.REPORT || 'docs-proposal.json', JSON.stringify(report, null, 2));
+
+          const summary = [
+            `### Docs still describe ${from}`,
+            '',
+            `${results.length} file(s), ${hitCount} line(s), ${shotCount} screenshot reference(s).`,
+            '',
+            '| File | Lines | Screenshot refs |',
+            '|---|---|---|',
+            ...results.map((r) => `| \`${r.path}\` | ${r.hits.length} | ${r.shots} |`),
+            '',
+            '#### Evidence',
+            '',
+            ...results.flatMap((r) => [
+              `**${r.path}**`,
+              '',
+              '```',
+              ...r.hits.slice(0, 8).map((h) => `L${h.line}: ${h.text}`),
+              '```',
+              ''
+            ]),
+            '> Replacing a version string is not the same as re-reading the page. Review each hunk,',
+            '> and re-capture any screenshot that shows the old version before approving.'
+          ].join('\n');
+          writeFileSync(process.env.SUMMARY || 'docs-proposal.md', summary);
+
+          console.log(`docs-proposal: ${results.length} file(s), ${hitCount} hit(s), ${shotCount} screenshot ref(s) ${apply ? '(applied)' : '(report only)'}`);
+          for (const r of results) { for (const h of r.hits.slice(0, 3)) { console.log(`  ${r.path}:${h.line}  ${h.text}`); } }
+
+          if (process.env.GITHUB_OUTPUT) {
+            appendFileSync(process.env.GITHUB_OUTPUT, `files=${results.length}\nhits=${hitCount}\nshots=${shotCount}\n`);
+          }
+          SCRIPT
+          node "$RUNNER_TEMP/scan.mjs"
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-proposal
+          path: |
+            docs-proposal.json
+            docs-proposal.md
+          if-no-files-found: ignore
+
+      - name: Summarise on the run page
+        if: always()
+        shell: bash
+        run: |
+          if [ -f docs-proposal.md ]; then cat docs-proposal.md >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Apply the replacements to a branch
+        if: ${{ steps.scan.outputs.hits != '0' }}
+        shell: bash
+        env:
+          FROM: ${{ steps.versions.outputs.from }}
+          TO: ${{ steps.versions.outputs.to }}
+          ROOT: ${{ github.workspace }}
+          SCOPE: ${{ inputs.scope || 'docs' }}
+          REPORT: ${{ github.workspace }}/docs-proposal.json
+          SUMMARY: ${{ github.workspace }}/docs-proposal.md
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/apply.mjs" <<'SCRIPT'
+          import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+          import { join, extname } from 'node:path';
+          const root = process.env.ROOT;
+          const from = process.env.FROM;
+          const to = process.env.TO;
+          const exts = new Set(['.md', '.mdx']);
+          function walk(dir, out = []) {
+            for (const entry of readdirSync(dir, { withFileTypes: true })) {
+              if (entry.name === 'node_modules' || entry.name === '.git') { continue; }
+              const path = join(dir, entry.name);
+              if (entry.isDirectory()) { walk(path, out); }
+              else if (exts.has(extname(entry.name))) { out.push(path); }
+            }
+            return out;
+          }
+          let changed = 0;
+          for (const file of walk(join(root, process.env.SCOPE || 'docs'))) {
+            const text = readFileSync(file, 'utf8');
+            if (!text.includes(from)) { continue; }
+            writeFileSync(file, text.split(from).join(to));
+            changed += 1;
+          }
+          console.log(`rewrote ${changed} file(s)`);
+          SCRIPT
+          node "$RUNNER_TEMP/apply.mjs"
+
+      - name: Open a pull request
+        if: ${{ steps.scan.outputs.hits != '0' && (github.event_name == 'push' || inputs.dry_run != true) }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FROM: ${{ steps.versions.outputs.from }}
+          TO: ${{ steps.versions.outputs.to }}
+        run: |
+          set -euo pipefail
+          branch="docs/version-${TO}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add -A docs
+          if git diff --cached --quiet; then
+            echo "::notice::No file changed after replacement; nothing to propose."
+            exit 0
+          fi
+          git commit -m "docs: propose ${FROM} -> ${TO} updates"
+          git push --force-with-lease origin "$branch"
+          if gh pr view "$branch" --json number >/dev/null 2>&1; then
+            echo "::notice::A pull request for $branch already exists; it was updated in place."
+            exit 0
+          fi
+          gh pr create \
+            --title "Docs: update version references ${FROM} -> ${TO}" \
+            --body-file docs-proposal.md \
+            --base "${{ github.event.repository.default_branch }}" \
+            --head "$branch" \
+            --draft
+          echo "::notice::Proposal opened as a DRAFT pull request. Publication stays a human decision."

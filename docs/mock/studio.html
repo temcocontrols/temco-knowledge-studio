@@ -1,0 +1,1899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Temco Studio — Fluent UI prototype</title>
+<meta name="description" content="A working prototype of the Temco Platform document studio, built with real Fluent UI, on route R4 (no office engine).">
+<style>
+	* { box-sizing: border-box; }
+	html, body, #root { height: 100%; margin: 0; }
+	/* FluentProvider renders its own div; without this the shell collapses. */
+	#root > div { height: 100%; }
+	body {
+		font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+		font-size: 13px;
+	}
+	.app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+	.topbar {
+		display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+		border-bottom: 1px solid var(--colorNeutralStroke2);
+		background: var(--colorNeutralBackground2);
+	}
+	.body { display: grid; grid-template-columns: 44px 276px minmax(0, 1fr) 324px; min-height: 0; }
+	.body--noaside { grid-template-columns: 44px 276px minmax(0, 1fr); }
+	.rail {
+		display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0;
+		background: var(--colorNeutralBackground2);
+		border-right: 1px solid var(--colorNeutralStroke2);
+	}
+	.side {
+		min-height: 0; overflow: auto;
+		background: var(--colorNeutralBackground2);
+		border-right: 1px solid var(--colorNeutralStroke2);
+	}
+	.main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+	.aside {
+		min-height: 0; overflow: auto; padding: 8px;
+		background: var(--colorNeutralBackground2);
+		border-left: 1px solid var(--colorNeutralStroke2);
+	}
+	.content { flex: 1; min-height: 0; overflow: auto; }
+	.statusbar {
+		display: flex; align-items: center; gap: 14px; padding: 2px 10px; font-size: 11px;
+		background: var(--colorNeutralBackground2);
+		border-top: 1px solid var(--colorNeutralStroke2);
+		color: var(--colorNeutralForeground2);
+	}
+	.tabs {
+		display: flex; gap: 2px; padding: 4px 6px 0; overflow-x: auto;
+		border-bottom: 1px solid var(--colorNeutralStroke2);
+	}
+	.tab {
+		display: flex; align-items: center; gap: 6px; padding: 4px 8px;
+		border: 1px solid transparent; border-bottom: none; border-radius: 4px 4px 0 0;
+		font-size: 12px; white-space: nowrap; cursor: pointer;
+		color: var(--colorNeutralForeground2);
+	}
+	.tab:hover { background: var(--colorNeutralBackground1Hover); }
+	.tab--active {
+		background: var(--colorNeutralBackground1);
+		border-color: var(--colorNeutralStroke2);
+		color: var(--colorNeutralForeground1);
+	}
+	.node {
+		display: flex; align-items: center; gap: 4px; height: 24px; padding: 0 6px;
+		font-size: 12px; white-space: nowrap; cursor: pointer; user-select: none;
+	}
+	.node:hover { background: var(--colorNeutralBackground1Hover); }
+	.node--selected { background: var(--colorNeutralBackground1Selected); }
+	.node__twist { width: 14px; text-align: center; opacity: .65; font-size: 10px; }
+	.node__meta { margin-left: auto; font-size: 10px; color: var(--colorNeutralForeground3); }
+
+	.page { padding: 16px 20px 48px; max-width: 1040px; }
+	.page__head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+	.page__title { margin: 0; font-size: 20px; font-weight: 600; }
+	.page__desc { margin: 4px 0 0; color: var(--colorNeutralForeground3); font-size: 12px; max-width: 62ch; }
+	.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
+	.stack { display: flex; flex-direction: column; gap: 10px; }
+	.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+	.spacer { flex: 1 1 auto; }
+
+	.surface { display: flex; flex-direction: column; gap: 10px; padding: 10px; min-height: 0; }
+	.chrome {
+		display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+		border: 1px solid var(--colorNeutralStroke2); border-radius: 6px;
+		background: var(--colorNeutralBackground2);
+	}
+	.chrome__name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.paper {
+		max-width: 680px; margin: 0 auto; padding: 32px 40px;
+		background: #fff; color: #1a1a1a; border-radius: 2px;
+		box-shadow: 0 2px 10px rgba(0, 0, 0, .35); font-size: 13px; line-height: 1.65;
+	}
+	.paper h1 { margin: 0 0 4px; font-size: 20px; }
+	.paper h2 { margin: 20px 0 6px; font-size: 15px; }
+	.paper h3 { margin: 16px 0 4px; font-size: 13px; }
+	.paper p { margin: 0 0 10px; }
+	.paper ul, .paper ol { margin: 0 0 10px 18px; }
+	.paper code { padding: 1px 4px; background: #f1f1f1; border-radius: 3px; font-family: Consolas, monospace; font-size: 12px; }
+	.paper table { width: 100%; border-collapse: collapse; margin: 0 0 12px; font-size: 12px; }
+	.paper th, .paper td { padding: 4px 8px; border: 1px solid #d0d0d0; text-align: left; }
+	.paper th { background: #f4f4f4; font-weight: 600; }
+	.paper blockquote { margin: 0 0 10px; padding-left: 10px; border-left: 3px solid #d0d0d0; color: #444; }
+	.paper .muted { margin: 0; color: #6b6b6b; font-size: 11px; }
+	.paper .missing { padding: 10px; border: 1px dashed #c8a24a; background: #fdf7e7; font-size: 12px; }
+
+	.split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; min-height: 0; flex: 1; }
+	.pane { min-height: 0; overflow: auto; border: 1px solid var(--colorNeutralStroke2); border-radius: 6px; background: var(--colorNeutralBackground2); }
+	.pane--src { padding: 8px; }
+	.rev, .job {
+		display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-size: 12px;
+		border-bottom: 1px solid var(--colorNeutralStroke3);
+	}
+	.rev__n { width: 42px; font-variant-numeric: tabular-nums; color: var(--colorNeutralForeground3); }
+	.rev__body { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.job__state { width: 96px; }
+	.job__bar { width: 110px; }
+	.mono { font-family: Consolas, 'Cascadia Mono', monospace; font-size: 11px; }
+	.empty { padding: 24px; text-align: center; color: var(--colorNeutralForeground3); font-size: 12px; }
+	.fatal { padding: 32px; max-width: 640px; margin: 40px auto; }
+	.fatal h1 { font-size: 18px; margin: 0 0 8px; }
+	.fatal code { background: rgba(255,255,255,.08); padding: 2px 5px; border-radius: 3px; }
+
+	/* screenshots in a document */
+	.paper .shot { margin: 0 0 14px; }
+	.paper .shot img { display: block; max-width: 100%; border: 1px solid #d7d7d7; border-radius: 4px; }
+	.paper .shot figcaption { margin-top: 4px; font-size: 11px; color: #666; }
+	.paper .shot--stale img { outline: 2px solid #d99b2b; outline-offset: 1px; }
+	.paper .stale { color: #a86b00; font-weight: 600; }
+
+	.editor-toolbar {
+		display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 8px;
+		border: 1px solid var(--colorNeutralStroke2); border-radius: 6px;
+		background: var(--colorNeutralBackground2);
+	}
+	.editor-toolbar__hint { margin-left: auto; font-size: 11px; color: var(--colorNeutralForeground3); }
+
+	.anno { display: flex; flex-direction: column; gap: 10px; }
+	.anno__tools { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+	.anno__canvas {
+		display: flex; justify-content: center; max-height: 58vh; overflow: auto;
+		background: #0b0f14; border: 1px solid var(--colorNeutralStroke2); border-radius: 6px;
+	}
+	.anno__canvas canvas { display: block; max-width: 100%; cursor: crosshair; }
+
+	.proposal { padding: 6px 0; border-bottom: 1px solid var(--colorNeutralStroke3); }
+	.proposal pre {
+		margin: 4px 0 0; padding: 6px 8px; max-height: 130px; overflow: auto;
+		background: var(--colorNeutralBackground3); border-radius: 4px; font-size: 11px;
+	}
+	.proposal .add { color: #4ea34e; }
+	.proposal .del { color: #c05050; }
+</style>
+<script type="importmap">
+{
+	"imports": {
+		"react": "https://esm.sh/react@19?bundle",
+		"react/jsx-runtime": "https://esm.sh/react@19/jsx-runtime?bundle",
+		"react-dom": "https://esm.sh/react-dom@19?bundle&external=react",
+		"react-dom/client": "https://esm.sh/react-dom@19/client?bundle&external=react",
+		"htm": "https://esm.sh/htm@3?bundle",
+		"@fluentui/react-icons": "https://esm.sh/@fluentui/react-icons@2?bundle&external=react",
+		"@fluentui/react-components": "https://esm.sh/@fluentui/react-components@9?external=react,react-dom"
+	}
+}
+</script>
+</head>
+<body>
+<div id="root"></div>
+<script>
+	setTimeout(function () {
+		if (!window.__studioReady) {
+			document.getElementById('root').innerHTML =
+				'<div class="fatal"><h1>The Fluent modules did not load</h1>' +
+				'<p>This prototype imports React and <code>@fluentui/react-components</code> from esm.sh through an import map, so the first load needs network access.</p>' +
+				'<p>Offline? Serve this folder and allow <code>https://esm.sh</code>, or vendor the modules and change the import map at the top of this file.</p></div>';
+		}
+	}, 25000);
+</script>
+<script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import htmModule from 'htm';
+import {
+	FluentProvider, webLightTheme, webDarkTheme,
+	Button, Input, Textarea, Badge, Divider, ProgressBar,
+	MessageBar, MessageBarBody, MessageBarTitle,
+	Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent, DialogActions,
+	Switch, TabList, Tab, Tooltip, Text
+} from '@fluentui/react-components';
+import {
+	Home24Regular, Folder24Regular, Search24Regular, ArrowUpload24Regular, Tag24Regular,
+	Settings24Regular, Document24Regular, History24Regular, Save24Regular, Edit24Regular,
+	ArrowSync24Regular, Info24Regular, Checkmark24Regular, Camera24Regular, Image24Regular
+} from '@fluentui/react-icons';
+
+const html = htmModule.bind(React.createElement);
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+/* ------------------------------------------------------------------ seed */
+
+const DOC_BODY = [
+	'# Commissioning the T3000',
+	'',
+	'T3000 · guide · applies to firmware 13.0 and later',
+	'',
+	'## Before you start',
+	'',
+	'The controller ships with inputs disabled. You need a 24 V supply, a BACnet',
+	'router on the same subnet, and the T3000 app at 13.0 or later.',
+	'',
+	'## Wiring',
+	'',
+	'1. Connect power to terminals `24V` and `GND`.',
+	'2. Wire AI1 to the sensor; the range is 0-10 V.',
+	'3. Terminate the RS-485 pair at both ends.',
+	'',
+	'## Input ranges',
+	'',
+	'| Input | Range | Default |',
+	'|---|---|---|',
+	'| AI1 | 0-10 V | disabled |',
+	'| AI2 | 0-20 mA | disabled |',
+	'| DI1 | dry contact | enabled |',
+	'',
+	'> If a point reads a fixed value, check the terminal before the schedule.',
+	'',
+	'## Verifying the commission',
+	'',
+	'Open the device list, poll once, and confirm every point reads a plausible',
+	'value before you leave site.',
+	'',
+	'![Device list after reset](att:IMG-1)',
+	''
+].join('\n');
+
+const MD_BODY = [
+	'# BACnet Router Guide',
+	'',
+	'Cloud · guide · applies to router firmware 2.4',
+	'',
+	'## Why a router',
+	'',
+	'A router joins two networks that do not share a datalink. The T3000 speaks',
+	'MSTP over RS-485; the building speaks IP.',
+	'',
+	'## Addressing',
+	'',
+	'- Device instance must be unique across both networks.',
+	'- Network number 0 is reserved. Never assign it.',
+	'- Keep the router on the same subnet as the T3000.',
+	'',
+	'## Check list',
+	'',
+	'1. Ping the router.',
+	'2. Poll the device list once.',
+	'3. Confirm the point count matches the schedule.'
+].join('\n');
+
+function seed() {
+	const t = (minutesAgo) => new Date(Date.now() - minutesAgo * 60000).toISOString();
+	return {
+		v: 2,
+		nextAsset: 8900,
+		nextJob: 1,
+		attachments: [
+			{
+				id: 'IMG-1',
+				caption: 'Device list after reset',
+				appliesTo: '13.0',
+				stale: false,
+				at: t(150),
+				dataUrl: 'data:image/svg+xml;utf8,' + encodeURIComponent(
+					"<svg xmlns='http://www.w3.org/2000/svg' width='520' height='196'>" +
+					"<rect width='520' height='196' rx='8' fill='#0b0f14'/>" +
+					"<rect width='520' height='26' rx='8' fill='#1b2430'/>" +
+					"<circle cx='16' cy='13' r='4' fill='#ff5f57'/><circle cx='31' cy='13' r='4' fill='#febc2e'/><circle cx='46' cy='13' r='4' fill='#28c840'/>" +
+					"<text x='14' y='56' fill='#8fb4d9' font-family='Consolas,monospace' font-size='12'>T3000 · Device list</text>" +
+					"<text x='14' y='84' fill='#9fe8a0' font-family='Consolas,monospace' font-size='12'>AI1  0.00 V   disabled</text>" +
+					"<text x='14' y='106' fill='#9fe8a0' font-family='Consolas,monospace' font-size='12'>AI2  0.00 V   disabled</text>" +
+					"<text x='14' y='128' fill='#9fe8a0' font-family='Consolas,monospace' font-size='12'>DI1  closed    enabled</text>" +
+					"<text x='14' y='164' fill='#6b7a8c' font-family='Consolas,monospace' font-size='11'>polled 1 device · 3 points</text>" +
+					"</svg>"
+				)
+			}
+		],
+		products: [
+			{ id: 'T3000', label: 'T3000', note: 'controller · firmware 13.0' },
+			{ id: 'T3-ESP', label: 'T3-ESP', note: 'expansion · firmware 2.4' },
+			{ id: 'CM5', label: 'CM5', note: 'display · firmware 1.1' }
+		],
+		assets: [
+			{
+				id: 'AS-8812', productId: 'T3000', area: 'guides', title: 'Commissioning',
+				format: 'docx', note: 'applies to firmware 13.0+',
+				current: 3, published: 1, preferredHost: null,
+				revisions: [
+					{ n: 1, at: t(3200), by: 'Ada', source: 'import', body: DOC_BODY },
+					{ n: 2, at: t(900), by: 'Ada', source: 'external', body: DOC_BODY },
+					{ n: 3, at: t(120), by: 'Ada', source: 'external', body: DOC_BODY }
+				]
+			},
+			{
+				id: 'AS-8820', productId: 'T3000', area: 'guides', title: 'BACnet Router Guide',
+				format: 'md', note: 'Cloud · router 2.4',
+				current: 2, published: 2, preferredHost: null,
+				revisions: [
+					{ n: 1, at: t(4000), by: 'Bo', source: 'editor', body: MD_BODY },
+					{ n: 2, at: t(2000), by: 'Bo', source: 'editor', body: MD_BODY }
+				]
+			},
+			{
+				id: 'AS-8830', productId: 'T3000', area: 'release-notes', title: 'Release notes 13.0',
+				format: 'docx', note: 'one page per version',
+				current: 2, published: null, preferredHost: null,
+				revisions: [
+					{ n: 1, at: t(5200), by: 'Bo', source: 'import', body: '# Release notes 13.0\n\n## Fixes\n\n- Polling no longer stalls after 24 h.\n- Schedule export keeps its column order.\n' },
+					{ n: 2, at: t(700), by: 'Bo', source: 'external', body: '# Release notes 13.0\n\n## Fixes\n\n- Polling no longer stalls after 24 h.\n- Schedule export keeps its column order.\n- Router discovery survives a subnet change.\n' }
+				]
+			},
+			{
+				id: 'AS-8840', productId: 'T3000', area: 'troubleshooting', title: 'No comms with router',
+				format: 'md', note: 'symptom → cause → fix',
+				current: 1, published: null, preferredHost: null,
+				revisions: [
+					{ n: 1, at: t(2600), by: 'Ada', source: 'editor', body: '# No comms with router\n\n## Symptom\n\nThe device list is empty after a poll.\n\n## Cause\n\nTermination missing at one end of the RS-485 pair.\n\n## Fix\n\nFit a 120 Ω resistor at both ends, then poll again.\n' }
+				]
+			},
+			{
+				id: 'AS-8850', productId: 'T3-ESP', area: 'references', title: 'Expansion pinout',
+				format: 'md', note: 'terminal map',
+				current: 1, published: 1, preferredHost: null,
+				revisions: [
+					{ n: 1, at: t(6100), by: 'Bo', source: 'import', body: '# Expansion pinout\n\n| Pin | Signal |\n|---|---|\n| 1 | 24 V |\n| 2 | GND |\n| 3 | AI1 |\n' }
+				]
+			}
+		],
+		jobs: [
+			{ id: 'J-1', assetId: 'AS-8820', rev: 2, channel: 'public', state: 'live', progress: 100, at: t(2000), ms: 1800 },
+			{ id: 'J-2', assetId: 'AS-8830', rev: 2, channel: 'internal', state: 'failed', progress: 0, at: t(120), ms: 2100, error: 'converter exited with 1' }
+		]
+	};
+}
+
+/* --------------------------------------------------------------- helpers */
+
+const nowIso = () => new Date().toISOString();
+
+function fmtClock(iso) {
+	const d = new Date(iso);
+	return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+
+function fmtAgo(iso) {
+	const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+	if (minutes < 1) { return 'just now'; }
+	if (minutes < 60) { return minutes + ' min ago'; }
+	const hours = Math.round(minutes / 60);
+	if (hours < 24) { return hours + ' h ago'; }
+	return Math.round(hours / 24) + ' d ago';
+}
+
+const currentRev = (asset) => asset.revisions[asset.revisions.length - 1];
+const revN = (asset, n) => asset.revisions.find((r) => r.n === n) || currentRev(asset);
+const unpublished = (asset) => asset.published === null ? asset.revisions.length - 0 : asset.revisions.filter((r) => r.n > asset.published).length;
+
+/* ------------------------------------------------- markdown → html (small) */
+
+const escapeHtml = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+function inlineMd(text) {
+	return escapeHtml(text)
+		.replace(/`([^`]+)`/g, '<code>$1</code>')
+		.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+		.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+}
+
+function mdToHtml(markdown, attachments) {
+	const lines = String(markdown || '').split('\n');
+	const out = [];
+	let list = null;
+	let fence = false;
+	const closeList = () => { if (list) { out.push('</' + list + '>'); list = null; } };
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
+
+		if (line.trim().startsWith('```')) {
+			if (fence) { out.push('</code></pre>'); fence = false; } else { closeList(); out.push('<pre><code>'); fence = true; }
+			continue;
+		}
+		if (fence) { out.push(escapeHtml(line) + '\n'); continue; }
+
+		if (/^\s*$/.test(line)) { closeList(); continue; }
+
+		const heading = line.match(/^(#{1,3})\s+(.*)$/);
+		if (heading) {
+			closeList();
+			const level = heading[1].length;
+			out.push('<h' + level + '>' + inlineMd(heading[2]) + '</h' + level + '>');
+			continue;
+		}
+
+		if (/^\s*>\s?/.test(line)) {
+			closeList();
+			out.push('<blockquote>' + inlineMd(line.replace(/^\s*>\s?/, '')) + '</blockquote>');
+			continue;
+		}
+
+		const image = line.match(/^!\[([^\]]*)\]\(([^)]+)\)\s*$/);
+		if (image) {
+			closeList();
+			const alt = image[1];
+			const url = image[2].trim();
+			const id = url.startsWith('att:') ? url.slice(4) : null;
+			const att = id && attachments ? attachments[id] : null;
+			const src = att ? att.dataUrl : url;
+			const caption = alt || (att && att.caption) || '';
+			const stale = !!(att && att.stale);
+			out.push(
+				'<figure class="shot' + (stale ? ' shot--stale' : '') + '">' +
+				'<img src="' + escapeHtml(src) + '" alt="' + escapeHtml(caption) + '">' +
+				(caption || stale
+					? '<figcaption>' + escapeHtml(caption) + (stale ? ' <span class="stale">stale — shows ' + escapeHtml(att.appliesTo) + '</span>' : '') + '</figcaption>'
+					: '') +
+				'</figure>'
+			);
+			continue;
+		}
+
+		if (/^\s*[-*]\s+/.test(line)) {
+			if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; }
+			out.push('<li>' + inlineMd(line.replace(/^\s*[-*]\s+/, '')) + '</li>');
+			continue;
+		}
+
+		if (/^\s*\d+\.\s+/.test(line)) {
+			if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; }
+			out.push('<li>' + inlineMd(line.replace(/^\s*\d+\.\s+/, '')) + '</li>');
+			continue;
+		}
+
+		if (/^\s*\|.*\|\s*$/.test(line)) {
+			closeList();
+			const rows = [];
+			while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { rows.push(lines[i]); i++; }
+			i--;
+			const cells = (row) => row.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+			const head = cells(rows[0]);
+			out.push('<table><thead><tr>' + head.map((c) => '<th>' + inlineMd(c) + '</th>').join('') + '</tr></thead><tbody>');
+			for (let r = 2; r < rows.length; r++) {
+				out.push('<tr>' + cells(rows[r]).map((c) => '<td>' + inlineMd(c) + '</td>').join('') + '</tr>');
+			}
+			out.push('</tbody></table>');
+			continue;
+		}
+
+		closeList();
+		out.push('<p>' + inlineMd(line) + '</p>');
+	}
+	closeList();
+	if (fence) { out.push('</code></pre>'); }
+	return out.join('\n');
+}
+
+/* ---------------------------------------------------------------- storage */
+
+const STORAGE_KEY = 'temco.studio.v1';
+
+function loadDb() {
+	try {
+		const raw = window.localStorage.getItem(STORAGE_KEY);
+		if (raw) {
+			const parsed = JSON.parse(raw);
+			if (parsed && parsed.v === 2 && Array.isArray(parsed.assets)) { return parsed; }
+		}
+	} catch (error) { /* a prototype may start with broken storage; the seed is the fallback */ }
+	return seed();
+}
+
+function saveDb(db) {
+	try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); } catch (error) { /* quota is not worth a dialog here */ }
+}
+
+/* ----------------------------------------------------------------- store */
+
+const StudioContext = React.createContext(null);
+const useStudio = () => React.useContext(StudioContext);
+
+function parseHash() {
+	const raw = (window.location.hash || '').replace(/^#\/?/, '');
+	const [name, id] = raw.split('/');
+	if (!name) { return { name: 'home' }; }
+	return { name, id };
+}
+
+function useStudioStore() {
+	const [db, setDb] = useState(loadDb);
+	const [route, setRoute] = useState(parseHash);
+	const [theme, setTheme] = useState('dark');
+	const [selectedId, setSelectedId] = useState('AS-8812');
+	const [aside, setAside] = useState(true);
+	const [toasts, setToasts] = useState([]);
+	const [tabs, setTabs] = useState([]);
+
+	useEffect(() => { saveDb(db); }, [db]);
+
+	useEffect(() => {
+		const onHash = () => setRoute(parseHash());
+		window.addEventListener('hashchange', onHash);
+		return () => window.removeEventListener('hashchange', onHash);
+	}, []);
+
+	/* A deep link to #/doc/<id> is still an open document, so it gets a tab. */
+	useEffect(() => {
+		if (route.name === 'doc' && route.id) {
+			setTabs((list) => list.includes(route.id) ? list : [...list, route.id]);
+			setSelectedId(route.id);
+		}
+	}, [route]);
+
+	/* Jobs advance on their own, so the queue is a queue and not a table of words. */
+	useEffect(() => {
+		const timer = setInterval(() => {
+			setDb((prev) => {
+				let moved = false;
+				const published = {};
+				const jobs = prev.jobs.map((job) => {
+					if (job.state === 'queued') { moved = true; return { ...job, state: 'building', progress: 8 }; }
+					if (job.state === 'building') {
+						moved = true;
+						const progress = Math.min(100, job.progress + 16);
+						if (progress >= 100) {
+							published[job.assetId] = Math.max(published[job.assetId] || 0, job.rev);
+							return { ...job, state: 'live', progress: 100, ms: (job.ms || 1200) };
+						}
+						return { ...job, progress };
+					}
+					return job;
+				});
+				if (!moved) { return prev; }
+				const assets = prev.assets.map((asset) => published[asset.id]
+					? { ...asset, published: Math.max(asset.published || 0, published[asset.id]) }
+					: asset);
+				return { ...prev, jobs, assets };
+			});
+		}, 380);
+		return () => clearInterval(timer);
+	}, []);
+
+	const go = useCallback((name, id) => {
+		const hash = '#/' + name + (id ? '/' + id : '');
+		if (window.location.hash === hash) { setRoute({ name, id }); } else { window.location.hash = hash; }
+	}, []);
+
+	const toast = useCallback((intent, text) => {
+		const id = Math.random().toString(36).slice(2);
+		setToasts((list) => [...list, { id, intent, text }]);
+		setTimeout(() => setToasts((list) => list.filter((t) => t.id !== id)), 4200);
+	}, []);
+
+	const openAsset = useCallback((assetId) => {
+		setSelectedId(assetId);
+		setTabs((list) => list.includes(assetId) ? list : [...list, assetId]);
+		go('doc', assetId);
+	}, [go]);
+
+	const closeTab = useCallback((assetId) => {
+		setTabs((list) => {
+			const next = list.filter((id) => id !== assetId);
+			if (route.name === 'doc' && route.id === assetId) {
+				go(next.length ? 'doc' : 'home', next[next.length - 1]);
+			}
+			return next;
+		});
+	}, [go, route]);
+
+	const assetById = useCallback((id) => db.assets.find((a) => a.id === id), [db.assets]);
+
+	const saveRevision = useCallback((assetId, body, source) => {
+		setDb((prev) => ({
+			...prev,
+			assets: prev.assets.map((asset) => {
+				if (asset.id !== assetId) { return asset; }
+				const latest = currentRev(asset);
+				if (latest.body === body) {
+					toast('info', 'No change — nothing to save.');
+					return asset;
+				}
+				const n = latest.n + 1;
+				return { ...asset, current: n, revisions: [...asset.revisions, { n, at: nowIso(), by: 'You', source: source || 'editor', body }] };
+			})
+		}), []);
+	}, [toast]);
+
+	const restoreRevision = useCallback((assetId, n) => {
+		setDb((prev) => ({
+			...prev,
+			assets: prev.assets.map((asset) => {
+				if (asset.id !== assetId) { return asset; }
+				const source = revN(asset, n);
+				const next = currentRev(asset).n + 1;
+				toast('success', 'Restored rev ' + n + ' as rev ' + next + '.');
+				return { ...asset, current: next, revisions: [...asset.revisions, { n: next, at: nowIso(), by: 'You', source: 'restore', body: source.body }] };
+			})
+		}), []);
+	}, [toast]);
+
+	const convertAsset = useCallback((assetId) => {
+		setDb((prev) => {
+			const source = prev.assets.find((a) => a.id === assetId);
+			if (!source) { return prev; }
+			const id = 'AS-' + prev.nextAsset;
+			const created = {
+				id, productId: source.productId, area: source.area,
+				title: source.title + ' (editable)', format: 'md',
+				note: 'converted from ' + source.id + ' rev ' + currentRev(source).n,
+				current: 1, published: null, preferredHost: 'markdown',
+				derivedFrom: { id: source.id, n: currentRev(source).n },
+				revisions: [{ n: 1, at: nowIso(), by: 'You', source: 'convert', body: currentRev(source).body }]
+			};
+			toast('success', 'Created ' + id + ' — the original is untouched.');
+			return { ...prev, nextAsset: prev.nextAsset + 1, assets: [...prev.assets, created] };
+		}, [toast]);
+	}, [toast]);
+
+	const publish = useCallback((assetIds, channel) => {
+		setDb((prev) => {
+			let nextJob = prev.nextJob;
+			const jobs = [...prev.jobs];
+			for (const assetId of assetIds) {
+				const asset = prev.assets.find((a) => a.id === assetId);
+				if (!asset) { continue; }
+				jobs.push({
+					id: 'J-' + nextJob++, assetId, rev: currentRev(asset).n,
+					channel, state: 'queued', progress: 0, at: nowIso(), ms: 1400 + assetId.length * 10
+				});
+			}
+			toast('success', 'Queued ' + assetIds.length + ' asset' + (assetIds.length === 1 ? '' : 's') + ' on ' + channel + '.');
+			return { ...prev, nextJob, jobs };
+		}, [toast]);
+	}, [toast]);
+
+	const retryJob = useCallback((jobId) => {
+		setDb((prev) => ({
+			...prev,
+			jobs: prev.jobs.map((job) => job.id === jobId && job.state === 'failed'
+				? { ...job, state: 'queued', progress: 0, error: null, at: nowIso() }
+				: job)
+		}), []);
+		toast('info', 'Retrying the revision that failed — not the newest one.');
+	}, [toast]);
+
+	const patchAsset = useCallback((assetId, patch) => {
+		setDb((prev) => ({ ...prev, assets: prev.assets.map((a) => a.id === assetId ? { ...a, ...patch } : a) }));
+	}, []);
+
+	const addAttachment = useCallback((record) => {
+		setDb((prev) => (prev.attachments.some((a) => a.id === record.id)
+			? prev
+			: { ...prev, attachments: [...prev.attachments, { ...record, at: nowIso() }] }));
+	}, []);
+
+	/** A version bump is what makes a screenshot a lie, so it marks them stale. */
+	const applySweep = useCallback((assetIds, from, to) => {
+		setDb((prev) => {
+			const assets = prev.assets.map((asset) => {
+				if (!assetIds.includes(asset.id)) { return asset; }
+				const body = currentRev(asset).body;
+				const next = body.split(from).join(to);
+				if (next === body) { return asset; }
+				const n = currentRev(asset).n + 1;
+				return { ...asset, current: n, revisions: [...asset.revisions, { n, at: nowIso(), by: 'automation', source: 'automation', body: next }] };
+			});
+			const attachments = prev.attachments.map((att) => att.appliesTo === from ? { ...att, stale: true } : att);
+			return { ...prev, assets, attachments };
+		});
+		toast('success', from + ' → ' + to + ' applied to ' + assetIds.length + ' asset' + (assetIds.length === 1 ? '' : 's') + '; screenshots of ' + from + ' are now marked stale.');
+	}, [toast]);
+
+	const attMap = useMemo(
+		() => Object.fromEntries(db.attachments.map((att) => [att.id, att])),
+		[db.attachments]
+	);
+
+	const value = {
+		db, route, theme, setTheme, selectedId, setSelectedId, aside, setAside,
+		toasts, toast, go, tabs, openAsset, closeTab, assetById, attMap,
+		saveRevision, restoreRevision, convertAsset, publish, retryJob, patchAsset,
+		addAttachment, applySweep
+	};
+	return value;
+}
+
+/* ------------------------------------------------------------- components */
+
+function ToastStack({ toasts }) {
+	if (!toasts.length) { return null; }
+	return html`<div style=${{ position: 'fixed', right: 16, bottom: 34, zIndex: 40, display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 380 }}>
+		${toasts.map((t) => html`<${MessageBar} key=${t.id} intent=${t.intent} layout="multiline">
+			<${MessageBarBody}>${t.text}<//>
+		<//>`)}
+	</div>`;
+}
+
+function Tree({ db, selectedId, onSelect, onOpen }) {
+	const [closed, setClosed] = useState({});
+	const toggle = (key) => setClosed((prev) => ({ ...prev, [key]: !prev[key] }));
+
+	const rows = [];
+	for (const product of db.products) {
+		const assets = db.assets.filter((a) => a.productId === product.id);
+		const areas = [...new Set(assets.map((a) => a.area))];
+		const open = !closed[product.id];
+		rows.push(html`<div key=${'p' + product.id} className="node" onClick=${() => toggle(product.id)} title=${product.note}>
+			<span className="node__twist">${open ? '\u25be' : '\u25b8'}</span>
+			<span>${product.label}</span>
+			<span className="node__meta">${assets.length}</span>
+		</div>`);
+		if (!open) { continue; }
+		for (const area of areas) {
+			const inner = assets.filter((a) => a.area === area);
+			const areaKey = product.id + '/' + area;
+			const areaOpen = !closed[areaKey];
+			rows.push(html`<div key=${areaKey} className="node" style=${{ paddingLeft: 18 }} onClick=${() => toggle(areaKey)}>
+				<span className="node__twist">${areaOpen ? '\u25be' : '\u25b8'}</span>
+				<span>${area}</span>
+				<span className="node__meta">${inner.length}</span>
+			</div>`);
+			if (!areaOpen) { continue; }
+			for (const asset of inner) {
+				const dirty = unpublished(asset);
+				rows.push(html`<div
+					key=${asset.id}
+					className=${'node' + (asset.id === selectedId ? ' node--selected' : '')}
+					style=${{ paddingLeft: 34 }}
+					onClick=${() => onSelect(asset.id)}
+					onDoubleClick=${() => onOpen(asset.id)}
+					title=${asset.id + ' · ' + asset.format}
+				>
+					<span>${asset.title}</span>
+					${dirty ? html`<span className="node__meta">${dirty}\u00b7</span>` : null}
+				</div>`);
+			}
+		}
+	}
+	return html`<div style=${{ paddingTop: 6 }}>${rows}</div>`;
+}
+
+function DocSurface({ asset, children, actions }) {
+	return html`<div className="surface">
+		<div className="chrome">
+			<span className="chrome__name">${asset.title}</span>
+			<${Badge} appearance="tint" color="informative">${asset.format}<//>
+			<${Badge} appearance="tint">rev ${currentRev(asset).n}<//>
+			${unpublished(asset) ? html`<${Badge} appearance="tint" color="warning">${unpublished(asset)} unpublished<//>` : null}
+			<div className="spacer"></div>
+			${actions}
+		</div>
+		${children}
+	</div>`;
+}
+
+/* ------------------------------------------- capture, annotate, paste */
+
+async function captureScreen() {
+	if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+		throw new Error('This browser cannot capture the screen. Paste a screenshot with Ctrl+V instead.');
+	}
+	const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+	try {
+		const video = document.createElement('video');
+		video.srcObject = stream;
+		video.muted = true;
+		await video.play();
+		await new Promise((resolve) => setTimeout(resolve, 150));
+		const canvas = document.createElement('canvas');
+		canvas.width = video.videoWidth || 1280;
+		canvas.height = video.videoHeight || 720;
+		canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+		return canvas.toDataURL('image/png');
+	} finally {
+		stream.getTracks().forEach((track) => track.stop());
+	}
+}
+
+/** Pasted HTML keeps its structure (tables, lists, headings) and loses its styling. */
+function htmlToMarkdown(source) {
+	const doc = new DOMParser().parseFromString(source, 'text/html');
+	const cell = (el) => el.textContent.replace(/\s+/g, ' ').trim();
+	const walk = (node, depth) => {
+		const out = [];
+		for (const el of node.children) {
+			const tag = el.tagName.toLowerCase();
+			if (tag === 'table') {
+				const rows = [...el.querySelectorAll('tr')];
+				if (!rows.length) { continue; }
+				const head = [...rows[0].children].map(cell);
+				out.push('', '| ' + head.join(' | ') + ' |', '|' + head.map(() => '---').join('|') + '|');
+				for (const row of rows.slice(1)) {
+					out.push('| ' + [...row.children].map(cell).join(' | ') + ' |');
+				}
+				out.push('');
+			} else if (tag === 'ul' || tag === 'ol') {
+				let i = 1;
+				for (const li of el.children) {
+					out.push((tag === 'ol' ? i++ + '. ' : '- ') + li.textContent.replace(/\s+/g, ' ').trim());
+				}
+				out.push('');
+			} else if (/^h[1-6]$/.test(tag)) {
+				out.push('', '#'.repeat(Number(tag[1])) + ' ' + el.textContent.trim(), '');
+			} else if (tag === 'p') {
+				out.push(el.textContent.trim(), '');
+			} else if (tag === 'pre') {
+				out.push('```', el.textContent.replace(/\s+$/, ''), '```', '');
+			} else if (el.children.length) {
+				out.push(...walk(el, depth + 1));
+			} else {
+				const text = el.textContent.replace(/\s+/g, ' ').trim();
+				if (text) { out.push(text, ''); }
+			}
+		}
+		return out;
+	};
+	return walk(doc.body, 0).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+const ANNO_TOOLS = [
+	{ id: 'arrow', label: 'Arrow' },
+	{ id: 'rect', label: 'Box' },
+	{ id: 'ellipse', label: 'Ellipse' },
+	{ id: 'callout', label: 'Callout' },
+	{ id: 'redact', label: 'Redact' },
+	{ id: 'blur', label: 'Blur' },
+	{ id: 'step', label: 'Step' },
+	{ id: 'crop', label: 'Crop' }
+];
+
+function AnnotateDialog({ open, src, onClose, onInsert }) {
+	const canvasRef = useRef(null);
+	const baseRef = useRef(null);
+	const opsRef = useRef([]);
+	const dragRef = useRef(null);
+	const cropRef = useRef([]);
+	const [tool, setTool] = useState('arrow');
+	const [caption, setCaption] = useState('');
+	const [step, setStep] = useState(1);
+	const [ready, setReady] = useState(false);
+
+	const drawOp = (ctx, op) => {
+		ctx.save();
+		ctx.lineWidth = Math.max(2, Math.round(ctx.canvas.width / 400));
+		ctx.strokeStyle = '#ff3b30';
+		ctx.fillStyle = 'rgba(255, 59, 48, 0.16)';
+		const x = Math.min(op.x1, op.x2);
+		const y = Math.min(op.y1, op.y2);
+		const w = Math.abs(op.x2 - op.x1);
+		const h = Math.abs(op.y2 - op.y1);
+		if (op.kind === 'arrow') {
+			ctx.beginPath();
+			ctx.moveTo(op.x1, op.y1);
+			ctx.lineTo(op.x2, op.y2);
+			ctx.stroke();
+			const angle = Math.atan2(op.y2 - op.y1, op.x2 - op.x1);
+			const head = 12 + ctx.lineWidth * 2;
+			ctx.beginPath();
+			ctx.moveTo(op.x2, op.y2);
+			ctx.lineTo(op.x2 - head * Math.cos(angle - 0.4), op.y2 - head * Math.sin(angle - 0.4));
+			ctx.lineTo(op.x2 - head * Math.cos(angle + 0.4), op.y2 - head * Math.sin(angle + 0.4));
+			ctx.closePath();
+			ctx.fillStyle = '#ff3b30';
+			ctx.fill();
+		} else if (op.kind === 'rect') {
+			ctx.fillRect(x, y, w, h);
+			ctx.strokeRect(x, y, w, h);
+		} else if (op.kind === 'ellipse') {
+			ctx.beginPath();
+			ctx.ellipse(x + w / 2, y + h / 2, Math.max(2, w / 2), Math.max(2, h / 2), 0, 0, Math.PI * 2);
+			ctx.fill();
+			ctx.stroke();
+		} else if (op.kind === 'redact') {
+			ctx.fillStyle = '#111';
+			ctx.fillRect(x, y, w, h);
+			ctx.strokeStyle = '#111';
+			ctx.strokeRect(x, y, w, h);
+		} else if (op.kind === 'blur') {
+			const canvas = ctx.canvas;
+			ctx.beginPath();
+			ctx.rect(x, y, w, h);
+			ctx.clip();
+			ctx.filter = 'blur(9px)';
+			ctx.drawImage(canvas, 0, 0);
+			ctx.filter = 'none';
+		} else if (op.kind === 'callout') {
+			const canvas = ctx.canvas;
+			const zoom = 2.2;
+			const destW = Math.min(canvas.width * 0.42, w * zoom);
+			const destH = Math.max(24, destW * (h / Math.max(1, w)));
+			let tx = x + w + 18 + destW <= canvas.width ? x + w + 18 : x - 18 - destW;
+			if (tx < 6) { tx = Math.max(6, canvas.width - destW - 6); }
+			const ty = Math.min(Math.max(6, y), Math.max(6, canvas.height - destH - 6));
+			ctx.strokeStyle = '#ff3b30';
+			ctx.lineWidth = Math.max(1, ctx.lineWidth - 1);
+			ctx.beginPath();
+			ctx.moveTo(x + w, y);
+			ctx.lineTo(tx, ty);
+			ctx.moveTo(x + w, y + h);
+			ctx.lineTo(tx, ty + destH);
+			ctx.stroke();
+			ctx.drawImage(canvas, x, y, w, h, tx, ty, destW, destH);
+			ctx.lineWidth = Math.max(2, Math.round(canvas.width / 400));
+			ctx.strokeRect(tx, ty, destW, destH);
+		} else if (op.kind === 'step') {
+			const r = 15 + ctx.lineWidth;
+			ctx.beginPath();
+			ctx.arc(op.x1, op.y1, r, 0, Math.PI * 2);
+			ctx.fillStyle = '#ff3b30';
+			ctx.fill();
+			ctx.fillStyle = '#fff';
+			ctx.font = 'bold ' + Math.round(r) + 'px Segoe UI, sans-serif';
+			ctx.textAlign = 'center';
+			ctx.textBaseline = 'middle';
+			ctx.fillText(String(op.n), op.x1, op.y1 + 1);
+		}
+		ctx.restore();
+	};
+
+	const redraw = (preview) => {
+		const canvas = canvasRef.current;
+		if (!canvas || !baseRef.current) { return; }
+		const ctx = canvas.getContext('2d');
+		ctx.putImageData(baseRef.current, 0, 0);
+		for (const op of opsRef.current) { drawOp(ctx, op); }
+		if (preview) { drawOp(ctx, preview); }
+	};
+
+	useEffect(() => {
+		if (!open || !src) { return; }
+		opsRef.current = [];
+		cropRef.current = [];
+		dragRef.current = null;
+		setReady(false);
+		setCaption('');
+		setStep(1);
+		const image = new Image();
+		image.onload = () => {
+			requestAnimationFrame(() => {
+				const canvas = canvasRef.current;
+				if (!canvas) { return; }
+				const scale = Math.min(1, 960 / image.width);
+				canvas.width = Math.round(image.width * scale);
+				canvas.height = Math.round(image.height * scale);
+				const ctx = canvas.getContext('2d');
+				ctx.fillStyle = '#fff';
+				ctx.fillRect(0, 0, canvas.width, canvas.height);
+				ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+				baseRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+				setReady(true);
+			});
+		};
+		image.onerror = () => onClose();
+		image.src = src;
+	}, [open, src]);
+
+	const pointOf = (event) => {
+		const canvas = canvasRef.current;
+		const rect = canvas.getBoundingClientRect();
+		return {
+			x: (event.clientX - rect.left) * (canvas.width / rect.width),
+			y: (event.clientY - rect.top) * (canvas.height / rect.height)
+		};
+	};
+
+	const onDown = (event) => {
+		if (!ready) { return; }
+		const p = pointOf(event);
+		if (tool === 'step') {
+			opsRef.current.push({ kind: 'step', x1: p.x, y1: p.y, n: step });
+			setStep(step + 1);
+			redraw();
+			return;
+		}
+		dragRef.current = { start: p, cur: p };
+		event.currentTarget.setPointerCapture(event.pointerId);
+	};
+
+	const onMove = (event) => {
+		if (!dragRef.current) { return; }
+		dragRef.current.cur = pointOf(event);
+		const { start, cur } = dragRef.current;
+		redraw({ kind: tool, x1: start.x, y1: start.y, x2: cur.x, y2: cur.y });
+	};
+
+	const onUp = () => {
+		if (!dragRef.current) { return; }
+		const { start, cur } = dragRef.current;
+		dragRef.current = null;
+		const w = Math.abs(cur.x - start.x);
+		const h = Math.abs(cur.y - start.y);
+		if (w < 4 && h < 4) { redraw(); return; }
+
+		if (tool === 'crop') {
+			if (w < 24 || h < 24) { redraw(); return; }
+			const canvas = canvasRef.current;
+			const ctx = canvas.getContext('2d');
+			cropRef.current.push({
+				imageData: ctx.getImageData(0, 0, canvas.width, canvas.height),
+				w: canvas.width, h: canvas.height, ops: opsRef.current.slice()
+			});
+			const x = Math.round(Math.min(start.x, cur.x));
+			const y = Math.round(Math.min(start.y, cur.y));
+			const temp = document.createElement('canvas');
+			temp.width = Math.round(w);
+			temp.height = Math.round(h);
+			temp.getContext('2d').drawImage(canvas, x, y, temp.width, temp.height, 0, 0, temp.width, temp.height);
+			canvas.width = temp.width;
+			canvas.height = temp.height;
+			ctx.drawImage(temp, 0, 0);
+			baseRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+			opsRef.current = [];
+			return;
+		}
+
+		opsRef.current.push({ kind: tool, x1: start.x, y1: start.y, x2: cur.x, y2: cur.y });
+		redraw();
+	};
+
+	const insert = () => {
+		const canvas = canvasRef.current;
+		onInsert(canvas.toDataURL('image/png'), caption.trim());
+	};
+
+	return html`<${Dialog} open=${open} onOpenChange=${(e, data) => { if (!data.open) { onClose(); } }}>
+		<${DialogSurface} style=${{ maxWidth: '1060px', width: '92vw' }}>
+			<${DialogBody}>
+				<${DialogTitle}>Annotate screenshot<//>
+				<${DialogContent}>
+					<div className="anno">
+						<div className="anno__tools">
+							${ANNO_TOOLS.map((item) => html`<${Button}
+								key=${item.id}
+								id=${'anno-' + item.id}
+								size="small"
+								appearance=${tool === item.id ? 'primary' : 'secondary'}
+								onClick=${() => setTool(item.id)}
+							>${item.label}<//>`)}
+							<span style=${{ width: 8 }}></span>
+							<${Button} size="small" onClick=${() => {
+								if (opsRef.current.length) { opsRef.current.pop(); redraw(); return; }
+								const last = cropRef.current.pop();
+								if (last) {
+									const canvas = canvasRef.current;
+									canvas.width = last.w;
+									canvas.height = last.h;
+									const ctx = canvas.getContext('2d');
+									ctx.putImageData(last.imageData, 0, 0);
+									baseRef.current = last.imageData;
+									opsRef.current = last.ops;
+								}
+							}}>Undo<//>
+							<${Button} size="small" onClick=${() => { opsRef.current = []; cropRef.current = []; setStep(1); redraw(); }}>Clear<//>
+						</div>
+						${tool === 'blur' ? html`<${MessageBar} intent="warning"><${MessageBarBody}>Blur is a convenience. If those pixels must not leave the company, use <strong>Redact</strong> — a blurred key is still a published key.</${MessageBarBody}><//>` : null}
+						<div className="anno__canvas">
+							<canvas
+								ref=${canvasRef}
+								onPointerDown=${onDown}
+								onPointerMove=${onMove}
+								onPointerUp=${onUp}
+								onPointerCancel=${onUp}
+							></canvas>
+						</div>
+						<div className="row">
+							<span className="hint">Caption — becomes the alt text, so nobody ships “image1.png”.</span>
+						</div>
+						<${Input}
+							id="anno-caption"
+							placeholder="Device list after reset"
+							value=${caption}
+							onChange=${(e, data) => setCaption(data.value)}
+						/>
+					</div>
+				<//>
+				<${DialogActions}>
+					<${Button} appearance="secondary" onClick=${onClose}>Cancel<//>
+					<${Button} id="anno-insert" appearance="primary" disabled=${!ready} onClick=${insert}>Insert into document<//>
+				<//>
+			<//>
+		<//>
+	<//>`;
+}
+
+const Panel = ({ title, action, children, style }) => html`<section style=${{
+	border: '1px solid var(--colorNeutralStroke2)', borderRadius: 8, padding: 12,
+	background: 'var(--colorNeutralBackground1)', display: 'flex', flexDirection: 'column', gap: 8, ...style
+}}>
+	<div className="row"><${Text} weight="semibold">${title}<//><div className="spacer"></div>${action || null}</div>
+	${children}
+</section>`;
+
+function HomeView() {
+	const s = useStudio();
+	const recent = [...s.db.assets]
+		.sort((a, b) => new Date(currentRev(b).at) - new Date(currentRev(a).at))
+		.slice(0, 4);
+	const attention = s.db.assets.filter((a) => unpublished(a) > 0);
+	const failed = s.db.jobs.filter((j) => j.state === 'failed');
+
+	return html`<div className="page">
+		<div className="page__head">
+			<div>
+				<h1 className="page__title">Home</h1>
+				<p className="page__desc">What you were doing, what needs you, and which product you are in. Everything on this page is computed from the store, not written in the page.</p>
+			</div>
+			<div className="spacer"></div>
+			<${Button} appearance="primary" onClick=${() => s.go('search')}>Search everything<//>
+		</div>
+		<div className="grid2">
+			<${Panel} title="Continue">
+				${recent.map((asset) => html`<div key=${asset.id} className="row" style=${{ cursor: 'pointer' }} onClick=${() => s.openAsset(asset.id)}>
+					<${Document24Regular} />
+					<div style=${{ minWidth: 0 }}>
+						<div>${asset.title}</div>
+						<div className="hint">${asset.id} · rev ${currentRev(asset).n} · ${fmtAgo(currentRev(asset).at)}</div>
+					</div>
+				</div>`)}
+			<//>
+			<${Panel} title="Needs attention">
+				${attention.length === 0 && failed.length === 0
+					? html`<div className="hint">Nothing unpublished and no failed jobs.</div>`
+					: null}
+				${attention.length ? html`<div className="row" style=${{ cursor: 'pointer' }} onClick=${() => s.go('publish')}>
+					<${ArrowUpload24Regular} />
+					<span>${attention.length} asset${attention.length === 1 ? '' : 's'} with unpublished changes</span>
+				</div>` : null}
+				${failed.length ? html`<div className="row" style=${{ cursor: 'pointer' }} onClick=${() => s.go('queue')}>
+					<${Tag24Regular} />
+					<span>${failed.length} failed publication job${failed.length === 1 ? '' : 's'}</span>
+				</div>` : null}
+				${s.db.assets.some((a) => a.format === 'docx') ? html`<div className="row">
+					<${Document24Regular} />
+					<span className="hint">.docx files open as a converted preview — no office engine in this build (route R4)</span>
+				</div>` : null}
+			<//>
+		</div>
+		<div style=${{ height: 10 }}></div>
+		<${Panel} title="Products">
+			${s.db.products.map((product) => {
+				const assets = s.db.assets.filter((a) => a.productId === product.id);
+				return html`<div key=${product.id} className="row">
+					<${Folder24Regular} />
+					<div style=${{ minWidth: 120 }}>${product.label}</div>
+					<div className="hint">${assets.length} assets · ${product.note}</div>
+					<div className="spacer"></div>
+					<${Button} size="small" onClick=${() => { const first = assets[0]; if (first) { s.openAsset(first.id); } }}>Open<//>
+				</div>`;
+			})}
+		<//>
+	</div>`;
+}
+
+function ConvertDialog({ asset, open, onClose, onConvert }) {
+	return html`<${Dialog} open=${open} onOpenChange=${(e, data) => { if (!data.open) { onClose(); } }}>
+		<${DialogSurface}>
+			<${DialogBody}>
+				<${DialogTitle}>Convert to editable<//>
+				<${DialogContent}>
+					<div className="stack">
+						<${MessageBar} intent="warning">
+							<${MessageBarBody}>
+								<${MessageBarTitle}>Conversion is lossy<//>
+								Tables, images and headings survive. Exact pagination, floating shapes and complex numbering do not.
+								For a document whose layout must stay as it is, use <strong>Edit in Word</strong> instead.
+							<//>
+						<//>
+						<div className="hint">The original ${asset.id} stays at rev ${currentRev(asset).n}, untouched. The result is a new markdown asset linked with <span className="mono">derived-from</span>.</div>
+					</div>
+				<//>
+				<${DialogActions}>
+					<${Button} appearance="secondary" onClick=${onClose}>Cancel<//>
+					<${Button} id="convert-confirm" appearance="primary" onClick=${onConvert}>Convert<//>
+				<//>
+			<//>
+		<//>
+	<//>`;
+}
+
+function DocView({ id }) {
+	const s = useStudio();
+	const asset = s.assetById(id);
+	const [draft, setDraft] = useState('');
+	const [dirty, setDirty] = useState(false);
+	const [convertOpen, setConvertOpen] = useState(false);
+	const [wordOpen, setWordOpen] = useState(false);
+
+	useEffect(() => {
+		if (asset) { setDraft(currentRev(asset).body); setDirty(false); }
+	}, [id]);
+
+	const save = useCallback(() => {
+		if (!asset) { return; }
+		s.saveRevision(asset.id, draft);
+		setDirty(false);
+	}, [asset, draft, s]);
+
+	useEffect(() => {
+		const onKey = (event) => {
+			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+				event.preventDefault();
+				if (asset && asset.format === 'md') { save(); }
+			}
+		};
+		window.addEventListener('keydown', onKey);
+		return () => window.removeEventListener('keydown', onKey);
+	}, [asset, save]);
+
+	const taRef = useRef(null);
+	const fileRef = useRef(null);
+	const [anno, setAnno] = useState(null);
+
+	const insertAtCaret = useCallback((text) => {
+		const el = taRef.current;
+		const start = el ? el.selectionStart : draft.length;
+		const end = el ? el.selectionEnd : draft.length;
+		const next = draft.slice(0, start) + text + draft.slice(end);
+		setDraft(next);
+		setDirty(true);
+		requestAnimationFrame(() => {
+			if (!el) { return; }
+			el.focus();
+			el.selectionStart = el.selectionEnd = start + text.length;
+		});
+	}, [draft]);
+
+	const readFile = (file) => {
+		const reader = new FileReader();
+		reader.onload = () => setAnno({ src: String(reader.result) });
+		reader.readAsDataURL(file);
+	};
+
+	const handlePaste = useCallback((event) => {
+		const data = event.clipboardData;
+		if (!data) { return; }
+		const media = [...data.items].find((item) => item.kind === 'file' && item.type.startsWith('image/'));
+		if (media) {
+			event.preventDefault();
+			readFile(media.getAsFile());
+			return;
+		}
+		const html = data.getData('text/html');
+		if (html && /<(table|ul|ol|h[1-6]|pre)\b/i.test(html)) {
+			event.preventDefault();
+			insertAtCaret('\n' + htmlToMarkdown(html) + '\n');
+			s.toast('info', 'Pasted as markdown: structure kept, styling dropped.');
+		}
+	}, [insertAtCaret, s]);
+
+	const insertImage = useCallback((dataUrl, caption) => {
+		const id = 'IMG-' + (s.db.attachments.length + 1);
+		const appliesTo = (draft.match(/\b\d+\.\d+\b/) || ['13.0'])[0];
+		s.addAttachment({ id, caption: caption || 'Screenshot', dataUrl, appliesTo, stale: false });
+		insertAtCaret('\n![' + (caption || 'Screenshot') + '](att:' + id + ')\n');
+		setAnno(null);
+		s.toast('success', 'Inserted ' + id + ' at the caret — the document holds a reference, not a blob.');
+	}, [draft, insertAtCaret, s]);
+
+	if (!asset) {
+		return html`<div className="page"><div className="empty">No asset ${id}.</div></div>`;
+	}
+
+	const actions = html`<${React.Fragment}>
+		${asset.format === 'md'
+			? html`<${Button} size="small" appearance=${dirty ? 'primary' : 'secondary'} icon=${html`<${Save24Regular} />`} onClick=${save}>${dirty ? 'Save (Ctrl+S)' : 'Saved'}<//>`
+			: html`<${Button} size="small" icon=${html`<${Edit24Regular} />`} onClick=${() => setWordOpen(true)}>Edit in Word<//>`}
+		${asset.format === 'docx'
+			? html`<${Button} size="small" appearance="primary" icon=${html`<${ArrowSync24Regular} />`} onClick=${() => setConvertOpen(true)}>Convert to editable<//>`
+			: null}
+		<${Button} size="small" icon=${html`<${History24Regular} />`} onClick=${() => s.go('history', asset.id)}>History<//>
+	<//>`;
+
+	if (asset.format === 'docx') {
+		return html`<${React.Fragment}>
+			<${DocSurface} asset=${asset} actions=${actions}>
+				<${MessageBar} intent="info">
+					<${MessageBarBody}>
+						<strong>Converted preview.</strong> Read-only, and rendered from the converted model — not from Word.
+						Nothing here can be typed into; the original stays at rev ${currentRev(asset).n}.
+					<//>
+				<//>
+				<div style=${{ overflow: 'auto' }}>
+					<div className="paper" dangerouslySetInnerHTML=${{ __html: mdToHtml(currentRev(asset).body, s.attMap) }}></div>
+				</div>
+			<//>
+
+			<${ConvertDialog}
+				asset=${asset}
+				open=${convertOpen}
+				onClose=${() => setConvertOpen(false)}
+				onConvert=${() => {
+					const newId = 'AS-' + s.db.nextAsset;
+					s.convertAsset(asset.id);
+					setConvertOpen(false);
+					setTimeout(() => s.openAsset(newId), 0);
+				}}
+			/>
+
+			<${Dialog} open=${wordOpen} onOpenChange=${(e, data) => { if (!data.open) { setWordOpen(false); } }}>
+				<${DialogSurface}>
+					<${DialogBody}>
+						<${DialogTitle}>Edit in Word<//>
+						<${DialogContent}>
+							<div className="stack">
+								<div className="hint">We copy rev ${currentRev(asset).n} to a temporary file, open it with the app Windows has registered for .docx, and watch that file. A save there becomes a new revision here.</div>
+								<div className="mono">%TEMP%\temco\${asset.id}-rev${currentRev(asset).n}.docx</div>
+								<${Button} appearance="primary" onClick=${() => {
+									const body = currentRev(asset).body + '\n\n> Edited in Word at ' + fmtClock(nowIso()) + '.';
+									s.saveRevision(asset.id, body, 'external');
+									s.toast('success', 'Word saved. Added rev ' + (currentRev(asset).n + 1) + ' with source "external".');
+									setWordOpen(false);
+								}}>Simulate a save in Word<//>
+							</div>
+						<//>
+						<${DialogActions}>
+							<${Button} appearance="secondary" onClick=${() => setWordOpen(false)}>Close<//>
+						<//>
+					<//>
+				<//>
+			<//>
+		<//>`;
+	}
+
+	return html`<${DocSurface} asset=${asset} actions=${actions}>
+		<div className="editor-toolbar">
+			<${Button} id="doc-capture" size="small" icon=${html`<${Camera24Regular} />`} onClick=${async () => {
+				try { setAnno({ src: await captureScreen() }); }
+				catch (error) { s.toast('warning', String((error && error.message) || error)); }
+			}}>Screenshot<//>
+			<${Button} id="doc-attach" size="small" icon=${html`<${Image24Regular} />`} onClick=${() => { if (fileRef.current) { fileRef.current.click(); } }}>Attach image…<//>
+			<${Button} id="doc-table" size="small" onClick=${() => insertAtCaret('\n| Column | Column |\n|---|---|\n|  |  |\n')}>Insert table<//>
+			<span className="editor-toolbar__hint">Paste a screenshot with Ctrl+V — it lands at the caret, annotated and captioned.</span>
+			<input
+				ref=${fileRef}
+				type="file"
+				accept="image/*"
+				style=${{ display: 'none' }}
+				onChange=${(e) => { const file = e.target.files && e.target.files[0]; if (file) { readFile(file); } e.target.value = ''; }}
+			/>
+		</div>
+		<div className="split">
+			<div className="pane pane--src">
+				<${Textarea}
+					ref=${taRef}
+					value=${draft}
+					resize="none"
+					onPaste=${handlePaste}
+					style=${{ width: '100%', height: '100%', fontFamily: 'Consolas, monospace', fontSize: 12 }}
+					onChange=${(e, data) => { setDraft(data.value); setDirty(data.value !== currentRev(asset).body); }}
+				/>
+			</div>
+			<div className="pane" style=${{ padding: 10 }}>
+				<div className="paper" dangerouslySetInnerHTML=${{ __html: mdToHtml(draft, s.attMap) }}></div>
+			</div>
+		</div>
+		<${AnnotateDialog}
+			open=${!!anno}
+			src=${anno && anno.src}
+			onClose=${() => setAnno(null)}
+			onInsert=${(dataUrl, caption) => insertImage(dataUrl, caption)}
+		/>
+	<//>`;
+}
+
+function HistoryView({ id }) {
+	const s = useStudio();
+	const asset = s.assetById(id);
+	if (!asset) { return html`<div className="page"><div className="empty">No asset ${id}.</div></div>`; }
+	const latest = currentRev(asset).n;
+	return html`<div className="page">
+		<div className="page__head">
+			<div>
+				<h1 className="page__title">History · ${asset.title}</h1>
+				<p className="page__desc">A revision is immutable. Restoring copies old bytes forward as a new revision — nothing is ever rewound or overwritten.</p>
+			</div>
+			<div className="spacer"></div>
+			<${Button} onClick=${() => s.go('doc', asset.id)}>Back to document<//>
+		</div>
+		<${Panel} title=${'Revisions · ' + asset.revisions.length}>
+			${[...asset.revisions].reverse().map((rev) => html`<div key=${rev.n} className="rev">
+				<span className="rev__n">rev ${rev.n}</span>
+				<${Badge} appearance="tint" color=${rev.source === 'external' ? 'warning' : rev.source === 'restore' ? 'informative' : 'subtle'}>${rev.source}<//>
+				<span className="rev__body">${rev.body.split('\n').find((l) => l.trim()) || ''}</span>
+				<span className="hint">${fmtClock(rev.at)} · ${rev.by}</span>
+				<span className="rev__n mono">${(rev.body.length / 1024).toFixed(1)} KB</span>
+				${rev.n === latest
+					? html`<${Badge} appearance="tint" color="success">current<//>`
+					: html`<${Button} size="small" onClick=${() => s.restoreRevision(asset.id, rev.n)}>Restore<//>`}
+			</div>`)}
+		<//>
+	</div>`;
+}
+
+function PublishView() {
+	const s = useStudio();
+	const candidates = s.db.assets.filter((a) => unpublished(a) > 0);
+	const [channel, setChannel] = useState('public');
+	const [excluded, setExcluded] = useState({});
+	const chosen = candidates.filter((a) => !excluded[a.id]);
+
+	const staleInChosen = (() => {
+		const ids = new Set();
+		for (const asset of chosen) {
+			for (const match of currentRev(asset).body.matchAll(/att:(IMG-\d+)/g)) { ids.add(match[1]); }
+		}
+		return [...ids].map((id) => s.attMap[id]).filter((att) => att && att.stale);
+	})();
+
+	return html`<div className="page">
+		<div className="page__head">
+			<div>
+				<h1 className="page__title">Publish</h1>
+				<p className="page__desc">A publication is a frozen set of revisions, not “whatever is current”. The preflight below is computed from the store.</p>
+			</div>
+			<div className="spacer"></div>
+			<${Button} appearance="secondary" onClick=${() => s.go('queue')}>Open queue<//>
+			<${Button}
+				id="publish-go"
+				appearance="primary"
+				disabled=${chosen.length === 0}
+				onClick=${() => { s.publish(chosen.map((a) => a.id), channel); s.go('queue'); }}
+			>Publish ${chosen.length} asset${chosen.length === 1 ? '' : 's'}<//>
+		</div>
+
+		<${Panel} title="Channel">
+			<${TabList} selectedValue=${channel} onTabSelect=${(e, data) => setChannel(data.value)}>
+				<${Tab} value="internal">Internal<//>
+				<${Tab} value="public">Public<//>
+			<//>
+			<div className="hint">Public adds the release to the customer download page and the search index.</div>
+		<//>
+
+		<${Panel} title="Preflight">
+			${candidates.length === 0
+				? html`<div className="hint">Everything is published. Edit something to give this page work to do.</div>`
+				: html`<div className="stack">
+					<div className="row"><${Checkmark24Regular} /><span>${candidates.length} asset${candidates.length === 1 ? '' : 's'} with unpublished changes</span></div>
+					<div className="row"><${Checkmark24Regular} /><span>Payload is frozen at the revision shown — no “latest” at build time</span></div>
+					${staleInChosen.length
+						? html`<div className="row">
+							<${Tag24Regular} />
+							<span>${staleInChosen.length} screenshot${staleInChosen.length === 1 ? '' : 's'} ${staleInChosen.length === 1 ? 'depicts' : 'depict'} an older version — publishing is allowed and recorded</span>
+						</div>
+						${staleInChosen.map((att) => html`<div key=${att.id} className="row" style=${{ paddingLeft: 26 }}>
+							<span className="mono hint">${att.id}</span>
+							<span className="hint">${att.caption}</span>
+							<${Badge} appearance="tint" color="warning">shows ${att.appliesTo}<//>
+						</div>`)}`
+						: null}
+					${s.tabs.length ? html`<${MessageBar} intent="warning"><${MessageBarBody}>${s.tabs.length} asset${s.tabs.length === 1 ? '' : 's'} open in an editor tab. Publishing a revision someone is still editing is allowed, but they will not see this publication.<//><//>` : null}
+				</div>`}
+		<//>
+
+		${candidates.map((asset) => html`<${Panel} key=${asset.id} title=${asset.title}>
+			<div className="row">
+				<${Badge} appearance="tint" color="informative">${asset.format}<//>
+				<span className="hint mono">${asset.id} · rev ${currentRev(asset).n} · published ${asset.published === null ? 'never' : 'rev ' + asset.published}</span>
+				<div className="spacer"></div>
+				<${Switch}
+					checked=${!excluded[asset.id]}
+					label=${excluded[asset.id] ? 'Skipped' : 'Included'}
+					onChange=${(e, data) => setExcluded((prev) => ({ ...prev, [asset.id]: !data.checked }))}
+				/>
+			</div>
+		<//>`)}
+	</div>`;
+}
+
+function QueueView() {
+	const s = useStudio();
+	const jobs = [...s.db.jobs].reverse();
+	const stateBadge = (state) => {
+		const color = state === 'live' ? 'success' : state === 'failed' ? 'danger' : state === 'building' ? 'informative' : 'subtle';
+		return html`<${Badge} appearance="tint" color=${color}>${state}<//>`;
+	};
+	const staleFor = (asset, rev) => {
+		if (!asset) { return 0; }
+		const ids = [...new Set((revN(asset, rev).body.match(/att:(IMG-\d+)/g) || []).map((m) => m.slice(4)))];
+		return ids.filter((id) => (s.attMap[id] || {}).stale).length;
+	};
+	return html`<div className="page">
+		<div className="page__head">
+			<div>
+				<h1 className="page__title">Publication queue</h1>
+				<p className="page__desc">Jobs advance by themselves. A failed job retries the revision that failed, never the newest one.</p>
+			</div>
+			<div className="spacer"></div>
+			<${Button} appearance="primary" icon=${html`<${ArrowUpload24Regular} />`} onClick=${() => s.go('publish')}>Publish…<//>
+		</div>
+		<${Panel} title=${'Jobs · ' + jobs.length}>
+			${jobs.length === 0 ? html`<div className="hint">No jobs yet. Publish something.</div>` : null}
+			${jobs.map((job) => {
+				const asset = s.assetById(job.assetId);
+				return html`<div key=${job.id} className="job">
+					<span style=${{ display: 'flex', alignItems: 'center', gap: 6 }}>
+						${asset ? asset.title : job.assetId}
+						${staleFor(asset, job.rev) ? html`<${Badge} appearance="tint" color="warning">${staleFor(asset, job.rev)} stale shot<//>` : null}
+					</span>
+					<span className="hint mono">rev ${job.rev}</span>
+					<span className="hint">${job.channel}</span>
+					<span className="job__state">${stateBadge(job.state)}</span>
+					<span className="job__bar">${job.state === 'building' ? html`<${ProgressBar} value=${job.progress / 100} thickness="medium" />` : html`<span className="hint">${job.state === 'live' ? (job.ms / 1000).toFixed(1) + ' s' : ''}</span>`}</span>
+					<span className="hint">${fmtClock(job.at)}</span>
+					<span>
+						${job.state === 'failed'
+							? html`<${Button} size="small" onClick=${() => s.retryJob(job.id)}>Retry<//>`
+							: null}
+						${asset ? html`<${Button} size="small" appearance="subtle" onClick=${() => s.openAsset(asset.id)}>Open<//>` : null}
+					</span>
+				</div>`;
+			})}
+		<//>
+		${s.db.jobs.some((j) => j.state === 'failed') ? html`<${MessageBar} intent="warning"><${MessageBarBody}>A failed job keeps its error and its revision. Retry re-enqueues <strong>that</strong> revision.</${MessageBarBody}><//>` : null}
+	</div>`;
+}
+
+function SearchView() {
+	const s = useStudio();
+	const [query, setQuery] = useState('');
+	const results = useMemo(() => {
+		const q = query.trim().toLowerCase();
+		if (!q) { return s.db.assets; }
+		return s.db.assets.filter((asset) => {
+			const haystack = [asset.id, asset.title, asset.format, asset.area, asset.productId, asset.note || ''].join(' ').toLowerCase();
+			return q.split(/\s+/).every((part) => haystack.includes(part.replace(/^(asset|format|product):/, '')));
+		});
+	}, [query, s.db.assets]);
+
+	return html`<div className="page">
+		<div className="page__head">
+			<div>
+				<h1 className="page__title">Search</h1>
+				<p className="page__desc">One box over assets. Try <span className="mono">docx</span>, <span className="mono">guides</span>, or <span className="mono">troubleshooting</span>.</p>
+			</div>
+		</div>
+		<${Input}
+			style=${{ width: '100%' }}
+			placeholder="Search assets, formats, areas…"
+			value=${query}
+			onChange=${(e, data) => setQuery(data.value)}
+			contentBefore=${html`<${Search24Regular} />`}
+		/>
+		<div style=${{ height: 10 }}></div>
+		<${Panel} title=${results.length + ' result' + (results.length === 1 ? '' : 's')}>
+			${results.length === 0 ? html`<div className="hint">Nothing matches “${query}”.</div>` : null}
+			${results.map((asset) => html`<div key=${asset.id} className="row" style=${{ cursor: 'pointer', padding: '4px 0' }} onClick=${() => s.openAsset(asset.id)}>
+				<${Document24Regular} />
+				<span style=${{ minWidth: 220 }}>${asset.title}</span>
+				<${Badge} appearance="tint" color="informative">${asset.format}<//>
+				<span className="hint mono">${asset.id} · ${asset.productId} › ${asset.area} · rev ${currentRev(asset).n}</span>
+				<div className="spacer"></div>
+				${unpublished(asset) ? html`<${Badge} appearance="tint" color="warning">unpublished<//>` : html`<${Badge} appearance="tint" color="success">published<//>`}
+			</div>`)}
+		<//>
+	</div>`;
+}
+
+function DiagnosticsView() {
+	const s = useStudio();
+	const revisions = s.db.assets.reduce((sum, a) => sum + a.revisions.length, 0);
+	const bytes = new Blob([JSON.stringify(s.db)]).size;
+	const row = (label, value, badge) => html`<div className="row" style=${{ padding: '3px 0' }}>
+		<span className="hint" style=${{ minWidth: 190 }}>${label}</span>
+		${badge ? badge : html`<span>${value}</span>`}
+	</div>`;
+	return html`<div className="page">
+		<div className="page__head">
+			<div>
+				<h1 className="page__title">Diagnostics</h1>
+				<p className="page__desc">The one place to answer “why will this document not open?”. Every number below is read from the store.</p>
+			</div>
+		</div>
+		<${MessageBar} intent="success">
+			<${MessageBarBody}>This prototype runs <strong>route R4</strong>: no office engine is embedded, copied or contacted. Nothing to licence, nothing to reach over the network.</${MessageBarBody}>
+		<//>
+		<div className="grid2">
+			<${Panel} title="Surfaces">
+				${row('Markdown editor', '', html`<${Badge} appearance="tint" color="success">available<//>`)}
+				${row('Converted preview', '', html`<${Badge} appearance="tint" color="success">available<//>`)}
+				${row('Office engine', '', html`<${Badge} appearance="tint" color="subtle">not installed (R4)<//>`)}
+				${row('AGPL components', '', html`<${Badge} appearance="tint" color="subtle">none<//>`)}
+				${row('.docx export', 'generated from our model')}
+			<//>
+			<${Panel} title="Store">
+				${row('Assets', String(s.db.assets.length))}
+				${row('Revisions', String(revisions))}
+				${row('Publication jobs', String(s.db.jobs.length))}
+				${row('Stored size', (bytes / 1024).toFixed(1) + ' KB')}
+				${row('Persistence', 'localStorage · temco.studio.v1')}
+			<//>
+		</div>
+		<div style=${{ height: 10 }}></div>
+		<${Panel} title="If a document will not open">
+			<div className="row"><${Info24Regular} /><span className="hint">A .docx whose layout matters → <strong>Edit in Word</strong>, then the save comes back as a revision.</span></div>
+			<div className="row"><${Info24Regular} /><span className="hint">A .xlsx or .pptx → not supported in R4; download and open it in Office.</span></div>
+			<div className="row"><${Info24Regular} /><span className="hint">A preview that looks wrong → the original revision is still the source of truth.</span></div>
+		<//>
+	</div>`;
+}
+
+function AutomationView() {
+	const s = useStudio();
+	const [from, setFrom] = useState('13.0');
+	const [to, setTo] = useState('13.1');
+
+	const hits = useMemo(() => s.db.assets
+		.map((asset) => {
+			const lines = currentRev(asset).body.split('\n');
+			const found = lines
+				.map((text, index) => ({ line: index + 1, text }))
+				.filter((entry) => entry.text.includes(from));
+			return { asset, found };
+		})
+		.filter((entry) => entry.found.length > 0), [s.db.assets, from]);
+
+	const staleShots = s.db.attachments.filter((att) => att.appliesTo === from);
+
+	const tools = [
+		['docs.find_version_refs', 'assets + line hits for a version string'],
+		['docs.get_asset', 'the current revision and body'],
+		['docs.propose_revision', 'a draft revision, never a save'],
+		['docs.attach_image', 'an attachment with a caption and a version'],
+		['docs.list_stale_attachments', 'screenshots that depict an old version'],
+		['release.notes_from_commits', 'a draft release note for a commit range']
+	];
+
+	return html`<div className="page">
+		<div className="page__head">
+			<div>
+				<h1 className="page__title">Automation</h1>
+				<p className="page__desc">A version change arrives as a proposal with evidence. A person applies it; CI never publishes. Everything below is a real query over the store.</p>
+			</div>
+		</div>
+
+		<div className="grid2">
+			<${Panel} title="Version sweep">
+				<div className="row">
+					<${Input} size="small" value=${from} onChange=${(e, d) => setFrom(d.value)} style=${{ width: 90 }} contentBefore=${html`<span className="hint">from</span>`} />
+					<${Input} size="small" value=${to} onChange=${(e, d) => setTo(d.value)} style=${{ width: 90 }} contentBefore=${html`<span className="hint">to</span>`} />
+					<div className="spacer"></div>
+					<${Button} size="small" icon=${html`<${Search24Regular} />`} onClick=${() => s.toast('info', hits.length + ' asset(s) mention ' + from + '.')}>Scan<//>
+				</div>
+				<div className="hint">${hits.length} asset${hits.length === 1 ? '' : 's'} mention <span className="mono">${from}</span>${staleShots.length ? ' · ' + staleShots.length + ' screenshot(s) depict it' : ''}.</div>
+				<${Button}
+					id="sweep-apply"
+					appearance="primary"
+					size="small"
+					disabled=${hits.length === 0 || !to.trim()}
+					onClick=${() => s.applySweep(hits.map((entry) => entry.asset.id), from, to)}
+				>Apply as proposals (${hits.length})<//>
+			<//>
+
+			<${Panel} title="MCP tools">
+				<div className="hint" style=${{ marginBottom: 4 }}>The same calls a GitHub Action makes. An agent can propose; only a person can approve.</div>
+				${tools.map(([name, what]) => html`<div key=${name} className="row" style=${{ padding: '2px 0' }}>
+					<span className="mono" style=${{ minWidth: 210 }}>${name}</span>
+					<span className="hint">${what}</span>
+				</div>`)}
+			<//>
+		</div>
+
+		<div style=${{ height: 10 }}></div>
+
+		<${Panel} title=${'Proposals · ' + from + ' → ' + to}>
+			${hits.length === 0
+				? html`<div className="hint">Nothing to propose. Try <span className="mono">13.0</span>.</div>`
+				: hits.map(({ asset, found }) => html`<div key=${asset.id} className="proposal">
+					<div className="row">
+						<${Badge} appearance="tint" color="informative">${asset.format}<//>
+						<span>${asset.title}</span>
+						<span className="hint mono">${asset.id} rev ${currentRev(asset).n} → rev ${currentRev(asset).n + 1}</span>
+						<div className="spacer"></div>
+						<${Badge} appearance="tint" color="warning">${found.length} hit${found.length === 1 ? '' : 's'}<//>
+					</div>
+					<pre>${found.slice(0, 4).map((entry) => html`<div key=${entry.line}><span className="del">L${entry.line}: ${entry.text.trim().slice(0, 90)}</span></div>`)}</pre>
+					<div className="hint">reason: “${from}” appears in ${found.length} line(s) of this asset; firmware ${to} is being prepared.</div>
+				</div>`)}
+		<//>
+
+		${staleShots.length ? html`<${Panel} title="Screenshots that will go stale">
+			${staleShots.map((att) => html`<div key=${att.id} className="row">
+				<span className="mono">${att.id}</span>
+				<span>${att.caption}</span>
+				<span className="hint">depicts ${att.appliesTo}${att.stale ? ' · already stale' : ''}</span>
+			</div>`)}
+			<div className="hint">Applying the sweep marks these stale wherever they are used, so a reader sees it on the page — not only here.</div>
+		<//>` : null}
+	</div>`;
+}
+
+function SettingsView() {
+	const s = useStudio();
+	return html`<div className="page">
+		<div className="page__head">
+			<div>
+				<h1 className="page__title">Settings</h1>
+				<p className="page__desc">Prototype controls. In the product these are VS Code settings, not a page in a webview.</p>
+			</div>
+		</div>
+		<${Panel} title="Appearance">
+			<div className="row">
+				<span style=${{ minWidth: 160 }}>Dark theme</span>
+				<${Switch} checked=${s.theme === 'dark'} onChange=${(e, data) => s.setTheme(data.checked ? 'dark' : 'light')} />
+			</div>
+			<div className="row">
+				<span style=${{ minWidth: 160 }}>Properties panel</span>
+				<${Switch} checked=${s.aside} onChange=${(e, data) => s.setAside(data.checked)} />
+			</div>
+		<//>
+		<${Panel} title="Editor transport">
+			<div className="row">
+				<span style=${{ minWidth: 160 }}>Transport</span>
+				<${Badge} appearance="tint" color="informative">R4 · internal only<//>
+			</div>
+			<div className="hint">No ONLYOFFICE, no document server, no AGPL binary in what ships. A server transport can be added later behind the same interface; it is a mode, not a rewrite.</div>
+		<//>
+		<${Panel} title="Prototype data">
+			<div className="row">
+				<span className="hint">Everything lives in localStorage so a reload keeps your revisions.</span>
+				<div className="spacer"></div>
+				<${Button} appearance="secondary" onClick=${() => { window.localStorage.removeItem(STORAGE_KEY); window.location.hash = '#/home'; window.location.reload(); }}>Reset to seed<//>
+			</div>
+		<//>
+	</div>`;
+}
+
+function Properties({ assetId }) {
+	const s = useStudio();
+	const asset = s.assetById(assetId);
+	if (!asset) { return html`<div className="hint">Nothing selected.</div>`; }
+	const [title, setTitle] = useState(asset.title);
+	useEffect(() => { setTitle(asset.title); }, [asset.id]);
+	const row = (label, value) => html`<div className="row" style=${{ padding: '2px 0' }}>
+		<span className="hint" style=${{ minWidth: 92 }}>${label}</span><span style=${{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>${value}</span>
+	</div>`;
+	return html`<div className="stack">
+		<${Text} weight="semibold">Properties<//>
+		<div className="hint mono">${asset.id}</div>
+		<${Input}
+			size="small"
+			value=${title}
+			onChange=${(e, data) => setTitle(data.value)}
+			onBlur=${() => { if (title.trim() && title !== asset.title) { s.patchAsset(asset.id, { title: title.trim() }); s.toast('success', 'Title updated. This is metadata — no revision was written.'); } }}
+		/>
+		${row('Format', asset.format)}
+		${row('Product', asset.productId)}
+		${row('Area', asset.area)}
+		${row('Revision', 'rev ' + currentRev(asset).n + ' · ' + (currentRev(asset).body.length / 1024).toFixed(1) + ' KB')}
+		${row('Updated', fmtAgo(currentRev(asset).at))}
+		${row('Published', asset.published === null ? 'never' : 'rev ' + asset.published)}
+		<${Divider} />
+		<${Text} weight="semibold">Opens in<//>
+		<div className="hint">${asset.format === 'docx' ? 'Converted preview (R4)' : 'Markdown editor'}</div>
+		${asset.derivedFrom ? html`<div className="hint mono">derived from ${asset.derivedFrom.id} rev ${asset.derivedFrom.n}</div>` : null}
+		<${Divider} />
+		<div className="row">
+			<${Button} size="small" appearance="primary" onClick=${() => s.openAsset(asset.id)}>Open<//>
+			<${Button} size="small" onClick=${() => s.go('history', asset.id)}>History<//>
+		</div>
+	</div>`;
+}
+
+/* ------------------------------------------------------------------- app */
+
+const RAIL = [
+	{ name: 'home', label: 'Home', icon: Home24Regular },
+	{ name: 'explorer', label: 'Assets', icon: Folder24Regular },
+	{ name: 'search', label: 'Search', icon: Search24Regular },
+	{ name: 'publish', label: 'Publish', icon: ArrowUpload24Regular },
+	{ name: 'queue', label: 'Queue', icon: Tag24Regular },
+	{ name: 'automation', label: 'Automation', icon: ArrowSync24Regular },
+	{ name: 'diagnostics', label: 'Diagnostics', icon: Info24Regular },
+	{ name: 'settings', label: 'Settings', icon: Settings24Regular }
+];
+
+function App() {
+	const s = useStudioStore();
+	const theme = s.theme === 'dark' ? webDarkTheme : webLightTheme;
+
+	const view = (() => {
+		switch (s.route.name) {
+			case 'doc': return html`<${DocView} id=${s.route.id} />`;
+			case 'history': return html`<${HistoryView} id=${s.route.id} />`;
+			case 'search': return html`<${SearchView} />`;
+			case 'publish': return html`<${PublishView} />`;
+			case 'queue': return html`<${QueueView} />`;
+			case 'automation': return html`<${AutomationView} />`;
+			case 'diagnostics': return html`<${DiagnosticsView} />`;
+			case 'settings': return html`<${SettingsView} />`;
+			case 'explorer': return html`<div className="page">
+				<div className="page__head"><div>
+					<h1 className="page__title">Assets</h1>
+					<p className="page__desc">The tree on the left is the product tree. Select an asset for its properties, double-click or press Enter to open it.</p>
+				</div></div>
+				<${Panel} title="Selected">
+					${s.selectedId ? html`<${Properties} assetId=${s.selectedId} />` : html`<div className="hint">Nothing selected.</div>`}
+				<//>
+			</div>`;
+			default: return html`<${HomeView} />`;
+		}
+	})();
+
+	return html`<${StudioContext.Provider} value=${s}>
+		<${FluentProvider} theme=${theme}>
+			<div className="app">
+				<div className="topbar">
+					<${Text} weight="semibold" size=${400}>Temco Studio<//>
+					<${Badge} appearance="tint" color="informative">prototype<//>
+					<span className="hint">route R4 · no office engine</span>
+					<div className="spacer"></div>
+					<${Button} size="small" appearance="subtle" onClick=${() => s.setAside(!s.aside)}>${s.aside ? 'Hide properties' : 'Show properties'}<//>
+				</div>
+
+				<div className=${'body' + (s.aside ? '' : ' body--noaside')}>
+					<div className="rail">
+						${RAIL.map((item) => {
+							const Icon = item.icon;
+							const active = s.route.name === item.name;
+							return html`<${Tooltip} key=${item.name} content=${item.label} relationship="label">
+								<${Button}
+									appearance=${active ? 'primary' : 'subtle'}
+									icon=${html`<${Icon} />`}
+									aria-label=${item.label}
+									onClick=${() => s.go(item.name)}
+								/>
+							<//>`;
+						})}
+					</div>
+
+					<div className="side">
+						<div className="row" style=${{ padding: '8px 8px 4px' }}>
+							<${Text} weight="semibold" size=${200}>PRODUCTS<//>
+						</div>
+						<${Tree} db=${s.db} selectedId=${s.selectedId} onSelect=${s.setSelectedId} onOpen=${s.openAsset} />
+					</div>
+
+					<div className="main">
+						<div className="tabs">
+							${s.tabs.map((id) => {
+								const asset = s.assetById(id);
+								if (!asset) { return null; }
+								const active = s.route.name === 'doc' && s.route.id === id;
+								return html`<div key=${id} className=${'tab' + (active ? ' tab--active' : '')} onClick=${() => s.go('doc', id)}>
+									<span>${asset.title}</span>
+									<span className="mono" style=${{ opacity: .6 }}>rev ${currentRev(asset).n}</span>
+									<span style=${{ cursor: 'pointer', opacity: .7 }} onClick=${(e) => { e.stopPropagation(); s.closeTab(id); }}>×</span>
+								</div>`;
+							})}
+						</div>
+						<div className="content">${view}</div>
+					</div>
+
+					${s.aside ? html`<div className="aside"><${Properties} assetId=${s.route.id || s.selectedId} /><//>` : null}
+				</div>
+
+				<div className="statusbar">
+					<span>${s.db.assets.length} assets · ${s.db.jobs.filter((j) => j.state !== 'live').length} active jobs</span>
+					<span>engine: none (R4)</span>
+					<div className="spacer"></div>
+					<span>${s.route.name === 'doc' ? 'Ctrl+S saves a revision' : 'Double-click an asset to open'}</span>
+					<span>${s.theme}</span>
+				</div>
+			</div>
+			<${ToastStack} toasts=${s.toasts} />
+		<//>
+	<//>`;
+}
+
+class Boundary extends React.Component {
+	constructor(props) { super(props); this.state = { error: null }; }
+	static getDerivedStateFromError(error) { return { error }; }
+	render() {
+		if (this.state.error) {
+			return html`<div className="fatal">
+				<h1>The prototype threw</h1>
+				<div className="mono">${String(this.state.error && this.state.error.stack || this.state.error)}</div>
+			</div>`;
+		}
+		return this.props.children;
+	}
+}
+
+createRoot(document.getElementById('root')).render(html`<${Boundary}><${App} /><//>`);
+window.__studioReady = true;
+
+
+
+
+</script>
+</body>
+</html>

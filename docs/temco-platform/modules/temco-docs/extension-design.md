@@ -25,17 +25,21 @@
 | `src/previewPanel.ts` | the page as a reader sees it, in its own editor tab beside the source: one panel per document, redrawn as the page is typed. Rendering is the built-in Markdown pipeline, so the preview and the editor's own idea of the page cannot disagree; the DocFX `> [!NOTE]` markers are dressed as the alerts the site publishes |
 | `src/diffPage.ts` | the page against its last commit, in `vscode.diff`. HEAD's text is read with `git show`, written under the extension's storage, and deleted when the tab closes. The right-hand side is the editor's buffer, so an unsaved change is part of the diff it shows |
 | `src/outline.ts` | the **Page** pane: the page's headings as a nested jump list, and its word count in the status bar. Fenced blocks are skipped, because a `#` inside a code sample is a comment |
-| `src/tiptapEditor.ts` | **Rich mode**: the page as a document, on the official Tiptap UI Components template. Opt-in by command, never an editor association |
-| `webview/markdown.mts` | `tidy()`: what the official serializer produces, turned back into the file the author wrote — three narrow repairs, each covered by a fixture in `scripts/check-roundtrip.mts` |
-| `scripts/check-roundtrip.mts` | the check that matters most: 16 page shapes through the real editor stack, every one **byte-identical** and idempotent. `npm run check-roundtrip` |
-| `scripts/check-webview.mts` | the bundle loaded into a DOM and driven the way the extension drives it. Bundling is not rendering: a webview that throws on its first render is a blank tab, and `tsc` and `eslint` both pass. `npm run check-webview` |
+| `src/fluentEditor.ts` | **Temco Markdown**: the authoring surface — the page as a document on Fluent UI, with capture and annotation in the surface. The default editor for `*.md`; it owns the view type and the open command, and nothing of the protocol |
+| `src/markdownEdits.ts` | what bold, a list, a heading, a table and an image **mean**, as pure transforms over text and offsets — plus the writing behaviours (`continueList`, `indentLines`) and the search (`findMatches`, `replaceAll`). Both editors call it — Monaco through `src/format.ts`, the Fluent surface directly — so the two cannot drift into producing different files |
+| `src/attachments.ts` | where an image lands: the `media/` folder, the `NN-slug` name, the size limit, the width warning, and the record beside it. One path for the Monaco command, the surface's paste, a capture and a file picked from disk |
+| `src/attachmentRecord.ts` | that record as data — parse, serialise, add a caption, decide what is stale — with no `vscode` import, which is what makes the rule testable |
+| `webview/docs/main.tsx` | that surface's shell, its caret rules, its paste matrix, its caption question, its outline, its find bar and its view modes; `annotate.tsx` is the canvas annotator beside it, `highlight.ts` the colour behind the text, `find.tsx` and `outline.tsx` the two panels, `theme.ts` the `--vscode-*` → Fluent token bridge, `markdown.ts` the page renderer |
+| `scripts/check-fluent.mts` | the content-library boundary: only `webview/docs` may import `@fluentui`. `npm run check-fluent` |
+| `scripts/check-docs.mts` | the Fluent surface's bundle loaded into a DOM and driven the way the host drives it — it renders, `ready` is posted **once**, the formatting actions produce the right Markdown, an identical `set` disturbs nothing, an outside change still arrives. `npm run check-docs` |
+| `scripts/check-record.mts` | the attachment record through a table of cases, including the one that matters: a picture with no recorded version is never called stale. `npm run check-record` |
+| `tsconfig.webview.json` | the webview sources type-checked on their own, since `tsconfig.json` covers the extension host only. `npm run check-types` |
 | `scripts/check-learn.mts` | the Temco Learn portal: what a `manifest.json` means, and what the page it writes says. The first coverage of a file written on every publish and read by nobody. `npm run check-learn` |
-| `scripts/check-editor.mts` | the editing operations, driven through real Chromium: typing lands at the caret, Backspace deletes beside it, and a selection survives a message round trip. The only place the caret actually exists — `check-webview` passes either way. `npm run check-editor` |
 | `src/learnPage.ts` | the portal page and the manifest rules, as pure functions — no `vscode`, so the publish path has something to test |
-| `src/webviewText.ts` | the bridge both Rich modes share: one `WorkspaceEdit` per save, line endings preserved, the echo guard, and the three bar actions (preview / diff / source). Nothing that could corrupt a file is decided twice |
+| `src/webviewText.ts` | the bridge every webview surface shares: one `WorkspaceEdit` per save, line endings preserved, the echo guard, the capture handshake, and the bar actions (preview / diff / source / properties). Nothing that could corrupt a file is decided twice |
 | `src/csv.ts` | CSV as a grid can hold it and back again: RFC 4180 quoting, delimiter and end-of-line detected, and the *quoting style* preserved per cell so a one-cell edit is a one-line diff. No VS Code here at all |
 | `src/gridEditor.ts` | **Grid mode**: a CSV edited as cells (Univer). Same bridge as `webviewText.ts`; the file stays line-per-row because `csv.ts` does the writing |
-| `scripts/build-webview.mts` | the one bundler step: `webview/grid.ts` → `out/webview/grid/` and `webview/tiptap/main.tsx` → `out/webview/tiptap/`. `tsc` cannot do this — the surfaces are browser code with npm dependencies |
+| `scripts/build-webview.mts` | the one bundler step: `webview/grid.ts` → `out/webview/grid/` and `webview/docs/main.tsx` → `out/webview/docs/`. `tsc` cannot do this — the surfaces are browser code with npm dependencies |
 
 It no longer has a `src/catalog/` or a `src/selected.ts`: the database, the selection and the slug rule are `temco-store`'s, reached through `src/store.ts`.
 
@@ -80,95 +84,153 @@ one-word change becomes a whole-file diff. What was missing was never the engine
 | **Preview** | `previewPanel.ts`, a tab beside the source (`preview: <page>.md`) | VS Code shows a page, the build shows an alert; the panel dresses the markers so the two agree |
 | **Diff** | `diffPage.ts`, `vscode.diff` against `HEAD` | the editor's own diff, so the hunks seen are the hunks the pull request carries |
 | the **Page** pane | `outline.ts`: headings as a nested jump list, plus a word count in the status bar | line, column, encoding and end-of-line are already the status bar's, so nothing repeats them |
-| **Rich** | `tiptapEditor.ts` + `webview/tiptap/`: the page as a document, reached by *Open in Rich Mode* | the template's own bar, with this extension's preview / diff / source appended |
 | **Grid** | `gridEditor.ts` + `webview/grid.ts`: a CSV as cells, reached by *Open in the Grid* | the file stays CSV, one row per line, so a one-cell edit stays a one-line diff |
+| **Temco Markdown** | `fluentEditor.ts` + `webview/docs/`: the page as a document on **Fluent UI**, with capture and annotation built in — the **default** for `*.md` | see *The Fluent Markdown surface* below |
+| **Temco Page** | `pageEditor.ts` + `webview/page/`: the same file in the real **Tiptap** editor — *Open With… → Temco Page*, or the tab's menu | see *The rich page* below |
 
-The two optional surfaces are webviews, so they need a bundler — the only one in this extension:
+### One bridge, two surfaces
+
+Two editors over one file is a decision, not an accident: **what you see while editing** is a real choice, and it cannot
+be both. A source-visible editor (`Temco Markdown`) is the only way to be sure `git diff` will show what you did; a
+WYSIWYG editor (`Temco Page`) is the only way to write a table without thinking about pipes. Everything *else* about them
+is shared, and it is shared in code, not by convention:
+
+| Shared, in `src/webviewText.ts` | Why it cannot be per-surface |
+|---|---|
+| the ordered-write guard (a set of texts asked for, not just the newest) | a write that lands late looks like an outside change, and answering it moves the caret to the end of the page |
+| the file's own line endings | a browser only has `\n`; writing that into a CRLF file is a whole-file diff for one word |
+| one `WorkspaceEdit` over the whole file | so `Ctrl+Z` undoes an edit rather than a keystroke, and the dirty dot means the same thing |
+| the capture pipeline (`image`, `pastedImage`, `capture`, `commitCapture`, `caption`, `linkPage`) | the picture lands beside the page with its words and its version; two copies of that would drift |
+| the surface-failure reporter in the HTML | an editor that cannot start must say so in its own tab — an empty one is the failure a person cannot act on |
+
+`PageEditor` is therefore 30 lines: it names the bundle (`page`) and nothing else. Two surfaces, one set of rules. The
+**ribbon** is the second half of that: `.ribbon` lives in `temco-ui/media/page.css`, so both editors wear the same strip.
+
+A surface that asks a question draws the question itself. A webview frame is sandboxed without modals, so `window.prompt`
+returns `null` there — the Link button was dead for exactly that reason, and the page now asks in the vocabulary's own
+box (`.page-surface__ask`), where Enter accepts and Escape cancels.
+
+The three optional surfaces are webviews, so they need a bundler — the only one in this extension:
 
 ```
-webview/tiptap/main.tsx ─esbuild+sass─▶ out/webview/tiptap/tiptap.js 1.6 MB  official Tiptap template
-webview/grid.ts    ──esbuild──▶  out/webview/grid/grid.js    11.9 MB   Univer (Apache-2.0)
+webview/grid.ts       ──esbuild──▶  out/webview/grid/grid.js   11.9 MB   Univer (Apache-2.0)
+webview/docs/main.tsx ──esbuild──▶  out/webview/docs/docs.js    637 KB   Fluent v9 + React 19
+webview/page/main.tsx ──esbuild──▶  out/webview/page/page.js    987 KB   Tiptap 3.30.3 + React 19
 ```
+
+### Where this belongs: the extension, and what moving it into core would take
+
+The surfaces are an extension today. The question "should this be product code instead" has a factual answer in this
+fork, so it is recorded here rather than argued:
+
+| | Extension (`extensions/temco-docs`) | Core (`src/vs/workbench/contrib/…`) |
+|---|---|---|
+| how a surface is registered | `customEditors` contribution + `registerCustomTextEditorProvider` | an `EditorPane` on `EditorExtensions.EditorPane` with its own `EditorInput` + `IEditorSerializer`; the in-tree templates are `contrib/imageCarousel` (pane + webview) and `contrib/update/releaseNotesEditor` (a webview editor) |
+| what it can reach | the public API: `vscode.*` | every service: `IEditorService`, `IStorageService`, `IFileService`, `IContextKeyService`, `INotificationService`, the chat/agent services, `MenuRegistry`, `ViewsRegistry` |
+| tab restore | `retainContextWhenHidden`, a webview kept alive in a hidden tab | the editor input serializes itself, so a tab comes back without the hack |
+| iteration | edit, `npm run build-webview`, reload the window | edit, client compile, repo gates |
+| price of a change | local and quick | `valid-layers-check`, layering rules, a full client compile |
+
+Two things decide it. **A core surface cannot `import` React, Tiptap or Fluent** — `src/vs` has no React and no JSX
+toolchain — so the *content* would still be a webview bundle whatever we do; only the *host* moves. And the fork already
+contains the pattern for that split (`imageCarousel`: DOM in core, a webview for what needs one).
+
+The target, when the surfaces stop being experimental:
+
+```
+src/vs/workbench/contrib/temcoDocs/
+  browser/
+    temcoDocs.contribution.ts        registers the panes, commands, menus, views
+    markdownPageEditor.ts            EditorPane   ┐
+    markdownPageEditorInput.ts       EditorInput  ├ the authoring surface
+    pageEditor.ts                    EditorPane   ┐
+    pageEditorInput.ts               EditorInput  ├ the document surface
+    media/docs.js · media/page.js    built bundles (esbuild, not committed)
+  common/                            the round trip, the page model, the registry
+  test/browser/                      what `check-page` and `check-docs` do today
+```
+
+The migration is worth doing when one of these is true: a surface needs a workbench service an extension cannot see
+(the editor group layout, the chat context, a real `IStorageService`), tab restore has to be exact, or the module needs
+its own keybindings and menus without the `when`-clause traps. Until then the extension is not a limitation being
+tolerated — it is the cheapest place to keep a surface that is still being designed, and everything above it (the
+round trip, the capture pipeline, the page model) is already plain TypeScript that moves without a rewrite.
 
 The output goes to `out/webview/`, beside the extension host JavaScript and inside the directory this repository
 already treats as build output, so it is ignored by git. It is deliberately **not** committed: the
 `local/code-no-new-javascript-files` rule rejects a newly added `.js`, and only a CODEOWNERS edit can allowlist one.
 `vscode:prepublish` runs the build for a packaged extension, so a source tree needs `npm run build-webview` once.
 
-### The rich editor: the official Tiptap template
+### What was tried and removed: the rich editor
 
-The Rich surface is the **Tiptap UI Components Simple template**, installed with the project's own CLI
-(`npx @tiptap/cli add simple-editor`) and vendored verbatim at `webview/tiptap-template/` — 161 files of MIT React
-components, node views and SCSS. Six files of ours sit beside it:
+The page was once offered twice: the source surface, and a **Rich mode** built on the official Tiptap UI Components
+template — 161 vendored files, 21 @tiptap/* packages and a 1.6 MB bundle. It was **removed**, because:
 
-| File | What it does |
+* **The file is the source of truth, and it is Markdown.** The site, the offline help and the AI context all read it, and
+  review is a git diff of one paragraph per line. A ProseMirror document has to be serialised back, and a round trip that
+  re-wraps a paragraph turns a one-word edit into a whole-file diff — which is the failure this whole document exists to
+  avoid.
+* **It cost more than it gave.** Four extensions had to be removed because they do not survive that round trip (TextAlign,
+  Subscript/Superscript, Typography, colour highlight), each one a standing risk that the repairs in `tidy()` cannot
+  keep up. Two editors was also two sets of interactions to keep right, and the one that showed the document *as a
+  document* was never the one that showed the bytes.
+* **It did not look like the product.** It wore the template's own chrome rather than `page.css`, so the two editors did
+  not resemble each other, let alone the rest of the application.
+
+What it taught is kept, because it is the reason the shipped surface has the caret rules it has: a set that replaces the
+document under the caret moves the caret to the end of the page, an echo of the editor's own write must be dropped rather
+than applied, and `applyEdit` landing out of order makes a late write of ours look like an outside change. Those three
+lessons are enforced in `webview/docs/main.tsx` and asserted in `check-docs` and in the scenario below.
+
+### The rich page: Tiptap, and the round trip that makes it safe
+
+The rich editor is back, and it is the same engine — Tiptap 3.30.3, twelve packages, its own bundle at 983 KB. What
+changed is the order of the argument. The template was removed because its round trip could not be trusted; this page
+ships because the round trip **is a module with a check**, and nothing reaches its toolbar unless it survives that check.
+
+| Part | What it is |
 |---|---|
-| `webview/tiptap/main.tsx` | mounts the template's `<SimpleEditor />`, and maps VS Code's dark/light classes onto the `.dark` class the template expects |
-| `webview/tiptap/simple-editor.tsx` | the template's own entry component, adapted for a Markdown document (see below) |
-| `webview/tiptap/document.ts` | the message bridge: `set` in, `change` out, plus the image picker |
-| `webview/tiptap/document-actions.tsx` | preview / diff / source, as a trailing toolbar group |
-| `webview/tiptap/highlight-toggle.tsx` | the template's colour popover, reduced to the one highlight Markdown can hold |
-| `webview/tiptap/callout.ts` | decorates `> [!NOTE]` blockquotes so they look like the published alerts |
-| `webview/tiptap/context-menu.tsx` | the editing menu for the page: cut, copy, paste, select all, insert image, remove link |
-| `webview/tiptap/outline-panel.tsx` | the outline, its rail and the word count |
+| `src/pageMarkdown.ts` | the whole contract: `toHtml` (`marked`), `toMarkdown` (`turndown` + GFM), `roundTrip` |
+| `webview/page/main.tsx` | the Tiptap editor and its ribbon; it never sees a file, only Markdown over the message port |
+| `pageEditor.ts` | `temcoDocs.page`, a `CustomTextEditorProvider` on the same text document the source surface edits |
+| `scripts/check-page.mts` | eleven cases, one of them a whole page that must come back byte-identical |
 
-Four deviations from the template, each measured by `scripts/check-roundtrip.mts` before it was made:
+**The rules the conversion needs, each one a case in `check-page`:**
 
-| Extension | What it does on save | Decision |
-|---|---|---|
-| `TextAlign` | `<div align="center">centred</div>` — `centred` | removed |
-| `Subscript` / `Superscript` | `H<sub>2</sub>` — `H2` | removed |
-| `Typography` | rewrites what a person types (`--` → `—`) | removed |
-| colour highlight | colour is dropped, `==text==` remains | popover replaced by a toggle |
+* Tiptap wraps a table in `<colgroup>`; the GFM rule only recognises a table whose first child is a row, so a table
+  would serialise as raw HTML and the file would lose it. The colgroup is dropped — column widths are the reader's.
+* A paragraph inside a list item or a table cell emits **no** blank line. With one, a tight list becomes loose and every
+  bullet is rewritten, and a table row breaks into fragments.
+* Turndown pads a bullet marker to the width of the longest marker in the list (`-   one`), so markers are collapsed
+  back to one space. A task item's checkbox is followed by one space, not two.
+* `*italic*` is written `*italic*`, not `_italic_`; the GFM plugin's strikethrough writes a single `~`, which is not
+  strikethrough at all, so it is overridden to `~~`.
+* Underline and highlight have no Markdown spelling. They are kept as the inline HTML Markdown already allows
+  (`<u>`, `<mark>`), because a button whose effect disappears on the next save is a lie.
+* **Alignment and colour are not in the toolbar.** A paragraph's alignment lives in a `style` attribute Markdown cannot
+  hold, which is the same reason table widths are not kept. The reader decides both.
 
-Three things were **added** because this documentation needs them and the template does not ship them: `Table` (1,458
-table lines in `docs/`), `Mathematics` (`$...$`, `$$...$$`), and the official `Markdown` extension with `tidy()`.
+The two surfaces are peers over one file, not two products: the tab's menu reaches the other one
+(`temcoDocs.page.open`, *Open With…*), and both write the same document, so save, the dirty dot, `Ctrl+Z` and
+`git diff` mean the same thing in either. The Markdown source surface stays the default for `*.md`; a workspace that
+wants the page instead changes one `priority` in `package.json`, or a person picks it once in *Open With…*.
 
-### Where the template's editing behaviour had to change
+The two editors also share one ribbon: `.ribbon` and its groups live in `temco-ui/media/page.css`, so the strip a
+writer recognises in the source surface is the strip in the page, drawn from the same buttons and badges.
 
-Four interaction defects were reproduced in a real browser against the built bundle, not guessed at. The first three
-were one bug with four symptoms.
+### What was removed: ONLYOFFICE
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| Clicking text near a link moved the caret somewhere else | `enableClickSelection` selected the whole link on click | turned off, so a click places the caret |
-| A link popover opened on every click and took the focus | `LinkPopover` auto-opens whenever the caret is inside a link | `autoOpenOnLinkActive={false}`; the toolbar button still opens it |
-| Ctrl+A, paste and typing then went to the URL field | a consequence of the focus being taken | gone with the two fixes above |
-| A pasted screenshot did nothing | ProseMirror drops pasted files; only the template's picker was wired to the host | `handlePaste` sends the bytes to the extension, which writes them beside the page and replies with the page-relative address |
-| Right-click offered only Cut / Copy / Paste | the host's webview menu stops there, and hides itself once the page handles `contextmenu` | the page owns the menu: cut, copy, paste, select all, insert image, remove link |
+`src/office/` (sign, config, bridge, desktop paths, the custom editor), its four commands, its settings block and
+`scripts/check-office.mts` were deleted. ONLYOFFICE Docs does edit `.md` natively and the integration worked, but the
+licence and the deployment each decide the question on their own:
 
-Two details of the menu are deliberate. The focus stays in the page rather than moving to the menu, so the selected text
-keeps its highlight — the keyboard reaches the menu with the arrow keys. And a right-click inside a selection keeps that
-selection instead of collapsing it, so Cut and Copy have something to act on; anywhere else it moves the caret, which is
-what tells the menu whether it is on a link.
+* **AGPL-3.0.** The Document Server is a network service; serving it to our own users is exactly the case the licence
+  covers, and embedding it in a desktop product does not avoid that.
+* **A server nobody has.** It is not a library — it is a Docker or WSL deployment with its own storage, callback URLs and
+  JWT signing. No such server exists in this repository or on the machines this product runs on, and a document editor
+  that needs one before it can open a file is not a desktop product.
 
-### The caret through a message round trip
-
-The most damaging defect in this surface was not in the editor at all. The extension answers any change it does not
-recognise as its own by sending the file back, and the bridge applied that with `setContent` — which replaces the
-document and leaves the caret at the **end of the page**. Typing then looked like this: the selection you were dragging
-stopped halfway, and the next keystroke went somewhere else entirely, because the caret had been moved to the bottom.
-
-Two changes, each guarding one half:
-
-| Change | Why |
-|---|---|
-| a `set` whose text the editor already holds is ignored outright | the common case is an echo after the editor's own write; nothing about the document needs to change |
-| a `set` that does carry an outside change restores the caret to where it was, clamped to the new document | an external edit must not take the keyboard away from the person typing |
-
-The host had a third part of the same bug: `applyEdit` is asynchronous, so two writes can land out of order while
-somebody types, and a single `applied` string only names the newest. A late write from this editor was therefore
-mistaken for an outside change and answered with a redraw. The editor now remembers every text it asked VS Code to
-write, and a document change matching any of them is its own.
-
-And the rule that settles it: **the template's editor owns its document.** It is built once with the file and then
-edited; the bridge never replaces it while the editor has focus, and an outside change waits in a variable until the
-person leaves the page. That is what the template does, and wrapping it in a document-sync loop was the mistake.
-
-`scripts/check-editor.mts` reproduces the whole thing in Chromium and asserts the caret does not move across the round
-trip, that a selection survives it, and that an outside change does not touch a focused editor at all. Removing the
-guard makes it fail (`caret was 70, became 253`), which is the check earning its place: `check-webview` passes with the
-defect present, because jsdom reconciles an identical document to identical nodes and never has a selection to lose.
+Tiptap answers the same need — a document, in the product, offline, on the file — with a licence we can ship.
 
 ### Importing Word documents
 
@@ -187,7 +249,7 @@ Tiptap's own DOCX extensions were considered and are not used: both need a paid 
 
 Both are `iife` and self-contained: a webview has no module loader and there is no CDN, so everything a surface needs
 travels with it. `npm run build-webview` writes both (`esbuild` + Sass) into `out/webview/`, which is ignored by git —
-so a source tree needs that one command before the Rich or Grid surface will open, and `vscode:prepublish` runs it for
+so a source tree needs that one command before the editor or the Grid surface will open, and `vscode:prepublish` runs it for
 a packaged extension. No network and no `npm install` are needed *after* that build.
 
 What neither surface owns: the document. Both send the whole file text to the extension, which applies it as a single
@@ -208,10 +270,331 @@ Which editor opens what:
 
 | File | Opens in |
 |---|---|
-| `.md` | the text editor, with the toolbar, Preview and Diff — or Rich, on request |
+| `.md` | **Temco Markdown**, by default — one *Open With… → Text Editor* away from the source, and the file never changes meaning |
 | `.csv`, `.tsv` | the text editor — or the Grid, on request |
 | `.xlsx` | whatever VS Code opens a binary with; there is no grid for it (see above) |
 | everything else | untouched — the ordinary VS Code editor |
+
+**One editor per kind, on purpose.** There is no second rich-text surface for `.md`: the file is the source of truth and it
+is already readable in the surface's `Page` view, so an engine between the person and the bytes buys formatting they cannot
+review in a diff. The Office question is settled the same way, in
+[`../../platform-design.md`](../../platform-design.md): `.docx`/`.xlsx`/`.pptx` are *not* edited in the product — Word
+documents come **in** through `src/docx.ts`, and an OOXML editor would make the source of truth binary, un-diffable, and
+(ONLYOFFICE being AGPL-3.0) unshippable.
+
+## The Markdown surface
+
+The page as a document, in **the application's own vocabulary**. It is the default editor for `*.md`, because authoring is
+what a page is for and the chrome around it is what was missing — not the engine. The document is still the file: the
+surface writes Markdown through the document, so `Ctrl+Z`, the dirty dot, save, *Diff* and the git gutter behave exactly as
+they do in the source editor, and *Open With… → Text Editor* shows the same bytes.
+
+**The layout is not invented here.** `temco-ui/media/page.css` already carries a Markdown editor — `.md-editor` with a
+bar, a numbered gutter, `.md-line` colours and a status strip — and every other Temco page is drawn from the same file.
+This surface imports `page.css` into its bundle and renders `.view`, `.page-head`, `.md-editor`, `.badge` and `.segmented`,
+so it looks like the product instead of like an editor that happens to be inside it. Fluent supplies the popups only (the
+`⋯` menu, the outline popover, the prompt dialog); nothing on the page itself is a Fluent control.
+
+```
+┌ Temco Markdown ──────────────────────────────────────────────────────────────────────────────┐
+│ DOCUMENTATION                                          [📷 Screenshot] [🖼 Attach image…] ⚙ │
+│ Commissioning the T3000                                                                      │
+│ commissioning.md                                                                             │
+├──────────────────────────────────────────────────────────────────────────────────────────────┤
+│  Home   Insert   View                                                                        │
+│ ┌──────────┬─────────────────┬──────────┐                                                    │
+│ │ B  I  </>│ •  1.  ☑  ❝     │  🔗  ⋯   │        ← the chosen tab's groups, each captioned    │
+│ │  Text    │  Paragraph      │  Insert  │                                                    │
+├──────────┴─────────────────┴──────────┴──────────────────────────────────────────────────────┤
+│                       ┌ .sheet ─────────────────────────────────────────────┐               │
+│                       │  1 │ # Commissioning the T3000                     │               │
+│                       │  2 │                                               │               │
+│                       │  3 │ The controller ships with inputs disabled.    │               │
+│                       │  4 │                                               │               │
+│                       │  5 │ Terminate the RS-485 pair at both ends.       │               │
+│                       │  6 │                                               │               │
+│                       │  7 │ ![The device list after a reset](media/01.png)│               │
+│                       └───────────────────────────────────────────────────┘               │
+├──────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 23 words  8 lines  1 headings  [ saved in the document ]        −  100%  +  [Editor│Split│Page] │
+└──────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**The arrangement is a document editor's, not a web page's**: a head that says which document this is, a ribbon of named
+tabs whose chosen tab shows captioned groups of commands, the document itself on a **sheet** centred in the surface, and a
+status bar along the bottom with the counts on the left and the zoom and the view mode on the right.
+
+| Tab | Groups |
+|---|---|
+| **Home** | *Text* — bold, italic, inline code · *Paragraph* — bullet, numbered, task, quote · *Insert* — link, and `⋯` for every block |
+| **Insert** | *Blocks* — table, code block, rule, `⋯` · *Links* — link to a page · *Page* — page properties |
+| **View** | *Open* — the preview tab, the diff, the source editor · *Find* — the outline, find and replace |
+
+The tabs answer to `←` / `→` / `Home` / `End` and are a proper `tablist`: one tab in the tab order, `aria-selected` on the
+chosen one, `aria-controls` to its panel. A tab's controls exist **only** while its tab is chosen, which is why
+`check-docs` visits all three before it says every action is reachable.
+
+**Two sheets, or one.** `Editor` shows the sheet alone; `Page` shows a sheet of `.article__body`; `Split` shows both with a
+divider you can drag. The reader **does not repeat the title** — the head already says it, and in `Split` the source says it
+too, so three copies of one line is two too many. Both sheets carry the same inset, so their first lines sit on the same
+pixel row. One pane keeps a 900px measure instead of running the width of the tab.
+
+**Zoom is a font size, not a transform.** `− 100% +` in the status bar sets the *same* inline font size on the source and
+on its colour mirror, which is the only reason the colour stays under the words: two layers, one value. `MD-16` grows the
+text and measures both, because a size applied to one of them would look correct until the first character.
+
+Every icon button carries an `aria-label` and a tooltip.
+
+| Action | How it is reached |
+|---|---|
+| bold · italic · inline code | button, and `Ctrl+B` / `Ctrl+I`; a backtick over a selection makes it code |
+| heading 2 · 3 · 4 | `⋯` — pressing the level again removes it |
+| bullet · numbered · task · quote | one button each; every selected line is marked, and pressing again unmarks |
+| code block · table · rule · five callouts | `⋯` — the code block asks for a language, the callout for one of the five DocFX renders |
+| link | button, and `Ctrl+K` — the address is asked for, the selected words become the label |
+| **link to a page** | `⋯` — the host offers the pages the registry declares and inserts a **relative `.md` path**, the only link the build can resolve |
+| screenshot · attach image | the two buttons in the page head |
+| **page properties** | the ⚙ in the page head, or `⋯` — the right-hand panel, for the page in front |
+| **outline** | the outline button on the ribbon's View tab — the page's headings, indented by level, and one click puts the caret on one |
+| **find and replace** | `Ctrl+F`, or the search button on the View tab: literal or pattern, a count, next/previous, and **replace all** as one edit |
+| **source · split · preview** | the segmented control at the right of the status bar; the divider between the panes **drags** |
+| preview · diff · source | the three icons beside it; each asks the host to run a command **with this document's URI**, and each is also in the tab menu's *Temco Docs* submenu |
+
+### Writing, not just Markdown
+
+Four behaviours exist because a page of instructions is written in a list, edited in place and read back:
+
+| Behaviour | Why |
+|---|---|
+| `Enter` inside a list starts the next item, numbering included, and `Enter` on an empty item ends the list | every step is typed as an item; making each one by hand is the most repeated keystroke in the page |
+| `Tab` / `Shift+Tab` indent and outdent the selected lines | a nested step is two spaces, and nothing else should move |
+| the colour behind the words | see below — the input stays a textarea, so none of the caret rules are put at risk for colour |
+| the caret is revealed after a jump | the outline moves the caret into a line that may be off screen, and a caret you cannot see is a caret you do not trust |
+
+### Colour without a second editor engine
+
+The source pane is a `<textarea>`, and it has to stay one: every caret guarantee in this surface rests on the native
+element's own selection behaviour. So the highlighting is a **mirror `<pre>` behind the text**, and the textarea's own
+text is transparent with only its caret and selection visible:
+
+```
+┌───────────────────────────────────────────────┐
+│ <pre class="editor__mirror" aria-hidden>  ← colour, tokens, identical font  │
+│ <textarea class="source">                 ← transparent text, real caret     │
+└───────────────────────────────────────────────┘
+```
+
+Two things make or break it, and both are asserted: the mirror must hold **exactly** the same characters (one dropped
+space slides the colour out from under the words), and the control must **not paint its own background** — Fluent gives
+the textarea a surface, which is precisely what hides the colour, so that one declaration is `!important` on purpose.
+`MD-10` in the scenario measures both, because neither is visible in a diff and both look fine in a type check.
+
+| File | What it owns |
+|---|---|
+| `src/fluentEditor.ts` | `MARKDOWN_VIEW_TYPE`, the `MarkdownEditor` subclass, `openMarkdown` — no protocol of its own |
+| `src/webviewText.ts` | the bridge every webview surface shares: `set` / `change` / `pastedImage` / `capture` / `commitCapture` / `caption`, the echo guard, EOL handling, the capture command |
+| `webview/docs/main.tsx` | the shell, the caret rules, the paste matrix (image → annotate, HTML table/list → Markdown) |
+| `webview/docs/annotate.tsx` | the canvas annotator: arrow, box, ellipse, callout, redact, blur, numbered step, crop, undo |
+| `webview/docs/markdown.ts` | `renderMarkdown` for the page, `htmlToMarkdown` for what is pasted in |
+| `webview/docs/theme.ts` | `--vscode-*` → Fluent brand ramp, neutrals, radius and font; `watchTheme` repaints on a theme change |
+| `webview/docs/docs.css` | geometry, the paper, the parts of a document Fluent has no concept of |
+
+### The protocol
+
+```
+webview                              host (WebviewTextEditor)
+   │  {type:'ready'}                    │
+   ├───────────────────────────────────▶│  answers with `set` — the document's own text
+   │  {type:'change', text}             │
+   ├───────────────────────────────────▶│  one WorkspaceEdit over the whole file, 350 ms after typing settles
+   │  {type:'action', action:'capture'} │
+   ├───────────────────────────────────▶│  takes the screenshot and holds it (nothing is written yet)
+   │  ◀──────── {type:'captureReady'} ──┤
+   │  {type:'action', action:'commitCapture', caption}
+   ├───────────────────────────────────▶│  writes media/NN-slug.png, records caption + version
+   │  ◀── {type:'image', src, alt} ─────┤  answers with a page-relative address and the words
+   │  {type:'action', action:'caption', src, caption}   (an image that landed without words)
+   ├───────────────────────────────────▶│  records the words; nothing moves
+   │  {type:'action', action:'preview' | 'diff' | 'source'}
+   ├───────────────────────────────────▶│  runs the command **with this document's URI**
+```
+
+The capture is taken **before** the caption is asked for, and that order is deliberate: the screen a person wants is the
+one behind this window, and a dialog raised first would photograph the question. The bytes stay on the host while the
+surface asks, because a full screen is megabytes of base64 and it would cross the boundary twice for nothing.
+
+`action` carries the document, because inside a custom editor there is no `activeTextEditor`: a command that fell back
+to "whatever editor is in front" would find nothing and quietly do nothing.
+
+### The caret, in the surface that ships
+
+The three rules learned from the rich editor's round trip hold here too, and they are enforced in the webview rather than hoped for:
+
+| Rule | Why |
+|---|---|
+| a `set` exactly equal to what is on screen is dropped | the common case is an echo of our own write; redrawing identical text only moves the caret |
+| a `set` that is an outside change while the surface has focus is **queued**, applied on blur | a replacement under the caret collapses the selection being dragged |
+| an inserted image goes in **at the caret**, never appended | "quick" means where you are, not the end of the page |
+| `ready` is posted **exactly once**, ever | the host answers `ready` with its own copy of the document; posting it again mid-write is what puts older text back under the caret |
+
+Validating this in real VS Code found a fourth defect that the prototype could not show, and it was the worst of the
+set: the message listener was re-subscribed whenever the status state changed, and each subscription posted `ready`
+again. `ready` makes the host answer with its own copy of the document — an answer that can arrive while a write of ours
+is still in flight, which puts the older text back **under the caret**. That is exactly the "the cursor comes to another
+place" report, arriving through a channel that only exists in the real host. The listener is now installed once, and the
+current closure is carried by a ref.
+
+`npm run check-docs` now guards it headlessly: the bundle is loaded into a DOM, a `set` is delivered, the surface is
+typed into, and the run fails if `ready` was posted more than once. Removing the fix makes it fail (`the surface
+reported ready`, `typing did not post a second ready`), which is the check earning its place — no screenshot and no
+type check can see this.
+
+The status badge is part of the same fix. The host never echoes a change it applied itself, so a badge that compared the
+page against "the text the document opened with" stayed on *unsaved* forever. It now means what it says — `writing…`
+while the bridge is behind, `in document` once the edit is in the document — and it deliberately does not duplicate
+"is the file saved", which is the tab's dirty dot.
+
+### Screenshots, and why the capture is host-side
+
+`getDisplayMedia` is not dependable inside a webview — the frame is not granted display capture in every build — so the
+capture happens where the OS window is. `captureScreen()` runs a small platform command (`System.Windows.Forms.Screen`
++ `System.Drawing` on Windows, `screencapture -x` on macOS), writes a PNG to the temp folder, and **holds the bytes**.
+Linux reports that capture is unsupported and points at the paste.
+
+Nothing else about the pipeline is different from a paste: the bytes are written beside the page and the surface gets a
+relative address back.
+
+| Concern | Decision |
+|---|---|
+| where an image lives | `media/` beside the page — one folder per page folder, so a page moved with its folder keeps its images |
+| what the Markdown holds | `media/NN-slug.png`, relative — what the build resolves, so a published page needs no rewriting |
+| the file name | `NN-slug`, the number continuing the folder's own sequence and the slug from the page — never `image.png`, and never a name that collides |
+| two screenshots with the same name | impossible: the sequence number is read from the folder |
+| what the file receives | nothing at capture time; the surface inserts the reference and the normal save path carries it in |
+| the words | **one string**, used as the alt text and as the visible caption. A screen reader and a reader see the same sentence, and there is no second field to fall out of step |
+| what a picture depicts | `appliesTo`, recorded at insert time (design §22.4, S1) |
+
+### The pictures a version leaves behind
+
+`media/attachments.json` sits beside the images and says what each one is:
+
+```json
+{ "version": 1,
+  "images": {
+    "01-commissioning.png": {
+      "caption": "The device list after a reset",
+      "appliesTo": "13.0",
+      "added": "2026-10-24"
+    } } }
+```
+
+`appliesTo` is the version the release workflow's `version-report.json` names at the moment the image is inserted, so
+nothing has to be remembered by a person. When the report moves to a newer version, every picture still claiming the
+old one is **stale** — a warning, never a block (S3), and `temcoDocs.staleScreenshots` writes the report that records
+which ones were known about:
+
+```
+# Screenshots a newer version has left behind — 2026-10-24
+
+The documentation describes **13.1**. These 2 pictures were taken of something else,
+and they still look true.
+
+| Page | Image | Shows | Documentation |
+| --- | --- | --- | --- |
+| t3000/commissioning | 01-commissioning.png | 13.0 | 13.1 |
+| t3000/data-points | 02-scaled.png | 13.0 | 13.1 |
+
+Stale is a warning, not a block. Publishing one of these is allowed, and this report is what records it.
+```
+
+Two silences are deliberate. An image with **no** `appliesTo` is never called stale — "we do not know" is a different
+claim from "this is old", and a false accusation on every page written before the record existed would make the report
+worthless. And no version report means no report at all, because there is nothing to compare against.
+
+### What was proven in a real window
+
+`.build/vscode-playwright-mcp/temco-markdown-editor.cjs` drives a dev build and passes **sixteen** steps: the surface opens, the source pane holds the file from disk, typing reaches the **file** after `Ctrl+S`, the caret is still where typing left it, re-opening the page costs **zero bytes**, the surface fills the editor area, a screenshot is taken and then asks what it shows, the caption becomes both the reference and the record, the preview renders it as a figure whose alt text is the same words, the colour behind the text lines up with the words, the outline lists the headings and jumps to one, find counts its matches, the view modes show one pane or both, and the tab menu's *Temco Docs* submenu offers the three views for this surface. The last one chooses each ribbon tab and proves the document is untouched by the choosing, because a tab is a place commands live, not a place text does. The sixteenth zooms in and measures the source against its colour mirror, then resets, because a zoom that moves one layer and not the other is invisible in every other check.
+
+A second scenario, `.build/vscode-playwright-mcp/temco-page-editor.cjs`, drives the **rich page** and passes **three** steps: the page opens on the file that was in front and holds its text, typing marks the tab dirty and only `Ctrl+S` writes the new line to the file as Markdown, and **Bold** from the ribbon produces `**` in the file while the heading it did not touch stays byte-identical. A fourth thing is proved outside the window: `npm run check-page` renders a whole page to HTML and back and requires it to come back unchanged, and the built bundle is loaded in a plain browser with a stubbed host to prove that the first answer to `ready` is not lost.
+
+Three defects were found by running that scenario, and all three are fixed in the product:
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| the editor tab was there and the area inside it was empty, with no webview at all | the bundle threw at load: `ColorBackground24Regular` was used but never imported, and `webview/page` was not in `tsconfig.webview.json`, so nothing type-checked it | the import is restored and the surface is type-checked like the other one |
+| the page opened blank although the host had sent the text | the host answers `ready` at once, and the answer arrived while Tiptap was still creating its editor, where the handler dropped it | the answer is held in a module-level inbox and handed over when there is an editor to accept it |
+| the scenario clicked an editor that was not on screen | two tabs carried the same file name — the source surface and the page — and a hidden webview still answers a selector | the page is left as the only tab, and "in front" is checked by the editor's own header naming *Temco Page* |
+
+The first one is the lesson worth keeping: a webview that fails to start looks exactly like a webview that has not been caught up yet, and neither looks like an error. The `try`/`catch` in `resolveCustomTextEditor` exists because of it — a surface that cannot start now says so in its own tab.
+
+A third scenario, `.build/vscode-playwright-mcp/temco-docs-page-link.cjs`, opens a page nested inside a documentation set. Its second step — **link to a page** and **page properties** — is reported as **blocked, not passed**: both read the project catalog, and the harness cannot register a project, so a folder holding `docs/help/registry.json` is still "Repositories with a registry: 0". Both menu items are reachable in the surface; the picker and the panel behind them are the unverified part, and registering a project in the harness is the missing capability.
+
+Three defects were found by looking at that run's screenshots and logs rather than by its assertions, and all are fixed:
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| the whole surface sat in a band at the top of the editor | `FluentProvider` renders its own `div` inside `#root`; with no height every `height: 100%` below it collapses to nothing | `#root > div { height: 100% }` |
+| the source pane was 260 px tall in an 828 px pane | Fluent's `Textarea` is a **wrapper** around the real `<textarea>`, and the control it draws is capped by its own `max-height` | both levels fill: the wrapper is a flex box, the control takes `height: 100%` with `max-height: none` |
+| a run failed with an empty source pane | the bar paints before the document arrives, so "the editor is open" was being decided by the first paint rather than by the text | the scenario waits for the file's text, which is what a person sees |
+
+The layout one is now an assertion (`MD-06`), because a screenshot alone does not keep it fixed.
+
+Three harness facts are worth writing down, since they cost the most time: a webview is **two frames deep** (`iframe.webview` serves the platform's `index.html`, and the extension's document is the nested `#active-frame`); `retainContextWhenHidden` keeps a webview alive in a **background tab**, so finding its frame proves nothing about what a person can click; and on a loaded machine a cold dev build can take **two minutes** to activate, which is a timeout to raise rather than a bug to chase.
+
+**When a menu entry is gated on the editor, key it on the editor.** Retiring the rich editor left three commands — *Open in Source Mode*, *Preview the Page*, *Diff the Page with HEAD* — gated on `activeCustomEditorId == 'temcoDocs.richTiptap'`, an id that no longer existed, so they were hidden and nothing failed. Two rules came out of it, and `MD-14` now enforces both:
+
+| Rule | Why |
+|---|---|
+| `activeCustomEditorId` names **this** surface; `editorLangId` does not | `activeCustomEditorId` is empty unless the active input *is* a custom editor, while `editorLangId` follows the active **text** editor — and a webview is not one. The built-in markdown preview keys its `editor/title/context` entry on `resourceLangId` for exactly this reason, and that difference is why the tab menu's Temco Docs submenu was invisible until it was corrected. |
+| a `when` that can never be true looks exactly like a working feature | Nothing errors and nothing logs. Only an assertion that the command is *present* tells the two apart, which is why the step opens the menu instead of trusting the manifest. |
+
+The three now live in that submenu rather than in `editor/title`, because the surface already draws them in its own head — as icons, next to the view modes — and a title-bar twin both repeated them and squeezed the breadcrumb. `editor/title` keeps only the source-mode twins keyed on `editorLangId`, so each action appears once in each mode.
+
+### Two deliberate deviations
+
+| Deviation | Why |
+|---|---|
+| Fluent lives in `extensions/temco-docs/webview/docs/`, not in `temco-ui` | `temco-ui` has no React runtime and no JSX toolchain; extracting means giving it both. It is confined rather than unowned: `scripts/check-fluent.mts` fails the build if any other file imports `@fluentui`. The trigger to extract is a **second** Fluent surface. |
+| `.md` opens in this editor by default | it is the authoring surface. The risk of a custom editor is that it changes what the file means; this one writes Markdown through the document, so it cannot. Every other surface here stays `option`. |
+
+## The reader: what a published version looks like
+
+Authoring is one half of documentation; this is the other half. A published version gets a page beside the files the
+generator produced, and **the reader is not a second renderer**: the article is the generated page in a frame, so DocFX
+(or MkDocs, or Docusaurus) keeps rendering its own Markdown, and the reader supplies the shape a documentation site has.
+
+```
+┌ Temco Learn ──────────────────────────────────────────────────────────────────────────────┐
+│ Temco Learn   T3000                        [13.0 ▾]        [ Search this version… ]       │
+├──────────────────┬───────────────────────────────────────────────────┬────────────────────┤
+│ T3000 · 13.0     │ T3000 › Commissioning the T3000                   │ IN THIS ARTICLE     │
+│  T3000 docs      │                                                   │  Before you start   │
+│ ▸Commissioning   │ Commissioning the T3000        ← the generated    │  Terminate the pair │
+│  Verify reset    │                                   page, framed    │    With one segment │
+│                  │                                                   │  Verify the reset   │
+│                  │ ◀ T3000 documentation        Verify the reset ▶   │                     │
+├──────────────────┴───────────────────────────────────────────────────┴────────────────────┤
+│ T3000 13.0                                                              3 pages           │
+└───────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+| Decision | Why |
+|---|---|
+| one self-contained file, model embedded as JSON | it works from a folder, from the loopback server, and inside a CHM alike — no fetch, no build step, no second file to keep in step |
+| the article is a **frame** | a Markdown renderer here would be a second implementation of the generator's job, and it would drift |
+| the sidebar is built from the **pages in the folder** | a doc set never has to be told about the reader, and the sidebar cannot disagree with what was published |
+| "In this article" is read from the frame | it needs same-origin, which `siteServer` gives; from `file://` a browser refuses and the panel says nothing rather than guessing |
+| written as `temco-reader.html`, never `index.html` | the generator's own home page is not ours to overwrite |
+| the deep link is `#<href>` | a page can be sent to a colleague, and a reload lands on it |
+
+`src/learnReader.ts` is pure and `scripts/check-learn.mts` renders it: three columns, every page in the sidebar in order,
+the first page framed and marked, the version picker, no markup from a title, an empty set that still renders, and the hash
+deep link. Twenty checks, no browser.
+
+**The same shape inside VS Code.** `Page` mode puts the article's own headings beside it — the rail a documentation site
+has, because a long page is crossed by its headings and not by scrolling. Headings are addressable: `renderMarkdown`
+writes `id` from `slugOf`, so a rail link lands on the section, `levels` indent, and the rail is hidden in `Split`, where
+the pane is already half a tab. `check-docs` asserts the links and their anchors, not the pixels.
 
 ## The AI panel
 
@@ -259,6 +642,8 @@ already owns.**
 | `temcoDocs.refresh` | re-reads the registries |
 | `temcoDocs.openRegistry` | opens `registry.json` for the folder the node belongs to |
 | `temcoDocs.openPage` | opens the page, or offers to create the missing file |
+| `temcoDocs.markdown` | opens the page in **Temco Markdown**, the Fluent authoring surface — the way back in from the source editor |
+| `temcoDocs.staleScreenshots` | the report of pictures a newer version has left behind, from the record beside each page's images. Nothing is written and nothing is refused (design §22.4, S3) |
 | `temcoDocs.reveal` | shows the page's file — or a chapter's, an area's or a source's folder — in the operating system's file manager (`revealFileInOS`, not the VS Code view of a similar name) |
 | `temcoDocs.openTerminal` | opens an integrated terminal at the folder that row stands for |
 | `temcoDocs.copyPath` · `copyRelativePath` | the row's path on the clipboard, absolute or relative to the open folder |
@@ -340,6 +725,11 @@ trusted.
 | Deterministic first | Staleness is read from `index.json`, never recomputed; the low-confidence fallback is plain term overlap; citations are resolved against the registry |
 | Cost bounded | 6 turns of history, 40 area candidates, 40 commits, 100k characters of page text, 1024 tokens per answer and 2048 per draft, `--ctx-size 8192` |
 | Offline | The runtime is a local process on `127.0.0.1`; the only other network calls are the downloads the user starts |
+| One content library | `scripts/check-fluent.mts` fails if anything outside `webview/docs` imports `@fluentui` — a second Fluent surface is the trigger to extract it, not a stray import |
+| A surface cannot corrupt a file | every webview editor shares `WebviewTextEditor`, which owns the echo guard, the line endings and the single-`WorkspaceEdit` write; a surface only names its bundle |
+| One meaning per action | every formatting action is a pure transform in `src/markdownEdits.ts`, called by both editors — there is no second copy to drift |
+| The page in front is a page, not a text editor | `frontUri()` reads the active tab as well as `activeTextEditor`, because a custom editor has none; without it Properties, the capture target and every row command silently saw nothing |
+| Every image has words, and a version | `landImage()` is the only writer into `media/`; it records the caption and the version the picture depicts, and `check-record` proves a picture with no recorded version is never called stale |
 
 ## Roadmap
 
