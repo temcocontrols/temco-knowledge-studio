@@ -1,0 +1,236 @@
+/*
+ * The controls every editing surface shares: find, the outline, and the annotator.
+ *
+ * They live in the vocabulary (`page.css`) and are drawn from it — nothing here is a control of its own invention. They
+ * are in one file because a surface that has one of them has all three, and because two copies would drift.
+ */
+
+/* --- find ---------------------------------------------------------------------------------------- */
+.find {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.find__query {
+	min-width: 200px;
+}
+
+.find__replace {
+	min-width: 140px;
+}
+
+.find__count {
+	min-width: 56px;
+	font-size: var(--fs-xs);
+	color: var(--fg-subtle);
+}
+
+.find__pattern {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
+}
+
+/* --- the outline ---------------------------------------------------------------------------------- */
+.outline__surface {
+	max-height: 60vh;
+	overflow: auto;
+	min-width: 240px;
+	max-width: 420px;
+	padding: 6px;
+}
+
+.outline {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.outline__go {
+	display: flex;
+	gap: 8px;
+	width: 100%;
+	padding: 3px 6px;
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: none;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.outline__go:hover {
+	background: var(--bg-hover);
+}
+
+.outline__go:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder, var(--accent));
+}
+
+.outline__level {
+	flex: 0 0 auto;
+	color: var(--fg-subtle);
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
+}
+
+.outline__text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.outline__empty {
+	margin: 0;
+	padding: 8px;
+	font-size: var(--fs-sm);
+	color: var(--fg-subtle);
+}
+
+/* --- the annotation surface ----------------------------------------------------------------------- */
+.anno {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.anno__tools {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex-wrap: wrap;
+}
+
+.anno__canvas {
+	display: flex;
+	justify-content: center;
+	max-height: 58vh;
+	overflow: auto;
+	background: var(--bg-inset);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+}
+
+.anno__canvas canvas {
+	display: block;
+	max-width: 100%;
+	cursor: crosshair;
+}
+/* --- the controls taken from Tiptap's own vocabulary ---------------------------------------------- */
+/*
+ * A style menu, a list menu and a link popover: the controls a document application has and a plain toolbar does not.
+ * Radix positions them; everything visible is the product's tokens, so the strip still looks like Temco and not like a
+ * second editor bolted on.
+ */
+
+.menu__trigger {
+	display: inline-flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	height: 30px;
+	min-width: 108px;
+	padding: 0 8px 0 10px;
+	border: 1px solid transparent;
+	border-radius: var(--radius-sm);
+	background: var(--bg-inset);
+	color: var(--fg);
+	font-size: var(--fs-sm);
+	font-family: inherit;
+	cursor: pointer;
+}
+
+.menu__trigger:hover {
+	background: var(--bg-hover);
+	border-color: var(--border);
+}
+
+.menu__trigger:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder, var(--accent));
+	outline-offset: -1px;
+}
+
+.menu__value {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.menu__caret {
+	display: inline-flex;
+	flex: none;
+	color: var(--fg-subtle);
+}
+
+.menu__caret svg {
+	width: 14px;
+	height: 14px;
+}
+
+.menu,
+.popover {
+	z-index: 30;
+	min-width: 216px;
+	padding: 4px;
+	background: var(--bg-card);
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.menu__item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 6px 8px;
+	border-radius: var(--radius-sm);
+	color: var(--fg);
+	cursor: pointer;
+	outline: none;
+	user-select: none;
+}
+
+.menu__item[data-highlighted] {
+	background: var(--bg-hover);
+}
+
+.menu__sample {
+	font-size: 13px;
+	white-space: nowrap;
+}
+
+.menu__sample--0 { font-size: 12.5px; }
+.menu__sample--1 { font-size: 16px; font-weight: 600; }
+.menu__sample--2 { font-size: 14.5px; font-weight: 600; }
+.menu__sample--3 { font-size: 13px; font-weight: 600; }
+.menu__sample--4 { font-size: 12.5px; font-weight: 600; font-style: italic; }
+
+.menu__hint {
+	color: var(--fg-subtle);
+	font-size: var(--fs-xs);
+	font-variant-numeric: tabular-nums;
+}
+
+.popover {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 320px;
+	padding: 8px;
+}
+
+.popover__field {
+	width: 100%;
+}
+
+.popover__actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 6px;
+}

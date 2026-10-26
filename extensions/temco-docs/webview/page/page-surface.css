@@ -1,0 +1,395 @@
+/* What the rich page needs beyond the application's page vocabulary.
+ *
+ * `page.css` owns the ribbon, the buttons, the badges and the status strip — the same file every other Temco surface is
+ * drawn from. This file holds only what a live Tiptap document needs and a drawn page does not: a paper to write on, the
+ * ProseMirror content box, and the few decorations Tiptap's own nodes (tables, task lists, code blocks) have no classes
+ * for.
+ */
+
+html,
+body,
+#root {
+	height: 100%;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+}
+
+body {
+	font-family: var(--font-ui, var(--vscode-font-family, "Segoe UI", system-ui, sans-serif));
+	background: var(--editor-bg, var(--vscode-editor-background));
+	color: var(--fg, var(--vscode-foreground));
+}
+
+.page-surface {
+	--page-canvas: color-mix(in srgb, var(--vscode-foreground) 5%, var(--vscode-editor-background));
+	--page-sheet: var(--vscode-editor-background);
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	/* Flush to the tab, like a document application: the ribbon is the top of the surface, not a card floating in it. */
+	padding: 0;
+	gap: 0;
+}
+
+.page-surface--empty {
+	padding: 24px;
+	color: var(--fg-muted);
+}
+
+/* The ribbon is a strip of the window here, not a card: no border on three sides, no corners, and it stays put while the
+   document scrolls under it. The vocabulary's `.ribbon` is a card because a page may want one; a document application
+   never does. */
+.page-surface .ribbon {
+	margin: 0;
+	border: 0;
+	border-bottom: 1px solid var(--border);
+	border-radius: 0;
+	flex: none;
+}
+
+.page-surface .ribbon__tabs {
+	padding: 0 8px;
+}
+
+.page-surface .ribbon__tab {
+	padding: 6px 14px 5px;
+	font-size: calc(var(--fs-ui, 13px));
+}
+
+.page-surface .ribbon__panel {
+	padding: 5px 8px;
+	gap: 2px;
+	min-height: 44px;
+}
+
+/* No captions under the groups: the controls are named by their tooltips and their aria-labels, and the hairline between
+   groups is what says where one ends. A caption under every group is how a ribbon looks when it has room to be a teaching
+   aid; this one has to fit an editor pane. */
+.page-surface .ribbon__group {
+	padding: 0 10px;
+	gap: 3px;
+}
+
+.page-surface .ribbon__group + .ribbon__group {
+	border-left: 1px solid var(--border);
+}
+
+/* Only an icon-only control gets a square. A button with words keeps its own width — forcing 30 px on every `.btn` is
+   what made "Preview", "Diff with HEAD" and "Open source" draw on top of each other. */
+.page-surface .ribbon .btn--icon {
+	width: 30px;
+	height: 30px;
+	padding: 0;
+	justify-content: center;
+}
+
+.page-surface .ribbon .btn--icon svg {
+	width: 20px;
+	height: 20px;
+}
+
+.page-surface .ribbon .btn:not(.btn--icon) {
+	height: 30px;
+	padding: 0 10px;
+}
+
+/* A narrow editor gets a denser bar rather than a clipped one: the gallery folds into the Style menu (which offers the
+   same blocks), and the controls that no longer fit are listed behind `⋯`. */
+.page-surface .ribbon.is-compact .ribbon__styles {
+	display: none;
+}
+
+.page-surface .ribbon.is-compact .ribbon__group {
+	padding: 0 6px;
+	gap: 2px;
+}
+
+.page-surface .ribbon.is-compact .ribbon__panel {
+	min-height: 46px;
+	padding: 4px 6px;
+}
+
+/* Read mode says so, and says nothing else: the editing tabs are not offered, so a reader cannot think they are editing. */
+.ribbon__mode {
+	margin-left: auto;
+	align-self: center;
+	padding: 0 4px;
+	font-size: var(--fs-xs);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--fg-subtle);
+}
+
+/* The reading engine's box is the editor's box, minus everything that makes it an editor. */
+.page-surface__doc--reading {
+	user-select: text;
+}
+
+.page-surface__doc--reading a {
+	pointer-events: none;
+}
+
+/* The canvas: the surface behind the sheet. Word and ONLYOFFICE both put the page on a tone that is not the page.
+   A plain scroll container, not a flex row: a flex item is stretched to the container's height, which cut the sheet off
+   at the viewport and let the rest of the document spill onto the grey. */
+.page-surface__canvas {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+	background: var(--page-canvas);
+}
+
+/* The document itself: paper. No border and no corners — a sheet is a sheet. The shadow is what separates it from the
+   canvas, and `min-height` is the sheet height while the content is short; the content decides it once it is longer. */
+.page-surface__paper {
+	width: min(860px, 100%);
+	margin: 16px auto 0;
+	min-height: calc(100% - 16px);
+	background: var(--page-sheet);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18), 0 6px 20px rgba(0, 0, 0, 0.12);
+	border: 0;
+	border-radius: 0;
+}
+
+.page-surface__doc {
+	margin: 0 auto;
+	padding: 44px 56px 72px;
+	min-height: 100%;
+	outline: none;
+	font-size: 14px;
+	line-height: 1.7;
+	color: var(--fg);
+}
+
+.page-surface__doc:focus {
+	outline: none;
+}
+
+/* The document's own typography. These are the nodes Tiptap produces; `page.css` has no classes for them because the
+   rich page draws blocks, not lines. */
+.page-surface__doc h1 { font-size: 26px; line-height: 1.3; margin: 0 0 10px; color: var(--fg-strong); }
+.page-surface__doc h2 { font-size: 20px; margin: 26px 0 8px; color: var(--fg-strong); }
+.page-surface__doc h3 { font-size: 16px; margin: 20px 0 6px; color: var(--fg-strong); }
+.page-surface__doc h4 { font-size: 14px; margin: 16px 0 6px; color: var(--fg-strong); }
+.page-surface__doc p { margin: 0 0 12px; }
+.page-surface__doc ul,
+.page-surface__doc ol { margin: 0 0 12px; padding-left: 24px; }
+.page-surface__doc li { margin: 0 0 4px; }
+.page-surface__doc li p { margin: 0; }
+.page-surface__doc a { color: var(--accent); }
+.page-surface__doc blockquote {
+	margin: 0 0 12px;
+	padding-left: 12px;
+	border-left: 3px solid var(--border-strong);
+	color: var(--fg-muted);
+}
+.page-surface__doc code {
+	font-family: var(--font-mono, var(--vscode-editor-font-family));
+	font-size: 12.5px;
+	background: var(--bg-inset);
+	padding: 1px 4px;
+	border-radius: var(--radius-sm);
+}
+.page-surface__doc pre {
+	margin: 0 0 12px;
+	padding: 10px 12px;
+	background: var(--bg-inset);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	overflow: auto;
+}
+.page-surface__doc pre code { background: none; padding: 0; }
+.page-surface__doc hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
+.page-surface__doc mark { background: var(--accent-bg); color: var(--accent-fg); padding: 0 2px; border-radius: 2px; }
+
+/* A picture is a figure: the picture, and the caption the alt text already says. */
+.page-surface__doc img {
+	max-width: 100%;
+	height: auto;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+}
+
+/* Tables: Tiptap's nodes, the vocabulary's borders. */
+.page-surface__doc table {
+	border-collapse: collapse;
+	width: 100%;
+	margin: 0 0 16px;
+	table-layout: fixed;
+	overflow: hidden;
+}
+.page-surface__doc th,
+.page-surface__doc td {
+	border: 1px solid var(--border);
+	padding: 6px 8px;
+	vertical-align: top;
+	position: relative;
+}
+.page-surface__doc th { background: var(--bg-inset); font-weight: 600; text-align: left; }
+.page-surface__doc .selectedCell::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: color-mix(in srgb, var(--accent) 14%, transparent);
+	pointer-events: none;
+}
+.page-surface__doc .column-resize-handle {
+	position: absolute;
+	right: -2px;
+	top: 0;
+	bottom: -2px;
+	width: 4px;
+	background: var(--accent);
+	pointer-events: none;
+}
+
+/* Task lists, which are checkboxes in a list rather than bullets. */
+.page-surface__doc ul[data-type='taskList'] { list-style: none; padding-left: 4px; }
+.page-surface__doc ul[data-type='taskList'] li { display: flex; gap: 8px; align-items: flex-start; }
+.page-surface__doc ul[data-type='taskList'] li > label { margin-top: 3px; }
+.page-surface__doc ul[data-type='taskList'] input[type='checkbox'] { accent-color: var(--accent); }
+
+/* A placeholder, so an empty page says where the typing goes. */
+.page-surface__doc p.is-editor-empty:first-child::before {
+	content: 'Start writing, or press Ctrl+V to paste from an application.';
+	float: left;
+	height: 0;
+	pointer-events: none;
+	color: var(--fg-subtle);
+}
+
+/* A toolbar button that is on: the vocabulary's ghost button, plus the state a toggle needs. */
+.ribbon .btn.is-on {
+	background: var(--bg-active, var(--bg-hover));
+	color: var(--fg-strong);
+}
+
+.page-surface__word {
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+}
+
+.statusbar__spacer {
+	flex: 1 1 auto;
+}
+
+.page-surface__table {
+	display: inline-flex;
+	gap: 4px;
+}
+
+/* The question a command asks before it edits — a caption, an address. A webview frame is sandboxed without modals, so
+   `window.prompt` returns null there and the command would silently do nothing; the surface asks in its own vocabulary. */
+.page-surface__ask {
+	position: fixed;
+	inset: 0;
+	z-index: 10;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: color-mix(in srgb, var(--vscode-editor-background, #000) 50%, transparent);
+}
+
+.page-surface__ask-box {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	width: min(420px, 90vw);
+	padding: 16px;
+	background: var(--bg-card);
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius);
+	box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+.page-surface__ask-title {
+	font-size: var(--fs-sm);
+	color: var(--fg-strong);
+}
+
+.page-surface__ask-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 6px;
+}
+
+/* The style gallery: each entry is its own sample, so the choice is made by sight. Sizes are the document's own — a
+   gallery that showed every heading at one size would be a list of words, not a gallery. */
+.page-surface__styles {
+	gap: 4px;
+	align-items: stretch;
+}
+
+.page-surface__style {
+	min-width: 96px;
+	padding: 4px 10px;
+	border: 1px solid transparent;
+	border-radius: var(--radius-sm);
+	background: var(--bg-inset);
+	color: var(--fg);
+	font-size: 13px;
+	cursor: pointer;
+	text-align: left;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.page-surface__style:hover {
+	background: var(--bg-hover);
+	border-color: var(--border);
+}
+
+.page-surface__style.is-on {
+	border-color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 12%, var(--bg-inset));
+}
+
+.page-surface__style[data-level='0'] { font-size: 13px; }
+.page-surface__style[data-level='1'] { font-size: 16px; font-weight: 600; }
+.page-surface__style[data-level='2'] { font-size: 14.5px; font-weight: 600; }
+.page-surface__style[data-level='3'] { font-size: 13.5px; font-weight: 600; font-style: italic; }
+
+.page-surface__zoom {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	padding-left: 8px;
+	border-left: 1px solid var(--border);
+}
+
+.page-surface__zoom-value {
+	min-width: 40px;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+	color: var(--fg-muted);
+}
+
+/* The find bar, the document and its outline share the space under the ribbon. */
+.page-surface__find {
+	flex: none;
+	padding: 6px 10px;
+	border-bottom: 1px solid var(--border);
+	background: var(--bg-card);
+}
+
+.page-surface__body {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+}
+
+.page-surface__canvas {
+	flex: 1 1 auto;
+}
+
+/* The outline is a rail, not a tab: the document keeps its width and the list sits beside it. */
+.page-surface__outline {
+	flex: 0 0 260px;
+	overflow: auto;
+	padding: 10px;
+	border-left: 1px solid var(--border);
+	background: var(--bg-card);
+}
