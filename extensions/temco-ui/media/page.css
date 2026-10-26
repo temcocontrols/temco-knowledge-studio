@@ -387,6 +387,87 @@ button.link:hover {
 	height: 15px;
 }
 
+/* ---------------------------------------------------------------- the ribbon */
+
+/* The arrangement a document editor is recognised by: a strip of named tabs, and under the chosen one a band of
+   grouped controls, each group captioned underneath. Every surface that edits text uses it — the Markdown source, the
+   rich page — so a person sees the same furniture whichever one they opened. It is the product's own buttons, badges
+   and icons; nothing here is a new control, only the place they sit. */
+.ribbon {
+	flex: none;
+	margin-bottom: 10px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--bg-card);
+	overflow: hidden;
+}
+
+.ribbon__tabs {
+	display: flex;
+	gap: 2px;
+	padding: 0 6px;
+	border-bottom: 1px solid var(--border);
+}
+
+.ribbon__tab {
+	border: 0;
+	background: none;
+	padding: 5px 12px 4px;
+	border-bottom: 2px solid transparent;
+	color: var(--fg-muted);
+	font-size: var(--fs-sm);
+	cursor: pointer;
+}
+
+.ribbon__tab:hover {
+	color: var(--fg);
+}
+
+.ribbon__tab[aria-selected='true'] {
+	color: var(--fg-strong);
+	border-bottom-color: var(--accent);
+}
+
+.ribbon__tab:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder, var(--accent));
+	outline-offset: -2px;
+}
+
+.ribbon__panel {
+	display: flex;
+	align-items: flex-start;
+	gap: 2px;
+	padding: 4px 6px 2px;
+	flex-wrap: wrap;
+	min-height: 44px;
+}
+
+/* A group is its controls with a hairline to the next one, and its name underneath — the arrangement ONLYOFFICE and
+   every ribbon before it uses, so the eye can find "Paragraph" without reading icons. */
+.ribbon__group {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding: 0 10px 12px;
+	position: relative;
+}
+
+.ribbon__group + .ribbon__group {
+	border-left: 1px solid var(--border);
+}
+
+.ribbon__label {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	text-align: center;
+	font-size: 10px;
+	letter-spacing: 0.02em;
+	color: var(--fg-subtle);
+	pointer-events: none;
+}
+
 /* ---------------------------------------------------------------- layout */
 
 .grid {

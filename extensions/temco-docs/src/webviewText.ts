@@ -11,8 +11,17 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 
+import { execFile } from 'child_process';
+import { promises as fs } from 'fs';
+import * as os from 'os';
+import { promisify } from 'util';
+import { currentVersion, landImage, setCaption } from './attachments';
+import { DocsRoot, collectPages } from './registry';
+
+const run = promisify(execFile);
+
 /** What a bar button may ask the extension to do. */
-export type PageAction = 'preview' | 'diff' | 'source';
+export type PageAction = 'preview' | 'diff' | 'source' | 'properties';
 
 /** One message from a webview: the editor's own protocol, in either direction. */
 interface HostMessage {
@@ -21,16 +30,19 @@ interface HostMessage {
 	action?: unknown;
 	name?: unknown;
 	data?: unknown;
+	caption?: unknown;
+	src?: unknown;
 }
 
 const COMMANDS: Record<PageAction, string> = {
 	preview: 'temcoDocs.previewPage',
 	diff: 'temcoDocs.diffPage',
 	source: 'temcoDocs.openSource',
+	properties: 'temcoDocs.pageProperties',
 };
 
 function actionOf(value: unknown): PageAction | undefined {
-	return value === 'preview' || value === 'diff' || value === 'source' ? value : undefined;
+	return value === 'preview' || value === 'diff' || value === 'source' || value === 'properties' ? value : undefined;
 }
 
 /**
@@ -49,13 +61,43 @@ export function webviewAssets(extensionUri: vscode.Uri, assets: string): vscode.
  * Subclasses supply the built bundles; this owns the conversation with them.
  */
 export abstract class WebviewTextEditor implements vscode.CustomTextEditorProvider {
-	constructor(protected readonly context: vscode.ExtensionContext, private readonly assets: string) { }
+	constructor(
+		protected readonly context: vscode.ExtensionContext,
+		private readonly assets: string,
+		/**
+		 * The documentation sets being read, for the one thing an image needs from them: the version the pages
+		 * describe right now. Optional, because a surface that never writes an image does not need it.
+		 */
+		private readonly roots?: () => readonly DocsRoot[]
+	) { }
+
+	/**
+	 * A screenshot that has been taken but not yet placed.
+	 *
+	 * The capture happens before the caption is asked for, because the screen the person wants is the one behind this
+	 * window — asking first would photograph the question. The document is part of the record so a capture cannot land
+	 * on a page that was not the one it was taken from.
+	 */
+	private pendingCapture: { document: vscode.TextDocument; bytes: Uint8Array } | undefined;
 
 	async resolveCustomTextEditor(
 		document: vscode.TextDocument,
 		panel: vscode.WebviewPanel,
 		_token: vscode.CancellationToken
 	): Promise<void> {
+		// An editor that throws leaves an empty tab and no explanation, which a person cannot act on. Say it instead.
+		try {
+			this.start(document, panel);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			void vscode.window.showErrorMessage(`Temco Docs: the ${this.assets} surface could not start — ${message}`);
+			panel.webview.options = { enableScripts: false };
+			panel.webview.html = `<body style="font-family:var(--vscode-font-family);padding:20px">The ${this.assets} surface could not start: ${message}</body>`;
+		}
+	}
+
+	/** The surface itself: assets, document, and the two-way conversation that keeps them equal. */
+	private start(document: vscode.TextDocument, panel: vscode.WebviewPanel): void {
 		panel.webview.options = {
 			enableScripts: true,
 			localResourceRoots: [
@@ -88,7 +130,12 @@ export abstract class WebviewTextEditor implements vscode.CustomTextEditorProvid
 		};
 
 		const redraw = (): void => {
-			void panel.webview.postMessage({ type: 'set', text: document.getText() });
+			void panel.webview.postMessage({
+				type: 'set',
+				text: document.getText(),
+				// The page's own place, for the head the surface draws: `docs/t3000/commissioning.md`.
+				path: vscode.workspace.asRelativePath(document.uri),
+			});
 		};
 
 		panel.webview.onDidReceiveMessage((message: HostMessage) => {
@@ -101,7 +148,23 @@ export abstract class WebviewTextEditor implements vscode.CustomTextEditorProvid
 				return;
 			}
 			if (message.type === 'action' && message.action === 'pastedImage') {
-				void this.savePastedImage(document, panel, message.name, message.data);
+				void this.landPasted(document, panel, message.name, message.data, message.caption);
+				return;
+			}
+			if (message.type === 'action' && message.action === 'capture') {
+				void this.captureScreen(document, panel);
+				return;
+			}
+			if (message.type === 'action' && message.action === 'commitCapture') {
+				void this.commitCapture(document, panel, message.caption);
+				return;
+			}
+			if (message.type === 'action' && message.action === 'caption') {
+				void this.rememberCaption(document, panel, message.src, message.caption);
+				return;
+			}
+			if (message.type === 'action' && message.action === 'linkPage') {
+				void this.linkToPage(document, panel);
 				return;
 			}
 			if (message.type === 'action') {
@@ -138,12 +201,13 @@ export abstract class WebviewTextEditor implements vscode.CustomTextEditorProvid
 		);
 	}
 
+
 	/**
-	 * Puts an image beside the page and tells the editor where it is.
+	 * Puts an image the person picked beside the page.
 	 *
-	 * The file goes into the page's own `media/` folder and the editor receives a **page-relative** address, because
-	 * that is what the Markdown has to contain for the build to resolve it. Nothing is written to the document here:
-	 * the webview inserts the image node, and the normal save path carries it into the file.
+	 * Nothing is written to the document here: the webview inserts the reference and the normal save path carries it into
+	 * the file. What this adds is the record — the words that go with the picture, and the version it shows, which is
+	 * what lets a later release name the screenshots that need retaking (design §22.4).
 	 */
 	private async pickImage(document: vscode.TextDocument, panel: vscode.WebviewPanel): Promise<void> {
 		const picked = await vscode.window.showOpenDialog({
@@ -155,70 +219,198 @@ export abstract class WebviewTextEditor implements vscode.CustomTextEditorProvid
 		if (source === undefined) {
 			return;
 		}
-
-		const folder = vscode.Uri.joinPath(vscode.Uri.file(path.dirname(document.uri.fsPath)), 'media');
 		try {
-			await vscode.workspace.fs.createDirectory(folder);
-			const target = vscode.Uri.joinPath(folder, path.basename(source.fsPath));
-			if (target.toString() !== source.toString()) {
-				await vscode.workspace.fs.copy(source, target, { overwrite: true });
-			}
-			const relative = `media/${path.basename(source.fsPath)}`.split(path.sep).join('/');
-			await panel.webview.postMessage({ type: 'image', src: encodeURI(relative) });
+			const bytes = await vscode.workspace.fs.readFile(source);
+			await this.place(document, panel, {
+				bytes,
+				extension: path.extname(source.fsPath).replace('.', ''),
+				caption: '',
+				// A picture from disk arrives with no words at all, so the surface is asked for them afterwards. A paste
+				// or a capture already knows: the person typed the caption before the file was written.
+				askForCaption: true,
+			});
 		} catch (error) {
-			void vscode.window.showErrorMessage(
-				`Temco Docs: the image could not be copied beside the page — ${
-					error instanceof Error ? error.message : String(error)
-				}`
-			);
+			this.report('the image could not be read', error);
 		}
 	}
 
-	/**
-	 * Puts a pasted image beside the page.
-	 *
-	 * A paste carries the bytes, not a path, so there is no file to copy — this writes them. The name is made safe and
-	 * made unique, because a screenshot is always called `image.png` and two of them must not overwrite each other.
-	 */
-	private async savePastedImage(
+	/** A pasted image: the caption came with the bytes, because the surface asks before it sends them. */
+	private async landPasted(
 		document: vscode.TextDocument,
 		panel: vscode.WebviewPanel,
 		name: unknown,
-		data: unknown
+		data: unknown,
+		caption: unknown
 	): Promise<void> {
 		if (typeof data !== 'string' || data.length === 0) {
 			return;
 		}
-		const folder = vscode.Uri.joinPath(vscode.Uri.file(path.dirname(document.uri.fsPath)), 'media');
+		await this.place(document, panel, {
+			bytes: Buffer.from(data, 'base64'),
+			extension: typeof name === 'string' ? path.extname(name).replace('.', '') : 'png',
+			caption: typeof caption === 'string' ? caption : '',
+		});
+	}
+
+	/**
+	 * Takes a screenshot and holds it until the surface has asked what it shows.
+	 *
+	 * `getDisplayMedia` is not dependable inside a webview — the frame is not granted display capture in every build —
+	 * so the capture happens where the OS window is: a small platform command writes a PNG to a temporary file. The
+	 * bytes are kept here rather than sent back, because the caption is asked for *after* the picture is taken and a
+	 * full screen is megabytes of base64 that would cross the boundary twice for nothing.
+	 */
+	private async captureScreen(document: vscode.TextDocument, panel: vscode.WebviewPanel): Promise<void> {
+		const file = path.join(os.tmpdir(), `temco-capture-${Date.now()}.png`);
 		try {
-			await vscode.workspace.fs.createDirectory(folder);
-			const target = await this.freeName(folder, typeof name === 'string' ? name : 'pasted.png');
-			await vscode.workspace.fs.writeFile(target, Buffer.from(data, 'base64'));
-			const relative = `media/${path.basename(target.fsPath)}`.split(path.sep).join('/');
-			await panel.webview.postMessage({ type: 'image', src: encodeURI(relative) });
+			if (process.platform === 'win32') {
+				const target = file.replace(/'/g, "''");
+				const script = [
+					'Add-Type -AssemblyName System.Windows.Forms,System.Drawing',
+					'$b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds',
+					'$bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height',
+					'$g = [System.Drawing.Graphics]::FromImage($bmp)',
+					'$g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)',
+					`$bmp.Save('${target}', [System.Drawing.Imaging.ImageFormat]::Png)`,
+					'$g.Dispose(); $bmp.Dispose()',
+				].join('; ');
+				await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { timeout: 20000 });
+			} else if (process.platform === 'darwin') {
+				await run('screencapture', ['-x', file], { timeout: 20000 });
+			} else {
+				void vscode.window.showInformationMessage(
+					'Temco Docs: capture is implemented on Windows and macOS. Paste a screenshot with Ctrl+V instead.'
+				);
+				return;
+			}
+			const bytes = await fs.readFile(file);
+			this.pendingCapture = { document, bytes };
+			await panel.webview.postMessage({ type: 'captureReady' });
 		} catch (error) {
-			void vscode.window.showErrorMessage(
-				`Temco Docs: the pasted image could not be saved beside the page — ${
-					error instanceof Error ? error.message : String(error)
-				}`
-			);
+			this.report('the screenshot could not be taken', error);
+		} finally {
+			await fs.rm(file, { force: true }).catch(() => undefined);
 		}
 	}
 
-	/** The first free `name`, `name-2`, `name-3` … in a folder, so a paste never replaces an existing image. */
-	private async freeName(folder: vscode.Uri, name: string): Promise<vscode.Uri> {
-		const safe = path.basename(name).replace(/[^\w.-]+/g, '-');
-		const extension = path.extname(safe) || '.png';
-		const stem = path.basename(safe, extension) || 'pasted';
-		for (let index = 1; index < 1000; index++) {
-			const candidate = vscode.Uri.joinPath(folder, index === 1 ? `${stem}${extension}` : `${stem}-${index}${extension}`);
-			try {
-				await vscode.workspace.fs.stat(candidate);
-			} catch {
-				return candidate;
-			}
+	/** The caption for a screenshot that has been taken: now it can land, with its words and its version. */
+	private async commitCapture(document: vscode.TextDocument, panel: vscode.WebviewPanel, caption: unknown): Promise<void> {
+		const pending = this.pendingCapture;
+		this.pendingCapture = undefined;
+		if (pending === undefined || pending.document.uri.toString() !== document.uri.toString()) {
+			return;
 		}
-		return vscode.Uri.joinPath(folder, `${stem}-${Date.now()}${extension}`);
+		await this.place(document, panel, {
+			bytes: pending.bytes,
+			extension: 'png',
+			caption: typeof caption === 'string' ? caption : '',
+		});
+	}
+
+	/**
+	 * One place for every image: write it, record it, and tell the surface where it is.
+	 *
+	 * The address the surface receives is **page-relative**, because that is what the Markdown has to contain for the
+	 * build to resolve it; the alt text is the caption, because the preview renders it as a caption and a screen reader
+	 * reads it as the description — one string, so the two cannot disagree.
+	 */
+	private async place(
+		document: vscode.TextDocument,
+		panel: vscode.WebviewPanel,
+		options: { bytes: Uint8Array; extension: string; caption: string; askForCaption?: boolean }
+	): Promise<void> {
+		try {
+			const landed = await landImage({
+				pageFsPath: document.uri.fsPath,
+				slug: path.basename(document.uri.fsPath, path.extname(document.uri.fsPath)),
+				bytes: options.bytes,
+				fallbackExtension: options.extension,
+				caption: options.caption,
+				appliesTo: await currentVersion(this.roots?.() ?? []),
+			});
+			if ('error' in landed) {
+				void vscode.window.showErrorMessage(`Temco Docs: ${landed.error}. Nothing was written.`);
+				return;
+			}
+			if (landed.warning !== undefined) {
+				void vscode.window.showWarningMessage(`Temco Docs: ${landed.warning}`);
+			}
+			await panel.webview.postMessage({
+				type: 'image',
+				src: encodeURI(landed.relative),
+				alt: landed.alt,
+				askForCaption: options.askForCaption === true,
+			});
+		} catch (error) {
+			this.report('the image could not be written beside the page', error);
+		}
+	}
+
+	/** The caption the surface collected for an image that had none when it landed. Words only; nothing moves. */
+	private async rememberCaption(
+		document: vscode.TextDocument,
+		_panel: vscode.WebviewPanel,
+		src: unknown,
+		caption: unknown
+	): Promise<void> {
+		if (typeof src !== 'string' || typeof caption !== 'string') {
+			return;
+		}
+		try {
+			const name = decodeURIComponent(src).replace(/^media\//, '');
+			await setCaption(document.uri.fsPath, name, caption);
+		} catch (error) {
+			this.report('the caption could not be recorded', error);
+		}
+	}
+
+	private report(situation: string, error: unknown): void {
+		void vscode.window.showErrorMessage(
+			`Temco Docs: ${situation} — ${error instanceof Error ? error.message : String(error)}`
+		);
+	}
+
+	/** Whether `file` is inside `root`, for the one question a link needs: which set is this page in. */
+	private within(root: vscode.Uri, file: vscode.Uri): boolean {
+		if (root.scheme !== file.scheme) {
+			return false;
+		}
+		const relative = path.relative(root.fsPath, file.fsPath);
+		return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+	}
+
+	/**
+	 * Asks which page the selection should point at, and answers with the link.
+	 *
+	 * The form is `05-content-and-registry.md`'s: a **relative `.md` path**, which is the only link the build can resolve
+	 * and warn on. The picker therefore offers the pages the registry declares and refuses a page in another source,
+	 * because no relative path reaches it — the same rule `temcoDocs.format.linkPage` follows for the text editor.
+	 */
+	private async linkToPage(document: vscode.TextDocument, panel: vscode.WebviewPanel): Promise<void> {
+		const from = document.uri;
+		const root = (this.roots?.() ?? []).find((candidate) => this.within(candidate.rootUri, from));
+		if (root === undefined) {
+			void vscode.window.showInformationMessage(
+				'Temco Docs: this file is not inside a page tree that is being read, so there is nothing to link to.'
+			);
+			return;
+		}
+		const pages = collectPages(root).filter((page) => page.exists && page.uri.fsPath !== from.fsPath);
+		if (pages.length === 0) {
+			void vscode.window.showInformationMessage(
+				`Temco Docs: ${root.folder.name} declares no other page with a file to link to.`
+			);
+			return;
+		}
+		const picked = await vscode.window.showQuickPick(
+			pages.map((page) => ({ label: page.title, description: page.id, page })),
+			{ title: `Link to a page in ${root.folder.name}`, placeHolder: 'Type part of a title, or a path', matchOnDescription: true }
+		);
+		if (picked === undefined) {
+			return;
+		}
+		const address = path.relative(path.dirname(from.fsPath), picked.page.uri.fsPath).split(path.sep).join('/');
+		await panel.webview.postMessage({ type: 'pageLink', title: picked.page.title, address });
 	}
 
 	/**
@@ -275,6 +467,21 @@ export abstract class WebviewTextEditor implements vscode.CustomTextEditorProvid
 </head>
 <body>
 <div id="root"></div>
+<script>
+	// If the surface cannot start, say so in the page: an empty tab is the one failure a person cannot act on.
+	var say = function (text) {
+		var root = document.getElementById('root');
+		if (root !== null && root.childElementCount === 0) {
+			root.textContent = 'The surface did not start: ' + text;
+		}
+	};
+	window.addEventListener('error', function (event) {
+		say(String(event.message) + ' (' + String(event.filename) + ':' + String(event.lineno) + ')');
+	});
+	window.addEventListener('unhandledrejection', function (event) {
+		say(String(event.reason));
+	});
+</script>
 <script src="${script}"></script>
 </body>
 </html>`;

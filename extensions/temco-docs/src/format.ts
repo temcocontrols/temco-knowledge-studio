@@ -24,41 +24,24 @@
 
 import * as path from 'path';
 import * as vscode from 'vscode';
+import {
+  CALLOUTS,
+  HEADINGS,
+  LANGUAGES,
+  RULE,
+  TABLE,
+  headingsOf,
+  insertBlock,
+  insertCallout,
+  insertCodeBlock,
+  insertLink,
+  setHeading,
+  toggleLineMark,
+  toggleWrap,
+  type EditResult,
+  type EditState,
+} from './markdownEdits';
 import { DocsRoot, collectPages } from './registry';
-
-/** The heading levels the design's toolbar offers: a page's own title is the `#`. */
-const HEADINGS = [2, 3, 4];
-
-/** Enough languages to cover the code in these pages, and no pretence of being a list of all of them. */
-const LANGUAGES = [
-  'text',
-  'bash',
-  'powershell',
-  'json',
-  'yaml',
-  'javascript',
-  'typescript',
-  'csharp',
-  'cpp',
-  'rust',
-  'python',
-  'sql',
-  'ini',
-  'mermaid',
-  'plantuml',
-];
-
-/** The five DocFX renders, with the words its own documentation uses for them. */
-const CALLOUTS = [
-  { label: 'Note', detail: 'information to notice even when skimming' },
-  { label: 'Tip', detail: 'optional information that helps a reader succeed' },
-  { label: 'Important', detail: 'essential information' },
-  { label: 'Caution', detail: 'a negative consequence of an action' },
-  { label: 'Warning', detail: 'a dangerous consequence of an action' },
-];
-
-const TABLE = ['|  |  |', '| --- | --- |', '|  |  |'].join('\n');
-const RULE = '---';
 
 interface Action {
   command: string;
@@ -73,39 +56,54 @@ export function registerFormatCommands(
   roots: () => readonly DocsRoot[]
 ): void {
   const actions: Action[] = [
-    { command: 'temcoDocs.format.bold', label: 'Bold', detail: '**…**', run: (editor) => toggleWrap(editor, '**') },
-    { command: 'temcoDocs.format.italic', label: 'Italic', detail: '*…*', run: (editor) => toggleWrap(editor, '*') },
-    { command: 'temcoDocs.format.code', label: 'Inline code', detail: '`…`', run: (editor) => toggleWrap(editor, '`') },
+    {
+      command: 'temcoDocs.format.bold',
+      label: 'Bold',
+      detail: '**…**',
+      run: (editor) => apply(editor, (state) => toggleWrap(state, '**')),
+    },
+    {
+      command: 'temcoDocs.format.italic',
+      label: 'Italic',
+      detail: '*…*',
+      run: (editor) => apply(editor, (state) => toggleWrap(state, '*')),
+    },
+    {
+      command: 'temcoDocs.format.code',
+      label: 'Inline code',
+      detail: '`…`',
+      run: (editor) => apply(editor, (state) => toggleWrap(state, '`')),
+    },
     { command: 'temcoDocs.format.heading', label: 'Heading', detail: '## · ### · ####', run: chooseHeading },
     {
       command: 'temcoDocs.format.bullet',
       label: 'Bullet list',
       detail: '- item',
-      run: (editor) => toggleLineMark(editor, () => '- ', /^[-*+] /),
+      run: (editor) => apply(editor, (state) => toggleLineMark(state, () => '- ', /^[-*+] /)),
     },
     {
       command: 'temcoDocs.format.numbered',
       label: 'Numbered list',
       detail: '1. 2. 3.',
-      run: (editor) => toggleLineMark(editor, (index) => `${index + 1}. `, /^\d+[.)] /),
+      run: (editor) => apply(editor, (state) => toggleLineMark(state, (index) => `${index + 1}. `, /^\d+[.)] /)),
     },
     {
       command: 'temcoDocs.format.task',
       label: 'Task list',
       detail: '- [ ] item',
-      run: (editor) => toggleLineMark(editor, () => '- [ ] ', /^[-*+] \[[ xX]\] /),
+      run: (editor) => apply(editor, (state) => toggleLineMark(state, () => '- [ ] ', /^[-*+] \[[ xX]\] /)),
     },
     {
       command: 'temcoDocs.format.quote',
       label: 'Block quote',
       detail: '> text',
-      run: (editor) => toggleLineMark(editor, () => '> ', /^> ?/),
+      run: (editor) => apply(editor, (state) => toggleLineMark(state, () => '> ', /^> ?/)),
     },
-    { command: 'temcoDocs.format.codeBlock', label: 'Code block', detail: 'a fence with a language', run: insertCodeBlock },
-    { command: 'temcoDocs.format.table', label: 'Table', detail: 'two columns', run: (editor) => insertBlock(editor, TABLE) },
-    { command: 'temcoDocs.format.rule', label: 'Horizontal rule', detail: '---', run: (editor) => insertBlock(editor, RULE) },
-    { command: 'temcoDocs.format.callout', label: 'Callout', detail: '> [!NOTE]', run: insertCallout },
-    { command: 'temcoDocs.format.link', label: 'Link', detail: '[text](address)', run: insertLink },
+    { command: 'temcoDocs.format.codeBlock', label: 'Code block', detail: 'a fence with a language', run: insertCodeBlockAction },
+    { command: 'temcoDocs.format.table', label: 'Table', detail: 'two columns', run: (editor) => apply(editor, (state) => insertBlock(state, TABLE)) },
+    { command: 'temcoDocs.format.rule', label: 'Horizontal rule', detail: '---', run: (editor) => apply(editor, (state) => insertBlock(state, RULE)) },
+    { command: 'temcoDocs.format.callout', label: 'Callout', detail: '> [!NOTE]', run: insertCalloutAction },
+    { command: 'temcoDocs.format.link', label: 'Link', detail: '[text](address)', run: insertLinkAction },
     {
       command: 'temcoDocs.format.linkPage',
       label: 'Link to a page',
@@ -158,91 +156,43 @@ async function pick(actions: readonly Action[]): Promise<void> {
 }
 
 /**
- * The lines a command acts on: the ones the selection touches, or the one the cursor is on.
+ * Runs one transform on the editor in front.
  *
- * A block command is marks at the start of lines, so one selection becomes several list items — which is what
- * selecting three lines and pressing the list button means. Dragging to the start of the next line selects that
- * line too as far as the editor is concerned, and nobody who selected three lines meant four.
+ * The transform itself lives in `markdownEdits.ts`, because Temco Page applies the same ones to a
+ * `<textarea>` and two copies of "what bold means" would drift. All this adds is the editor: it reads the selection as
+ * offsets, and writes back **only the span that actually changed** — so one bold word is one small edit, and `Ctrl+Z`,
+ * folding and any other cursor see what they would have seen had the person typed the marks.
  */
-function linesOf(editor: vscode.TextEditor): { start: number; lines: string[] } {
-  const selection = editor.selection;
-  const start = selection.start.line;
-  let end = selection.end.line;
-  if (end > start && selection.end.character === 0) {
-    end -= 1;
-  }
-  const lines: string[] = [];
-  for (let line = start; line <= end; line += 1) {
-    lines.push(editor.document.lineAt(line).text);
-  }
-  return { start, lines };
-}
-
-/** Wraps the selection, or unwraps it — the toggle every editor's bold button is. */
-async function toggleWrap(editor: vscode.TextEditor, prefix: string, suffix = prefix): Promise<void> {
+async function apply(editor: vscode.TextEditor, transform: (state: EditState) => EditResult): Promise<void> {
   const document = editor.document;
+  const text = document.getText();
   const selection = editor.selection;
-
-  if (selection.isEmpty) {
-    // Nothing selected: the pair goes in and the cursor goes between the halves, so the next word typed is
-    // the bold one. That is what a person pressing the button with no selection is asking for.
-    const at = selection.active;
-    const offset = document.offsetAt(at);
-    await editor.edit((builder) => builder.insert(at, prefix + suffix));
-    const inside = document.positionAt(offset + prefix.length);
-    editor.selection = new vscode.Selection(inside, inside);
-    return;
-  }
-
-  const selected = document.getText(selection);
-  const before = textBefore(document, selection.start, prefix.length);
-  const after = textAfter(document, selection.end, suffix.length);
-
-  if (selected.length >= prefix.length + suffix.length && selected.startsWith(prefix) && selected.endsWith(suffix)) {
-    await editor.edit((builder) => builder.replace(selection, selected.slice(prefix.length, selected.length - suffix.length)));
-    return;
-  }
-  if (before === prefix && after === suffix) {
-    // The cursor is inside a pair — `**bold**` with the word selected — so the marks are the thing to remove,
-    // not the words.
-    await editor.edit((builder) => {
-      builder.delete(new vscode.Range(document.positionAt(document.offsetAt(selection.start) - prefix.length), selection.start));
-      builder.delete(new vscode.Range(selection.end, document.positionAt(document.offsetAt(selection.end) + suffix.length)));
-    });
-    return;
-  }
-
-  await editor.edit((builder) => builder.replace(selection, prefix + selected + suffix));
-  const start = selection.start.translate(0, prefix.length);
-  editor.selection = new vscode.Selection(start, start.translate(0, selected.length));
-}
-
-function textBefore(document: vscode.TextDocument, position: vscode.Position, length: number): string {
-  const start = document.positionAt(Math.max(0, document.offsetAt(position) - length));
-  return document.getText(new vscode.Range(start, position));
-}
-
-function textAfter(document: vscode.TextDocument, position: vscode.Position, length: number): string {
-  const end = document.positionAt(Math.min(document.getText().length, document.offsetAt(position) + length));
-  return document.getText(new vscode.Range(position, end));
-}
-
-/** Adds or removes a mark at the start of every selected line: the list, quote and task buttons. */
-async function toggleLineMark(
-  editor: vscode.TextEditor,
-  mark: (index: number) => string,
-  pattern: RegExp
-): Promise<void> {
-  const { start, lines } = linesOf(editor);
-  // Every line already carries it, so the button means "take it off" — press it twice and nothing has changed.
-  const every = lines.every((line) => pattern.test(line));
-  await editor.edit((builder) => {
-    for (let index = 0; index < lines.length; index += 1) {
-      const range = editor.document.lineAt(start + index).range;
-      const text = editor.document.getText(range);
-      builder.replace(range, every ? text.replace(pattern, '') : mark(index) + text.replace(pattern, ''));
-    }
+  const next = transform({
+    text,
+    start: document.offsetAt(selection.start),
+    end: document.offsetAt(selection.end),
   });
+
+  if (next.text !== text) {
+    const span = changedSpan(text, next.text);
+    const range = new vscode.Range(document.positionAt(span.start), document.positionAt(span.end));
+    await editor.edit((builder) => builder.replace(range, next.text.slice(span.start, span.end)));
+  }
+  editor.selection = new vscode.Selection(document.positionAt(next.start), document.positionAt(next.end));
+}
+
+/** The one region two versions of a document disagree about: the common head and tail are not part of the edit. */
+function changedSpan(before: string, after: string): { start: number; end: number } {
+  const shortest = Math.min(before.length, after.length);
+  let start = 0;
+  while (start < shortest && before[start] === after[start]) {
+    start += 1;
+  }
+  let tail = 0;
+  while (tail < shortest - start && before[before.length - 1 - tail] === after[after.length - 1 - tail]) {
+    tail += 1;
+  }
+  return { start, end: before.length - tail };
 }
 
 async function chooseHeading(editor: vscode.TextEditor): Promise<void> {
@@ -257,36 +207,10 @@ async function chooseHeading(editor: vscode.TextEditor): Promise<void> {
   if (level === undefined) {
     return;
   }
-  const { start, lines } = linesOf(editor);
-  const mark = `${'#'.repeat(level.level)} `;
-  const pattern = /^#{1,6} /;
-  const every = lines.every((line) => line.startsWith(mark));
-  await editor.edit((builder) => {
-    for (let index = 0; index < lines.length; index += 1) {
-      const range = editor.document.lineAt(start + index).range;
-      const text = editor.document.getText(range);
-      builder.replace(range, every ? text.replace(pattern, '') : mark + text.replace(pattern, ''));
-    }
-  });
+  await apply(editor, (state) => setHeading(state, level.level));
 }
 
-/**
- * A block on its own line: a table, a rule.
- *
- * The blank line is not decoration. `text` followed by `---` is a level-2 heading in Markdown, and a table glued
- * to the paragraph above it is a paragraph — so the one thing a block button must get right is the gap.
- */
-async function insertBlock(editor: vscode.TextEditor, block: string): Promise<void> {
-  const line = editor.document.lineAt(editor.selection.start.line);
-  const empty = line.text.trim() === '';
-  const above = line.lineNumber > 0 ? editor.document.lineAt(line.lineNumber - 1).text : '';
-  const gap = above.trim().length > 0;
-  const anchor = empty ? new vscode.Position(line.lineNumber, 0) : new vscode.Position(line.lineNumber, line.text.length);
-  const text = empty ? `${gap ? '\n' : ''}${block}` : `\n\n${block}`;
-  await editor.edit((builder) => builder.insert(anchor, text));
-}
-
-async function insertCodeBlock(editor: vscode.TextEditor): Promise<void> {
+async function insertCodeBlockAction(editor: vscode.TextEditor): Promise<void> {
   const language = await vscode.window.showQuickPick(LANGUAGES, {
     title: 'The code block’s language',
     placeHolder: 'text — the fence is what makes it a block; the word is what colours it',
@@ -294,31 +218,10 @@ async function insertCodeBlock(editor: vscode.TextEditor): Promise<void> {
   if (language === undefined) {
     return;
   }
-  const fence = '```';
-  const open = language === 'text' ? fence : fence + language;
-  const selected = editor.document.getText(editor.selection);
-
-  if (selected.trim() === '') {
-    // A fence owns its lines: mid-line it would glue the closing fence to the text after the cursor.
-    const at = editor.selection.active;
-    const lead = at.character === 0 ? '' : '\n';
-    const offset = editor.document.offsetAt(at);
-    const text = `${lead}${open}\n\n${fence}`;
-    await editor.edit((builder) => builder.insert(at, text));
-    // The cursor lands on the empty line between the fences, which is where the code goes.
-    const inside = editor.document.positionAt(offset + lead.length + open.length + 1);
-    editor.selection = new vscode.Selection(inside, inside);
-    return;
-  }
-
-  const body = selected.endsWith('\n') ? selected : `${selected}\n`;
-  const atLineStart = editor.selection.start.character === 0;
-  await editor.edit((builder) =>
-    builder.replace(editor.selection, `${atLineStart ? '' : '\n'}${open}\n${body}${fence}`)
-  );
+  await apply(editor, (state) => insertCodeBlock(state, language));
 }
 
-async function insertCallout(editor: vscode.TextEditor): Promise<void> {
+async function insertCalloutAction(editor: vscode.TextEditor): Promise<void> {
   const kind = await vscode.window.showQuickPick(CALLOUTS, {
     title: 'The callout',
     placeHolder: 'These are the five DocFX renders as coloured blocks',
@@ -326,30 +229,10 @@ async function insertCallout(editor: vscode.TextEditor): Promise<void> {
   if (kind === undefined) {
     return;
   }
-  const marker = `> [!${kind.label.toUpperCase()}]`;
-  const selected = editor.document.getText(editor.selection);
-
-  if (selected.trim() === '') {
-    // `> [!NOTE]` is an alert only at the start of a line, so the marker gets one of its own.
-    const at = editor.selection.active;
-    const lead = at.character === 0 ? '' : '\n';
-    const offset = editor.document.offsetAt(at);
-    const text = `${lead}${marker}\n> `;
-    await editor.edit((builder) => builder.insert(at, text));
-    const inside = editor.document.positionAt(offset + text.length);
-    editor.selection = new vscode.Selection(inside, inside);
-    return;
-  }
-
-  const body = selected
-    .split('\n')
-    .map((line) => (line.trim() === '' ? '>' : `> ${line}`))
-    .join('\n');
-  await editor.edit((builder) => builder.replace(editor.selection, `${marker}\n${body}`));
+  await apply(editor, (state) => insertCallout(state, kind.label));
 }
 
-async function insertLink(editor: vscode.TextEditor): Promise<void> {
-  const selected = editor.document.getText(editor.selection).trim();
+async function insertLinkAction(editor: vscode.TextEditor): Promise<void> {
   // A copied address is the common case, so it is offered rather than asked for again.
   const clipboard = (await vscode.env.clipboard.readText()).trim();
   const absolute = /^https?:\/\/\S+$/.test(clipboard);
@@ -362,8 +245,7 @@ async function insertLink(editor: vscode.TextEditor): Promise<void> {
   if (address === undefined || address.trim() === '') {
     return;
   }
-  const label = selected === '' ? address.trim() : selected;
-  await editor.edit((builder) => builder.replace(editor.selection, `[${label}](${address.trim()})`));
+  await apply(editor, (state) => insertLink(state, address.trim()));
 }
 
 /**
@@ -402,9 +284,7 @@ async function linkToPage(editor: vscode.TextEditor, roots: readonly DocsRoot[])
 
   const selected = editor.document.getText(editor.selection).trim();
   const link = path.relative(path.dirname(from.fsPath), picked.page.uri.fsPath).split(path.sep).join('/');
-  await editor.edit((builder) =>
-    builder.replace(editor.selection, `[${selected === '' ? picked.page.title : selected}](${link})`)
-  );
+  await apply(editor, (state) => insertLink(state, link, selected === '' ? picked.page.title : selected));
 }
 
 function within(root: vscode.Uri, file: vscode.Uri): boolean {
@@ -415,36 +295,8 @@ function within(root: vscode.Uri, file: vscode.Uri): boolean {
   return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
 }
 
-interface Heading {
-  level: number;
-  text: string;
-  line: number;
-}
-
-/** The page's own outline, read from its text, so it is right while a page is being written. */
-function headingsOf(document: vscode.TextDocument): Heading[] {
-  const headings: Heading[] = [];
-  let fenced = false;
-  for (let line = 0; line < document.lineCount; line += 1) {
-    const text = document.lineAt(line).text;
-    // A fence's contents are code: `#` in there is a comment, not a heading.
-    if (/^\s*(```|~~~)/.test(text)) {
-      fenced = !fenced;
-      continue;
-    }
-    if (fenced) {
-      continue;
-    }
-    const heading = /^(#{1,6})\s+(.*)$/.exec(text);
-    if (heading !== null) {
-      headings.push({ level: heading[1].length, text: heading[2].trim(), line });
-    }
-  }
-  return headings;
-}
-
 async function goToHeading(editor: vscode.TextEditor): Promise<void> {
-  const headings = headingsOf(editor.document);
+  const headings = headingsOf(editor.document.getText());
   if (headings.length === 0) {
     void vscode.window.showInformationMessage('Temco Docs: this page declares no headings yet.');
     return;

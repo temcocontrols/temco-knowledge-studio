@@ -88,9 +88,7 @@ one-word change becomes a whole-file diff. What was missing was never the engine
 | **Temco Markdown** | `fluentEditor.ts` + `webview/docs/`: the page as a document on **Fluent UI**, with capture and annotation built in — the **default** for `*.md` | see *The Fluent Markdown surface* below |
 | **Temco Page** | `pageEditor.ts` + `webview/page/`: the same file in the real **Tiptap** editor — *Open With… → Temco Page*, or the tab's menu | see *The rich page* below |
 
-### One bridge, two surfaces
-
-Two editors over one file is a decision, not an accident: **what you see while editing** is a real choice, and it cannot
+### One bridge, two surfacesTwo editors over one file is a decision, not an accident: **what you see while editing** is a real choice, and it cannot
 be both. A source-visible editor (`Temco Markdown`) is the only way to be sure `git diff` will show what you did; a
 WYSIWYG editor (`Temco Page`) is the only way to write a table without thinking about pipes. Everything *else* about them
 is shared, and it is shared in code, not by convention:
@@ -109,6 +107,58 @@ is shared, and it is shared in code, not by convention:
 A surface that asks a question draws the question itself. A webview frame is sandboxed without modals, so `window.prompt`
 returns `null` there — the Link button was dead for exactly that reason, and the page now asks in the vocabulary's own
 box (`.page-surface__ask`), where Enter accepts and Escape cancels.
+
+**The controls both surfaces need live in `webview/shared/`**: `find.tsx` (the bar; replacement is optional, because a
+rich document cannot truthfully "replace text" across formatting), `outline.tsx` (a jump list whose target is called `at`
+— a line for a source surface, a document position for a rich one), `annotate.tsx` (the canvas annotator) and
+`surface-controls.css`. They were inside `webview/docs/` until the page needed them; a copy in each surface is how the
+two would drift.
+
+### The page's chrome: a document application, not a card
+
+The rich page is arranged the way a document application is, because that is what it is: `Home · Insert · View` at the
+top, groups under each, a sheet on a canvas, and a status strip.
+
+| Element | Rule | Why |
+|---|---|---|
+| the ribbon | flush to the tab: no border on three sides, no corners, `border-bottom` only | a card floating in a window is a page; a document's ribbon is part of the window |
+| the controls | **30 px icon buttons, 20 px glyphs, 44 px panel**, no group captions | a writing bar should cost as little vertical space as possible; the captions are dropped because a caption under every group is a teaching aid a narrow editor pane cannot afford — the hairline between groups and each control's tooltip carry the same information. Only an icon-only control gets a square (`btn--icon`); a word button keeps its own width, which is what stops two of them drawing on top of each other |
+| density | `full` ≥ 1180 px, `compact` ≥ 720 px, `narrow` below — measured, not guessed | 1030 px is what the gallery needs beside the other groups; below it the bar wrapped onto a second row, so the gallery folds into the Style menu and the hidden commands move behind `⋯` || the sheet | `.page-surface__paper`: **no border, no radius**, on `.page-surface__canvas`, `min-height: calc(100% - 16px)` | a sheet is a sheet; the canvas is a plain scroll container, **not** a flex row — a flex item is stretched to the container's height, which cut the sheet off at the fold and let the rest of the document spill onto the grey |
+| the style gallery | `Normal / Heading 1–3`, each drawn **at the size it applies** | a style is chosen by sight; every entry maps to real Markdown |
+| zoom | `− 100% +` in the status strip, a view only | it never reaches the file, which is why it can exist at all |
+| Find / Outline | on the **View** tab; the outline is a rail, not a tab | navigating a document is not editing it |
+| **Read mode** | View → *Read the page*: a second engine (`reading.tsx`) over the same seam, no caret, no editing tabs | reading a page should not be one keystroke from changing it; and it is the proof that the seam is real |
+| Annotate | on the **Insert** tab, enabled only when a picture is selected, and it **replaces** that picture | the page keeps one figure, not a pair |
+
+What is deliberately **not** in this ribbon: font, font size, text colour, alignment, spacing, margins. Markdown cannot
+hold them, and a control whose effect disappears on the next save is a lie — the same reason the alignment group was
+removed from the source surface.
+
+### The editor's three files, and the seam between them
+
+```
+webview/page/
+  main.tsx       409  the mount: host protocol, the document, find/outline/zoom/status
+  ribbon.tsx     311  the bar: tabs, groups, gallery, overflow      ← imports no Tiptap
+  document.tsx   297  the engine: extensions, usePageDocument, actionsFor, stateOf
+  reading.tsx     50  a second engine that cannot edit             ← proves the seam
+```
+
+The seam is two types, both in `document.tsx`:
+
+| | |
+|---|---|
+| `PageState` | what is true at the caret — `block`, `marks`, `lists`, `inTable`, `onImage`, `link`, `canUndo`, `canRedo`, `words` |
+| `PageActions` | named operations — `setBlock`, `toggleMark`, `setLink`, `insertImage`, `replaceImage`, `goto`, `load`, `content`, `node`… |
+
+`grep -r "@tiptap" webview/page/ribbon.tsx webview/shared/` returns nothing, which is the property worth keeping: the bar
+can be re-skinned without touching the engine, and the engine replaced without touching a button. Read mode is the proof —
+it hands the same `PageRibbon` a frozen `READING_ACTIONS` and static markup instead of an editor, and the bar draws itself
+exactly as before with its editing tabs removed.
+
+One trap the split exposed, recorded because it will catch the next person: an actions facade built on every render makes
+the host-message effect re-subscribe on every keystroke, and the document that arrived while the effect was detached is
+lost — the page then opens with stale text. The facade is one object per editor (`useMemo` on the editor instance).
 
 The three optional surfaces are webviews, so they need a bundler — the only one in this extension:
 
@@ -260,6 +310,31 @@ source editor.
 (the maintained options are either deprecated on npm or drag in a pro tier), so a workbook keeps opening as what it
 is — a binary — rather than behind a grid that pretends it can be reviewed.
 
+### The Grid surface: a spreadsheet over CSV
+
+`webview/grid.ts` is Univer, bundled the same way the page is; `src/gridEditor.ts` is its host. The contract is
+deliberately narrow: the host sends `{ type: 'set', rows }` with what `parseCsv` read, the surface sends back
+`{ type: 'change', rows }` once an edit settles, and the host writes that through `writeCsv` as one `WorkspaceEdit`. The
+cells are plain strings and the quoting is the extension's, so a one-cell change stays a one-line diff.
+
+Four things about it are worth keeping written down, because each one cost an afternoon and none of them fails loudly:
+
+* **The event is the workbook's.** In Univer 1.2.0 `onCommandExecuted` belongs to `FWorkbook`, not to the application.
+  The first version guarded `typeof api.onCommandExecuted === 'function'`, which is false in every build, so the surface
+  never reported anything: the grid accepted a cell edit, displayed it, and saved nothing.
+* **A sheet is 1000 × 20 unless told otherwise.** `getRange` past the sheet's own size throws `Range is out of bounds`,
+  so the read is clamped to `getMaxRows()`/`getMaxColumns()` and the workbook is created at least as large as the file it
+  is given. Reading `Math.max(200, maxRows)` columns was asking for a range that did not exist.
+* **Univer runs commands continuously** — selection, scroll, render. A debounce that clears its own timer on every
+  command therefore never fires; the timer is armed once and allowed to run, and `flush()` decides whether anything
+  really changed by comparing against the last thing it sent.
+* **A throw inside a timer is invisible.** Reading the cells happened in the settle callback, so its exception became an
+  unhandled page error and the surface simply stopped reporting. Both the read and the flush say so with `console.error`.
+
+`src/cells.ts` holds the parts that need no browser — `asRows`, `widthOf`, `trimCells` — so `scripts/check-grid.mts` can
+prove the round trip without a window: a file opened and not edited reproduces itself byte for byte, and one edited cell
+stays one line.
+
 The preview and the diff are **tabs of the editor group, not tabs inside one pane**. A custom editor that owned the
 document would have to bundle its own Monaco, and every copy of Monaco is worse than the one this window is already
 running: no git gutter, no search results landing on the right line, no other extension's decorations. The
@@ -282,7 +357,29 @@ review in a diff. The Office question is settled the same way, in
 documents come **in** through `src/docx.ts`, and an OOXML editor would make the source of truth binary, un-diffable, and
 (ONLYOFFICE being AGPL-3.0) unshippable.
 
-## The Markdown surface
+## The Markdown surface — removed, and where its features went
+
+> **This surface is gone.** `temcoDocs.markdown`, `src/fluentEditor.ts` and `webview/docs/` were deleted, and
+> `temcoDocs.page` became the default for `*.md`. What follows is kept as the record of what it did and why it went; the
+> parts that survive live in `src/webviewText.ts` (the bridge) and `webview/shared/` (find, outline, the annotator).
+>
+> Why it went: two editors over one file is only justified when they *see* something different, and after the port they
+> did not — the page had every authoring feature the Markdown surface had, so the second surface was a second place for a
+> bug to live. Two things were lost with it and are recorded as lost: the `Editor | Split | Page` split view, and the
+> "In this article" rail in preview. Neither is replaced by a fake: the native text editor *is* the source view (`View →
+> Open source`), and navigation is the outline rail plus the Page pane.
+
+| Feature it had | Where it is now |
+|---|---|
+| capture, attach, paste, caption, link-to-page | `src/webviewText.ts` — shared by the page, unchanged |
+| annotate a picture | `webview/shared/annotate.tsx`, opened from the page's Insert tab |
+| find | `webview/shared/find.tsx`, on the page's View tab (no replace: formatting boundaries) |
+| outline | `webview/shared/outline.tsx` as a rail; `headingsIn()` in the page surface |
+| preview / diff / source / properties | the page's View tab, through the same host actions |
+| `Editor \| Split \| Page` | **lost** — the text editor is the source view |
+| "In this article" rail | **lost** — the outline rail covers navigation |
+
+The original description is kept below, because the reasoning about chrome and vocabulary still applies to the page.
 
 The page as a document, in **the application's own vocabulary**. It is the default editor for `*.md`, because authoring is
 what a page is for and the chrome around it is what was missing — not the engine. The document is still the file: the
@@ -726,7 +823,7 @@ trusted.
 | Cost bounded | 6 turns of history, 40 area candidates, 40 commits, 100k characters of page text, 1024 tokens per answer and 2048 per draft, `--ctx-size 8192` |
 | Offline | The runtime is a local process on `127.0.0.1`; the only other network calls are the downloads the user starts |
 | One content library | `scripts/check-fluent.mts` fails if anything outside `webview/docs` imports `@fluentui` — a second Fluent surface is the trigger to extract it, not a stray import |
-| A surface cannot corrupt a file | every webview editor shares `WebviewTextEditor`, which owns the echo guard, the line endings and the single-`WorkspaceEdit` write; a surface only names its bundle |
+| A surface cannot corrupt a file | every webview editor shares `WebviewTextEditor`, which owns the echo guard, the line endings and the single-`WorkspaceEdit` write; a surface only names its bundle, and `scripts/check-grid.mts` proves the CSV round trip keeps the file byte-for-byte when nothing is edited |
 | One meaning per action | every formatting action is a pure transform in `src/markdownEdits.ts`, called by both editors — there is no second copy to drift |
 | The page in front is a page, not a text editor | `frontUri()` reads the active tab as well as `activeTextEditor`, because a custom editor has none; without it Properties, the capture target and every row command silently saw nothing |
 | Every image has words, and a version | `landImage()` is the only writer into `media/`; it records the caption and the version the picture depicts, and `check-record` proves a picture with no recorded version is never called stale |

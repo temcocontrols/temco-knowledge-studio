@@ -1,0 +1,17 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"jsx": "react-jsx",
+		"strict": true,
+		"noEmit": true,
+		"skipLibCheck": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"noImplicitOverride": true,
+		"lib": ["ES2022", "DOM", "DOM.Iterable"],
+		"types": []
+	},
+	"include": ["webview/page/**/*", "webview/shared/**/*", "webview/grid.ts", "src/pageMarkdown.ts", "src/cells.ts", "src/*.d.ts"]
+}

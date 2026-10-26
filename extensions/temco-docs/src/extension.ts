@@ -1,4 +1,4 @@
-﻿// Temco Docs — activation.
+// Temco Docs — activation.
 //
 // The extension is a reader, of the **project being worked on**: it finds each of that project's sources, shows
 // their pages in the Workspace view, and reports structural problems where they can be fixed. The project is the
@@ -17,6 +17,7 @@ import { registerFeedbackCommands } from './feedback';
 import { registerDiffCommand } from './diffPage';
 import { registerDocxCommand } from './docx';
 import { GridEditor, openGrid } from './gridEditor';
+import { PageEditor, openPage } from './pageEditor';
 import { registerFormatCommands } from './format';
 import { registerImportCommand } from './importer';
 import { looseByRoot } from './loose';
@@ -28,11 +29,10 @@ import { NewPagePage } from './newPagePage';
 import { registerPagePane } from './outline';
 import { OverviewPage } from './overview';
 import { AREA_CHAPTER, KINDS, PageDeps, PageOperations, registerPageCommands, sourceAt, writePage } from './pageOps';
-import { writePortal } from './learnPortal';
+import { writePortal, writeReader } from './learnPortal';
 import { ProjectSection } from './projectSection';
 import { projects } from './projects';
 import { PreviewPanels } from './previewPanel';
-import { TiptapEditor, openRich } from './tiptapEditor';
 import { openSource } from './webviewText';
 import { codeFiles } from './repositories';
 import { QueueTreeProvider } from './queue';
@@ -196,6 +196,25 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   const projectView = vscode.window.createTreeView('temcoDocs.project', { treeDataProvider: projectSection });
   context.subscriptions.push(queueView, projectView);
 
+  /**
+   * The file in front, whether it is a text editor or a custom one.
+   *
+   * A custom editor has **no `activeTextEditor`** — the workbench holds a tab, not a text editor — so a fallback that
+   * only asked the text editors saw nothing whenever a page was open in Temco Markdown. That silently disabled
+   * everything that asks "which page is in front": Properties, attaching a capture, and the row a command acts on.
+   */
+  const frontUri = (): vscode.Uri | undefined => {
+    const editor = vscode.window.activeTextEditor;
+    if (editor !== undefined) {
+      return editor.document.uri;
+    }
+    const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+    if (input instanceof vscode.TabInputCustom || input instanceof vscode.TabInputText) {
+      return input.uri;
+    }
+    return undefined;
+  };
+
   /** The page a command means: the row the tree last had, or the page in the editor — one rule, everywhere. */
   const currentPage = (): PageEntry | undefined => {
     if (lastTouched === 'tree') {
@@ -204,8 +223,8 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
         return row.page;
       }
     }
-    const editor = vscode.window.activeTextEditor;
-    return editor === undefined ? undefined : pageForUri(roots, editor.document.uri);
+    const uri = frontUri();
+    return uri === undefined ? undefined : pageForUri(roots, uri);
   };
 
   // The right-hand panel: the page in front, what the model may read, and the drafts waiting on a person.
@@ -221,13 +240,20 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   const preview = new PreviewPanels();
   context.subscriptions.push(preview);
 
-  // The two optional surfaces: a page as a document (Rich) and a CSV as cells (Grid). Both are *registered* here and
-  // *reached* by an explicit `openWith`, so neither can take over a file that was opened to be read as text.
+  // The optional surface: a CSV as cells (Grid). Registered here and reached through its own custom editor id, so it
+  // cannot take over a file that was opened to be read as text.
+  //
+  // Temco Page is the default for `*.md`, and on purpose: it is the authoring surface (design 22). `Open With Text
+  // Editor` is one step away, and the file never changes meaning - the editor writes Markdown through the document, so
+  // the source and this surface see the same bytes.
   context.subscriptions.push(
-    vscode.window.registerCustomEditorProvider(TiptapEditor.VIEW_TYPE, new TiptapEditor(context), {
+    vscode.window.registerCustomEditorProvider(GridEditor.VIEW_TYPE, new GridEditor(context), {
       webviewOptions: { retainContextWhenHidden: true },
     }),
-    vscode.window.registerCustomEditorProvider(GridEditor.VIEW_TYPE, new GridEditor(context), {
+    // The rich page: the same file, edited as a document. `option`, so which one opens by default stays a choice a
+    // person makes (see `temcoDocs.page.open`), never something a build decides for them. It shares the Markdown
+    // surface's bridge, so the capture pipeline and the tab's own actions work here too.
+    vscode.window.registerCustomEditorProvider(PageEditor.VIEW_TYPE, new PageEditor(context, () => roots), {
       webviewOptions: { retainContextWhenHidden: true },
     })
   );
@@ -649,11 +675,30 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
       }
       await preview.show(document);
     }),
-    // Rich mode, the way back from it, and the grid. Each is explicit: no file ever changes surface because of an
-    // association it did not ask for.
-    vscode.commands.registerCommand('temcoDocs.openRich', (target?: unknown) => openRich(uriFrom(target))),
+    // The surface for a page, the way back to the source, and the grid. Each is explicit: no file ever changes
+    // surface because of an association it did not ask for.
     vscode.commands.registerCommand('temcoDocs.openSource', (target?: unknown) => openSource(uriFrom(target))),
     vscode.commands.registerCommand('temcoDocs.openGrid', (target?: unknown) => openGrid(uriFrom(target))),
+    // The rich page: the same Markdown file, edited as a document in Tiptap. It is the only editing surface for a
+    // page, and the source text editor stays one command away.
+    vscode.commands.registerCommand('temcoDocs.page.open', (target?: unknown) => openPage(uriFrom(target) ?? frontUri())),
+
+    // The reader: the published version, laid out the way MSDN lays one out, served from this machine. Written beside
+    // the generated site and never over it, so a rebuild of the site does not remove it.
+    vscode.commands.registerCommand('temcoDocs.openReader', async (destination?: unknown) => {
+      const where = typeof destination === 'string' && destination.length > 0
+        ? destination
+        : await newestPublished(context);
+      if (where === undefined) {
+        void vscode.window.showWarningMessage(
+          'Temco Docs: nothing has been published yet, so there is nothing to read. Build and publish a version first.'
+        );
+        return;
+      }
+      const page = await writeReader(vscode.Uri.file(where));
+      const address = await site.serve(where);
+      await vscode.env.openExternal(vscode.Uri.parse(`${address}/${path.basename(page.fsPath)}`));
+    }),
     // Importing a document set: the conversion the project wizard calls after it has a destination.
     registerImportCommand(),
     vscode.commands.registerCommand('temcoDocs.showStatus', report),

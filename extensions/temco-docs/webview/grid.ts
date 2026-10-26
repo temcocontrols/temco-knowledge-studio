@@ -12,6 +12,7 @@ import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core';
 import UniverPresetSheetsCoreEnUS from '@univerjs/preset-sheets-core/locales/en-US';
 
 import '@univerjs/preset-sheets-core/lib/index.css';
+import { asRows, trimCells, widthOf, type Rows } from '../src/cells';
 import './grid.css';
 
 interface Host {
@@ -35,72 +36,91 @@ const SETTLE_MS = 350;
 /** Univer paints its own chrome; this is the minimum a sheet needs to exist. */
 const SHEET = 'Sheet1';
 
-type Rows = string[][];
-
 let api: ReturnType<typeof createUniver>['univerAPI'] | undefined;
 let sheet: { getRange(...args: unknown[]): { getValues(): unknown; setValues(values: unknown): void }; getMaxRows(): number; getMaxColumns(): number } | undefined;
+/**
+ * The workbook, kept because it is what reports an edit.
+ *
+ * In Univer 1.2.0 `onCommandExecuted` is on the **workbook**, not on the application: the guard this file used to carry
+ * (`api.onCommandExecuted`) was always false, so `send()` was never called and a cell edit was silently lost — the grid
+ * looked editable and saved nothing. `watching` is the subscription, so loading a second file cannot stack listeners.
+ */
+let watching: { dispose(): void } | undefined;
 let settle: number | undefined;
 let applying = false;
 let track = 0;
 
-/** Blank cells the grid will always report back, so typing below the last row does not lose data. */
-const MIN_ROWS = 200;
-const MIN_COLUMNS = 26;
+/** Univer's own sheet size, used as the floor so a small file still has room to grow under the pen. */
+const DEFAULT_ROWS = 1000;
+const DEFAULT_COLUMNS = 20;
 
-function asRows(value: unknown): Rows {
-	if (!Array.isArray(value)) {
-		return [];
-	}
-	return value.map((row) => (Array.isArray(row) ? row.map((cell) => (cell === null || cell === undefined ? '' : String(cell))) : []));
-}
+/** Extra blank rows and columns given to a sheet, so typing past the last cell of the file is kept. */
+const ROOM_ROWS = 200;
+const ROOM_COLUMNS = 8;
 
-function widthOf(rows: Rows): number {
-	return rows.reduce((widest, row) => Math.max(widest, row.length), 0);
-}
-
-/** The grid as text, trimmed of the trailing empty rows and columns a spreadsheet always has. */
+/**
+ * The grid as text, trimmed of the trailing empty rows and columns a spreadsheet always has.
+ *
+ * The read is clamped to the sheet's own size. Asking for more than a sheet has throws (`Range is out of bounds`), and
+ * because that throw used to happen inside the settle timer, nothing was reported and nothing said why.
+ */
 function values(): Rows {
 	if (sheet === undefined) {
 		return [];
 	}
-	const range = sheet.getRange(0, 0, Math.max(MIN_ROWS, sheet.getMaxRows()), Math.max(MIN_COLUMNS, sheet.getMaxColumns()));
-	const read = range.getValues() as (string | number | boolean | null)[][];
-
-	const text = read.map((row) => row.map((cell) => (cell === null || cell === undefined ? '' : String(cell))));
-	while (text.length > 0 && text[text.length - 1].every((cell) => cell === '')) {
-		text.pop();
-	}
-	const width = widthOf(text);
-	return text.map((row) => {
-		const next = row.slice(0, width);
-		while (next.length < width) {
-			next.push('');
-		}
-		return next;
-	});
+	const rows = Math.max(1, sheet.getMaxRows());
+	const columns = Math.max(1, sheet.getMaxColumns());
+	const range = sheet.getRange(0, 0, rows, columns);
+	return trimCells(range.getValues() as (string | number | boolean | null)[][]);
 }
 
-function send(): void {
-	host.postMessage({ type: 'change', rows: values() });
-}
+/** The last thing this surface told the host, so a command that changed nothing does not look like an edit. */
+let lastSent = '';
 
-function watch(): void {
-	if (api === undefined || typeof api.onCommandExecuted !== 'function') {
+function flush(): void {
+	if (applying || sheet === undefined) {
 		return;
 	}
-	api.onCommandExecuted(() => {
-		// Loading the grid runs commands too; only a change made after it settles counts as an edit.
-		if (track === 0) {
+	let rows: Rows;
+	try {
+		rows = values();
+	} catch (error) {
+		// Loud on purpose: a grid that cannot read its own cells must not look like one that saved them.
+		console.error('Temco Grid: the cells could not be read, so this edit was not reported.', error);
+		return;
+	}
+	const text = JSON.stringify(rows);
+	if (text === lastSent) {
+		return;
+	}
+	lastSent = text;
+	host.postMessage({ type: 'change', rows });
+}
+
+/**
+ * Report every settled edit.
+ *
+ * `onCommandExecuted` is the workbook's, see the note on `watching`. Loading the grid runs commands of its own, which is
+ * what `track` and `applying` are for: only a command that arrives after the load has settled is a person's edit.
+ */
+function watch(workbook: { onCommandExecuted?(callback: () => void): { dispose(): void } }): void {
+	watching?.dispose();
+	watching = undefined;
+	if (typeof workbook.onCommandExecuted !== 'function') {
+		// A surface that cannot hear its own edits must say so: silence here means an edit is lost without a trace.
+		console.warn('Temco Grid: this Univer build does not report command execution, so cell edits cannot be saved.');
+		return;
+	}
+	watching = workbook.onCommandExecuted(() => {
+		if (track === 0 || settle !== undefined) {
 			return;
 		}
-		if (settle !== undefined) {
-			window.clearTimeout(settle);
-		}
+		// Armed once and allowed to fire: Univer runs commands continuously (selection, scroll, render), so a
+		// debounce that cancels its own timer on every command would never run at all — which is how the first
+		// attempt at this fix still saved nothing.
 		settle = window.setTimeout(() => {
 			settle = undefined;
-			if (!applying) {
-				send();
-			}
+			flush();
 		}, SETTLE_MS);
 	});
 }
@@ -111,21 +131,38 @@ function load(rows: Rows): void {
 	}
 	applying = true;
 	try {
+		const height = Math.max(rows.length, 1);
+		const width = Math.max(widthOf(rows), 1);
+		// Sized to the file, not to Univer's default: a sheet created at 1000x20 cannot be written past that, and
+		// `getRange` beyond it throws. The extra room is what keeps a value typed below the last row of the file.
 		const workbook = api.createWorkbook({
 			id: 'temco-docs',
-			sheets: { [SHEET]: { id: SHEET, name: SHEET } },
+			sheets: {
+				[SHEET]: {
+					id: SHEET,
+					name: SHEET,
+					rowCount: Math.max(rows.length + ROOM_ROWS, DEFAULT_ROWS),
+					columnCount: Math.max(width + ROOM_COLUMNS, DEFAULT_COLUMNS),
+				},
+			},
 		});
 		// Held directly rather than looked up again: a workbook is the thing this surface edits, and asking the
 		// application for "the active one" is one more thing that can be false.
 		sheet = workbook.getActiveSheet() as unknown as typeof sheet;
-		const height = Math.max(rows.length, 1);
-		const width = Math.max(widthOf(rows), 1);
 		sheet?.getRange(0, 0, height, width).setValues(rows.length === 0 ? [['']] : rows);
+		// After the workbook exists, not at boot: the events belong to it.
+		watch(workbook as unknown as { onCommandExecuted?(callback: () => void): { dispose(): void } });
 	} finally {
 		// One turn of the event loop, then edits count.
 		window.setTimeout(() => {
 			track = 1;
 			applying = false;
+			// The file as the host sent it is the baseline, so loading a sheet does not immediately look like an edit.
+			try {
+				lastSent = JSON.stringify(values());
+			} catch {
+				lastSent = '';
+			}
 		}, 0);
 	}
 }
@@ -137,7 +174,6 @@ function boot(): void {
 		presets: [UniverSheetsCorePreset({ container: root as HTMLElement })],
 	});
 	api = created.univerAPI;
-	watch();
 	host.postMessage({ type: 'ready' });
 }
 

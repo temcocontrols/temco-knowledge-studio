@@ -22,45 +22,15 @@
   ],
   "main": "./out/extension.js",
   "devDependencies": {
-    "@base-ui/react": "1.0.0",
-    "@floating-ui/react": "0.27.16",
-    "@radix-ui/react-dropdown-menu": "2.1.16",
-    "@radix-ui/react-popover": "1.1.15",
-    "@tiptap/core": "3.30.3",
-    "@tiptap/extension-code-block-lowlight": "3.30.3",
-    "@tiptap/extension-find-and-replace": "3.30.3",
-    "@tiptap/extension-highlight": "3.30.3",
-    "@tiptap/extension-horizontal-rule": "3.30.3",
-    "@tiptap/extension-image": "3.30.3",
-    "@tiptap/extension-link": "3.30.3",
-    "@tiptap/extension-list": "3.30.3",
-    "@tiptap/extension-mathematics": "3.30.3",
-    "@tiptap/extension-subscript": "3.30.3",
-    "@tiptap/extension-superscript": "3.30.3",
-    "@tiptap/extension-table": "3.30.3",
-    "@tiptap/extension-task-item": "3.30.3",
-    "@tiptap/extension-task-list": "3.30.3",
-    "@tiptap/extension-text-align": "3.30.3",
-    "@tiptap/extension-underline": "3.30.3",
-    "@tiptap/extensions": "3.30.3",
-    "@tiptap/markdown": "3.30.3",
-    "@tiptap/pm": "3.30.3",
-    "@tiptap/react": "3.30.3",
-    "@tiptap/starter-kit": "3.30.3",
+    "@types/turndown": "^5.0.6",
     "@univerjs/preset-sheets-core": "1.2.0",
     "@univerjs/presets": "1.2.0",
-    "class-variance-authority": "0.7.1",
-    "clsx": "2.1.1",
     "esbuild": "0.28.2",
-    "highlight.js": "11.11.1",
     "jsdom": "26.1.0",
-    "katex": "0.16.22",
-    "lodash.throttle": "4.1.1",
-    "lowlight": "3.3.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "react-hotkeys-hook": "5.2.1",
-    "sass": "1.95.1"
+    "sass": "1.95.1",
+    "typescript": "^5.9.3"
   },
   "extensionDependencies": [
     "temcocontrols.temco-store",
@@ -74,22 +44,11 @@
     "onView:temcoDocs.queue",
     "onView:temcoDocs.draft",
     "onView:temcoDocs.outline",
-    "onCustomEditor:temcoDocs.richTiptap",
     "onCustomEditor:temcoDocs.grid",
     "onView:temcoDocs.section.pipeline"
   ],
   "contributes": {
     "customEditors": [
-      {
-        "viewType": "temcoDocs.richTiptap",
-        "displayName": "Temco Page",
-        "selector": [
-          {
-            "filenamePattern": "*.md"
-          }
-        ],
-        "priority": "option"
-      },
       {
         "viewType": "temcoDocs.grid",
         "displayName": "Temco Grid",
@@ -102,6 +61,16 @@
           }
         ],
         "priority": "option"
+      },
+      {
+        "viewType": "temcoDocs.page",
+        "displayName": "Temco Page",
+        "selector": [
+          {
+            "filenamePattern": "*.md"
+          }
+        ],
+        "priority": "default"
       }
     ],
     "viewsContainers": {
@@ -215,12 +184,6 @@
         "icon": "$(list-unordered)"
       },
       {
-        "command": "temcoDocs.openRich",
-        "title": "Open in Rich Mode",
-        "category": "Temco Docs",
-        "icon": "$(book)"
-      },
-      {
         "command": "temcoDocs.openSource",
         "title": "Open in Source Mode",
         "category": "Temco Docs",
@@ -231,6 +194,12 @@
         "title": "Open in the Grid",
         "category": "Temco Docs",
         "icon": "$(table)"
+      },
+      {
+        "command": "temcoDocs.openReader",
+        "title": "Open the Reader",
+        "category": "Temco Docs",
+        "icon": "$(book)"
       },
       {
         "command": "temcoDocs.import",
@@ -564,6 +533,10 @@
         "icon": "$(file-media)"
       },
       {
+        "command": "temcoDocs.staleScreenshots",
+        "title": "Stale Screenshots"
+      },
+      {
         "command": "temcoDocs.attachCapture",
         "title": "Attach the Screenshot to a Page…",
         "icon": "$(link)"
@@ -573,28 +546,34 @@
         "title": "Import a Word Document",
         "category": "Temco Docs",
         "icon": "$(file-add)"
+      },
+      {
+        "command": "temcoDocs.page.open",
+        "title": "Open in Temco Page",
+        "category": "Temco Docs",
+        "icon": "$(book)"
       }
     ],
     "keybindings": [
       {
         "command": "temcoDocs.previewPage",
         "key": "ctrl+alt+p",
-        "when": "editorLangId == markdown && resourceScheme == file"
+        "when": "(editorLangId == markdown || activeCustomEditorId == 'temcoDocs.page') && resourceScheme == file"
       },
       {
         "command": "temcoDocs.diffPage",
         "key": "ctrl+alt+d",
-        "when": "editorLangId == markdown && resourceScheme == file"
+        "when": "(editorLangId == markdown || activeCustomEditorId == 'temcoDocs.page') && resourceScheme == file"
       },
       {
         "command": "temcoDocs.captureImage",
         "key": "ctrl+alt+s",
-        "when": "editorLangId == markdown"
+        "when": "editorLangId == markdown || activeCustomEditorId == 'temcoDocs.page'"
       },
       {
         "command": "temcoDocs.pasteImage",
         "key": "ctrl+alt+v",
-        "when": "editorLangId == markdown"
+        "when": "editorLangId == markdown || activeCustomEditorId == 'temcoDocs.page'"
       },
       {
         "command": "temcoDocs.rename",
@@ -687,43 +666,38 @@
           "command": "temcoDocs.pasteImage",
           "when": "editorLangId == markdown && resourceScheme == file",
           "group": "temcoDocs@7"
-        },
-        {
-          "command": "temcoDocs.openRich",
-          "when": "editorLangId == markdown && resourceScheme == file && activeCustomEditorId == ''",
-          "group": "temcoDocs@8"
-        },
-        {
-          "command": "temcoDocs.openSource",
-          "when": "activeCustomEditorId == 'temcoDocs.richTiptap'",
-          "group": "temcoDocs@1"
-        },
-        {
-          "command": "temcoDocs.previewPage",
-          "when": "activeCustomEditorId == 'temcoDocs.richTiptap'",
-          "group": "temcoDocs@3"
-        },
-        {
-          "command": "temcoDocs.diffPage",
-          "when": "activeCustomEditorId == 'temcoDocs.richTiptap'",
-          "group": "temcoDocs@3"
         }
       ],
       "editor/title/context": [
         {
-          "submenu": "temcoDocs.markdown",
-          "when": "editorLangId == markdown && resourceScheme == file",
+          "submenu": "temcoDocs.surface",
+          "when": "resourceLangId == markdown && resourceScheme == file",
           "group": "temcoDocs@1"
         }
       ],
       "editor/context": [
         {
-          "submenu": "temcoDocs.markdown",
+          "submenu": "temcoDocs.surface",
           "when": "editorLangId == markdown && resourceScheme == file",
           "group": "temcoDocs@1"
         }
       ],
-      "temcoDocs.markdown": [
+      "temcoDocs.surface": [
+        {
+          "command": "temcoDocs.openSource",
+          "when": "activeCustomEditorId == 'temcoDocs.page'",
+          "group": "0_views@1"
+        },
+        {
+          "command": "temcoDocs.previewPage",
+          "when": "activeCustomEditorId == 'temcoDocs.page'",
+          "group": "0_views@2"
+        },
+        {
+          "command": "temcoDocs.diffPage",
+          "when": "activeCustomEditorId == 'temcoDocs.page'",
+          "group": "0_views@3"
+        },
         {
           "command": "temcoDocs.format.pick",
           "group": "0_top@1"
@@ -799,6 +773,10 @@
         {
           "command": "temcoDocs.format.outline",
           "group": "4_navigate@1"
+        },
+        {
+          "command": "temcoDocs.page.open",
+          "group": "5_surface@1"
         }
       ],
       "temcoDocs.pageKinds": [
@@ -1063,17 +1041,38 @@
     "activationEvents": null
   },
   "scripts": {
-    "vscode:prepublish": "npm run build-webview",
+    "vscode:prepublish": "npm run check-commands && npm run check-fluent && npm run check-record && npm run check-types && npm run compile && npm run check-learn && npm run check-page && npm run check-grid && npm run build-webview",
     "check-commands": "node --experimental-strip-types scripts/check-commands.mts",
-    "check-roundtrip": "node --experimental-strip-types scripts/check-roundtrip.mts",
-    "check-webview": "node --experimental-strip-types scripts/check-webview.mts",
+    "check-fluent": "node --experimental-strip-types scripts/check-fluent.mts",
+    "check-record": "node --experimental-strip-types scripts/check-record.mts",
+    "check-types": "node node_modules/typescript/bin/tsc -p tsconfig.webview.json && node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
+    "compile": "node node_modules/typescript/bin/tsc -p tsconfig.json",
     "check-learn": "node --experimental-strip-types scripts/check-learn.mts",
-    "check-editor": "node --experimental-strip-types scripts/check-editor.mts",
+    "check-page": "node --experimental-strip-types scripts/check-page.mts",
+		"check-grid": "node --experimental-strip-types scripts/check-grid.mts",
     "build-webview": "node --experimental-strip-types scripts/build-webview.mts"
   },
   "dependencies": {
-    "@tiptap/extension-typography": "^3.30.3",
+    "@fluentui/react-components": "^9.74.11",
+    "@fluentui/react-icons": "^2.0.344",
+    "@radix-ui/react-dropdown-menu": "^2.2.1",
+    "@radix-ui/react-popover": "^1.3.1",
+    "@tiptap/core": "3.30.3",
+    "@tiptap/extension-code-block-lowlight": "3.30.3",
+    "@tiptap/extension-highlight": "3.30.3",
+    "@tiptap/extension-image": "3.30.3",
+    "@tiptap/extension-link": "3.30.3",
+    "@tiptap/extension-table": "3.30.3",
+    "@tiptap/extension-task-item": "3.30.3",
+    "@tiptap/extension-task-list": "3.30.3",
+    "@tiptap/extension-underline": "3.30.3",
+    "@tiptap/pm": "3.30.3",
+    "@tiptap/react": "3.30.3",
+    "@tiptap/starter-kit": "3.30.3",
+    "lowlight": "3.3.0",
     "mammoth": "1.11.0",
-    "turndown": "7.2.0"
+    "marked": "15.0.12",
+    "turndown": "7.2.0",
+    "turndown-plugin-gfm": "1.0.2"
   }
 }

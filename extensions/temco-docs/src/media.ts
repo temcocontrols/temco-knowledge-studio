@@ -27,12 +27,9 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { currentVersion, extensionOf, landImage, MAX_BYTES, staleAcross } from './attachments';
 import { DocsRoot, PageEntry, collectPages } from './registry';
 import { slugOf } from './store';
-
-/** The budget the design package sets for one screen, and the width below which a page stretches it into blur. */
-const MAX_BYTES = 2 * 1024 * 1024;
-const MIN_WIDTH = 1600;
 
 /** Where a screen waits when no page is in front. Below the folder the pages live in, never inside `media/`. */
 const INBOX = ['.temco', 'captures'];
@@ -66,9 +63,55 @@ export function registerMediaCommands(context: vscode.ExtensionContext, deps: Me
 		vscode.commands.registerCommand('temcoDocs.pasteImage', () => paste(deps)),
 		vscode.commands.registerCommand('temcoDocs.captureImage', () => capture(deps)),
 		vscode.commands.registerCommand('temcoDocs.chooseImage', () => choose(deps)),
+		vscode.commands.registerCommand('temcoDocs.staleScreenshots', () => reportStale(deps)),
 		vscode.commands.registerCommand('temcoDocs.attachCapture', (file?: unknown) =>
 			attach(deps, typeof file === 'string' ? file : undefined)
 		)
+	);
+}
+
+/**
+ * The screenshots a newer version has left behind, as a document that can be read, kept or sent.
+ *
+ * Design §22.4, S3: a stale screenshot is a **warning, not a block** — publishing one is allowed, and this report is
+ * the record of which ones were known about. Nothing is written and nothing is refused.
+ */
+async function reportStale(deps: MediaDeps): Promise<void> {
+	const roots = deps.roots();
+	const stale = await staleAcross(roots);
+	const date = new Date().toISOString().slice(0, 10);
+	const lines: string[] = [`# Screenshots a newer version has left behind — ${date}`, ''];
+
+	if (stale.length === 0) {
+		lines.push(
+			'Every picture beside a page either depicts the version the documentation describes, or does not say which',
+			'version it depicts. Nothing to retake.',
+			'',
+			'_A picture with no recorded version is not called stale: "we do not know" is a different claim from "this is old"._'
+		);
+	} else {
+		const described = [...new Set(stale.map((row) => row.current))].sort();
+		lines.push(
+			`The documentation describes **${described.join('**, **')}**. These ${stale.length} pictures were taken of`,
+			'something else, and they still look true.',
+			'',
+			'| Page | Image | Shows | Documentation |',
+			'| --- | --- | --- | --- |',
+			...stale.map((row) => `| ${row.page} | ${row.name} | ${row.appliesTo} | ${row.current} |`),
+			'',
+			'_Stale is a warning, not a block. Publishing one of these is allowed, and this report is what records it._'
+		);
+	}
+
+	lines.push('', '---', '', 'Made by Temco Docs from the folders that were open. Nothing was written or sent.');
+
+	// An untitled document, so producing a report never writes anything anywhere: saving it is the reader's act.
+	const document = await vscode.workspace.openTextDocument({ content: lines.join('\n'), language: 'markdown' });
+	await vscode.window.showTextDocument(document, { preview: false });
+	void vscode.window.showInformationMessage(
+		stale.length === 0
+			? 'Temco Docs: no screenshot claims a version the documentation no longer describes.'
+			: `Temco Docs: ${stale.length} screenshot${stale.length === 1 ? '' : 's'} a newer version has left behind.`
 	);
 }
 
@@ -216,19 +259,24 @@ async function land(deps: MediaDeps, bytes: Uint8Array, source: string, fallback
 		return;
 	}
 
-	const media = mediaFolder(page);
-	await vscode.workspace.fs.createDirectory(media);
-	const name = await nextName(media, page, extensionOf(bytes, fallback));
-	await vscode.workspace.fs.writeFile(vscode.Uri.joinPath(media, name), bytes);
-	await insertReference(page, `![${page.title}](media/${name})`);
-
-	const width = pngWidth(bytes);
-	if (width !== undefined && width < MIN_WIDTH) {
-		void vscode.window.showWarningMessage(
-			`Temco Docs: ${name} is ${width} px wide. A page stretches an image to the content width, so ${MIN_WIDTH} px or wider keeps it sharp.`
-		);
+	// One landing path for every insert: the same naming, the same record, the same width warning as Temco Page.
+	const landed = await landImage({
+		pageFsPath: page.uri.fsPath,
+		slug: slugOf(page.title) || slugOf(page.id) || 'screen',
+		bytes,
+		fallbackExtension: fallback,
+		caption: page.title,
+		appliesTo: await currentVersion(deps.roots()),
+	});
+	if ('error' in landed) {
+		void vscode.window.showWarningMessage(`Temco Docs: ${landed.error}. Nothing was written.`);
+		return;
 	}
-	deps.output.appendLine(`[media] ${source} → media/${name} on ${page.id}`);
+	if (landed.warning !== undefined) {
+		void vscode.window.showWarningMessage(`Temco Docs: ${landed.warning}`);
+	}
+	await insertReference(page, `![${landed.alt}](${landed.relative})`);
+	deps.output.appendLine(`[media] ${source} → ${landed.relative} on ${page.id}`);
 }
 
 /** No page in front: the screen waits in the inbox, and **Needs You** is where it gets a page. */
@@ -278,16 +326,27 @@ async function attach(deps: MediaDeps, file: string | undefined): Promise<void> 
 
 	const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(from));
 	const page = picked.page;
-	const media = mediaFolder(page);
-	await vscode.workspace.fs.createDirectory(media);
-	const name = await nextName(media, page, extensionOf(bytes, 'png'));
-	await vscode.workspace.fs.writeFile(vscode.Uri.joinPath(media, name), bytes);
+	const landed = await landImage({
+		pageFsPath: page.uri.fsPath,
+		slug: slugOf(page.title) || slugOf(page.id) || 'screen',
+		bytes,
+		fallbackExtension: 'png',
+		caption: page.title,
+		appliesTo: await currentVersion(deps.roots()),
+	});
+	if ('error' in landed) {
+		void vscode.window.showWarningMessage(`Temco Docs: ${landed.error}. Nothing was written.`);
+		return;
+	}
+	if (landed.warning !== undefined) {
+		void vscode.window.showWarningMessage(`Temco Docs: ${landed.warning}`);
+	}
 	try {
 		fs.unlinkSync(from);
 	} catch {
 		// It is out of the inbox either way: the copy in `media/` is the one the page points at.
 	}
-	await insertReference(page, `![${page.title}](media/${name})`);
+	await insertReference(page, `![${landed.alt}](${landed.relative})`);
 	deps.redraw();
 }
 
@@ -303,33 +362,6 @@ async function pickCapture(deps: MediaDeps): Promise<string | undefined> {
 		{ title: 'Attach which screenshot?' }
 	);
 	return picked?.detail;
-}
-
-/** A page's own `media/`, beside the file that shows it. */
-function mediaFolder(page: PageEntry): vscode.Uri {
-	return vscode.Uri.joinPath(vscode.Uri.file(path.dirname(page.uri.fsPath)), 'media');
-}
-
-/** The next `NN-slug.ext`: the number continues the folder's own sequence, the slug is the page's. */
-async function nextName(media: vscode.Uri, page: PageEntry, extension: string): Promise<string> {
-	let highest = 0;
-	for (const name of await listNames(media)) {
-		const match = /^(\d+)-/.exec(name);
-		if (match) {
-			highest = Math.max(highest, Number(match[1]));
-		}
-	}
-	const slug = slugOf(page.title) || slugOf(page.id) || 'screen';
-	return `${String(highest + 1).padStart(2, '0')}-${slug}.${extension}`;
-}
-
-async function listNames(directory: vscode.Uri): Promise<string[]> {
-	try {
-		const entries = await vscode.workspace.fs.readDirectory(directory);
-		return entries.filter(([, type]) => type === vscode.FileType.File).map(([name]) => name);
-	} catch {
-		return [];
-	}
 }
 
 /** Insert the reference where the person is writing; if the page was not open, put it at the end of the page. */
@@ -366,38 +398,7 @@ async function insertBlock(editor: vscode.TextEditor, text: string): Promise<voi
 	editor.selection = new vscode.Selection(after, after);
 }
 
-/**
- * The type, from the bytes. `15-online-editor.md`, *Safety rules*, rule 2: sniffed, never trusted from the name —
- * which is also why a file picked as `.bmp` is stored as what it really is.
- */
-function extensionOf(bytes: Uint8Array, fallback: string): string {
-	if (bytes.length > 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
-		return 'png';
-	}
-	if (bytes.length > 2 && bytes[0] === 0xff && bytes[1] === 0xd8) {
-		return 'jpg';
-	}
-	if (bytes.length > 4 && String.fromCharCode(...bytes.slice(0, 4)) === 'GIF8') {
-		return 'gif';
-	}
-	if (bytes.length > 12 && String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF'
-		&& String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP') {
-		return 'webp';
-	}
-	const head = Buffer.from(bytes.slice(0, 512)).toString('utf8');
-	if (head.includes('<svg')) {
-		return 'svg';
-	}
-	return fallback || 'png';
-}
 
-/** A PNG's width, from its IHDR — the only thing we need from the bytes, so no image library is involved. */
-function pngWidth(bytes: Uint8Array): number | undefined {
-	if (bytes.length < 24 || bytes[0] !== 0x89 || bytes[1] !== 0x50 || bytes[2] !== 0x4e || bytes[3] !== 0x47) {
-		return undefined;
-	}
-	return ((bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19]) >>> 0;
-}
 
 function megabytes(bytes: Uint8Array): string {
 	return (bytes.byteLength / (1024 * 1024)).toFixed(1);
