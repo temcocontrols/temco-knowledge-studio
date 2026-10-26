@@ -9,6 +9,7 @@
 
 import * as React from 'react';
 import { createRoot } from 'react-dom/client';
+import { FluentProvider } from '@fluentui/react-components';
 
 import '../../../temco-ui/media/page.css';
 import '../shared/surface-controls.css';
@@ -16,6 +17,7 @@ import './page-surface.css';
 import { AnnotateDialog } from '../shared/annotate';
 import { FindBar } from '../shared/find';
 import { OutlineList } from '../shared/outline';
+import { fluentTheme } from '../shared/theme';
 import { toHtml, toMarkdown } from '../../src/pageMarkdown';
 import { actionsFor, headingsIn, matchesIn, stateOf, usePageDocument, type Match, type PageActions, type PageState } from './document';
 import { staticNode } from './reading';
@@ -435,5 +437,11 @@ function Surface(): React.ReactElement {
 
 const root = document.getElementById('root');
 if (root !== null) {
-	createRoot(root).render(<Surface />);
+	// Only the annotator is Fluent, and Fluent components read their palette from a provider. `.page-fluent` undoes the
+	// provider's own background so the page keeps the editor's, and gives the box the height `#root` has.
+	createRoot(root).render(
+		<FluentProvider className="page-fluent" theme={fluentTheme()}>
+			<Surface />
+		</FluentProvider>
+	);
 }

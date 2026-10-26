@@ -172,15 +172,21 @@
 	height: 14px;
 }
 
+/* A menu is a floating surface, so it gets the theme's menu colours rather than the surface vocabulary's wash: `--bg-card`
+ * is 3% of the foreground over nothing, which draws a menu you can read the document through. It is portaled to `body`,
+ * away from the `.page-surface` element the other tokens are set on, and the menu tokens are the only ones VS Code
+ * guarantees to exist on the root.
+ */
 .menu,
 .popover {
 	z-index: 30;
 	min-width: 216px;
 	padding: 4px;
-	background: var(--bg-card);
-	border: 1px solid var(--border-strong);
+	background: var(--vscode-menu-background, var(--vscode-editorWidget-background, var(--editor-bg)));
+	color: var(--vscode-menu-foreground, var(--fg));
+	border: 1px solid var(--vscode-menu-border, var(--border-strong));
 	border-radius: var(--radius);
-	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+	box-shadow: 0 8px 24px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.28));
 }
 
 .menu__item {
@@ -197,7 +203,8 @@
 }
 
 .menu__item[data-highlighted] {
-	background: var(--bg-hover);
+	background: var(--vscode-menu-selectionBackground, var(--bg-hover));
+	color: var(--vscode-menu-selectionForeground, var(--vscode-menu-foreground, var(--fg)));
 }
 
 .menu__sample {

@@ -32,6 +32,17 @@ body {
 	gap: 0;
 }
 
+/* The provider Fluent needs is an element, and it must not become the page's own box: it keeps the height the page
+   expects, and paints and sets no type of its own, so the page still sits on the editor's background in the editor's
+   font and only the annotator takes Fluent's palette. A child selector with the id, because Fluent injects its own class
+   styles after this file and a plain class of ours would lose the tie. */
+#root > .page-fluent {
+	height: 100%;
+	background: none;
+	color: inherit;
+	font: inherit;
+}
+
 .page-surface--empty {
 	padding: 24px;
 	color: var(--fg-muted);
@@ -94,12 +105,7 @@ body {
 	padding: 0 10px;
 }
 
-/* A narrow editor gets a denser bar rather than a clipped one: the gallery folds into the Style menu (which offers the
-   same blocks), and the controls that no longer fit are listed behind `⋯`. */
-.page-surface .ribbon.is-compact .ribbon__styles {
-	display: none;
-}
-
+/* A narrow editor gets a denser bar rather than a clipped one: the block group folds into `⋯` and the groups tighten. */
 .page-surface .ribbon.is-compact .ribbon__group {
 	padding: 0 6px;
 	gap: 2px;
@@ -292,16 +298,18 @@ body {
 	background: color-mix(in srgb, var(--vscode-editor-background, #000) 50%, transparent);
 }
 
+/* Opaque on purpose. `--bg-card` is a 3% wash meant to tint a surface that is already painted, so a popover drawn on it
+   showed the document behind the menu. A floating surface has to be solid: it is over content it does not own. */
 .page-surface__ask-box {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
 	width: min(420px, 90vw);
 	padding: 16px;
-	background: var(--bg-card);
-	border: 1px solid var(--border-strong);
+	background: var(--vscode-editorWidget-background, var(--vscode-editor-background, #252526));
+	border: 1px solid var(--vscode-widget-border, var(--border-strong));
 	border-radius: var(--radius);
-	box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+	box-shadow: 0 8px 28px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.35));
 }
 
 .page-surface__ask-title {
@@ -315,42 +323,8 @@ body {
 	gap: 6px;
 }
 
-/* The style gallery: each entry is its own sample, so the choice is made by sight. Sizes are the document's own — a
-   gallery that showed every heading at one size would be a list of words, not a gallery. */
-.page-surface__styles {
-	gap: 4px;
-	align-items: stretch;
-}
-
-.page-surface__style {
-	min-width: 96px;
-	padding: 4px 10px;
-	border: 1px solid transparent;
-	border-radius: var(--radius-sm);
-	background: var(--bg-inset);
-	color: var(--fg);
-	font-size: 13px;
-	cursor: pointer;
-	text-align: left;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-.page-surface__style:hover {
-	background: var(--bg-hover);
-	border-color: var(--border);
-}
-
-.page-surface__style.is-on {
-	border-color: var(--accent);
-	background: color-mix(in srgb, var(--accent) 12%, var(--bg-inset));
-}
-
-.page-surface__style[data-level='0'] { font-size: 13px; }
-.page-surface__style[data-level='1'] { font-size: 16px; font-weight: 600; }
-.page-surface__style[data-level='2'] { font-size: 14.5px; font-weight: 600; }
-.page-surface__style[data-level='3'] { font-size: 13.5px; font-weight: 600; font-style: italic; }
+/* The gallery: gone. One paragraph-style control is enough, and the style menu is it — a second row of buttons that set
+   the same block made the bar teach two ways to do one thing. */
 
 .page-surface__zoom {
 	display: inline-flex;

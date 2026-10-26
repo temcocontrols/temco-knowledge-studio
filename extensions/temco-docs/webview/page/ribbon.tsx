@@ -77,24 +77,6 @@ function Tool({ label, glyph, run, active, disabled, shortcut }: ToolProps): Rea
 	);
 }
 
-/** One entry in the style gallery: the text it makes, set the way it makes it. */
-function Style({ label, sample, level, active, run }: { label: string; sample: string; level?: number; active: boolean; run: () => unknown }): React.ReactElement {
-	return (
-		<button
-			type="button"
-			className={`page-surface__style${active ? ' is-on' : ''}`}
-			aria-label={label}
-			aria-pressed={active}
-			title={label}
-			data-level={level ?? 0}
-			onMouseDown={(event) => event.preventDefault()}
-			onClick={run}
-		>
-			{sample}
-		</button>
-	);
-}
-
 export interface RibbonProps {
 	state: PageState;
 	actions: PageActions;
@@ -115,17 +97,15 @@ export interface RibbonProps {
 /**
  * How much of the bar fits. A narrow editor gets a denser bar rather than a clipped one.
  *
- * The `full` threshold is the width at which the gallery genuinely fits beside the other groups — measured, not guessed:
- * History ~76 + Text ~200 + Style 108 + Lists 108 + Blocks ~110 + gallery ~400, plus the dividers and padding, is about
- * 1030. Below that the bar wrapped onto a second row, which is why the gallery folds into the Style menu instead.
+ * There is one paragraph-style control — the style menu names the block the caret is in and sets it — so the bar no longer
+ * carries a second row of style buttons beside it. The threshold is measured, not guessed: undo/redo 76 + the marks 215 +
+ * the style menu 128 + the list menu 128 + the block group 110, plus the dividers and the padding, is about 700. Below
+ * that the block group folds into the `⋯` menu.
  */
-export type Density = 'full' | 'compact' | 'narrow';
+export type Density = 'full' | 'compact';
 
 export function densityFor(width: number): Density {
-	if (width < 720) {
-		return 'narrow';
-	}
-	return width < 1180 ? 'compact' : 'full';
+	return width < 720 ? 'compact' : 'full';
 }
 
 /**
@@ -161,13 +141,6 @@ const MARKS: ReadonlyArray<{ mark: Mark; label: string; glyph: React.ReactElemen
 	{ mark: 'highlight', label: 'Highlight', glyph: <ColorBackground24Regular />, shortcut: 'Ctrl+Shift+H' },
 ];
 
-const GALLERY: ReadonlyArray<{ level: number; label: string }> = [
-	{ level: 0, label: 'Normal' },
-	{ level: 1, label: 'Heading 1' },
-	{ level: 2, label: 'Heading 2' },
-	{ level: 3, label: 'Heading 3' },
-];
-
 /** The block commands, declared once: the group draws them, and the `⋯` menu offers the same ones when they do not fit. */
 const BLOCKS: ReadonlyArray<{ key: string; label: string; glyph: React.ReactElement; shortcut?: string; run: (actions: PageActions) => void }> = [
 	{ key: 'quote', label: 'Block quote', glyph: <TextQuote24Regular />, shortcut: 'Ctrl+Shift+B', run: actions => actions.toggleQuote() },
@@ -176,10 +149,7 @@ const BLOCKS: ReadonlyArray<{ key: string; label: string; glyph: React.ReactElem
 ];
 
 /** What a `⋯` shows: the commands the current width had to hide. */
-function MoreMenu({ density, actions }: { density: Density; actions: PageActions }): React.ReactElement | null {
-	if (density === 'full') {
-		return null;
-	}
+function MoreMenu({ actions }: { actions: PageActions }): React.ReactElement {
 	return (
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger asChild>
@@ -281,22 +251,7 @@ export function PageRibbon(props: RibbonProps): React.ReactElement {
 								</div>
 							)
 							: null}
-						{/* The gallery a document application puts beside the font box: each entry is the text it makes, at the
-						    size it makes it, so a style is chosen by sight rather than by the word "Heading 3". Below `full` it
-						    is not drawn: the Style menu beside it offers the same blocks, so nothing is lost. */}
-						<div className="ribbon__group page-surface__styles">
-							{GALLERY.map(entry => (
-								<Style
-									key={entry.level}
-									label={entry.label}
-									sample={entry.label}
-									level={entry.level}
-									active={state.block === entry.level}
-									run={() => actions.setBlock(entry.level)}
-								/>
-							))}
-						</div>
-						<MoreMenu density={density} actions={actions} />
+						{density === 'compact' ? <MoreMenu actions={actions} /> : null}
 					</div>
 				)
 				: shown === 'insert'
