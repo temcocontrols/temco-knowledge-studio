@@ -22,35 +22,33 @@ export function registerExportCommands(
 	roots: () => readonly DocsRoot[],
 	output: vscode.OutputChannel
 ): void {
-	const command = (id: string, run: (root: DocsRoot, target?: unknown) => Promise<void>): void => {
-		context.subscriptions.push(
-			vscode.commands.registerCommand(id, async (target?: unknown) => {
-				const root = await pickRoot(roots());
-				if (root !== undefined) {
-					await run(root, target);
-				}
-			})
-		);
+	/**
+	 * One export command: pick the folder, then run. Registered with a literal id at each call site below — the duplicate
+	 * check in `check-commands.mts` reads the source, so a helper that took the id as a variable would hide it.
+	 */
+	const run = async (work: (root: DocsRoot, target?: unknown) => Promise<void>, target?: unknown): Promise<void> => {
+		const root = await pickRoot(roots());
+		if (root !== undefined) {
+			await work(root, target);
+		}
 	};
 
-	command('temcoDocs.exportSite', async root => {
-		const result = await exportSite(root);
-		await finished(result, 'site');
-	});
-	command('temcoDocs.exportPage', async (root, target) => {
-		const page = await pickPage(root, target);
-		if (page === undefined) {
-			return;
-		}
-		const result = await exportPage(root, page);
-		await finished(result, `page “${page.title}”`);
-	});
-	command('temcoDocs.exportMarkdown', async root => {
-		const result = await exportMarkdown(root);
-		await finished(result, 'Markdown bundle');
-	});
-	// One door for the palette: the three shapes, named as a reader would ask for them.
 	context.subscriptions.push(
+		vscode.commands.registerCommand('temcoDocs.exportSite', async () => {
+			await run(async root => finished(await exportSite(root), 'site'));
+		}),
+		vscode.commands.registerCommand('temcoDocs.exportPage', async (target?: unknown) => {
+			await run(async (root, on) => {
+				const page = await pickPage(root, on);
+				if (page !== undefined) {
+					await finished(await exportPage(root, page), `page “${page.title}”`);
+				}
+			}, target);
+		}),
+		vscode.commands.registerCommand('temcoDocs.exportMarkdown', async () => {
+			await run(async root => finished(await exportMarkdown(root), 'Markdown bundle'));
+		}),
+		// One door for the palette: the three shapes, named as a reader would ask for them.
 		vscode.commands.registerCommand('temcoDocs.export', async () => {
 			const choice = await vscode.window.showQuickPick(
 				[
@@ -114,7 +112,8 @@ export async function exportPage(root: DocsRoot, page: PageEntry): Promise<Expor
 		body: embedded,
 		built: new Date().toISOString().slice(0, 10)
 	});
-	return write(root, slugPath(page.id), [{ name: `${slugPath(page.id)}.html`, data: Buffer.from(document, 'utf8') }]);
+	// A page export is one file, so it is written as one file — not wrapped in an archive a reader has to open first.
+	return writeOne(root, `${slugPath(page.id)}-${new Date().toISOString().slice(0, 10)}.html`, Buffer.from(document, 'utf8'));
 }
 
 /** The pages and the pictures they refer to, as a folder tree another Markdown tool can open. */
@@ -208,11 +207,15 @@ export function dataUri(name: string, bytes: Uint8Array): string {
 /** The archive, written beside the project so it is easy to find and easy to delete. */
 async function write(root: DocsRoot, base: string, files: readonly ZippedFile[]): Promise<ExportResult> {
 	const archive = zip(files);
-	const destination = path.join(root.folder.uri.fsPath, 'dist');
-	const target = vscode.Uri.joinPath(root.folder.uri, 'dist', `${base}-${new Date().toISOString().slice(0, 10)}.zip`);
-	await vscode.workspace.fs.createDirectory(vscode.Uri.file(destination));
-	await vscode.workspace.fs.writeFile(target, archive);
-	return { file: target, files: files.length, bytes: archive.length };
+	return writeOne(root, `${base}-${new Date().toISOString().slice(0, 10)}.zip`, archive, files.length);
+}
+
+/** One file in the project's `dist/`, with the folder made first so the write cannot fail on a fresh project. */
+async function writeOne(root: DocsRoot, name: string, content: Uint8Array, files = 1): Promise<ExportResult> {
+	const target = vscode.Uri.joinPath(root.folder.uri, 'dist', name);
+	await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(root.folder.uri, 'dist'));
+	await vscode.workspace.fs.writeFile(target, content);
+	return { file: target, files, bytes: content.length };
 }
 
 function kilo(bytes: number): string {

@@ -110,7 +110,9 @@ create project ─▶ add source ─▶ registry ─▶ write ─▶ validate �
   the first time either side changes. CI publishing becomes possible again the day a project owns its own renderer; the
   branch push is what makes publishing work until then.
 - **Export** is local and dependency-free: the site as a `.zip`, any page as one self-contained HTML file, the pages and
-  their media as a Markdown bundle. `.docx` needs a writer package (`mammoth` is import-only) and is optional.
+  their media as a Markdown bundle. The zip writer is in the module (`src/zip.ts`, store + deflate over a CRC32 table)
+  rather than a dependency, because an export a colleague cannot open is not an export. `.docx` needs a writer package
+  (`mammoth` is import-only) and is still owed.
 
 ## Design system
 
@@ -139,6 +141,8 @@ create project ─▶ add source ─▶ registry ─▶ write ─▶ validate �
 2. **Deploy** ✅ — `src/pages.ts` (the remote decides the sitemap's address), `src/publish.ts`
    (`temcoDocs.publishSite`), `scripts/check-publish.mts` (5 cases against a real bare repository);
    `src/git.ts` shared with the diff command. Still owed: the status-bar state and the confirmation screen S12.
-3. **Export** — zip, single-file HTML, Markdown bundle; then the panel.
+3. **Export** ✅ — `src/zip.ts` (a real archive writer: store, deflate, CRC32), `src/export.ts` (site zip, single-file
+   page, Markdown bundle; `temcoDocs.export` + three commands), `scripts/check-export.mts` (5 cases that read the archive
+   back). Still owed: `.docx`. Then the panel.
 4. **Panel and shell** — five activity entries, the Fluent panel above the native tree, dashboards as center tabs,
    S10–S13 in the center instead of two trees.

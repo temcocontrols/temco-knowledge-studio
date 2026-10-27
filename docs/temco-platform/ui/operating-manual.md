@@ -44,11 +44,11 @@ The manual never says "click the book icon" without naming the view, because the
 ## 2. The whole flow on one line
 
 ```
-create project ─▶ add material ─▶ write pages ─▶ validate ─▶ BUILD ─▶ RELEASE ─▶ PUBLISH ─▶ (export)
+create project ─▶ add material ─▶ write pages ─▶ validate ─▶ BUILD ─▶ RELEASE ─▶ PUBLISH ─▶ EXPORT
    step 3           step 4          step 5          step 7     step 8    step 9      step 10    step 12
 ```
 
-Steps 3–7 are where the writing happens; 8–10 are four clicks and a wait each.
+Steps 3–7 are where the writing happens; 8–10 and 12 are a few clicks and a wait each.
 
 ---
 
@@ -327,6 +327,10 @@ Print this. Every row is a real control, and the command id is what to type in `
 | **Build the Site** | `Publish` title `🌐` | `temcoDocs.buildSite` |
 | **Publish to GitHub Pages** | `Publish` title `☁` | `temcoDocs.publishSite` |
 | **Build the Offline Help** | `Publish` title `📦` | `temcoDocs.buildHelp` |
+| **Export…** | Releases page | `temcoDocs.export` |
+| **Export the Site as a Zip** | palette | `temcoDocs.exportSite` |
+| **Export the Page as HTML** | palette, page right-click | `temcoDocs.exportPage` |
+| **Export the Pages as a Markdown Bundle** | palette | `temcoDocs.exportMarkdown` |
 | **Review Center** (row) | `Publish` view | `temcoDocs.review` → focuses `Needs You` |
 | **Build Center** (row) | `Publish` view | `temcoDocs.builds` → opens the Build Center page |
 | **Releases** (row) | `Publish` view | `temcoDocs.releases` → opens the Releases page |
@@ -353,23 +357,37 @@ Print this. Every row is a real control, and the command id is what to type in `
 | **Open** (an artifact) | Build Center → Artifacts | `temcoDocs.openArtifact` |
 | **Publish** | Releases | `temcoDocs.publishRelease` |
 | **Publish to GitHub Pages** | Releases | `temcoDocs.publishSite` |
+| **Export…** | Releases | `temcoDocs.export` |
 | **Serve / Serve the Newest** | Releases, release rows | `temcoDocs.servePublished` |
 | **Open** (a release) | Releases → release rows | `temcoDocs.openPublished` |
 | **Stop Serving the Site** | palette | `temcoDocs.stopServing` |
 
 ---
 
-## 12. Export — not built yet
+## 12. Step 9 — Export
 
-Everything up to publishing exists. **Export is the one step in the flow that does not have a button yet**: there is no *Export as zip*, no *single-file HTML*, no *Markdown bundle*.
+**Documentation → Publish → Releases → `Export…`** (`temcoDocs.export`), or the palette. It asks which of three shapes you want; each has its own command if you prefer to go straight there.
 
-What you can do today, in order of practicality:
+```
+  Export what?
+  > The site, as a zip                     the finished website: pages, stylesheet, pictures
+    This page, as one HTML file            stylesheet and pictures inside the file itself
+    The pages, as a Markdown bundle        the sources and their pictures, for another tool
+```
 
-1. **The release folder is the export.** Each row on the Releases page shows its `destination`; **Open** it in your file browser and copy it anywhere. That folder is a complete, self-contained site (`index.html` + `assets/` + pages + media).
-2. **Serve + browser "Save page as…"** (`temcoDocs.servePublished`) for a single page as HTML.
-3. The Markdown sources are the project's `docs/` folder — zip it with the file explorer.
+| Shape | Command | What you get | For |
+|---|---|---|---|
+| **The site, as a zip** | `temcoDocs.exportSite` | `dist/<project>-site-<date>.zip` — `index.html`, `assets/site.css`, every page, every `media/` | a colleague who wants the finished website, or an upload to any static host |
+| **This page, as one HTML file** | `temcoDocs.exportPage` | `dist/<page>.html` — the stylesheet inlined, every picture a `data:` URI | e-mail, a chat message, a support ticket: one file that opens anywhere |
+| **The pages, as a Markdown bundle** | `temcoDocs.exportMarkdown` | `dist/<project>-markdown-<date>.zip` — the `.md` files, their `media/`, and `registry.json` | handing the sources to another tool, or archiving them |
 
-Planned, and next in the order of work: site as `.zip`, any page as one self-contained HTML file, all pages plus media as a Markdown bundle, and `.docx` if a writer dependency is accepted.
+The single-file page is the one to reach for when someone asks "can you send me that page" — it keeps working with the network unplugged, because nothing in it points outside itself.
+
+Every export is written to the project's `dist/` folder and the notification offers **Show in Folder**. Nothing is uploaded; nothing leaves the machine.
+
+> A page whose pictures are very large produces a very large file. That is the honest trade for a file that always opens — export the site as a zip instead when the pictures matter more than the convenience.
+>
+> `.docx` export is still not built: `mammoth` is import-only here, so writing Word needs a writer dependency first.
 
 ---
 
@@ -385,6 +403,8 @@ Planned, and next in the order of work: site as `.zip`, any page as one self-con
 | *this folder is not a git repository with a GitHub `origin`* | no remote | `git remote add origin …`, then publish again |
 | Pages shows 404 for a minute | the first deploy is still running | wait; check the repository's **Actions** tab |
 | A page is missing from the published site | it is not registered, or `ship` is false | `Documentation → Pages → … → Open Registry` |
+| An export says *has no pages to export* | no registered page has a file yet | create or generate the pages first (§5) |
+| A single-file page shows a broken picture | the picture's path in the Markdown is wrong, or it is not under the page's `media/` | fix the reference in the editor; the same link is broken in the site too |
 | The editor shows the raw Markdown | the file opened as text | in the `Pages` view, right-click the page → **Open the Page**; or in the Explorer right-click the file → **Reopen Editor With…** → **Temco Editor** |
 
 Output that explains itself: **View → Output → channel `Temco Docs`**. Every build, publish and generator decision is written there with the path it used.

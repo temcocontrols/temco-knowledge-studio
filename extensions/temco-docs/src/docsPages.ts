@@ -1159,7 +1159,7 @@ ${card({
 		title: 'Releases',
 		mark: 'upload',
 		desc: 'A release is what a build left that a reader can be given: the website, the offline help, the PDF, the search index. Publishing copies the site where it can be opened; serving it puts it on loopback so its own links resolve.',
-		actions: button('Publish', 'temcoDocs.publishRelease', { kind: 'primary', mark: 'upload' }) + button('Publish to GitHub Pages', 'temcoDocs.publishSite', { mark: 'cloud-upload' }) + button('Serve the Newest', 'temcoDocs.servePublished', { mark: 'radio-tower' }) + button('Build Site', 'temcoDocs.buildSite', { mark: 'play' }) + button('Build Offline Help', 'temcoDocs.buildHelp', { mark: 'package' })
+		actions: button('Publish', 'temcoDocs.publishRelease', { kind: 'primary', mark: 'upload' }) + button('Publish to GitHub Pages', 'temcoDocs.publishSite', { mark: 'cloud-upload' }) + button('Export…', 'temcoDocs.export', { mark: 'download' }) + button('Serve the Newest', 'temcoDocs.servePublished', { mark: 'radio-tower' }) + button('Build Site', 'temcoDocs.buildSite', { mark: 'play' }) + button('Build Offline Help', 'temcoDocs.buildHelp', { mark: 'package' })
 	})}
 ${tiles([
 		{ value: project ?? '—', label: 'Project' },
