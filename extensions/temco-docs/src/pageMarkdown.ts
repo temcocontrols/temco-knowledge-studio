@@ -15,11 +15,12 @@ const marked = new Marked({ gfm: true, breaks: false });
 interface RuleNode {
 	nodeName: string;
 	parentElement?: { closest(selectors: string): unknown } | null;
+	getAttribute?(name: string): string | null;
 }
 
 interface Rule {
 	filter: string | string[] | ((node: RuleNode) => boolean);
-	replacement: (content: string) => string;
+	replacement: (content: string, node: RuleNode) => string;
 }
 
 // `@types/turndown` describes the options object but not the three methods this module configures with.
@@ -41,6 +42,26 @@ turndown.addRule('strikethrough', {
 	replacement: content => `~~${content}~~`,
 });
 
+// A task item's checkbox, wherever the editor put it.
+//
+// `turndown-plugin-gfm` only recognises a checkbox that is the *first child* of the list item, which is the shape a
+// Markdown parser produces. Tiptap renders it inside a `<label>` (so it can be styled and announced), and that input was
+// dropped — so a page whose checkboxes were ticked came back as `- done` on the next save. Reading the input wherever it
+// sits writes `[x] ` / `[ ] ` for both shapes, and the list item's own rule still supplies the bullet and the indent.
+turndown.addRule('taskCheckbox', {
+	filter: node => node.nodeName === 'INPUT' && node.getAttribute?.('type') === 'checkbox',
+	replacement: (_content, node) => `${isChecked(node) ? '[x]' : '[ ]'} `,
+});
+
+/** A checkbox is checked when the property says so, or — without a live DOM — when the attribute is present. */
+function isChecked(node: RuleNode): boolean {
+	const checked = (node as { checked?: unknown }).checked;
+	if (typeof checked === 'boolean') {
+		return checked;
+	}
+	return node.getAttribute?.('checked') !== null && node.getAttribute?.('checked') !== undefined;
+}
+
 // Markdown has no underline and no highlight, so a command that produced one would be erased the moment the page was
 // saved. They are kept as the inline HTML Markdown already allows, which `marked` reads back as the same element.
 turndown.keep(['u', 'mark']);
@@ -53,9 +74,10 @@ turndown.addRule('noWrapping', {
 });
 
 // A paragraph inside a list item or a table cell is the exception: the blank line there turns a tight list into a loose
-// one and breaks a table row, so every bullet and cell would be rewritten on every save.
+// one and breaks a table row, so every bullet and cell would be rewritten on every save. The `<div>` Tiptap wraps a task
+// item's words in is the same exception one level out — it is a wrapper the editor adds, not a block Markdown has.
 turndown.addRule('tightBlock', {
-	filter: node => node.nodeName === 'P' && node.parentElement?.closest('li, td, th') !== null,
+	filter: node => (node.nodeName === 'P' || node.nodeName === 'DIV') && node.parentElement?.closest('li, td, th') !== null,
 	replacement: content => content,
 });
 

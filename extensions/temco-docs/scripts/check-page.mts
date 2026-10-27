@@ -115,6 +115,22 @@ check('a task list keeps its boxes', () => {
 	assert.equal(roundTrip('- [x] done\n- [ ] to do\n'), '- [x] done\n- [ ] to do\n');
 });
 
+check('a task list the editor rendered keeps its boxes', () => {
+	// The checkbox as Tiptap renders it: inside a `<label>`, with the words in a `<div>`. `turndown-plugin-gfm` only sees
+	// a checkbox that is its item's first child, so this is the shape that used to save as `- done` — every ticked box in
+	// a page was lost on the next save. `scripts/check-editor.mts` drives the editor itself; this is the same HTML.
+	const item = (checked: boolean, words: string): string =>
+		`<li data-checked="${checked}" data-type="taskItem"><label><input type="checkbox"${checked ? ' checked="checked"' : ''}><span></span></label><div><p>${words}</p></div></li>`;
+	assert.equal(
+		toMarkdown(`<ul data-type="taskList">${item(true, 'done')}${item(false, 'to do')}</ul>`),
+		'- [x] done\n- [ ] to do\n'
+	);
+});
+
+check('a plain bullet list is not a task list', () => {
+	assert.equal(roundTrip('- one\n- two\n'), '- one\n- two\n');
+});
+
 check('markdown in, the editor gets blocks', () => {
 	const html = toHtml('- one\n\n| a | b |\n| --- | --- |\n');
 	assert.match(html, /<ul>/u);

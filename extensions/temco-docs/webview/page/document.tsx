@@ -17,14 +17,13 @@ import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table/row';
 import { TableHeader } from '@tiptap/extension-table/header';
 import { TableCell } from '@tiptap/extension-table/cell';
-import TaskList from '@tiptap/extension-task-list';
-import TaskItem from '@tiptap/extension-task-item';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import Highlight from '@tiptap/extension-highlight';
 import Underline from '@tiptap/extension-underline';
 import { Extension } from '@tiptap/core';
 import { common, createLowlight } from 'lowlight';
 import type { HeadingAt } from '../../src/outlineModel';
+import { TaskItemWithCheckboxes, TaskListWithCheckboxes } from './taskLists.mjs';
 
 const lowlight = createLowlight(common);
 
@@ -295,6 +294,10 @@ export interface PageDocumentOptions {
  * inside StarterKit: bold, italic, strike, code, blockquote, the three lists, headings, hard breaks, undo/redo, the drop
  * and gap cursors, and the horizontal rule. Adding one of those a second time registers two extensions with the same name,
  * which Tiptap resolves by keeping one of them and warning — a silent, invisible difference in behaviour.
+ *
+ * The two task-list extensions are Tiptap's own, extended rather than replaced: `taskLists.ts` adds the shape `marked`
+ * writes (`<ul><li><input type="checkbox">`) to the one Tiptap renders (`ul[data-type="taskList"]`), so a page's
+ * checkboxes survive being opened.
  */
 function extensions(): Extensions {
 	return [
@@ -311,8 +314,8 @@ function extensions(): Extensions {
 		TableRow,
 		TableHeader,
 		TableCell,
-		TaskList,
-		TaskItem.configure({ nested: true }),
+		TaskListWithCheckboxes,
+		TaskItemWithCheckboxes.configure({ nested: true }),
 		CodeBlockLowlight.configure({ lowlight }),
 		Highlight,
 		STRIKE_KEY,

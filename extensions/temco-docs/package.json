@@ -1041,7 +1041,7 @@
     "activationEvents": null
   },
   "scripts": {
-    "vscode:prepublish": "npm run check-commands && npm run check-fluent && npm run check-record && npm run check-types && npm run compile && npm run check-learn && npm run check-page && npm run check-grid && npm run check-outline && npm run check-shortcuts && npm run build-webview",
+    "vscode:prepublish": "npm run check-commands && npm run check-fluent && npm run check-record && npm run check-types && npm run compile && npm run check-learn && npm run check-page && npm run check-task-lists && npm run check-grid && npm run check-outline && npm run check-shortcuts && npm run build-webview",
     "check-commands": "node --experimental-strip-types scripts/check-commands.mts",
     "check-fluent": "node --experimental-strip-types scripts/check-fluent.mts",
     "check-record": "node --experimental-strip-types scripts/check-record.mts",
@@ -1049,6 +1049,7 @@
     "compile": "node node_modules/typescript/bin/tsc -p tsconfig.json",
     "check-learn": "node --experimental-strip-types scripts/check-learn.mts",
     "check-page": "node --experimental-strip-types scripts/check-page.mts",
+    "check-task-lists": "node --experimental-strip-types scripts/check-task-lists.mts",
 		"check-grid": "node --experimental-strip-types scripts/check-grid.mts",
 		"check-outline": "node --experimental-strip-types scripts/check-outline.mts",
 		"check-shortcuts": "node --experimental-strip-types scripts/check-shortcuts.mts",
@@ -1064,9 +1065,8 @@
     "@tiptap/extension-highlight": "3.30.3",
     "@tiptap/extension-image": "3.30.3",
     "@tiptap/extension-link": "3.30.3",
+    "@tiptap/extension-list": "3.30.3",
     "@tiptap/extension-table": "3.30.3",
-    "@tiptap/extension-task-item": "3.30.3",
-    "@tiptap/extension-task-list": "3.30.3",
     "@tiptap/extension-underline": "3.30.3",
     "@tiptap/pm": "3.30.3",
     "@tiptap/react": "3.30.3",
