@@ -1,0 +1,5 @@
+webview/**
+scripts/**
+src/**
+tsconfig.tsbuildinfo
+**/*.map

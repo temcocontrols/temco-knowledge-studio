@@ -1,0 +1,108 @@
+{
+  "name": "temco-editor",
+  "displayName": "Temco Editor Prototype",
+  "description": "A second editor for a Markdown page: Tiptap 3.32 with a selection bubble menu, a block drag handle and a quieter bar — the surface to compare against Temco Editor.",
+  "publisher": "temcocontrols",
+  "version": "0.0.1",
+  "private": true,
+  "categories": [
+    "Other"
+  ],
+  "engines": {
+    "vscode": "^1.143.0"
+  },
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onCustomEditor:temcoEditor.page",
+    "onCommand:temcoEditor.open",
+    "onCommand:temcoEditor.openSource"
+  ],
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "temcoEditor.page",
+        "displayName": "Temco Editor Prototype",
+        "selector": [
+          {
+            "filenamePattern": "*.md"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "commands": [
+      {
+        "command": "temcoEditor.open",
+        "title": "Open in the Temco Editor Prototype",
+        "category": "Temco Editor",
+        "enablement": "editorLangId == markdown"
+      },
+      {
+        "command": "temcoEditor.openSource",
+        "title": "Open as Text",
+        "category": "Temco Editor"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "temcoEditor.openSource",
+          "when": "activeCustomEditorId == temcoEditor.page",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "temcoEditor.openSource",
+          "when": "activeCustomEditorId == temcoEditor.page"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run check-commands && npm run check-types && npm run compile && npm run check-page && npm run build-webview && npm run check-surface",
+    "check-commands": "node --experimental-strip-types scripts/check-commands.mts",
+    "check-types": "node node_modules/typescript/bin/tsc -p tsconfig.webview.json && node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
+    "compile": "node node_modules/typescript/bin/tsc -p tsconfig.json",
+    "check-page": "node --experimental-strip-types scripts/check-page.mts",
+    "check-surface": "node --experimental-strip-types scripts/check-surface.mts",
+    "build-webview": "node --experimental-strip-types scripts/build-webview.mts"
+  },
+  "dependencies": {
+    "@tiptap/core": "3.32.0",
+    "@tiptap/extension-bubble-menu": "3.32.0",
+    "@tiptap/extension-code-block-lowlight": "3.32.0",
+    "@tiptap/extension-drag-handle": "3.32.0",
+    "@tiptap/extension-drag-handle-react": "3.32.0",
+    "@tiptap/extension-floating-menu": "3.32.0",
+    "@tiptap/extension-highlight": "3.32.0",
+    "@tiptap/extension-image": "3.32.0",
+    "@tiptap/extension-link": "3.32.0",
+    "@tiptap/extension-list": "3.32.0",
+    "@tiptap/extension-table": "3.32.0",
+    "@tiptap/extension-underline": "3.32.0",
+    "@tiptap/extensions": "3.32.0",
+    "@tiptap/markdown": "3.32.0",
+    "@tiptap/pm": "3.32.0",
+    "@tiptap/react": "3.32.0",
+    "@tiptap/starter-kit": "3.32.0",
+    "lowlight": "3.3.0",
+    "marked": "15.0.12",
+    "turndown": "7.2.0",
+    "turndown-plugin-gfm": "1.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/turndown": "^5.0.6",
+    "esbuild": "0.28.2",
+    "jsdom": "^26.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.9.3"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

@@ -75,6 +75,7 @@ const compilations = [
 	'extensions/simple-browser/tsconfig.json',
 	// TEMCO: fork edit — this list is a cached glob, so every built-in extension must be named here to be compiled.
 	'extensions/temco-docs/tsconfig.json',
+	'extensions/temco-editor/tsconfig.json',
 	'extensions/temco-ai/tsconfig.json',
 	'extensions/temco-store/tsconfig.json',
 	'extensions/temco-ui/tsconfig.json',
