@@ -3,9 +3,9 @@
 // Design §7.1 says one package owns Fluent and every other surface imports that package, so there is one Fluent version in
 // a bundle and one place to swap it. The design's answer is `extensions/temco-ui`. Today `temco-ui` is a compiled
 // extension with no React runtime of its own, and there is exactly one Fluent surface, so the rule is enforced where it
-// can be enforced for free: the surfaces that draw a page (webview/page and webview/shared) are the only
-// folders allowed to import Fluent, and this script fails the build when any other file does. Everything else in this
-// extension is plain HTML in a webview, and a Fluent import there would be a second design language.
+// can be enforced for free: the folders that draw a page (webview/markdown and webview/shared) are the only ones allowed
+// to import Fluent, and this script fails the build when any other file does. Everything else here is extension host code,
+// and a Fluent import there would be a second design language.
 // When a second surface needs Fluent, the list below gains a folder *and* the provider moves into `temco-ui` — that is the
 // moment the extraction pays for itself, and this check is what will point at it.
 
@@ -14,7 +14,7 @@ import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = fileURLToPath(new URL('..', import.meta.url));
-const allowed = [join('webview', 'page'), join('webview', 'shared')];
+const allowed = [join('webview', 'markdown'), join('webview', 'shared')];
 const roots = ['src', 'webview', 'scripts'];
 const extensions = ['.ts', '.tsx', '.mts'];
 

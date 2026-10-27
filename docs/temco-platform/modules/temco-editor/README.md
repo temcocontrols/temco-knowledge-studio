@@ -1,81 +1,81 @@
 # temco-editor
 
-A **comparison surface**: the same Markdown page, edited by a second Tiptap editor so the two can be judged side by side.
-It is the only module here that exists to be deleted.
+The editor for a Markdown page: one module, one editor, three layers. It owns the surface and nothing about what a page
+*is* — that stays in `temco-docs`.
 
 ## Identifiers
 
 | | |
 |---|---|
 | Extension id | `temcocontrols.temco-editor` |
-| View type | `temcoEditor.page` — **Temco Editor Prototype**, `priority: "option"` for `*.md` |
-| Commands | `temcoEditor.open` · `temcoEditor.openSource` |
+| View type | `temcoEditor.markdown` — **Temco Editor**, `priority: "default"` for `*.md` |
+| Commands | `temcoEditor.open` · `temcoEditor.openSource` · `temcoEditor.preview` · `temcoEditor.diff` · `temcoEditor.pageProperties` |
 | Namespace | `temcoEditor` |
 | Storage | none |
+| Depends on | `temcocontrols.temco-docs` (its model, through `src/docs.ts`) |
 
 ## Why it exists
 
-`temco-docs` already ships **Temco Editor** (`temcoDocs.page`), a Tiptap 3.30.3 surface behind a two-tab ribbon. The open
-question is not "is Tiptap right" — it is whether a *quieter* surface is better: marks at the selection instead of a
-ribbon, a drag handle beside the block, a placeholder on an empty page. Those three are inline affordances a ribbon
-cannot offer, and they are exactly what this module adds.
+Writing a page in a text editor means thinking about pipes and asterisks; a WYSIWYG surface means writing the page. The
+editor used to live inside `temco-docs` as `temcoDocs.page`, next to the registry, the tree, the builds and the release
+report — 494 KB of documentation domain beside ~250 KB of editor. This module is that 250 KB, given its own front door.
 
-The rule that makes the comparison honest: **both editors write the same bytes**. `src/markdown.ts` reproduces
-`temco-docs/src/pageMarkdown.ts` rule for rule, and `scripts/check-page.mts` is the same set of round-trip cases. If a
-page opened here and saved unedited produced a different diff, the comparison would be measuring the wrong thing.
+It also replaced its own prototype: for a while there were two editors to compare. The comparison is over, the winning
+affordances are here — a **selection menu** for the marks, a **drag handle** beside a block, a **placeholder** on an empty
+page — and the prototype is deleted.
 
-The **second serialiser is a reader, not a writer**: `@tiptap/markdown` is registered so `editor.getMarkdown()` exists,
-and the status strip shows what it would produce beside the contract (`Compare serialisers`). Nothing it returns ever
-reaches the file. On a real page the two always disagree — different table separators, no trailing newline, `++`/`==`
-instead of `<u>`/`<mark>` — which is the finding, not a bug to paper over.
+## The three layers
 
-### Read mode, and what it proves
+```text
+the surface      main.tsx · ribbon.tsx · reading.tsx      asks for named operations, reads a snapshot of the caret
+   ↕ contract    webview/markdown/contract.ts             PageState · PageActions · Mark · ListKind — types only
+the engine       webview/markdown/engine/tiptap/          the only place a Tiptap package is named
+```
 
-`Read the page` in the head swaps the editor for the markup it last produced — no caret, no bar, no drag handle, and
-nothing to type into. Coming back re-mounts the same editor instance, so the document and the undo history are the ones
-that were there. It is the same idea as `temco-docs`' View ▸ *Read the page*, reached from one control instead of a tab,
-and it is the cheapest proof that the engine seam is real.
+The rule is enforced by reading, not by trust: `grep -r "@tiptap" webview/markdown/*.tsx webview/shared/` returns
+nothing, `scripts/check-shortcuts.mts` reads the shortcuts out of `engine/tiptap/document.tsx` rather than assuming them,
+and replacing Tiptap means deleting one folder.
 
-### Two defects this work found, and the fix that came with it
-
-1. **A task list did not survive being opened**, in either editor. `marked` renders `- [x] done` as
-   `<ul><li><input type="checkbox">…`, which is not the shape Tiptap's `TaskList`/`TaskItem` parse rules accept
-   (`ul[data-type="taskList"]`), so the page opened as a plain bullet list.
-2. **A checkbox did not survive being saved**, in either editor. `turndown-plugin-gfm`'s task rule expects the
-   `<input>` to be an item's first child; Tiptap renders it inside a `<label>`, so the file came back as `- done`.
-
-Found here, fixed where they belong: `temco-docs/webview/page/taskLists.mts` adds the shape `marked` writes to the
-parser, and a `taskCheckbox` rule in `pageMarkdown.ts` reads the checkbox wherever it sits. `temco-docs` now carries
-`scripts/check-task-lists.mts` — a real editor in jsdom, both shapes, open and save — and `check-page` grew the
-serialised cases. This prototype carries the same two rules, so the two editors still write the same bytes.
+The host is the same shape from the other side: `src/` knows a document, a panel, an edit and a line ending, and no
+`Editor`, `Node`, `Mark`, `PluginKey` or `Transaction`. What a page *is* — its media folder, the version it describes, the
+pages a link may reach — it asks `temco-docs` for, through `src/docs.ts`.
 
 ## What it owns
 
 - the view type, the provider, and the commands that reach it;
-- its own bridge to the file (`src/bridge.ts`) — a reduced copy of `temco-docs/src/webviewText.ts`, because a module may
-  not import another module's source: one `WorkspaceEdit` per save, the file's own line endings, the ordered-write guard
-  that keeps a caret still;
-- its bundle and the one bundler step that produces it;
-- a **comparison** of the two Markdown serialisers, shown and never saved.
+- the bridge to the file: one `WorkspaceEdit` per save, the file's own line endings, and the ordered-write guard that
+  keeps a caret still while two writes land out of order;
+- the Markdown contract (`src/markdown.ts`) — the rules that make an unedited page open and save to the same bytes;
+- the surface: the ribbon, the selection menu, the block handle, find, the outline rail, read mode, zoom, capture;
+- its bundle and the one bundler step that produces it.
 
 ## What it must not own
 
-- **the registry, the pages model, the checks, the writes** — `temco-docs`;
-- **the capture pipeline, annotation, the outline, find, read mode** — `temco-docs`;
-- **a second Markdown dialect.** Any change to the conversion must land in `temco-docs` first; this module follows.
+- **the registry, the pages model, the builds, the release report** — `temco-docs`;
+- **where an image lands.** `media/`, the file name and the attachment record are the model's; this module supplies the
+  bytes and the words and asks (`landImage`);
+- **a second Markdown dialect.** The round trip is one implementation. If Tiptap's own serialiser would be better, that
+  is a change to the contract, proved by `check-page` first.
+
+## What was learned the hard way
+
+- **A task list was destroyed twice** — on open, because `marked` writes `<ul><li><input type="checkbox">` and Tiptap
+  wants `ul[data-type="taskList"]`; on save, because `turndown-plugin-gfm` wants the `<input>` as the item's first child
+  and Tiptap renders it inside a `<label>`. Both shapes are now accepted on the way in (`engine/tiptap/taskLists.mts`)
+  and the checkbox is read wherever it sits on the way out (`src/markdown.ts`).
+- **Tiptap merges attribute parsers over a rule's `getAttrs`**, so `checked` had to be parsed in `addAttributes`, not in
+  the parse rule.
+- **A missing bundle is a blank tab, not an error**: `bridge.ts` asks for `markdown.js` and `markdown.css` by name, a 404
+  on a script fires no `onerror`, and `compile-extension:<name>` cleans `out/` before `tsc` — which deletes the bundle.
+  `check-surface.mts` loads the built file, so a stale or missing bundle fails the gate instead of the tab.
 
 ## Gates
 
-`npm run vscode:prepublish` — `check-commands` (declared = registered, once each), `check-types` (host and webview,
-separately), `compile`, `check-page` (the round trip), `build-webview`, `check-surface` (the built bundle in jsdom: it
-starts, draws a page, writes one edit back, shows both serialisers without writing, and survives a round trip through
-Read mode).
+`npm run vscode:prepublish`, in order: `check-commands` · `check-fluent` · `check-types` (host and webview, separately) ·
+`compile` · `check-page` (13 round-trip cases) · `check-task-lists` (a real editor, both shapes) · `check-outline`
+(29 cases, no browser) · `check-shortcuts` (every key the bar teaches is bound) · `build-webview` · `check-surface` (the
+built bundle in jsdom: it starts, draws the page, writes one edit back, keeps its checkboxes, and survives a round trip
+through Read mode).
 
-## The decision it is waiting for
-
-When the comparison is decided, one of two things happens:
-
-1. **the prototype wins** — the *extensions* and the three affordances move into `temco-docs`, and this folder is deleted;
-2. **the shipped editor wins** — this folder is deleted.
-
-Either way the folder does not stay: a module that is a prototype is a module with no owner.
+From the repository root, `npm run compile-temco` builds the extensions **and** both webview bundles — the only correct
+way to rebuild after a `tsc` run, which cleans `out/` first.

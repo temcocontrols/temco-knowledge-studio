@@ -40,8 +40,8 @@ const ENGINE_PACKAGES = [
 
 /** Keys the shell owns. Kept here because a `window` listener cannot be discovered from the outside. */
 const SHELL: Record<string, string> = {
-	'mod+f': 'webview/page/main.tsx — the find bar',
-	'mod+alt+o': 'webview/page/main.tsx — the outline rail',
+	'mod+f': 'webview/markdown/main.tsx — the find bar',
+	'mod+alt+o': 'webview/markdown/main.tsx — the outline rail',
 };
 
 /**
@@ -79,7 +79,7 @@ function canonical(parts: readonly string[]): string | undefined {
 const fromParts = (text: string): string | undefined => canonical(text.split('+'));
 
 // --- what the bar promises ------------------------------------------------------------------------
-const ribbon = read('webview/page/ribbon.tsx');
+const ribbon = read('webview/markdown/ribbon.tsx');
 const advertised = new Map<string, string>();
 for (const match of ribbon.matchAll(/shortcut: '([^']+)'/gu)) {
 	const key = fromParts(match[1]);
@@ -106,10 +106,10 @@ for (const name of ENGINE_PACKAGES) {
 }
 
 // Our own keymaps, written in the engine seam rather than taken from a package.
-for (const match of read('webview/page/document.tsx').matchAll(/'(Mod(?:-[A-Za-z0-9]+)+)'/gu)) {
+for (const match of read('webview/markdown/engine/tiptap/document.tsx').matchAll(/'(Mod(?:-[A-Za-z0-9]+)+)'/gu)) {
 	const key = canonical(match[1].split('-'));
 	if (key !== undefined) {
-		bound.set(key, 'webview/page/document.tsx');
+		bound.set(key, 'webview/markdown/engine/tiptap/document.tsx');
 	}
 }
 

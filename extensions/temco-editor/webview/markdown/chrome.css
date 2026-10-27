@@ -1,0 +1,467 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Temco Controls. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+/*
+ * The page chrome: the colour roles, the reset, the type scale, and the controls the ribbon and the selection menu are
+ * built from.
+ *
+ * Lifted from `extensions/temco-ui/media/page.css`: lines 17 to 470 of it, which is the tokens, the reset, `.page-head`,
+ * `.btn`, `.view` and `.ribbon`, ending where that file starts its layout utilities. This module keeps its own copy
+ * rather than reaching across a module boundary for a stylesheet, so the editor bundle builds from this folder alone.
+ * A platform rule a page surface starts to need belongs here too; `scripts/check-surface.mts` names every class the
+ * surface draws, so a rule that goes missing is a failure rather than a quiet re-style.
+ */
+
+:root {
+	color-scheme: light dark;
+
+	--font-ui: var(--vscode-font-family);
+	--font-mono: var(--vscode-editor-font-family);
+
+	--fs-ui: var(--vscode-font-size, 13px);
+	--fs-sm: calc(var(--fs-ui) - 1px);
+	--fs-xs: calc(var(--fs-ui) - 2px);
+
+	--radius-sm: 4px;
+	--radius: 6px;
+	--radius-lg: 10px;
+
+	--editor-bg: var(--vscode-editor-background);
+	--panel-bg: var(--vscode-panel-background, var(--vscode-editor-background));
+
+	--fg: var(--vscode-foreground);
+	--fg-strong: var(--vscode-foreground);
+	--fg-muted: var(--vscode-descriptionForeground);
+	--fg-subtle: var(--vscode-descriptionForeground);
+
+	--border: var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+	--border-strong: var(--vscode-contrastBorder, var(--vscode-panel-border, rgba(128, 128, 128, 0.5)));
+
+	--bg-hover: var(--vscode-list-hoverBackground);
+	--bg-active: var(--vscode-list-activeSelectionBackground);
+	--bg-selected: var(--vscode-list-activeSelectionBackground);
+	/* No `editorWidget-background` is not guaranteed to differ from the editor, so the two inset
+	   surfaces are mixed from the foreground instead: a tint of the text colour reads as "one step
+	   in" in every theme, including the ones that ship with a flat palette. */
+	--bg-inset: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
+	--bg-card: color-mix(in srgb, var(--vscode-foreground) 3%, transparent);
+	--bg-card-hover: color-mix(in srgb, var(--vscode-foreground) 7%, transparent);
+
+	--accent: var(--vscode-textLink-foreground);
+	--accent-bg: var(--vscode-button-background);
+	--accent-fg: var(--vscode-button-foreground);
+	--link: var(--vscode-textLink-foreground);
+
+	--ok: var(--vscode-charts-green, #3fb950);
+	--warn: var(--vscode-charts-yellow, #d29922);
+	--err: var(--vscode-charts-red, #f85149);
+	--info: var(--vscode-charts-blue, #4daafc);
+	--purple: var(--vscode-charts-purple, #b180d7);
+
+	--badge-bg: var(--vscode-badge-background);
+	--badge-fg: var(--vscode-badge-foreground);
+
+	--shadow: var(--vscode-widget-shadow);
+	--scrollbar: var(--vscode-scrollbarSlider-background);
+}
+
+/* A webview scrolls its own document, so the body must not be the fixed viewport the mock's shell
+   made it: the page is taller than the tab, and it is the page that scrolls. */
+html,
+body {
+	height: auto;
+	min-height: 100%;
+}
+
+/* The mock's own reset (`docs/mock/css/tokens.css`). A webview inherits VS Code's default body
+   instead — no line height, no font size on the controls, and content-box everywhere — and that is
+   what made a page read tighter here than in the design. The type scale is the mock's: the body at
+   `--fs-ui` and 1.45, the controls inheriting it, and every box measured inside its border. */
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+/* A class that sets `display` beats the browser's own `[hidden]` rule, which is how a wizard's
+   buttons leaked onto every step and a folded section stayed open. */
+[hidden] {
+	display: none !important;
+}
+
+body {
+	margin: 0;
+	overflow: auto;
+	font-family: var(--font-ui);
+	font-size: var(--fs-ui);
+	line-height: 1.45;
+	color: var(--fg);
+	background: var(--editor-bg);
+	-webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea,
+select {
+	font: inherit;
+	color: inherit;
+}
+
+/* ---------------------------------------------------------------- element defaults */
+
+/* A page may be written with the classes below, or with plain markup. These are the defaults a bare
+   heading, paragraph, button or field gets, so a page written before this vocabulary existed reads in
+   the same voice: one type scale, one control, one rhythm. Each rule is element-only, so a class always
+   wins — `.learn-card` stays a card, `.input` stays a field. */
+h1 {
+	margin: 0 0 6px;
+	font-size: 22px;
+	line-height: 1.3;
+	font-weight: 600;
+	color: var(--fg-strong);
+}
+
+h2 {
+	margin: 24px 0 8px;
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--fg-strong);
+}
+
+h3 {
+	margin: 16px 0 6px;
+	font-size: var(--fs-ui);
+	font-weight: 600;
+	color: var(--fg-strong);
+}
+
+p {
+	margin: 0 0 8px;
+}
+
+/* The same control as `.btn`, for a page that writes `<button>` with no class. */
+button:not([class]) {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 28px;
+	padding: 0 12px;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius);
+	background: var(--bg-card);
+	color: var(--fg);
+	cursor: pointer;
+	font-size: var(--fs-ui);
+	white-space: nowrap;
+}
+
+button:not([class]):hover {
+	background: var(--bg-card-hover);
+	border-color: var(--fg-subtle);
+}
+
+button:not([class])[disabled] {
+	opacity: 0.5;
+	cursor: default;
+}
+
+button.primary {
+	background: var(--accent-bg);
+	border-color: var(--accent-bg);
+	color: var(--accent-fg);
+}
+
+button.primary:hover {
+	background: color-mix(in srgb, var(--accent-bg) 86%, #fff);
+	border-color: color-mix(in srgb, var(--accent-bg) 86%, #fff);
+}
+
+/* The same field as `.input`, for a page that writes `<input>` with no class. A checkbox keeps its
+   own size, so the rule is narrower than it looks. */
+input:not([class]):not([type="checkbox"]):not([type="radio"]),
+select:not([class]),
+textarea:not([class]) {
+	height: 28px;
+	padding: 0 9px;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius);
+	background: var(--bg-inset);
+	color: var(--fg);
+	outline: none;
+	font-size: var(--fs-ui);
+}
+
+input:not([class]):not([type="checkbox"]):not([type="radio"]):focus,
+select:not([class]):focus,
+textarea:not([class]):focus {
+	border-color: var(--accent);
+}
+
+a {
+	color: var(--link);
+	text-decoration: none;
+}
+
+/* A page fills its tab. The mock centred its content in a 1180px column because it was a window inside a window;
+   a webview tab already is one, and a column it does not need costs a row four facts of width. The side margin is
+   the smallest that still separates content from the scrollbar, and the top margin is the smallest that does not
+   put the page head against the tab strip. Both are deliberately small: the page head is the first thing in the
+   tab, and every pixel of padding above it is a pixel of the tree or the list that a person cannot see. */
+.view {
+	min-height: 100%;
+	background: var(--editor-bg);
+}
+
+.view__inner {
+	max-width: none;
+	margin: 0;
+	padding: 8px 12px 32px;
+}
+
+/* A link in a page is a button that runs a command, so it keeps the link colour and loses the
+   focus ring a bare `href` would bring. */
+button.link {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--link);
+	font: inherit;
+	cursor: pointer;
+}
+
+button.link:hover {
+	text-decoration: underline;
+}
+
+/* ---------------------------------------------------------------- icons */
+
+/* The mock's sprite and its three sizes. The page shell inlines the sprite once per document, so
+   every glyph in a page is a <use> and no image is ever requested. */
+.icon {
+	width: 16px;
+	height: 16px;
+	flex: none;
+	display: inline-block;
+	vertical-align: middle;
+}
+
+.icon--lg {
+	width: 24px;
+	height: 24px;
+}
+
+.icon--sm {
+	width: 14px;
+	height: 14px;
+}
+
+.sprite {
+	display: none;
+}
+
+/* ---------------------------------------------------------------- page head */
+
+
+.page-head {
+	display: flex;
+	align-items: flex-start;
+	gap: 24px;
+	margin-bottom: 22px;
+}
+
+.page-head__main {
+	/* The text column gives way before the actions do: a head with two buttons should not stack
+	   them into a column just because the description is long. */
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.page-head__title {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	font-size: 24px;
+	line-height: 1.25;
+	color: var(--fg-strong);
+}
+
+.page-head__title .icon {
+	width: 22px;
+	height: 22px;
+	color: var(--accent);
+}
+
+.page-head__desc {
+	margin-top: 6px;
+	max-width: none;
+	color: var(--fg-muted);
+	font-size: 13px;
+	line-height: 1.55;
+}
+
+.page-head__actions {
+	flex: 0 0 auto;
+	margin-left: auto;
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.eyebrow {
+	font-size: var(--fs-xs);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--fg-subtle);
+	margin-bottom: 6px;
+}
+
+/* ---------------------------------------------------------------- buttons */
+
+.btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 28px;
+	padding: 0 12px;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius);
+	background: var(--bg-card);
+	color: var(--fg);
+	cursor: pointer;
+	font-size: var(--fs-ui);
+	white-space: nowrap;
+}
+
+.btn:hover {
+	background: var(--bg-card-hover);
+	border-color: var(--fg-subtle);
+}
+
+.btn--primary {
+	background: var(--accent-bg);
+	border-color: var(--accent-bg);
+	color: var(--accent-fg);
+}
+
+.btn--primary:hover {
+	background: color-mix(in srgb, var(--accent-bg) 86%, #fff);
+	border-color: color-mix(in srgb, var(--accent-bg) 86%, #fff);
+}
+
+.btn--ghost {
+	background: none;
+	border-color: transparent;
+	color: var(--fg-muted);
+}
+
+.btn--ghost:hover {
+	background: var(--bg-hover);
+	border-color: transparent;
+	color: var(--fg);
+}
+
+.btn--sm {
+	height: 24px;
+	padding: 0 9px;
+	font-size: var(--fs-sm);
+}
+
+.btn--danger {
+	color: var(--err);
+	border-color: color-mix(in srgb, var(--err) 45%, transparent);
+	background: color-mix(in srgb, var(--err) 10%, transparent);
+}
+
+.btn[disabled] {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.btn .icon {
+	width: 15px;
+	height: 15px;
+}
+
+/* ---------------------------------------------------------------- the ribbon */
+
+/* The arrangement a document editor is recognised by: a strip of named tabs, and under the chosen one a band of
+   grouped controls, each group captioned underneath. Every surface that edits text uses it — the Markdown source, the
+   rich page — so a person sees the same furniture whichever one they opened. It is the product's own buttons, badges
+   and icons; nothing here is a new control, only the place they sit. */
+.ribbon {
+	flex: none;
+	margin-bottom: 10px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--bg-card);
+	overflow: hidden;
+}
+
+.ribbon__tabs {
+	display: flex;
+	gap: 2px;
+	padding: 0 6px;
+	border-bottom: 1px solid var(--border);
+}
+
+.ribbon__tab {
+	border: 0;
+	background: none;
+	padding: 5px 12px 4px;
+	border-bottom: 2px solid transparent;
+	color: var(--fg-muted);
+	font-size: var(--fs-sm);
+	cursor: pointer;
+}
+
+.ribbon__tab:hover {
+	color: var(--fg);
+}
+
+.ribbon__tab[aria-selected='true'] {
+	color: var(--fg-strong);
+	border-bottom-color: var(--accent);
+}
+
+.ribbon__tab:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder, var(--accent));
+	outline-offset: -2px;
+}
+
+.ribbon__panel {
+	display: flex;
+	align-items: flex-start;
+	gap: 2px;
+	padding: 4px 6px 2px;
+	flex-wrap: wrap;
+	min-height: 44px;
+}
+
+/* A group is its controls with a hairline to the next one, and its name underneath — the arrangement ONLYOFFICE and
+   every ribbon before it uses, so the eye can find "Paragraph" without reading icons. */
+.ribbon__group {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding: 0 10px 12px;
+	position: relative;
+}
+
+.ribbon__group + .ribbon__group {
+	border-left: 1px solid var(--border);
+}
+
+.ribbon__label {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	text-align: center;
+	font-size: 10px;
+	letter-spacing: 0.02em;
+	color: var(--fg-subtle);
+	pointer-events: none;
+}
+

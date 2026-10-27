@@ -12,7 +12,7 @@
 // accepts HTML from a file or from the network.
 
 import * as React from 'react';
-import type { PageActions } from './document';
+import type { PageActions } from './contract';
 
 /** The document as markup, in the same box the editor would use — so the typography and the measure do not change. */
 export function staticNode(html: string): React.ReactElement {

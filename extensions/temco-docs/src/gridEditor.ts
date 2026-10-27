@@ -10,7 +10,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { parseCsv, writeCsv } from './csv';
-import { webviewAssets } from './webviewText';
+import { webviewAssets } from './webview';
 
 /** The custom editor id, matched by the `customEditors` contribution in `package.json`. */
 export const GRID_VIEW_TYPE = 'temcoDocs.grid';

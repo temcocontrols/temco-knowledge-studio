@@ -35,7 +35,7 @@ import {
 
 import { LinkPopover, ListMenu, StyleMenu } from '../shared/menus';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import type { Mark, PageActions, PageState } from './document';
+import type { Mark, PageActions, PageState } from './contract';
 
 /** The tabs. Two, because there are only two kinds of thing here: what writes the page, and what reads or hands it off. */
 export type Tab = 'home' | 'view';
@@ -56,7 +56,7 @@ interface ToolProps {
 }
 
 /** One toolbar control: a glyph, a name a screen reader can read, its shortcut, and the state it is in. */
-function Tool({ label, glyph, run, active, disabled, shortcut }: ToolProps): React.ReactElement {
+export function Tool({ label, glyph, run, active, disabled, shortcut }: ToolProps): React.ReactElement {
 	const title = shortcut === undefined ? label : `${label} (${shortcut})`;
 	return (
 		<button
@@ -132,7 +132,8 @@ function useDensity(): { ref: React.RefObject<HTMLDivElement | null>; density: D
 	return { ref, density };
 }
 
-const MARKS: ReadonlyArray<{ mark: Mark; label: string; glyph: React.ReactElement; shortcut: string }> = [
+/** The six marks a page can hold, in the order every editor puts them — the bar's first group and the whole selection menu. */
+export const MARKS: ReadonlyArray<{ mark: Mark; label: string; glyph: React.ReactElement; shortcut: string }> = [
 	{ mark: 'bold', label: 'Bold', glyph: <TextBold24Regular />, shortcut: 'Ctrl+B' },
 	{ mark: 'italic', label: 'Italic', glyph: <TextItalic24Regular />, shortcut: 'Ctrl+I' },
 	{ mark: 'underline', label: 'Underline', glyph: <TextUnderline24Regular />, shortcut: 'Ctrl+U' },

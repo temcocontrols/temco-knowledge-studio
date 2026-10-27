@@ -1,11 +1,12 @@
 // The one bundler step this extension has.
 //
-// `tsc` produces the extension host code in `out/`; it cannot produce a webview bundle, because the editor surfaces
-// are browser code with npm dependencies. This builds each surface into `out/webview/`, beside the extension host
-// code and inside the one directory this repository already treats as build output:
+// `tsc` produces the extension host code in `out/`; it cannot produce a webview bundle, because a surface is browser code
+// with npm dependencies. This builds each surface into `out/webview/`, beside the extension host code and inside the one
+// directory this repository already treats as build output:
 //
 //   out/webview/grid/    Univer's spreadsheet, for a CSV in Grid mode
-//   out/webview/page/    Temco Editor, the rich editor for a `.md` page
+//
+// The page editor's bundle is not built here: that surface lives in `extensions/temco-editor`, which builds its own.
 //
 // Run by `npm run build-webview`, and again by `vscode:prepublish` so a packaged extension always carries fresh
 // bundles. The output is *not* committed: `out/` is ignored by git, and a committed `.js` would be rejected by the
@@ -20,13 +21,12 @@ import * as sass from 'sass';
 
 const here = fileURLToPath(new URL('..', import.meta.url));
 
-/** Where `src/webviewText.ts` and `src/gridEditor.ts` look for their bundles. Keep the three in step. */
+/** Where `src/webview.ts` and `src/gridEditor.ts` look for their bundles. Keep them in step. */
 const output = join(here, 'out', 'webview');
 
 /** The surfaces, by the folder each writes into. */
 const SURFACES = [
 	{ name: 'grid', entry: join(here, 'webview', 'grid.ts') },
-	{ name: 'page', entry: join(here, 'webview', 'page', 'main.tsx') },
 ];
 
 /** esbuild has no Sass; this compiles a `.scss` import into CSS the bundle can carry. */

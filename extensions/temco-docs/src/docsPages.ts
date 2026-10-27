@@ -15,11 +15,11 @@ import { firstVersionReport } from './versionReport';
 import { BuildRow, Catalog, DocumentRow, DraftRow, ReleaseRow, ScanRow, selection, slugOf } from './store';
 import { commandScript, escapeHtml as esc, icon, page, pageColumn, runCommand, toneMark } from './ui';
 
-/** The view types, one per surface. */
+/** The view types, one per surface. `pagePanel` is a panel this dashboard opens, not the editor's `temcoEditor.markdown`. */
 export const PROJECTS_VIEW_TYPE = 'temcoDocs.projects';
 export const REPOSITORY_VIEW_TYPE = 'temcoDocs.repository';
 export const DOCUMENTS_VIEW_TYPE = 'temcoDocs.documents';
-export const PAGE_VIEW_TYPE = 'temcoDocs.page';
+export const PAGE_VIEW_TYPE = 'temcoDocs.pagePanel';
 export const SOURCE_VIEW_TYPE = 'temcoDocs.source';
 export const REVIEW_VIEW_TYPE = 'temcoDocs.review';
 export const BUILDS_VIEW_TYPE = 'temcoDocs.builds';

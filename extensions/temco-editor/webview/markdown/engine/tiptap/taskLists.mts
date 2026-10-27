@@ -3,7 +3,7 @@
 // A page writes `- [x] done`. `marked` reads that as `<ul><li><input type="checkbox" checked> done</li></ul>`, but
 // Tiptap's own task list is `ul[data-type="taskList"] > li[data-type="taskItem"]` — two different shapes. Without the
 // rules below the checkbox was dropped on the way in (the page opened as a plain bullet list) and again on the way out
-// (`src/pageMarkdown.ts` reads it back). Both shapes are accepted here; the editor still renders its own one.
+// (`src/markdown.ts` reads it back). Both shapes are accepted here; the editor still renders its own one.
 //
 // The parse rules are priority 52: above `ul` (bullet list, 50), `li` (list item, 50) and above Tiptap's own 51. A
 // `getAttrs` that returns `false` makes ProseMirror try the next rule, so a list without checkboxes stays a bullet list.

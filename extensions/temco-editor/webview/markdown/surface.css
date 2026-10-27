@@ -1,9 +1,9 @@
-/* What the rich page needs beyond the application's page vocabulary.
+/* What the rich page needs beyond the chrome it shares with any Temco surface.
  *
- * `page.css` owns the ribbon, the buttons, the badges and the status strip — the same file every other Temco surface is
- * drawn from. This file holds only what a live Tiptap document needs and a drawn page does not: a paper to write on, the
- * ProseMirror content box, and the few decorations Tiptap's own nodes (tables, task lists, code blocks) have no classes
- * for.
+ * `chrome.css` owns the colour roles, the ribbon, the buttons and the reset — the vocabulary every Temco webview is drawn
+ * from. This file holds only what a live Tiptap document needs and a drawn page does not: a paper to write on, the
+ * ProseMirror content box, the selection menu, the block handle, and the few decorations Tiptap's own nodes (tables, task
+ * lists, code blocks) have no classes for.
  */
 
 html,
@@ -262,13 +262,53 @@ body {
 .page-surface__doc ul[data-type='taskList'] li > label { margin-top: 3px; }
 .page-surface__doc ul[data-type='taskList'] input[type='checkbox'] { accent-color: var(--accent); }
 
-/* A placeholder, so an empty page says where the typing goes. */
+/* A placeholder, so an empty page says where the typing goes. The words are the engine's (`Placeholder` in
+   `engine/tiptap/document.tsx`), so the one place that draws the hint also owns its text. */
 .page-surface__doc p.is-editor-empty:first-child::before {
-	content: 'Start writing, or press Ctrl+V to paste from an application.';
+	content: attr(data-placeholder);
 	float: left;
 	height: 0;
 	pointer-events: none;
 	color: var(--fg-subtle);
+}
+
+/* The selection menu: the marks, where the hand already is. Floated by the engine, drawn here — a widget surface, so it
+   takes the widget shadow and the widget border rather than the page's own lines. */
+.bubble {
+	display: flex;
+	align-items: center;
+	gap: 1px;
+	padding: 3px;
+	border: 1px solid var(--vscode-widget-border, var(--border));
+	border-radius: var(--radius);
+	background: var(--vscode-editorWidget-background, var(--panel-bg));
+	box-shadow: 0 3px 12px var(--shadow, rgba(0, 0, 0, 0.28));
+}
+
+.bubble .btn {
+	min-width: 24px;
+	height: 24px;
+}
+
+/* The block handle: a grip in the margin, invisible until the pointer is over the block it moves. It is an affordance for
+   a mouse, so it never takes focus and never takes space from the text. */
+.drag-handle {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 22px;
+	margin-left: -26px;
+	color: var(--fg-muted);
+	cursor: grab;
+	user-select: none;
+	font-size: 12px;
+	opacity: 0;
+	transition: opacity 120ms ease-out;
+}
+
+.drag-handle:hover {
+	opacity: 1;
 }
 
 /* A toolbar button that is on: the glyph takes the accent, a hairline ring says "pressed". Not a filled block — a toggle

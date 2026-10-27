@@ -61,16 +61,6 @@
           }
         ],
         "priority": "option"
-      },
-      {
-        "viewType": "temcoDocs.page",
-        "displayName": "Temco Editor",
-        "selector": [
-          {
-            "filenamePattern": "*.md"
-          }
-        ],
-        "priority": "default"
       }
     ],
     "viewsContainers": {
@@ -558,22 +548,22 @@
       {
         "command": "temcoDocs.previewPage",
         "key": "ctrl+alt+p",
-        "when": "(editorLangId == markdown || activeCustomEditorId == 'temcoDocs.page') && resourceScheme == file"
+        "when": "(editorLangId == markdown || activeCustomEditorId == 'temcoEditor.markdown') && resourceScheme == file"
       },
       {
         "command": "temcoDocs.diffPage",
         "key": "ctrl+alt+d",
-        "when": "(editorLangId == markdown || activeCustomEditorId == 'temcoDocs.page') && resourceScheme == file"
+        "when": "(editorLangId == markdown || activeCustomEditorId == 'temcoEditor.markdown') && resourceScheme == file"
       },
       {
         "command": "temcoDocs.captureImage",
         "key": "ctrl+alt+s",
-        "when": "editorLangId == markdown || activeCustomEditorId == 'temcoDocs.page'"
+        "when": "editorLangId == markdown || activeCustomEditorId == 'temcoEditor.markdown'"
       },
       {
         "command": "temcoDocs.pasteImage",
         "key": "ctrl+alt+v",
-        "when": "editorLangId == markdown || activeCustomEditorId == 'temcoDocs.page'"
+        "when": "editorLangId == markdown || activeCustomEditorId == 'temcoEditor.markdown'"
       },
       {
         "command": "temcoDocs.rename",
@@ -614,6 +604,10 @@
       {
         "id": "temcoDocs.markdown",
         "label": "Temco Docs"
+      },
+      {
+        "id": "temcoDocs.surface",
+        "label": "Temco Markdown"
       },
       {
         "id": "temcoDocs.pageKinds",
@@ -683,21 +677,6 @@
         }
       ],
       "temcoDocs.surface": [
-        {
-          "command": "temcoDocs.openSource",
-          "when": "activeCustomEditorId == 'temcoDocs.page'",
-          "group": "0_views@1"
-        },
-        {
-          "command": "temcoDocs.previewPage",
-          "when": "activeCustomEditorId == 'temcoDocs.page'",
-          "group": "0_views@2"
-        },
-        {
-          "command": "temcoDocs.diffPage",
-          "when": "activeCustomEditorId == 'temcoDocs.page'",
-          "group": "0_views@3"
-        },
         {
           "command": "temcoDocs.format.pick",
           "group": "0_top@1"
@@ -1041,37 +1020,16 @@
     "activationEvents": null
   },
   "scripts": {
-    "vscode:prepublish": "npm run check-commands && npm run check-fluent && npm run check-record && npm run check-types && npm run compile && npm run check-learn && npm run check-page && npm run check-task-lists && npm run check-grid && npm run check-outline && npm run check-shortcuts && npm run build-webview",
+    "vscode:prepublish": "npm run check-commands && npm run check-record && npm run check-types && npm run compile && npm run check-learn && npm run check-grid && npm run build-webview",
     "check-commands": "node --experimental-strip-types scripts/check-commands.mts",
-    "check-fluent": "node --experimental-strip-types scripts/check-fluent.mts",
     "check-record": "node --experimental-strip-types scripts/check-record.mts",
     "check-types": "node node_modules/typescript/bin/tsc -p tsconfig.webview.json && node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
     "compile": "node node_modules/typescript/bin/tsc -p tsconfig.json",
     "check-learn": "node --experimental-strip-types scripts/check-learn.mts",
-    "check-page": "node --experimental-strip-types scripts/check-page.mts",
-    "check-task-lists": "node --experimental-strip-types scripts/check-task-lists.mts",
 		"check-grid": "node --experimental-strip-types scripts/check-grid.mts",
-		"check-outline": "node --experimental-strip-types scripts/check-outline.mts",
-		"check-shortcuts": "node --experimental-strip-types scripts/check-shortcuts.mts",
     "build-webview": "node --experimental-strip-types scripts/build-webview.mts"
   },
   "dependencies": {
-    "@fluentui/react-components": "^9.74.11",
-    "@fluentui/react-icons": "^2.0.344",
-    "@radix-ui/react-dropdown-menu": "^2.2.1",
-    "@radix-ui/react-popover": "^1.3.1",
-    "@tiptap/core": "3.30.3",
-    "@tiptap/extension-code-block-lowlight": "3.30.3",
-    "@tiptap/extension-highlight": "3.30.3",
-    "@tiptap/extension-image": "3.30.3",
-    "@tiptap/extension-link": "3.30.3",
-    "@tiptap/extension-list": "3.30.3",
-    "@tiptap/extension-table": "3.30.3",
-    "@tiptap/extension-underline": "3.30.3",
-    "@tiptap/pm": "3.30.3",
-    "@tiptap/react": "3.30.3",
-    "@tiptap/starter-kit": "3.30.3",
-    "lowlight": "3.3.0",
     "mammoth": "1.11.0",
     "marked": "15.0.12",
     "turndown": "7.2.0",

@@ -13,5 +13,5 @@
 		"lib": ["ES2022", "DOM", "DOM.Iterable"],
 		"types": []
 	},
-	"include": ["webview/page/**/*", "src/markdown.ts", "src/*.d.ts"]
+	"include": ["webview/**/*", "src/markdown.ts", "src/outlineModel.ts", "src/*.d.ts"]
 }

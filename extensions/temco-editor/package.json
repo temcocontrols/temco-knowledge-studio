@@ -1,7 +1,7 @@
 {
   "name": "temco-editor",
-  "displayName": "Temco Editor Prototype",
-  "description": "A second editor for a Markdown page: Tiptap 3.32 with a selection bubble menu, a block drag handle and a quieter bar — the surface to compare against Temco Editor.",
+  "displayName": "Temco Editor",
+  "description": "The editor for a Markdown page: Tiptap under a private engine seam, with a ribbon, a selection menu, a block handle, a find bar, an outline rail and a read mode.",
   "publisher": "temcocontrols",
   "version": "0.0.1",
   "private": true,
@@ -13,68 +13,161 @@
   },
   "main": "./out/extension.js",
   "activationEvents": [
-    "onCustomEditor:temcoEditor.page",
-    "onCommand:temcoEditor.open",
-    "onCommand:temcoEditor.openSource"
+    "onCustomEditor:temcoEditor.markdown",
+    "onCommand:temcoEditor.open"
+  ],
+  "extensionDependencies": [
+    "temcocontrols.temco-docs"
   ],
   "contributes": {
     "customEditors": [
       {
-        "viewType": "temcoEditor.page",
-        "displayName": "Temco Editor Prototype",
+        "viewType": "temcoEditor.markdown",
+        "displayName": "Temco Editor",
         "selector": [
           {
             "filenamePattern": "*.md"
           }
         ],
-        "priority": "option"
+        "priority": "default"
       }
     ],
     "commands": [
       {
         "command": "temcoEditor.open",
-        "title": "Open in the Temco Editor Prototype",
+        "title": "Open in Temco Editor",
         "category": "Temco Editor",
-        "enablement": "editorLangId == markdown"
+        "icon": "$(book)"
       },
       {
         "command": "temcoEditor.openSource",
         "title": "Open as Text",
-        "category": "Temco Editor"
+        "category": "Temco Editor",
+        "icon": "$(code)"
+      },
+      {
+        "command": "temcoEditor.preview",
+        "title": "Preview the Page",
+        "category": "Temco Editor",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "temcoEditor.diff",
+        "title": "Diff with HEAD",
+        "category": "Temco Editor",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "temcoEditor.pageProperties",
+        "title": "Page Properties",
+        "category": "Temco Editor",
+        "icon": "$(settings-gear)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "temcoEditor.preview",
+        "key": "ctrl+alt+p",
+        "when": "activeCustomEditorId == 'temcoEditor.markdown' && resourceScheme == file"
+      },
+      {
+        "command": "temcoEditor.diff",
+        "key": "ctrl+alt+d",
+        "when": "activeCustomEditorId == 'temcoEditor.markdown' && resourceScheme == file"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "temcoEditor.surface",
+        "label": "Temco Editor"
       }
     ],
     "menus": {
       "editor/title": [
         {
           "command": "temcoEditor.openSource",
-          "when": "activeCustomEditorId == temcoEditor.page",
+          "when": "activeCustomEditorId == 'temcoEditor.markdown'",
           "group": "navigation"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "submenu": "temcoEditor.surface",
+          "when": "resourceLangId == markdown && resourceScheme == file",
+          "group": "temcoEditor@1"
+        }
+      ],
+      "editor/context": [
+        {
+          "submenu": "temcoEditor.surface",
+          "when": "editorLangId == markdown && resourceScheme == file",
+          "group": "temcoEditor@1"
+        }
+      ],
+      "temcoEditor.surface": [
+        {
+          "command": "temcoEditor.openSource",
+          "when": "activeCustomEditorId == 'temcoEditor.markdown'",
+          "group": "0_views@1"
+        },
+        {
+          "command": "temcoEditor.preview",
+          "when": "activeCustomEditorId == 'temcoEditor.markdown'",
+          "group": "0_views@2"
+        },
+        {
+          "command": "temcoEditor.diff",
+          "when": "activeCustomEditorId == 'temcoEditor.markdown'",
+          "group": "0_views@3"
         }
       ],
       "commandPalette": [
         {
+          "command": "temcoEditor.open",
+          "when": "false"
+        },
+        {
           "command": "temcoEditor.openSource",
-          "when": "activeCustomEditorId == temcoEditor.page"
+          "when": "activeCustomEditorId == 'temcoEditor.markdown'"
+        },
+        {
+          "command": "temcoEditor.preview",
+          "when": "activeCustomEditorId == 'temcoEditor.markdown'"
+        },
+        {
+          "command": "temcoEditor.diff",
+          "when": "activeCustomEditorId == 'temcoEditor.markdown'"
+        },
+        {
+          "command": "temcoEditor.pageProperties",
+          "when": "activeCustomEditorId == 'temcoEditor.markdown'"
         }
       ]
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run check-commands && npm run check-types && npm run compile && npm run check-page && npm run build-webview && npm run check-surface",
+    "vscode:prepublish": "npm run check-commands && npm run check-fluent && npm run check-types && npm run compile && npm run check-page && npm run check-task-lists && npm run check-outline && npm run check-shortcuts && npm run build-webview && npm run check-surface",
     "check-commands": "node --experimental-strip-types scripts/check-commands.mts",
+    "check-fluent": "node --experimental-strip-types scripts/check-fluent.mts",
     "check-types": "node node_modules/typescript/bin/tsc -p tsconfig.webview.json && node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
     "compile": "node node_modules/typescript/bin/tsc -p tsconfig.json",
     "check-page": "node --experimental-strip-types scripts/check-page.mts",
-    "check-surface": "node --experimental-strip-types scripts/check-surface.mts",
-    "build-webview": "node --experimental-strip-types scripts/build-webview.mts"
+    "check-task-lists": "node --experimental-strip-types scripts/check-task-lists.mts",
+    "check-outline": "node --experimental-strip-types scripts/check-outline.mts",
+    "check-shortcuts": "node --experimental-strip-types scripts/check-shortcuts.mts",
+    "build-webview": "node --experimental-strip-types scripts/build-webview.mts",
+    "check-surface": "node --experimental-strip-types scripts/check-surface.mts"
   },
   "dependencies": {
+    "@fluentui/react-components": "^9.74.11",
+    "@fluentui/react-icons": "^2.0.344",
+    "@radix-ui/react-dropdown-menu": "^2.2.1",
+    "@radix-ui/react-popover": "^1.3.1",
     "@tiptap/core": "3.32.0",
     "@tiptap/extension-bubble-menu": "3.32.0",
     "@tiptap/extension-code-block-lowlight": "3.32.0",
     "@tiptap/extension-drag-handle": "3.32.0",
     "@tiptap/extension-drag-handle-react": "3.32.0",
-    "@tiptap/extension-floating-menu": "3.32.0",
     "@tiptap/extension-highlight": "3.32.0",
     "@tiptap/extension-image": "3.32.0",
     "@tiptap/extension-link": "3.32.0",
@@ -82,7 +175,6 @@
     "@tiptap/extension-table": "3.32.0",
     "@tiptap/extension-underline": "3.32.0",
     "@tiptap/extensions": "3.32.0",
-    "@tiptap/markdown": "3.32.0",
     "@tiptap/pm": "3.32.0",
     "@tiptap/react": "3.32.0",
     "@tiptap/starter-kit": "3.32.0",

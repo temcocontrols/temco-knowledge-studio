@@ -86,14 +86,20 @@ one-word change becomes a whole-file diff. What was missing was never the engine
 | the **Page** pane | `outline.ts`: headings as a nested jump list, plus a word count in the status bar | line, column, encoding and end-of-line are already the status bar's, so nothing repeats them |
 | **Grid** | `gridEditor.ts` + `webview/grid.ts`: a CSV as cells, reached by *Open in the Grid* | the file stays CSV, one row per line, so a one-cell edit stays a one-line diff |
 | **Temco Markdown** | `fluentEditor.ts` + `webview/docs/`: the page as a document on **Fluent UI**, with capture and annotation built in — the **default** for `*.md` | see *The Fluent Markdown surface* below |
-| **Temco Editor** | `pageEditor.ts` + `webview/page/`: the same file in the real **Tiptap** editor — *Open With… → Temco Editor*, or the tab's menu | see *The rich page* below |
+| **Temco Editor** | not this module any more: the page editor is `extensions/temco-editor` (`temcoEditor.markdown`), and **Open in Temco Editor** asks for it by command | see [temco-editor](../temco-editor/README.md) |
 
-### One bridge, two surfacesTwo editors over one file is a decision, not an accident: **what you see while editing** is a real choice, and it cannot
+### One bridge, two surfaces
+
+> **Record.** This is the period when `temco-docs` shipped two editing surfaces at once. It ended: `Temco Markdown` is
+> gone, the page surface became its own module, and the shared bridge went with it ([temco-editor](../temco-editor/README.md)).
+> What is left here is only the grid.
+
+Two editors over one file is a decision, not an accident: **what you see while editing** is a real choice, and it cannot
 be both. A source-visible editor (`Temco Markdown`) is the only way to be sure `git diff` will show what you did; a
 WYSIWYG editor (`Temco Editor`) is the only way to write a table without thinking about pipes. Everything *else* about them
 is shared, and it is shared in code, not by convention:
 
-| Shared, in `src/webviewText.ts` | Why it cannot be per-surface |
+| Shared, in the bridge (`src/webviewText.ts`, now `temco-editor/src/bridge.ts`) | Why it cannot be per-surface |
 |---|---|
 | the ordered-write guard (a set of texts asked for, not just the newest) | a write that lands late looks like an outside change, and answering it moves the caret to the end of the page |
 | the file's own line endings | a browser only has `\n`; writing that into a CRLF file is a whole-file diff for one word |
@@ -153,6 +159,12 @@ webview/page/
   reading.tsx     50  a second engine that cannot edit             ← proves the seam
 ```
 
+> **Where this is now.** The three files moved to `extensions/temco-editor/webview/markdown/` when the editor became its
+> own module, and the seam was separated from the engine: the two types below live in `contract.ts` (no package named in
+> it), and `document.tsx` sits under `engine/tiptap/` with `bubble.tsx`, `handle.tsx` and `taskLists.mts`. Everything this
+> section says about the seam still holds; only the paths changed. `temco-docs` keeps `webviewText.ts`' share of the work
+> as `src/webview.ts`, which is now just `webviewAssets` for the grid.
+
 The seam is two types, both in `document.tsx`:
 
 | | |
@@ -172,10 +184,11 @@ lost — the page then opens with stale text. The facade is one object per edito
 The three optional surfaces are webviews, so they need a bundler — the only one in this extension:
 
 ```
-webview/grid.ts       ──esbuild──▶  out/webview/grid/grid.js   11.9 MB   Univer (Apache-2.0)
-webview/docs/main.tsx ──esbuild──▶  out/webview/docs/docs.js    637 KB   Fluent v9 + React 19
-webview/page/main.tsx ──esbuild──▶  out/webview/page/page.js    987 KB   Tiptap 3.30.3 + React 19
+webview/grid.ts       ──esbuild──▶  out/webview/grid/grid.js      11.9 MB  Univer (Apache-2.0)
 ```
+
+The page surface has its own bundler in its own module (`extensions/temco-editor`, `out/webview/markdown/`), because a
+module builds what it owns.
 
 ### Where this belongs: the extension, and what moving it into core would take
 
@@ -243,18 +256,23 @@ lessons are enforced in `webview/docs/main.tsx` and asserted in `check-docs` and
 
 ### The rich page: Tiptap, and the round trip that makes it safe
 
-The rich editor is back, and it is the same engine — Tiptap 3.30.3, twelve packages, its own bundle at 983 KB. What
-changed is the order of the argument. The template was removed because its round trip could not be trusted; this page
-ships because the round trip **is a module with a check**, and nothing reaches its toolbar unless it survives that check.
+> **Where it lives now.** This surface became its own module: `extensions/temco-editor`, view type `temcoEditor.markdown`,
+> and it is the **default** for `*.md` today. The paths below are the ones it had while it lived here; the reasoning, the
+> rules and the checks are unchanged and still apply — see [temco-editor](../temco-editor/README.md) for the current tree.
+> The two-surface comparison this section describes is over: the winning affordances (a selection menu, a block handle, a
+> placeholder) are in that module, the losing prototype was deleted, and the ribbons of the two surfaces became one.
 
-| Part | What it is |
-|---|---|
-| `src/pageMarkdown.ts` | the whole contract: `toHtml` (`marked`), `toMarkdown` (`turndown` + GFM), `roundTrip` |
-| `webview/page/main.tsx` | the Tiptap editor and its ribbon; it never sees a file, only Markdown over the message port |
-| `webview/page/taskLists.mts` | Tiptap's `TaskList`/`TaskItem`, extended to accept the shape `marked` writes as well as their own |
-| `pageEditor.ts` | `temcoDocs.page`, a `CustomTextEditorProvider` on the same text document the source surface edits |
-| `scripts/check-page.mts` | thirteen cases, one of them a whole page that must come back byte-identical |
-| `scripts/check-task-lists.mts` | the two task-list shapes, through a real editor in jsdom: open, save, and the lists that must not be claimed |
+The rich editor is back, and it is the same engine — Tiptap, then 3.30.3 and now 3.32, twelve packages, its own bundle at
+983 KB (1457 KB today, with Fluent, Radix and the drag handle).
+
+| Part | What it was | Where it is now |
+|---|---|---|
+| `src/pageMarkdown.ts` | the whole contract: `toHtml` (`marked`), `toMarkdown` (`turndown` + GFM), `roundTrip` | `temco-editor/src/markdown.ts` |
+| `webview/page/main.tsx` | the Tiptap editor and its ribbon; it never sees a file, only Markdown over the message port | `temco-editor/webview/markdown/main.tsx` |
+| `webview/page/taskLists.mts` | Tiptap's `TaskList`/`TaskItem`, extended to accept the shape `marked` writes as well as their own | `temco-editor/webview/markdown/engine/tiptap/taskLists.mts` |
+| `pageEditor.ts` | `temcoDocs.page`, a `CustomTextEditorProvider` on the same text document the source surface edits | `temco-editor/src/surfaces/markdown.ts` (`temcoEditor.markdown`) |
+| `scripts/check-page.mts` | thirteen cases, one of them a whole page that must come back byte-identical | `temco-editor/scripts/check-page.mts` |
+| `scripts/check-task-lists.mts` | the two task-list shapes, through a real editor in jsdom: open, save, and the lists that must not be claimed | `temco-editor/scripts/check-task-lists.mts` |
 
 **The rules the conversion needs, each one a case in `check-page`:**
 
@@ -272,8 +290,8 @@ ships because the round trip **is a module with a check**, and nothing reaches i
   `<ul><li><input type="checkbox" checked> done</li></ul>`; Tiptap renders it as
   `ul[data-type="taskList"] > li[data-type="taskItem"]` with the checkbox inside a `<label>`. Without a rule for each
   direction the checkbox was lost twice — the page opened as a plain bullet list, and an item that did survive saved as
-  `- done`. `webview/page/taskLists.mts` adds the second shape to the parser, and the `taskCheckbox` rule in
-  `pageMarkdown.ts` reads the checkbox wherever it sits. `check-task-lists.mts` drives a real editor over both shapes;
+  `- done`. `engine/tiptap/taskLists.mts` adds the second shape to the parser, and the `taskCheckbox` rule in
+  `src/markdown.ts` reads the checkbox wherever it sits. `check-task-lists.mts` drives a real editor over both shapes;
   `check-page.mts` keeps the serialised result byte-identical.
 * **Alignment and colour are not in the toolbar.** A paragraph's alignment lives in a `style` attribute Markdown cannot
   hold, which is the same reason table widths are not kept. The reader decides both.
@@ -291,13 +309,13 @@ writer recognises in the source surface is the strip in the page, drawn from the
 Two questions come back often enough to answer once.
 
 **Tiptap is not the editor; it is the document model.** It owns the schema, the text, the caret, the undo history and the
-HTML — `webview/page/document.tsx` (the schema and the editor) and `webview/page/taskLists.mts` (the two task-list
+HTML — `engine/tiptap/document.tsx` (the schema and the editor) and `engine/tiptap/taskLists.mts` (the two task-list
 shapes) are the only files in the product that import `@tiptap/*`. Everything that a
-person sees or presses is ours: `ribbon.tsx` (348 lines), `main.tsx` (509), `outline.tsx`, `find.tsx`, and the round trip
-in `src/pageMarkdown.ts`, which converts HTML ⇄ Markdown with `marked`/`turndown` and has no Tiptap import at all. The
-contract between the two is `PageState` (a snapshot) and `PageActions` (25 named operations), and `reading.tsx` runs the
+person sees or presses is ours: `ribbon.tsx`, `main.tsx`, `outline.tsx`, `find.tsx`, and the round trip
+in `src/markdown.ts`, which converts HTML ⇄ Markdown with `marked`/`turndown` and has no Tiptap import at all. The
+contract between the two is `PageState` (a snapshot) and `PageActions` (named operations), and `reading.tsx` runs the
 same ribbon, outline and status strip behind an implementation with **no editor**, which is the seam being real rather
-than drawn.
+than drawn. Since the move, the contract is its own file (`webview/markdown/contract.ts`) and names no package at all.
 
 Swapping the engine is therefore possible and pointless: it would rewrite those 315 lines, change no button, and re-prove
 the behaviour `check-page` already proves. Tiptap earns its place at roughly a third of the bundle, because a rich-text
@@ -306,9 +324,9 @@ model with tables, task lists, images, marks and undo is not a weekend's work.
 **Fluent is not the design language either.** It supplies the **icons** (plain SVGs, no provider needed, five files) and
 **one dialog** — the annotator, ten Fluent components plus the `FluentProvider` that gives it the editor's light or dark
 theme. The ribbon, the menus (Radix, for positioning), the outline tree, the sheet and the status strip are the
-vocabulary's own HTML and CSS. `scripts/check-fluent.mts` fails the build if anything outside `webview/page` and
-`webview/shared` imports it, so a second design language cannot creep in unnoticed. Removing Fluent entirely would mean
-replacing those glyphs and one dialog — worth doing when the annotator next needs a change, not before.
+vocabulary's own HTML and CSS. `scripts/check-fluent.mts` fails the build if anything outside `webview/markdown`,
+`webview/shared` (in `temco-editor`) imports it, so a second design language cannot creep in unnoticed. Removing Fluent
+entirely would mean replacing those glyphs and one dialog — worth doing when the annotator next needs a change, not before.
 
 ### What was removed: ONLYOFFICE
 

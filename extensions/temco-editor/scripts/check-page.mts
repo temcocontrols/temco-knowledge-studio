@@ -20,11 +20,11 @@ interface PageMarkdown {
 	roundTrip(markdown: string): string;
 }
 
-const source = fileURLToPath(new URL('../src/pageMarkdown.ts', import.meta.url));
-const built = fileURLToPath(new URL('../out/pageMarkdown.js', import.meta.url));
+const source = fileURLToPath(new URL('../src/markdown.ts', import.meta.url));
+const built = fileURLToPath(new URL('../out/markdown.js', import.meta.url));
 
 try {
-	assert.ok(statSync(built).mtimeMs >= statSync(source).mtimeMs, 'out/pageMarkdown.js is older than src/pageMarkdown.ts');
+	assert.ok(statSync(built).mtimeMs >= statSync(source).mtimeMs, 'out/markdown.js is older than src/markdown.ts');
 } catch (error) {
 	console.log(`Cannot run: ${(error as Error).message}`);
 	console.log('Compile first:  tsc -p .');
@@ -118,7 +118,7 @@ check('a task list keeps its boxes', () => {
 check('a task list the editor rendered keeps its boxes', () => {
 	// The checkbox as Tiptap renders it: inside a `<label>`, with the words in a `<div>`. `turndown-plugin-gfm` only sees
 	// a checkbox that is its item's first child, so this is the shape that used to save as `- done` — every ticked box in
-	// a page was lost on the next save. `scripts/check-editor.mts` drives the editor itself; this is the same HTML.
+	// a page was lost on the next save. `scripts/check-task-lists.mts` drives the editor itself; this is the same HTML.
 	const item = (checked: boolean, words: string): string =>
 		`<li data-checked="${checked}" data-type="taskItem"><label><input type="checkbox"${checked ? ' checked="checked"' : ''}><span></span></label><div><p>${words}</p></div></li>`;
 	assert.equal(

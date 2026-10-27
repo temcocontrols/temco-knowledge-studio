@@ -1,9 +1,13 @@
-// The one bundler step this extension has.
+// The one bundler step this module has.
 //
 // `tsc` produces the extension host code in `out/`; it cannot produce a webview bundle, because the surface is browser
-// code with npm dependencies. This builds it into `out/webview/page/` — beside the extension host code, inside the one
-// directory this repository already treats as build output. The output is *not* committed: a committed `.js` would be
-// rejected by the `local/code-no-new-javascript-files` rule.
+// code with npm dependencies. This builds it into `out/webview/markdown/` — beside the extension host code, inside the one
+// directory this repository already treats as build output:
+//
+//   out/webview/markdown/   the page surface, for a `.md` file
+//
+// The output is *not* committed: `out/` is ignored by git, and a committed `.js` would be rejected by the repository's
+// `local/code-no-new-javascript-files` rule. Build it once when working from a source tree.
 //
 // The bundle is `iife` on purpose: a webview has no module loader, and there is no CDN to fall back on.
 import { rm, readdir, stat } from 'node:fs/promises';
@@ -13,8 +17,9 @@ import { build } from 'esbuild';
 
 const here = fileURLToPath(new URL('..', import.meta.url));
 
-/** Where `src/bridge.ts` looks for the bundle. Keep the two in step. */
-const output = join(here, 'out', 'webview');
+/** Where `src/bridge.ts` looks for the bundle: `out/webview/<assets>/<assets>.js`. Keep the two in step. */
+const assets = 'markdown';
+const outdir = join(here, 'out', 'webview', assets);
 
 /** Bytes under a folder, for the one line of output worth printing. */
 async function weigh(folder: string): Promise<number> {
@@ -26,10 +31,9 @@ async function weigh(folder: string): Promise<number> {
 	return total;
 }
 
-const outdir = join(output, 'page');
 await rm(outdir, { recursive: true, force: true });
 await build({
-	entryPoints: { page: join(here, 'webview', 'page', 'main.tsx') },
+	entryPoints: { [assets]: join(here, 'webview', 'markdown', 'main.tsx') },
 	outdir,
 	bundle: true,
 	minify: true,
@@ -53,11 +57,11 @@ await build({
 });
 
 const kib = Math.round((await weigh(outdir)) / 1024);
-// `bridge.ts` asks the webview for `page.js` and `page.css` by name; a bundle without its stylesheet opens as an
+// `bridge.ts` asks the webview for `markdown.js` and `markdown.css` by name; a bundle without its stylesheet opens as an
 // unstyled page, which looks like a broken surface rather than a missing file.
-for (const required of ['page.js', 'page.css']) {
+for (const required of [`${assets}.js`, `${assets}.css`]) {
 	if (!(await stat(join(outdir, required)).catch(() => null))) {
-		throw new Error(`out/webview/page/${required} was not written — does the entry import its stylesheet?`);
+		throw new Error(`out/webview/${assets}/${required} was not written — does the entry import its stylesheets?`);
 	}
 }
-console.log(`out/webview/page: ${kib} KB`);
+console.log(`out/webview/${assets}: ${kib} KB`);

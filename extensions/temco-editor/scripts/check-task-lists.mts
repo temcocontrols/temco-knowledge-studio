@@ -2,8 +2,8 @@
 //
 // Two shapes meet here and neither is wrong: `marked` writes `<ul><li><input type="checkbox"> done</li></ul>`, and Tiptap
 // renders `ul[data-type="taskList"] > li[data-type="taskItem"]`. A page whose checkboxes were ticked used to open as a
-// plain bullet list — the input matched no parse rule — and then save as `- done`. `webview/page/taskLists.ts` teaches
-// the editor the second shape; `src/pageMarkdown.ts` reads the checkbox back wherever it sits.
+// plain bullet list — the input matched no parse rule — and then save as `- done`. `webview/markdown/engine/tiptap/taskLists.mts`
+// teaches the editor the second shape; `src/markdown.ts` reads the checkbox back wherever it sits.
 //
 // `check-page.mts` proves the serialiser; this proves the pair. It runs in jsdom because a ProseMirror editor needs a
 // document, and it imports the extension module directly rather than the bundle, so the failure names the rule.
@@ -29,10 +29,11 @@ globals.DOMParser = dom.window.DOMParser;
 
 // The extension is CommonJS, so the page conversion under test is the compiled one — the same rule `check-page.mts`
 // follows. A stale `out/` would quietly test yesterday's rules, so it refuses to run instead.
-const source = fileURLToPath(new URL('../src/pageMarkdown.ts', import.meta.url));
-const built = fileURLToPath(new URL('../out/pageMarkdown.js', import.meta.url));
+const source = fileURLToPath(new URL('../src/markdown.ts', import.meta.url));
+const built = fileURLToPath(new URL('../out/markdown.js', import.meta.url));
+
 try {
-	assert.ok(statSync(built).mtimeMs >= statSync(source).mtimeMs, 'out/pageMarkdown.js is older than src/pageMarkdown.ts');
+	assert.ok(statSync(built).mtimeMs >= statSync(source).mtimeMs, 'out/markdown.js is older than src/markdown.ts');
 } catch (error) {
 	console.log(`Cannot run: ${(error as Error).message}`);
 	console.log('Compile first:  npm run compile');
@@ -41,8 +42,8 @@ try {
 
 const { Editor } = await import('@tiptap/core');
 const { default: StarterKit } = await import('@tiptap/starter-kit');
-const { TaskItemWithCheckboxes, TaskListWithCheckboxes } = await import('../webview/page/taskLists.mts');
-const { toHtml, toMarkdown } = createRequire(import.meta.url)(built) as typeof import('../src/pageMarkdown');
+const { TaskItemWithCheckboxes, TaskListWithCheckboxes } = await import('../webview/markdown/engine/tiptap/taskLists.mts');
+const { toHtml, toMarkdown } = createRequire(import.meta.url)(built) as typeof import('../src/markdown');
 
 let failures = 0;
 function check(name: string, run: () => void): void {

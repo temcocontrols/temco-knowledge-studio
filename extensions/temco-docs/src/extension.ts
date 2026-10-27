@@ -10,14 +10,14 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ai, aiInstalled } from './aiModule';
-import { TemcoDocsApi } from './api';
+import { LinkablePage, TemcoDocsApi } from './api';
+import { currentVersion, landImage, setCaption } from './attachments';
 import { registerBuildCommands, registerScriptCommands, scriptsIn } from './builds';
 import { publishDiagnostics } from './diagnostics';
 import { registerFeedbackCommands } from './feedback';
 import { registerDiffCommand } from './diffPage';
 import { registerDocxCommand } from './docx';
 import { GridEditor, openGrid } from './gridEditor';
-import { PageEditor, openPage } from './pageEditor';
 import { registerFormatCommands } from './format';
 import { registerImportCommand } from './importer';
 import { looseByRoot } from './loose';
@@ -33,7 +33,7 @@ import { writePortal, writeReader } from './learnPortal';
 import { ProjectSection } from './projectSection';
 import { projects } from './projects';
 import { PreviewPanels } from './previewPanel';
-import { openSource } from './webviewText';
+import { openSource } from './webview';
 import { codeFiles } from './repositories';
 import { QueueTreeProvider } from './queue';
 import { registerReportCommands } from './report';
@@ -243,17 +243,11 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   // The optional surface: a CSV as cells (Grid). Registered here and reached through its own custom editor id, so it
   // cannot take over a file that was opened to be read as text.
   //
-  // Temco Editor is the default for `*.md`, and on purpose: it is the authoring surface (design 22). `Open With Text
-  // Editor` is one step away, and the file never changes meaning - the editor writes Markdown through the document, so
-  // the source and this surface see the same bytes.
+  // The rich page editor is not registered here: it is `extensions/temco-editor`, its own module, and the default for
+  // `*.md` on purpose (design 22). `Open With Text Editor` is one step away, and the file never changes meaning - both
+  // surfaces write Markdown through the document, so the source and either of them see the same bytes.
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider(GridEditor.VIEW_TYPE, new GridEditor(context), {
-      webviewOptions: { retainContextWhenHidden: true },
-    }),
-    // The rich page: the same file, edited as a document. `option`, so which one opens by default stays a choice a
-    // person makes (see `temcoDocs.page.open`), never something a build decides for them. It shares the Markdown
-    // surface's bridge, so the capture pipeline and the tab's own actions work here too.
-    vscode.window.registerCustomEditorProvider(PageEditor.VIEW_TYPE, new PageEditor(context, () => roots), {
       webviewOptions: { retainContextWhenHidden: true },
     })
   );
@@ -679,9 +673,9 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     // surface because of an association it did not ask for.
     vscode.commands.registerCommand('temcoDocs.openSource', (target?: unknown) => openSource(uriFrom(target))),
     vscode.commands.registerCommand('temcoDocs.openGrid', (target?: unknown) => openGrid(uriFrom(target))),
-    // The rich page: the same Markdown file, edited as a document in Tiptap. It is the only editing surface for a
-    // page, and the source text editor stays one command away.
-    vscode.commands.registerCommand('temcoDocs.page.open', (target?: unknown) => openPage(uriFrom(target) ?? frontUri())),
+    // The rich page: the same Markdown file, edited as a document. The surface is another module's, so this is the one
+    // place the two meet — a command, which may be missing, never an import.
+    vscode.commands.registerCommand('temcoDocs.page.open', (target?: unknown) => openInEditor(uriFrom(target) ?? frontUri())),
 
     // The reader: the published version, laid out the way MSDN lays one out, served from this machine. Written beside
     // the generated site and never over it, so a rebuild of the site does not remove it.
@@ -1105,6 +1099,20 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     pageColumn,
     refresh,
     onDidChange: (listener: () => void) => changed.event(listener),
+    // The editor's three. It writes pages without reading this model, so the things it may not decide for itself are
+    // here: where an image lands (and what version it shows), what the words for one are called, and which pages a
+    // relative link can reach.
+    landImage: async (pageFsPath, bytes, fallbackExtension, caption) =>
+      landImage({
+        pageFsPath,
+        slug: path.basename(pageFsPath, path.extname(pageFsPath)),
+        bytes,
+        fallbackExtension,
+        caption,
+        appliesTo: await currentVersion(roots),
+      }),
+    setCaption,
+    pagesNear: (pageFsPath: string) => pagesNear(roots, pageFsPath),
   };
 }
 
@@ -1505,6 +1513,44 @@ async function openPageFile(known: readonly DocsRoot[], title: unknown, area: un
   }
   const document = await vscode.workspace.openTextDocument(page.uri);
   await vscode.window.showTextDocument(document, { preview: false, viewColumn: fileColumn() });
+}
+
+/**
+ * Opens a page in the rich editor, which lives in another module.
+ *
+ * The direction between modules is one way: `temco-editor` declares this one as a dependency and asks for the page's
+ * *preview*, *diff* and *properties* by command. This is the same rule read backwards — a command that may be missing,
+ * never an import — so a platform built without the editor still opens the file, as text.
+ */
+async function openInEditor(uri: vscode.Uri | undefined): Promise<void> {
+  if (uri === undefined) {
+    return;
+  }
+  if (vscode.extensions.getExtension('temcocontrols.temco-editor') === undefined) {
+    await vscode.commands.executeCommand('vscode.open', uri);
+    return;
+  }
+  await vscode.commands.executeCommand('temcoEditor.open', uri);
+}
+
+/**
+ * The pages of the set a file is in, which is what a relative link can reach.
+ *
+ * The editor asks this rather than walking the tree: which folders are being read, and which pages a registry declares, is
+ * this module's model. A file in no set answers with nothing, and the surface says so instead of offering a link that
+ * would not resolve.
+ */
+function pagesNear(known: readonly DocsRoot[], pageFsPath: string): LinkablePage[] {
+  const root = known.find((candidate) => {
+    const relative = path.relative(candidate.rootUri.fsPath, pageFsPath);
+    return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+  });
+  if (root === undefined) {
+    return [];
+  }
+  return collectPages(root)
+    .filter((page) => page.exists && page.uri.fsPath !== pageFsPath)
+    .map((page) => ({ title: page.title, id: page.id, fsPath: page.uri.fsPath }));
 }
 
 /**

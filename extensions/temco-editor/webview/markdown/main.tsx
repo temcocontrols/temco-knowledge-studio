@@ -2,26 +2,27 @@
 //
 // It knows no Tiptap and no command names. It knows the host protocol (`ready`, `set`, `change`, the five actions), it
 // holds the tab that is open, and it draws the document, the find bar and the outline rail. The engine is behind
-// `document.tsx`; the bar is behind `ribbon.tsx`.
+// `engine/tiptap`; the surface's own vocabulary is `./contract`; the bar is behind `./ribbon`.
 //
 // The file is the source of truth: what arrives is Markdown, what leaves is Markdown, and the round trip is
-// `src/pageMarkdown.ts` with `scripts/check-page.mts` as its proof.
+// `src/markdown.ts` with `scripts/check-page.mts` as its proof.
 
 import * as React from 'react';
 import { createRoot } from 'react-dom/client';
 import { FluentProvider } from '@fluentui/react-components';
 
-import '../../../temco-ui/media/page.css';
+import './chrome.css';
 import '../shared/surface-controls.css';
-import './page-surface.css';
+import './surface.css';
 import { AnnotateDialog } from '../shared/annotate';
 import { FindBar } from '../shared/find';
 import { OutlineList } from '../shared/outline';
 import { fluentTheme } from '../shared/theme';
 import { Dismiss24Regular } from '@fluentui/react-icons';
 import { OUTLINE_WHEN, type HeadingAt } from '../../src/outlineModel';
-import { toHtml, toMarkdown } from '../../src/pageMarkdown';
-import { actionsFor, headingsIn, matchesIn, stateOf, usePageDocument, type Match, type PageActions, type PageState } from './document';
+import { toHtml, toMarkdown } from '../../src/markdown';
+import type { Match, PageActions, PageState } from './contract';
+import { actionsFor, headingsIn, matchesIn, stateOf, usePageDocument } from './engine/tiptap';
 import { staticNode } from './reading';
 import { PageRibbon, type Tab } from './ribbon';
 

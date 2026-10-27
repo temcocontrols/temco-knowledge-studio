@@ -8,7 +8,7 @@ import * as React from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Popover from '@radix-ui/react-popover';
 import { Checkmark24Regular, ChevronDown16Regular, Dismiss24Regular, Link24Regular } from '@fluentui/react-icons';
-import type { PageActions, PageState } from '../page/document';
+import type { PageActions, PageState } from '../markdown/contract';
 
 /** The block types a Markdown page can hold, which is the whole list — no quote, no custom style. */
 const BLOCKS: ReadonlyArray<{ level: number; label: string; sample: string }> = [

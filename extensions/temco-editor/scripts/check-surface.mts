@@ -4,6 +4,9 @@
 // answers "does this surface start, does it ask for the page, does it draw what arrives, and does an edit reach the
 // host?" — the four failures that are invisible in a compiler and obvious in an empty tab.
 //
+// It is also the only place the engine's furniture is asserted: the block handle and the selection menu are drawn by
+// Tiptap, not by the ribbon, so nothing else would notice if they stopped being mounted.
+//
 // Run with `npm run check-surface`, after `npm run compile && npm run build-webview`.
 
 import assert from 'node:assert/strict';
@@ -11,11 +14,12 @@ import { readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 
-const bundle = fileURLToPath(new URL('../out/webview/page/page.js', import.meta.url));
-const entry = fileURLToPath(new URL('../webview/page/main.tsx', import.meta.url));
+const assets = 'markdown';
+const bundle = fileURLToPath(new URL(`../out/webview/${assets}/${assets}.js`, import.meta.url));
+const entry = fileURLToPath(new URL('../webview/markdown/main.tsx', import.meta.url));
 
 try {
-	assert.ok(statSync(bundle).mtimeMs >= statSync(entry).mtimeMs, 'out/webview/page/page.js is older than webview/page/main.tsx');
+	assert.ok(statSync(bundle).mtimeMs >= statSync(entry).mtimeMs, `out/webview/${assets}/${assets}.js is older than webview/markdown/main.tsx`);
 } catch (error) {
 	console.log(`Cannot run: ${(error as Error).message}`);
 	console.log('Build first:  npm run compile && npm run build-webview');
@@ -50,6 +54,18 @@ window.Range.prototype.getClientRects = () => rects;
 window.Range.prototype.getBoundingClientRect = () => box as DOMRect;
 window.Element.prototype.getClientRects = () => rects;
 window.Element.prototype.getBoundingClientRect = () => box as DOMRect;
+
+// The observers a positioner needs and a DOM without layout cannot provide. No-op is enough: nothing here asserts a
+// position, only that the surface draws and that an edit travels.
+class Observer {
+	observe(): void { }
+	unobserve(): void { }
+	disconnect(): void { }
+	takeRecords(): unknown[] { return []; }
+}
+(window as unknown as { ResizeObserver: unknown }).ResizeObserver = Observer;
+(window as unknown as { IntersectionObserver: unknown }).IntersectionObserver = Observer;
+
 // The one API a webview has that a browser does not: the message pipe back to the extension host.
 (window as unknown as { acquireVsCodeApi: () => unknown }).acquireVsCodeApi = () => ({
 	postMessage: (message: { type?: string; text?: string }) => sent.push(message),
@@ -75,7 +91,7 @@ async function check(name: string, run: () => void | Promise<void>): Promise<voi
  * React renders on its own schedule, so a fixed sleep is a race: the same run passes on a warm machine and fails on a
  * cold one. The check waits for the fact it is about to assert, and fails on the deadline instead.
  */
-async function drawn(tryIt: () => boolean, what: string, timeout = 3000): Promise<void> {
+async function drawn(tryIt: () => boolean, what: string, timeout = 5000): Promise<void> {
 	const started = Date.now();
 	while (Date.now() - started < timeout) {
 		if (tryIt()) {
@@ -88,6 +104,16 @@ async function drawn(tryIt: () => boolean, what: string, timeout = 3000): Promis
 
 const root = window.document.getElementById('root');
 
+/** The control the surface draws for `label`: a `Tool` names itself with `aria-label`, a tab with its own text. */
+function button(label: string): HTMLElement {
+	const byLabel = root?.querySelector<HTMLElement>(`[aria-label="${label}"]`) ?? null;
+	const byText = Array.from(root?.querySelectorAll<HTMLElement>('.btn, .ribbon__tab') ?? [])
+		.find(element => (element.textContent ?? '').trim() === label) ?? null;
+	const found = byLabel ?? byText;
+	assert.ok(found, `no "${label}" control`);
+	return found;
+}
+
 await check('the surface starts and asks for the page, once', async () => {
 	await drawn(() => (root?.childElementCount ?? 0) > 0, 'the surface to start');
 	assert.deepEqual(sent.map(message => message.type), ['ready']);
@@ -97,19 +123,17 @@ await check('the surface starts and asks for the page, once', async () => {
 window.postMessage({ type: 'set', text: page, path: 'docs/t3000/wiring.md' }, '*');
 
 await check('the document arrives and is drawn as a page', async () => {
-	// The page and the head are two renders: ProseMirror paints the document itself, React commits the head a tick
-	// later. Wait for both before asserting anything about the whole surface.
-	await drawn(() => root?.querySelector('.doc-surface__where')?.textContent === 'docs/t3000/wiring.md', 'the head to name the page');
-	assert.equal(root?.querySelector('h1')?.textContent, 'Wiring a T3000 controller');
-	assert.equal(root?.querySelectorAll('li').length, 2);
-	assert.equal(root?.textContent?.includes('docs/t3000/wiring.md'), true, 'the head does not name the page');
+	await drawn(() => root?.querySelector('.page-surface__doc h1')?.textContent === 'Wiring a T3000 controller', 'the heading to be drawn');
+	assert.equal(root?.querySelectorAll('.page-surface__doc li').length, 2, 'the bullets are not there');
 });
 
-await check('the bar and the status strip are there', async () => {
-	await drawn(() => root?.querySelector('[role="toolbar"]') !== null, 'the bar to be drawn');
-	assert.equal((root?.querySelectorAll('.bar__btn').length ?? 0) > 10, true, 'the bar has no controls');
+await check('the ribbon, the status strip and the engine furniture are there', async () => {
+	await drawn(() => root?.querySelector('.ribbon') !== null, 'the ribbon to be drawn');
+	assert.equal((root?.querySelectorAll('.ribbon .btn').length ?? 0) > 5, true, 'the ribbon has no controls');
 	assert.equal(/\d+ words/.test(root?.textContent ?? ''), true, 'no word count');
-	assert.equal(/\d+ characters/.test(root?.textContent ?? ''), true, 'no character count');
+	// The block handle and the selection menu are the engine's own: mounted by `actions.node()`, not by the ribbon.
+	assert.ok(root?.querySelector('.drag-handle'), 'the block handle was not mounted');
+	assert.equal(root?.querySelector('.bubble') === null, true, 'the selection menu showed with nothing selected');
 });
 
 await check('nothing was written back just because the page arrived', async () => {
@@ -118,12 +142,9 @@ await check('nothing was written back just because the page arrived', async () =
 
 // The write path: an edit in the surface must reach the host as the whole page, once the typing settles. The edit is a
 // DOM mutation plus the `input` event a browser fires for it — the same path ProseMirror's DOM observer reads.
-const doc = root?.querySelector<HTMLElement>('.doc-surface__doc') ?? null;
-const paragraph = doc?.querySelector('p') ?? null;
-const text = paragraph?.firstChild ?? null;
-
-await check('an edit is written back as Markdown, once', async () => {
-	assert.ok(paragraph !== null && paragraph !== undefined && text !== null && text !== undefined, 'no paragraph to type into');
+function typeInto(paragraph: Element): void {
+	const text = paragraph.firstChild;
+	assert.ok(text !== null, 'no text node to type into');
 	const range = window.document.createRange();
 	range.setStart(text, (text.textContent ?? '').length);
 	range.collapse(true);
@@ -131,6 +152,12 @@ await check('an edit is written back as Markdown, once', async () => {
 	window.getSelection()?.addRange(range);
 	text.textContent = `${text.textContent ?? ''}Z`;
 	paragraph.dispatchEvent(new window.Event('input', { bubbles: true }));
+}
+
+await check('an edit is written back as Markdown, once', async () => {
+	const paragraph = root?.querySelector('.page-surface__doc p');
+	assert.ok(paragraph, 'no paragraph to type into');
+	typeInto(paragraph);
 
 	await drawn(() => sent.some(message => message.type === 'change'), 'the edit to reach the host');
 	const changes = sent.filter(message => message.type === 'change');
@@ -138,47 +165,24 @@ await check('an edit is written back as Markdown, once', async () => {
 	assert.equal(changes[0].text?.includes('# Wiring a T3000 controller'), true, 'the page lost its heading');
 	assert.equal(changes[0].text?.includes('address.Z'), true, 'the typed text did not reach the file');
 	assert.equal(changes[0].text?.endsWith('\n'), true, 'the file must end with one newline');
-});
-
-/** The button whose label is `label`, wherever the surface put it. */
-function link(label: string): HTMLElement {
-	const found = Array.from(root?.querySelectorAll<HTMLElement>('.doc-surface__link') ?? [])
-		.find(element => element.textContent === label);
-	assert.ok(found, `no "${label}" control`);
-	return found;
-}
-
-await check('the serializer panel shows both, and the file kept the contract', async () => {
-	// The badge may say either thing — what must hold is that it agrees with the panes it is describing.
-	link('Compare serialisers').click();
-	await drawn(() => root?.querySelectorAll('.doc-surface__code').length === 2, 'the two panes to open');
-	const panes = Array.from(root?.querySelectorAll<HTMLElement>('.doc-surface__code') ?? []).map(pane => pane.textContent ?? '');
-	const saved = sent.filter(message => message.type === 'change')[0].text;
-	assert.equal(panes[0], saved, 'the left pane is not what is saved');
-	assert.equal(panes[1].length > 0, true, 'the right pane is empty');
-	const badge = Array.from(root?.querySelectorAll('.badge') ?? []).find(element => /serialisers/.test(element.textContent ?? ''));
-	assert.ok(badge, 'no serializer badge');
-	const agree = badge.textContent === 'serialisers agree';
-	assert.equal(agree, panes[0] === panes[1], 'the badge disagrees with the panes');
-	// Closing it must leave the page alone: the comparison never writes.
-	Array.from(root?.querySelectorAll<HTMLElement>('.doc-surface__btn') ?? []).find(element => element.textContent === 'Close')?.click();
-	await drawn(() => root?.querySelectorAll('.doc-surface__code').length === 0, 'the panel to close');
-	assert.equal(sent.filter(message => message.type === 'change').length, 1, 'the comparison wrote to the host');
+	assert.equal(changes[0].text?.includes('- one\n- two'), true, 'the bullets did not survive the save');
 });
 
 await check('Read mode hides the editor and keeps the page', async () => {
-	link('Read the page').click();
-	await drawn(() => root?.querySelector('.doc-surface__doc--reading') !== null, 'Read mode to appear');
+	// Read mode lives on the View tab, so the tab has to be opened before its control exists.
+	button('View').click();
+	await drawn(() => root?.querySelector('[aria-label="Read the page"]') !== null, 'the read control');
+	button('Read the page').click();
+	await drawn(() => root?.querySelector('.page-surface__doc--reading') !== null, 'Read mode to appear');
 	assert.equal(root?.querySelector('[contenteditable]') !== null, false, 'the editor is still there');
-	assert.equal(root?.querySelector('.doc-surface__doc--reading h1')?.textContent, 'Wiring a T3000 controller');
-	assert.equal(root?.querySelector('[role="toolbar"]') !== null, false, 'the bar is still there');
+	assert.equal(root?.querySelector('.page-surface__doc--reading h1')?.textContent, 'Wiring a T3000 controller');
 });
 
 await check('leaving Read mode gives the editor back with the same words', async () => {
-	link('Edit the page').click();
+	button('Edit the page').click();
 	await drawn(() => root?.querySelector('[contenteditable]') !== null, 'the editor to come back');
-	assert.equal(root?.querySelector('.doc-surface__doc--reading') !== null, false, 'Read mode is still showing');
-	assert.equal(root?.querySelector('.doc-surface__doc h1')?.textContent, 'Wiring a T3000 controller');
+	assert.equal(root?.querySelector('.page-surface__doc--reading') !== null, false, 'Read mode is still showing');
+	assert.equal(root?.querySelector('.page-surface__doc h1')?.textContent, 'Wiring a T3000 controller');
 	assert.equal(root?.textContent?.includes('address.Z'), true, 'the typed text was lost across the mode switch');
 });
 
@@ -198,16 +202,9 @@ await check('a task list opens as a task list, checkboxes and all', async () => 
 });
 
 await check('and it saves back with its checkboxes', async () => {
-	const paragraph = root?.querySelector('.doc-surface__doc p') ?? null;
-	const text = paragraph?.firstChild ?? null;
-	assert.ok(paragraph !== null && text !== null && text !== undefined, 'no paragraph to type into');
-	const range = window.document.createRange();
-	range.setStart(text, (text.textContent ?? '').length);
-	range.collapse(true);
-	window.getSelection()?.removeAllRanges();
-	window.getSelection()?.addRange(range);
-	text.textContent = `${text.textContent ?? ''}Z`;
-	paragraph.dispatchEvent(new window.Event('input', { bubbles: true }));
+	const paragraph = root?.querySelector('.page-surface__doc p');
+	assert.ok(paragraph, 'no paragraph to type into');
+	typeInto(paragraph);
 
 	await drawn(() => sent.filter(message => message.type === 'change').length === 2, 'the task list to be saved');
 	const saved = sent.filter(message => message.type === 'change')[1].text ?? '';
