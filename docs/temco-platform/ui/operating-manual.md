@@ -27,17 +27,41 @@ Read it once end to end, then keep §11 (**all the buttons, one page**) open whi
  │    │                            │                                  └─ secondary side bar: Outline and the draft (§6)
  │    │                            └─ editor area: the page, and the tool pages
  │    └─ side bar: the views of the container you picked
- └─ activity bar: Dashboard · Documentation · AI Hub · Temco Learn · SQL Studio · Settings · Help
+ └─ activity bar: Home · Docs · AI · Tools · Settings
 ```
 
-Two containers matter for documentation:
+Five entries, and every view is under one of them:
 
 | Container | Views, top to bottom |
 |---|---|
-| **Dashboard** (⌫ house icon) | **Projects** · **Overview** · **Recent activity** |
-| **Documentation** (▤ book icon) | **Pages** · **Needs You** · **Sources** · **Publish** |
+| **Home** (house) | **Projects** · **Overview** · **Recent activity** · **Site** · **Delivery** |
+| **Docs** (book) | **Project** · **Pages** · **Needs You** · **Sources** · **Publish** · **Repositories** |
+| **AI** (spark) | **Assistant** · **Runtime** |
+| **Tools** (grid) | **Query & Browse** · **Schema & Maintenance** |
+| **Settings** (gear) | **Profile** · **Platform** · **Learn** · **Support** |
 
 The manual never says "click the book icon" without naming the view, because the view is what carries the buttons.
+
+The **Project** strip at the top of **Docs** is not a tree — it is the answer to "what am I looking at":
+
+```
+  Temco Handbook  [v1.4.2]
+  148 pages · 3 issues
+  ( Pages 148 )  ( Needs you 2 )  ( Validate )
+  [ Find a page… ]
+  ─────────────────────────────────────────────
+  built 3 h ago                     [ Build ]  [ Publish ]
+```
+
+Its chips run the same commands as the views below (`temcoDocs.documents`, `temcoDocs.review`, `temcoDocs.validate`), **Find a page…** searches every page in the project and opens the one you pick, and the footer builds or publishes without leaving the side bar.
+
+The **status bar**, bottom left, carries one item about the same project:
+
+```
+$(book) Temco Handbook · 148 pages · $(warning) 3
+```
+
+`$(error) N` replaces the warning when a registry file cannot be read at all. Click it to run **Validate**; hover for the sources, the pages nobody has reviewed and how many things are waiting for you. It hides itself entirely when the window has no documentation, because "0 pages" on a project nobody has started is an accusation, not information.
 
 ---
 
@@ -55,6 +79,8 @@ Steps 3–7 are where the writing happens; 8–10 and 12 are a few clicks and a 
 ## 3. Step 1 — Create the project
 
 **Activity bar → Dashboard → view `Projects` → the `+` in the view title** (command `temcoProjects.newProject`, *Create a Project*).
+
+Afterwards, **right-click the project → Project Detail** (`temcoDocs.projectPage`) is the project's own dashboard in the center: cards for pages, drafts, stale pages and issues; a **Needs you** group when drafts are waiting; and **Last out of the building** — the newest build and release, with **Open** and **Serve** on the release.
 
 The form opens in the editor area. It is one screen, split in two — a rail on the left and the form on the right:
 
@@ -264,7 +290,18 @@ Releasing is local and versioned. It is not publishing to the internet — that 
 
 ## 10. Step 8 — Publish to GitHub Pages
 
-**Documentation → Publish → title button `☁`**, or **Releases → Publish to GitHub Pages**, or the palette (*Publish to GitHub Pages*, `temcoDocs.publishSite`).
+**Documentation → Publish → title button `☁`**, or **Releases → Where It Publishes → Publish to GitHub Pages**, or the palette (*Publish to GitHub Pages*, `temcoDocs.publishSite`).
+
+The Releases page carries a **Where It Publishes** section that names the repository and the address before you press anything — the address comes from the folder's own git remote, not from a setting you have to keep in step:
+
+```
+WHERE IT PUBLISHES — owner/repo
+  $ https://owner.github.io/repo/     pushed to the gh-pages branch of owner/repo
+  ! One time only                     Settings → Pages → Source: branch gh-pages, folder /
+  ! Never forced                      a branch with commits this build does not know is reported, not overwritten
+```
+
+With no GitHub remote it says so instead, in one line, rather than failing after the push.
 
 One click does four things, with a progress notification naming the phase:
 
@@ -327,11 +364,12 @@ Print this. Every row is a real control, and the command id is what to type in `
 | **Build the Site** | `Publish` title `🌐` | `temcoDocs.buildSite` |
 | **Publish to GitHub Pages** | `Publish` title `☁` | `temcoDocs.publishSite` |
 | **Build the Offline Help** | `Publish` title `📦` | `temcoDocs.buildHelp` |
-| **Export…** | Releases page | `temcoDocs.export` |
+| **Export…** | Releases page (opens the Exports page) | `temcoDocs.export` |
 | **Export the Site as a Zip** | palette | `temcoDocs.exportSite` |
 | **Export the Page as HTML** | palette, page right-click | `temcoDocs.exportPage` |
 | **Export the Pages as a Markdown Bundle** | palette | `temcoDocs.exportMarkdown` |
-| **Review Center** (row) | `Publish` view | `temcoDocs.review` → focuses `Needs You` |
+| **Export the Page as Word** | Exports page, palette | `temcoDocs.exportDocx` |
+| **Review Center** (row) | `Publish` view | `temcoDocs.review` → opens the Review Center page |
 | **Build Center** (row) | `Publish` view | `temcoDocs.builds` → opens the Build Center page |
 | **Releases** (row) | `Publish` view | `temcoDocs.releases` → opens the Releases page |
 
@@ -366,24 +404,38 @@ Print this. Every row is a real control, and the command id is what to type in `
 
 ## 12. Step 9 — Export
 
-**Documentation → Publish → Releases → `Export…`** (`temcoDocs.export`), or the palette. It asks which of three shapes you want; each has its own command if you prefer to go straight there.
+**Documentation → Publish → Releases → `Export…`** (`temcoDocs.export`), which opens the **Exports** page:
 
 ```
-  Export what?
-  > The site, as a zip                     the finished website: pages, stylesheet, pictures
-    This page, as one HTML file            stylesheet and pictures inside the file itself
-    The pages, as a Markdown bundle        the sources and their pictures, for another tool
+EXPORTS — Temco Handbook
+[ 148 pages ] [ 3 shapes ] [ dist/ — where it lands ]
+
+THE SITE, AS A ZIP
+  What you get     index.html, assets/site.css, every page, each page's media/
+                   [ Export the Site ]
+  Reach for it when a colleague wants the website, or it goes to a static host
+
+ONE PAGE, AS ONE FILE
+  What you get     one .html per page, stylesheet and pictures inside it
+                   [ Export a Page ]
+  Reach for it when a page must survive an e-mail, a chat or a ticket
+
+THE PAGES, AS A MARKDOWN BUNDLE
+  What you get     every .md, each folder's media/, and registry.json
+                   [ Export the Sources ]
+  Reach for it when the sources move to another tool, or need archiving
 ```
+
+The page exists because a picker answers "which one?" but not "what will I get?", and export is the one step that happens outside the application.
 
 | Shape | Command | What you get | For |
 |---|---|---|---|
 | **The site, as a zip** | `temcoDocs.exportSite` | `dist/<project>-site-<date>.zip` — `index.html`, `assets/site.css`, every page, every `media/` | a colleague who wants the finished website, or an upload to any static host |
-| **This page, as one HTML file** | `temcoDocs.exportPage` | `dist/<page>.html` — the stylesheet inlined, every picture a `data:` URI | e-mail, a chat message, a support ticket: one file that opens anywhere |
+| **This page, as one HTML file** | `temcoDocs.exportPage` | `dist/<page>-<date>.html` — the stylesheet inlined, every picture a `data:` URI | e-mail, a chat message, a support ticket: one file that opens anywhere |
+| **This page, as a Word document** | `temcoDocs.exportDocx` | `dist/<page>-<date>.docx` — headings, lists, tables and the pictures embedded | a reviewer who works in Word and will not read Markdown |
 | **The pages, as a Markdown bundle** | `temcoDocs.exportMarkdown` | `dist/<project>-markdown-<date>.zip` — the `.md` files, their `media/`, and `registry.json` | handing the sources to another tool, or archiving them |
 
-The single-file page is the one to reach for when someone asks "can you send me that page" — it keeps working with the network unplugged, because nothing in it points outside itself.
-
-Every export is written to the project's `dist/` folder and the notification offers **Show in Folder**. Nothing is uploaded; nothing leaves the machine.
+Every export writes to the project's `dist/` and the notification offers **Show in Folder**. Nothing is uploaded; nothing leaves the machine.
 
 > A page whose pictures are very large produces a very large file. That is the honest trade for a file that always opens — export the site as a zip instead when the pictures matter more than the convenience.
 >

@@ -42,6 +42,7 @@ interface Manifest {
 	contributes?: {
 		commands?: { command?: string }[];
 		submenus?: { id?: string }[];
+		viewsContainers?: Record<string, { id?: string }[]>;
 		views?: Record<string, { id?: string }[]>;
 		menus?: Record<string, { command?: string; submenu?: string; view?: string }[]>;
 		viewsWelcome?: { view?: string; contents?: string }[];
@@ -174,7 +175,47 @@ for (const [folder, manifest] of manifests) {
 	}
 }
 
-// 3. A source binding that the module wrapper has already taken.
+// 3. A view pointed at a container that no manifest declares.
+//
+// A view is declared *under a container id*, and the container is what puts an icon in the activity bar. When the two
+// disagree — a typo, or a container removed in a redesign while its views stayed — the workbench does not complain: the
+// view is simply never shown, and no menu, no panel and no error message mentions it. Moving a module's views into
+// another module's container is a supported thing to do (that is how Docs carries the repositories list), which makes
+// this mistake easy to introduce deliberately and impossible to notice.
+const containers = new Map<string, string>();
+for (const [folder, manifest] of manifests) {
+	for (const list of Object.values(manifest.contributes?.viewsContainers ?? {})) {
+		for (const container of list) {
+			if (!container.id) {
+				continue;
+			}
+			const owner = containers.get(container.id);
+			if (owner !== undefined && owner !== folder) {
+				problems.push(
+					`${folder} and ${owner} both declare the container "${container.id}".\n` +
+					'    The workbench keeps one of them, so half the container\'s views vanish with no message. Give the\n' +
+					'    second one its own id, or move its views under the first.'
+				);
+				continue;
+			}
+			containers.set(container.id, folder);
+		}
+	}
+}
+
+for (const [folder, manifest] of manifests) {
+	for (const containerId of Object.keys(manifest.contributes?.views ?? {})) {
+		if (!containers.has(containerId)) {
+			problems.push(
+				`${folder} contributes views under the container "${containerId}", which no module declares.\n` +
+				'    A view whose container does not exist is never shown — no icon, no panel, no error. Declare the\n' +
+				'    container in `contributes.viewsContainers`, or point these views at one that exists.'
+			);
+		}
+	}
+}
+
+// 4. A source binding that the module wrapper has already taken.
 //
 // Only `const`/`let`/`class` collide with a parameter of the wrapper function — a `var` or a function
 // declaration may share a parameter's name — so this checks those, plus an `import * as module` alias, which
@@ -214,4 +255,4 @@ if (problems.length > 0) {
 	process.exit(1);
 }
 
-console.log(`${folders.length} modules, no dependency loops, every menu id declared, no name taken by the module wrapper.`);
+console.log(`${folders.length} modules, no dependency loops, every menu id declared, every view in a declared container, no name taken by the module wrapper.`);

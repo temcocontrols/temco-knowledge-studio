@@ -37,6 +37,13 @@ export function activate(context: vscode.ExtensionContext): TemcoProjectsApi {
 	// Building a project's outputs, invoked in the source repository that owns the script.
 	registerProjectBuildCommands(context, output);
 
+	// S1: a window that is not working on a project and has no tab open has nothing to look at, so the one page that
+	// says what to do opens itself. Both halves of the condition matter — a window restored with tabs keeps them, and a
+	// window that is on a project keeps that tab, so this happens on a first run and never again.
+	if (selection.project() === undefined && vscode.window.tabGroups.all.every((group) => group.tabs.length === 0)) {
+		void vscode.commands.executeCommand('temcoProjects.projectsPage');
+	}
+
 	return {
 		onDidChange: (listener: () => void) => changed.event(listener),
 	};

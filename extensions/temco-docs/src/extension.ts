@@ -31,6 +31,8 @@ import { DraftView } from './draftView';
 import { registerMediaCommands } from './media';
 import { NewPagePage } from './newPagePage';
 import { registerPagePane } from './outline';
+import { PANEL_VIEW_TYPE, DocsPanel, DocsPanelState } from './panelView';
+import { statusLine } from './statusLine';
 import { OverviewPage } from './overview';
 import { AREA_CHAPTER, KINDS, PageDeps, PageOperations, registerPageCommands, sourceAt, writePage } from './pageOps';
 import { writePortal, writeReader } from './learnPortal';
@@ -271,6 +273,38 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   };
   const sidebar = registerSectionViews(context, sidebarModel);
 
+  // The strip above the tree: which project this is, what it owes, and the way out of the building. Its numbers come from
+  // the same reads the tree uses, so the two cannot disagree about how many pages there are.
+  const panel = new DocsPanel({
+    roots: () => roots,
+    state: async () => {
+      const counts = sidebarModel.counts();
+      const current = selection.project();
+      let project: DocsPanelState['project'];
+      if (current !== undefined) {
+        let catalog: Catalog | undefined;
+        try {
+          catalog = await Catalog.open(context);
+          const row = catalog.documents().find(document => document.slug === current);
+          project = { name: row?.name ?? current, version: row?.version, sources: row?.sources ?? 0, builtAt: row?.builtAt };
+        } catch {
+          // A catalog that cannot be read still leaves the registry's own counts worth showing.
+          project = { name: current, sources: 0 };
+        } finally {
+          catalog?.close();
+        }
+      }
+      return {
+        project,
+        pages: roots.reduce((total, root) => total + root.pages, 0),
+        issues: roots.reduce((total, root) => total + root.issues, 0),
+        unshipped: roots.reduce((total, root) => total + root.unshipped, 0),
+        owed: counts.review
+      };
+    }
+  });
+  context.subscriptions.push(vscode.window.registerWebviewViewProvider(PANEL_VIEW_TYPE, panel));
+
   // Two reads can be in flight at once — a file event while the window is still coming up, one save firing two
   // watchers, the workspace folders changing under a read that has already started. Each read builds its own answer
   // and only the newest may publish it: an older read finishing late would put back the tree the newer one just
@@ -403,7 +437,10 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
         new vscode.Diagnostic(new vscode.Range(0, 0, 0, 0), message, vscode.DiagnosticSeverity.Error),
       ]);
     }
-    updateStatus(status, roots, broken);
+    updateStatus(status, roots, broken, projectName, {
+      sources: sidebarModel.counts().sources,
+      owed: sidebarModel.counts().review
+    });
     // The AI module's panel and the workbench's three surfaces are the surfaces this module does not own: they
     // are told, by the one signal.
     overviewPage.refresh();
@@ -622,6 +659,25 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
       const version = catalog.document(project)?.version ?? 'unversioned';
       const destination = vscode.Uri.joinPath(context.globalStorageUri, 'published', project, version);
       const productRoot = vscode.Uri.joinPath(context.globalStorageUri, 'published', project);
+      // A release is the one act here that cannot be quietly undone, so it names every value before it writes: what
+      // version, where it lands, and how much is being copied. The design asked for exactly this confirmation.
+      const confirmed = await vscode.window.showWarningMessage(
+        `Publish ${version}?`,
+        {
+          modal: true,
+          detail: [
+            `version      ${version}`,
+            `destination  ${vscode.workspace.asRelativePath(destination) || destination.fsPath}`,
+            `files        ${chosen.length} from the last build`,
+            '',
+            'An older version keeps its own folder; nothing already published is rewritten.'
+          ].join('\n')
+        },
+        'Publish'
+      );
+      if (confirmed !== 'Publish') {
+        return;
+      }
       const copied = await copyArtifacts(chosen.map((artifact) => artifact.path), destination.fsPath);
       if (copied === 0) {
         void vscode.window.showWarningMessage('Temco Docs: the artifacts could not be copied, so nothing was published.');
@@ -743,7 +799,9 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
       openPageFile(roots, title, area)
     ),
     vscode.commands.registerCommand('temcoDocs.source', () => focusView('temcoRepositories.sources')),
-    vscode.commands.registerCommand('temcoDocs.review', () => focusView('temcoDocs.queue')),
+    // The Review Center is a page — one draft at a time, with its body beside the page it would change — and it is what
+    // this command has always meant by "Review the Drafts". `temcoDocs.needsPage` is the one that lands on the queue.
+    vscode.commands.registerCommand('temcoDocs.review', () => docsPages.review()),
     // Settling a draft: accepting writes the page it proposed, discarding wastes the text. Both act on one row and
     // both redraw the queue, because what is left is what a person needs to see.
     vscode.commands.registerCommand('temcoDocs.acceptDraft', async (id?: unknown) => {
@@ -846,6 +904,9 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     // The Build Center page: the same command its own Refresh button runs, so opening and refreshing are one thing.
     vscode.commands.registerCommand('temcoDocs.builds', () => docsPages.builds()),
     vscode.commands.registerCommand('temcoDocs.releases', () => docsPages.releases()),
+    // Exports has a page of its own: what each shape leaves behind, and the button that writes it. The three shapes are
+    // still separate commands, so a key binding or a script can ask for one without going through the page.
+    vscode.commands.registerCommand('temcoDocs.export', () => docsPages.exports()),
     // Publishing hands files to a reader: copied into a folder the platform owns, recorded, then opened.
     vscode.commands.registerCommand('temcoDocs.publishRelease', () => publishRelease()),
     vscode.commands.registerCommand('temcoDocs.revisePage', (target?: unknown) =>
@@ -915,7 +976,11 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     // What is being read, in one page: the tree answers where a page is, this answers what it all is.
     vscode.commands.registerCommand('temcoDocs.overview', () => overviewPage.open()),
 
-    vscode.commands.registerCommand('temcoDocs.openRegistry', async (node?: DocsNode) => {
+    // The registry, as a page: every entry with the reason it might not appear in the site. The raw file is one click
+    // away from there, but it is no longer the first thing a person has to read.
+    vscode.commands.registerCommand('temcoDocs.openRegistry', () => docsPages.registry()),
+    // The file itself, for the reader who wants to edit it directly.
+    vscode.commands.registerCommand('temcoDocs.openRegistryFile', async (node?: DocsNode) => {
       const uri = rootOf(node ?? selectedRow(), roots)?.registryUri;
       if (!uri) {
         void vscode.window.showInformationMessage('Temco Docs: no registry in this workspace.');
@@ -1002,7 +1067,19 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     try {
       // The repository's remote decides the address the site will be served from, so the sitemap can hold real URLs.
       const target = await pagesTarget(root.folder.uri);
-      const site = await generateSite(root, { project: root.folder.name, base: target?.base });
+      // The steps are reported as they happen — to the channel and to the notification — because a build that says
+      // nothing for eight seconds looks broken. A project's own `docs:site` script is opaque; this one is not.
+      const site = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: `Building ${root.folder.name}`, cancellable: false },
+        progress => generateSite(root, {
+          project: root.folder.name,
+          base: target?.base,
+          onStep: step => {
+            progress.report({ message: step });
+            output.appendLine(`[site] ${step}`);
+          }
+        })
+      );
       for (const warning of site.warnings) {
         output.appendLine(`[site] ${warning}`);
       }
@@ -1653,17 +1730,26 @@ function rootKey(root: DocsRoot): string {
 function updateStatus(
   status: vscode.StatusBarItem,
   roots: readonly DocsRoot[],
-  broken: readonly BrokenRegistry[]
+  broken: readonly BrokenRegistry[],
+  projectName: string | undefined,
+  extra: { sources: number; owed: number }
 ): void {
   const sums = totals(roots);
-  if (sums.pages === 0 && broken.length === 0) {
+  const line = statusLine({
+    project: projectName,
+    sources: extra.sources,
+    pages: sums.pages,
+    issues: sums.issues,
+    neverReviewed: sums.neverReviewed,
+    unreadable: broken.length,
+    owed: extra.owed
+  });
+  if (line === undefined) {
     status.hide();
     return;
   }
-  const issuePart = sums.issues > 0 ? ` · ${sums.issues} issues` : '';
-  const brokenPart = broken.length > 0 ? ` · ${broken.length} unreadable` : '';
-  status.text = `$(book) ${sums.pages} pages${issuePart}${brokenPart} · ${sums.neverReviewed} never reviewed`;
-  status.tooltip = 'Temco Docs: validate the documentation set';
+  status.text = line.text;
+  status.tooltip = line.tooltip;
   status.show();
 }
 

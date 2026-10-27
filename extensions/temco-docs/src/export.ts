@@ -8,6 +8,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { DocsRoot, PageEntry, collectPages } from './registry';
 import { addresses, renderArticle, renderStandalone, slugPath } from './siteRender';
+import { DocxPicture, docx, pngSize } from './docxWrite';
 import { generateSite } from './site';
 import { ZippedFile, zip } from './zip';
 
@@ -48,19 +49,14 @@ export function registerExportCommands(
 		vscode.commands.registerCommand('temcoDocs.exportMarkdown', async () => {
 			await run(async root => finished(await exportMarkdown(root), 'Markdown bundle'));
 		}),
-		// One door for the palette: the three shapes, named as a reader would ask for them.
-		vscode.commands.registerCommand('temcoDocs.export', async () => {
-			const choice = await vscode.window.showQuickPick(
-				[
-					{ label: 'The site, as a zip', description: 'the finished website: pages, stylesheet, pictures', command: 'temcoDocs.exportSite' },
-					{ label: 'This page, as one HTML file', description: 'stylesheet and pictures inside the file itself', command: 'temcoDocs.exportPage' },
-					{ label: 'The pages, as a Markdown bundle', description: 'the sources and their pictures, for another tool', command: 'temcoDocs.exportMarkdown' }
-				],
-				{ placeHolder: 'Export what?' }
-			);
-			if (choice !== undefined) {
-				await vscode.commands.executeCommand(choice.command);
-			}
+		// A Word document of one page: the shape a reviewer who does not use Markdown asks for.
+		vscode.commands.registerCommand('temcoDocs.exportDocx', async (target?: unknown) => {
+			await run(async (root, on) => {
+				const page = await pickPage(root, on);
+				if (page !== undefined) {
+					await finished(await exportDocx(root, page), `Word document of “${page.title}”`);
+				}
+			}, target);
 		})
 	);
 
@@ -147,6 +143,29 @@ export async function exportMarkdown(root: DocsRoot): Promise<ExportResult | und
 		// A project without a registry file still has pages worth taking.
 	}
 	return write(root, `${slugPath(root.folder.name)}-markdown`, files);
+}
+
+/** One page as a Word document, with its pictures embedded. */
+export async function exportDocx(root: DocsRoot, page: PageEntry): Promise<ExportResult | undefined> {
+	const markdown = new TextDecoder().decode(await vscode.workspace.fs.readFile(page.uri));
+	const pictures: DocxPicture[] = [];
+	// The Markdown says which pictures it has; read those, and let a missing file fall back to its caption.
+	for (const match of markdown.matchAll(/!\[[^\]]*\]\(\s*([^)\s]+)/gu)) {
+		const source = match[1];
+		if (/^[a-z]+:/iu.test(source) || pictures.some(entry => entry.src === source)) {
+			continue;
+		}
+		try {
+			const file = vscode.Uri.joinPath(page.uri, '..', ...decodeURI(source).split('/'));
+			const data = await vscode.workspace.fs.readFile(file);
+			const size = pngSize(data);
+			pictures.push({ src: source, data, width: size?.width ?? 0, height: size?.height ?? 0 });
+		} catch {
+			// A picture that is not there does not stop the document; the caption stays where it was.
+		}
+	}
+	const document = docx({ title: page.title, markdown, pictures });
+	return writeOne(root, `${slugPath(page.id)}-${new Date().toISOString().slice(0, 10)}.docx`, document);
 }
 
 /** Every file under a folder, as `relative path → uri`. A folder that does not exist is simply empty. */

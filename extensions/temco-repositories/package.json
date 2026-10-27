@@ -29,17 +29,8 @@
     "onView:temcoRepositories.list"
   ],
   "contributes": {
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "temcoRepos",
-          "title": "Repositories",
-          "icon": "media/repositories.svg"
-        }
-      ]
-    },
     "views": {
-      "temcoRepos": [
+      "temco": [
         {
           "id": "temcoRepositories.list",
           "name": "Repositories"

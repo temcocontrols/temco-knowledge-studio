@@ -11,7 +11,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 
-import { statSync } from 'fs';
+import { existsSync, statSync } from 'fs';
 import { screenshotPng } from './capture';
 import { docsApi, LinkablePage } from './docs';
 
@@ -418,6 +418,25 @@ export abstract class WebviewTextEditor implements vscode.CustomTextEditorProvid
 
 	private html(document: vscode.TextDocument, webview: vscode.Webview): string {
 		const base = this.bundleRoot();
+		// A bundle that is not there is the one failure a browser cannot report: a script that 404s fires no error on
+		// `window`, so the tab is simply blank. Asking the disk first turns that into a sentence naming the fix.
+		const missing = [`${this.assets}.js`, `${this.assets}.css`].filter(name => !existsSync(path.join(base.fsPath, name)));
+		if (missing.length > 0) {
+			return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
+<title>${path.basename(document.uri.fsPath)}</title>
+</head>
+<body style="font: 13px var(--vscode-font-family, sans-serif); padding: 16px; color: var(--vscode-foreground, #333);">
+	<p><b>The Temco Editor surface is not built.</b></p>
+	<p>Missing: <code>${missing.join('</code>, <code>')}</code> in <code>${base.fsPath}</code>.</p>
+	<p>Run <code>npm run compile-temco</code> from the repository root, then reload this window. A plain
+	<code>npm run compile</code> compiles the extension host but not the webview bundles.</p>
+</body>
+</html>`;
+		}
 		const script = stamped(webview.asWebviewUri(vscode.Uri.joinPath(base, `${this.assets}.js`)));
 		const style = stamped(webview.asWebviewUri(vscode.Uri.joinPath(base, `${this.assets}.css`)));
 		const page = `${webview.asWebviewUri(vscode.Uri.file(path.dirname(document.uri.fsPath)))}/`;
@@ -442,7 +461,7 @@ export abstract class WebviewTextEditor implements vscode.CustomTextEditorProvid
 	};
 	window.addEventListener('error', function (event) {
 		say(String(event.message) + ' (' + String(event.filename) + ':' + String(event.lineno) + ')');
-	});
+	}, true);
 	window.addEventListener('unhandledrejection', function (event) {
 		say(String(event.reason));
 	});

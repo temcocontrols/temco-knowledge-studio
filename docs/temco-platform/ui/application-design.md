@@ -49,6 +49,12 @@ To **use** the application rather than design it, read [operating-manual.md](./o
 Eight icons became five: three are places to *be* (Home, Docs, AI), two are where you *configure* things. `Repositories`
 moved into Docs ▸ Sources, `Learn` into Home, `Help` under Settings. No view is deleted.
 
+**Implemented** (2026-10-27): the five containers exist with those titles, `temcoRepositories.list` is contributed under
+`temco`, and the `temcoLearn`/`temcoHelp`/`temcoRepos` containers are gone. Container **ids** were kept where they were
+already used (`temcoDashboard`, `temco`, `temcoAiHub`, `temcoSql`, `temcoSettings`) so saved layout and `onView`
+activation keep working — only titles and view membership changed. The guard in `build/check-temco-modules.ts` now refuses
+a view pointed at a container nobody declares, which is the mistake this consolidation can make silently.
+
 ## Screens
 
 | # | screen | center | left | right |
@@ -144,5 +150,20 @@ create project ─▶ add source ─▶ registry ─▶ write ─▶ validate �
 3. **Export** ✅ — `src/zip.ts` (a real archive writer: store, deflate, CRC32), `src/export.ts` (site zip, single-file
    page, Markdown bundle; `temcoDocs.export` + three commands), `scripts/check-export.mts` (5 cases that read the archive
    back). Still owed: `.docx`. Then the panel.
-4. **Panel and shell** — five activity entries, the Fluent panel above the native tree, dashboards as center tabs,
-   S10–S13 in the center instead of two trees.
+4. **Panel and shell** — *(in progress)* the activity bar is five entries ✅; the **Project** strip above the native Pages
+   tree ✅ (`src/panelView.ts`, `check-panel.mts`); the **status bar** ✅ (`src/statusLine.ts`, `check-status.mts`); **S3**
+   (the project dashboard) ✅ inside the Project Detail page: pages · drafts · stale · issues, a *Needs you* group, and
+   *Last out of the building*; **S13** ✅ as the **Exports** page (`temcoDocs.export` opens it; the three shapes are still
+   their own commands, plus **`.docx`** from `src/docxWrite.ts` — Word's format is a zip of XML, so it needs no dependency);
+   **S12** ✅ folded into the Releases page as *Where It Publishes*; **S1** ✅ the Projects page opens itself when the window
+   is on no project and has no tab; **S6** ✅ as *The Registry* page — every entry with the reason it might not appear in the
+   site, and one action per reason; **S10** ✅ the generator reports its steps (Resolve → Render → Assets → Sitemap) to the
+   notification and the output channel as they happen; **S11** ✅ publishing a release confirms first, naming version,
+   destination and file count.
+
+   **Phase 4 is done, and so is every gap the screen audit found.** What remains for the shell is the tabbed *Ship* surface
+   (Build · Release · Deploy · Export as one page) — deliberately not built: after the cross-links and the Exports page, the
+   four surfaces point at each other, so it is polish rather than a gap.
+   The status line deliberately carries the window's facts (project · pages · issues) and not the version or the last build:
+   those need the catalog, and a catalog read on every file save is too high a price for a status bar. The strip in the side
+   bar shows them instead, from a render that already had a reason to read the catalog.

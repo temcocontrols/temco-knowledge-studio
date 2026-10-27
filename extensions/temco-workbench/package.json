@@ -52,9 +52,7 @@
         {
           "id": "temcoWorkbench.activityView",
           "name": "Recent activity"
-        }
-      ],
-      "temcoLearn": [
+        },
         {
           "id": "temcoWorkbench.learnView",
           "name": "Site"
@@ -72,9 +70,7 @@
         {
           "id": "temcoWorkbench.settingsPlatform",
           "name": "Platform"
-        }
-      ],
-      "temcoHelp": [
+        },
         {
           "id": "temcoWorkbench.helpLearn",
           "name": "Learn"
@@ -288,38 +284,28 @@
       "activitybar": [
         {
           "id": "temcoDashboard",
-          "title": "Dashboard",
+          "title": "Home",
           "icon": "media/dashboard.svg"
         },
         {
           "id": "temco",
-          "title": "Documentation",
+          "title": "Docs",
           "icon": "media/document.svg"
         },
         {
           "id": "temcoAiHub",
-          "title": "AI Hub",
+          "title": "AI",
           "icon": "media/ai.svg"
         },
         {
-          "id": "temcoLearn",
-          "title": "Temco Learn",
-          "icon": "media/learn.svg"
-        },
-        {
           "id": "temcoSql",
-          "title": "SQL Studio",
+          "title": "Tools",
           "icon": "media/sql.svg"
         },
         {
           "id": "temcoSettings",
           "title": "Settings",
           "icon": "media/settings.svg"
-        },
-        {
-          "id": "temcoHelp",
-          "title": "Help",
-          "icon": "media/help.svg"
         }
       ]
     }

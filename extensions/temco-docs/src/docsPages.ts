@@ -11,6 +11,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { DocsRoot, PageEntry, collectPages } from './registry';
 import { capturesOf } from './media';
+import { pagesTarget } from './pages';
 import { firstVersionReport } from './versionReport';
 import { BuildRow, Catalog, DocumentRow, DraftRow, ReleaseRow, ScanRow, selection, slugOf } from './store';
 import { commandScript, escapeHtml as esc, icon, page, pageColumn, runCommand, toneMark } from './ui';
@@ -24,6 +25,8 @@ export const SOURCE_VIEW_TYPE = 'temcoDocs.source';
 export const REVIEW_VIEW_TYPE = 'temcoDocs.review';
 export const BUILDS_VIEW_TYPE = 'temcoDocs.builds';
 export const RELEASES_VIEW_TYPE = 'temcoDocs.releases';
+export const EXPORTS_VIEW_TYPE = 'temcoDocs.exports';
+export const REGISTRY_VIEW_TYPE = 'temcoDocs.registryPage';
 
 interface ActionOptions {
 	kind?: 'primary' | 'ghost';
@@ -90,6 +93,8 @@ interface BuildFacts {
 	builds: BuildRow[];
 	artifacts: ArtifactFact[];
 	releases: ReleaseRow[];
+	/** Where the site would publish, when the folder has a GitHub remote: the only thing Deploy needs to know. */
+	publish?: { owner: string; repo: string; base: string; branch: string };
 }
 
 /** The module's pages: one panel per surface, kept open so a second visit reveals the tab. */
@@ -147,6 +152,7 @@ export class DocsPages {
 		let name = wanted ?? '';
 		let sources: { name: string; kind: string; branch?: string }[] = [];
 		let outputs: string[] = [];
+		let drafts: DraftRow[] = [];
 		let catalog: Catalog | undefined;
 		try {
 			catalog = await Catalog.open(this.context);
@@ -157,6 +163,7 @@ export class DocsPages {
 				name = detail?.name ?? slug;
 				sources = catalog.documentSources(slug);
 				outputs = Array.isArray(detail?.outputs) ? detail.outputs : [];
+				drafts = catalog.drafts(slug);
 			}
 		} catch {
 			// A catalog that cannot be read still leaves the sets being read, and this page shows those.
@@ -167,24 +174,45 @@ export class DocsPages {
 		const pages = this.roots().flatMap((root) => collectPages(root));
 		const stale = pages.filter((page) => page.provenance?.stale === true).length;
 		const never = pages.filter((page) => page.reviewed === null).length;
+		const issues = pages.reduce((total, page) => total + page.issues.length, 0);
 		const version = await firstVersionReport(this.roots());
 		const changed = version?.report.changed ?? [];
+		// The same facts the Build Center and the Releases page read: one answer per question, three places that show it.
+		const facts = await this.buildFacts();
+		const lastBuild = facts.builds[0];
+		const lastRelease = facts.releases[0];
 
 		const body = `${pageHead({
 			eyebrow: 'Project',
 			title: name === '' ? 'No project yet' : name,
-			mark: 'folders',
+			mark: 'layers',
 			desc: 'What this project cites, what it produces, and the acts on it. Nothing is published from here.',
 			actions: name === ''
 				? button('Create a Project', 'temcoProjects.newProject', { kind: 'primary', mark: 'plus' })
-				: button('Edit the Pages', 'temcoDocs.pages.focus', { kind: 'primary', mark: 'list-tree' }) + button('Edit the Project', 'temcoProjects.editProject', { mark: 'gear', args: [name] })
+				: button('Edit the Pages', 'temcoDocs.pages.focus', { kind: 'primary', mark: 'list' }) + button('Edit the Project', 'temcoProjects.editProject', { mark: 'gear', args: [name] })
 		})}
 ${pages.length === 0 ? '' : `<div class="mt-16">${tiles([
 			{ value: String(pages.length), label: 'pages' },
-			{ value: String(pages.length - never), label: 'reviewed' },
+			{ value: String(drafts.length), label: drafts.length === 1 ? 'draft' : 'drafts' },
 			{ value: String(stale), label: 'stale' },
-			{ value: String(sources.length), label: 'sources' },
+			{ value: String(issues), label: issues === 1 ? 'issue' : 'issues' },
 		])}</div>`}
+${drafts.length === 0
+			? `<div class="mt-16">${callout(never === 0 && stale === 0
+				? '<b>Nothing is waiting.</b> No draft is unsettled, no page unreviewed, no screenshot stale.'
+				: `<b>No draft is waiting.</b> ${never} ${never === 1 ? 'page has' : 'pages have'} never been reviewed and ${stale} ${stale === 1 ? 'claims' : 'claim'} code that has moved since.`)}</div>`
+			: `<div class="mt-16">${group({
+			label: 'Needs you',
+			count: String(drafts.length),
+			note: 'Drafts the local model wrote that no person has settled yet. Opening one shows it beside the page it would change.',
+			actions: button('Open the Review Center', 'temcoDocs.review', { mark: 'check', kind: 'primary' }),
+			body: list(drafts.slice(0, 5).map((draft) => ({
+				mark: 'sparkle',
+				title: draft.title === '' ? draft.pageId : draft.title,
+				sub: `${draft.pageId} · ${draft.kind}`,
+				command: 'temcoDocs.review'
+			}))),
+		})}</div>`}
 <div class="mt-24">${group({
 			label: 'Sources',
 			count: String(sources.length),
@@ -204,9 +232,30 @@ ${pages.length === 0 ? '' : `<div class="mt-16">${tiles([
 			actions: button('Build the Site', 'temcoDocs.buildSite', { mark: 'play' }) + button('Build the Offline Help', 'temcoDocs.buildHelp', { mark: 'package' }),
 			body: list([
 				{ mark: 'package', title: 'Site', sub: 'the rendered copy a reader browses', command: 'temcoDocs.builds' },
-				{ mark: 'archive', title: 'Offline help', sub: 'the CHM that ships inside the installer', command: 'temcoDocs.builds' },
+				{ mark: 'package', title: 'Offline help', sub: 'the CHM that ships inside the installer', command: 'temcoDocs.builds' },
 			]),
 		})}</div>
+${lastBuild === undefined && lastRelease === undefined ? '' : `<div class="mt-24">${group({
+			label: 'Last out of the building',
+			note: 'A build is the attempt, with the files it left; a release is the copy a reader can be given. Both are recorded when they happen, never inferred.',
+			actions: lastRelease === undefined
+				? button('Build the Site', 'temcoDocs.buildSite', { mark: 'play' }) + button('Build Center', 'temcoDocs.builds', { mark: 'list' })
+				: button('Open', 'temcoDocs.openPublished', { mark: 'globe', args: [lastRelease.destination] }) + button('Serve', 'temcoDocs.servePublished', { mark: 'server', args: [lastRelease.destination] }) + button('Releases', 'temcoDocs.releases', { mark: 'upload' }),
+			body: list([
+				...(lastBuild === undefined ? [] : [{
+					mark: 'play',
+					title: `build #${lastBuild.id}`,
+					sub: `${lastBuild.status} · ${lastBuild.finishedAt ?? lastBuild.startedAt}`,
+					command: 'temcoDocs.builds'
+				}]),
+				...(lastRelease === undefined ? [] : [{
+					mark: 'upload',
+					title: lastRelease.version,
+					sub: `published · ${lastRelease.files} ${lastRelease.files === 1 ? 'file' : 'files'} · ${lastRelease.destination}`,
+					command: 'temcoDocs.releases'
+				}])
+			]),
+		})}</div>`}
 ${changed.length === 0 ? '' : `<div class="mt-24">${group({
 			label: `Changed in ${version?.report.version ?? 'the new version'}`,
 			count: String(changed.length),
@@ -214,7 +263,7 @@ ${changed.length === 0 ? '' : `<div class="mt-24">${group({
 			body: list(changed.slice(0, 20).map((change) => {
 				const page = change.page === undefined ? undefined : pages.find((entry) => entry.id === change.page);
 				return {
-					mark: 'diff',
+					mark: 'branch',
 					title: change.title ?? page?.title ?? change.page ?? 'a page',
 					sub: (change.code ?? []).join(' · ') || 'the code moved',
 					command: page === undefined ? undefined : 'temcoDocs.openFile',
@@ -242,9 +291,9 @@ ${changed.length === 0 ? '' : `<div class="mt-24">${group({
 		const body = `${pageHead({
 			eyebrow: 'Dashboard',
 			title: 'Needs You',
-			mark: 'tasklist',
+			mark: 'check',
 			desc: 'What is waiting on a person. A row opens the page that needs the work; nothing is written from here.',
-			actions: button('Capture a Screenshot', 'temcoDocs.captureImage', { kind: 'primary', mark: 'device-camera' })
+			actions: button('Capture a Screenshot', 'temcoDocs.captureImage', { kind: 'primary', mark: 'panel' })
 		})}
 ${empty ? `<div class="mt-16">${callout('Nothing is waiting: no screenshot without a page, no page the code moved away from, no page unreviewed.')}</div>` : ''}
 ${captures.length === 0 ? '' : `<div class="mt-24">${group({
@@ -252,7 +301,7 @@ ${captures.length === 0 ? '' : `<div class="mt-24">${group({
 			count: String(captures.length),
 			note: 'Taken with no page in front. Attaching one moves it into that page’s media/ and inserts the reference.',
 			body: list(captures.map((capture) => ({
-				mark: 'device-camera',
+				mark: 'panel',
 				title: path.basename(capture.uri.fsPath),
 				sub: 'not in a page yet',
 				command: 'temcoDocs.attachCapture',
@@ -275,9 +324,9 @@ ${never.length === 0 ? '' : `<div class="mt-24">${group({
 			label: 'Never reviewed',
 			count: String(never.length),
 			note: 'No review date is recorded. The report groups them by owner.',
-			actions: button('Open the Report', 'temcoDocs.stalenessReport', { mark: 'list-unordered' }),
+			actions: button('Open the Report', 'temcoDocs.stalenessReport', { mark: 'list' }),
 			body: list(never.slice(0, 20).map((page) => ({
-				mark: 'circle-outline',
+				mark: 'clock',
 				title: page.title,
 				sub: `${page.area}${page.chapter === '' ? '' : ` › ${page.chapter}`}`,
 				command: 'temcoDocs.openFile',
@@ -367,6 +416,14 @@ ${never.length === 0 ? '' : `<div class="mt-24">${group({
 		void this.openReview();
 	}
 
+	exports(): void {
+		void this.openExports();
+	}
+
+	registry(): void {
+		void this.openRegistryPage();
+	}
+
 	/**
 	 * The queue, read from the catalog rather than from the mock.
 	 *
@@ -374,6 +431,147 @@ ${never.length === 0 ? '' : `<div class="mt-24">${group({
 	 * never written has no diff to weigh. So the Review Center lists exactly the unsettled drafts of the project
 	 * the window is on, and says so when there are none.
 	 */
+	/**
+	 * The three shapes an export can take, with what each one leaves behind.
+	 *
+	 * This was a three-line quick pick. A picker answers "which one?" but not "what will I get?", and an export is the one
+	 * step of the whole flow that happens *outside* this application — so the page says, per shape, the file it writes, what
+	 * is inside it and who it is for, then lets the reader press the button.
+	 */
+	private async openExports(): Promise<void> {
+		const facts = await this.buildFacts();
+		const pages = this.roots().flatMap((root) => collectPages(root)).filter((page) => page.exists);
+		const where = '<code>dist/</code> in the project folder';
+
+		const shape = (options: { title: string; mark: string; desc: string; command: string; label: string; inside: string; when: string }): string =>
+			card({
+				title: options.title,
+				mark: options.mark,
+				plain: true,
+				desc: options.desc,
+				body: `<div class="record-list">
+	<div class="record-row record-row--static">${toneMark(options.mark)}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">What you get</span></div><div class="record-row__meta">${options.inside}</div></div><div class="record-row__state"></div>${button(options.label, options.command, { kind: 'primary', mark: options.mark })}</div>
+	<div class="record-row record-row--static">${toneMark('book')}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">Reach for it when</span></div><div class="record-row__meta">${options.when}</div></div></div>
+</div>`
+			});
+
+		const body = `${pageHead({
+			eyebrow: facts.project === undefined ? 'No project selected' : `${esc(facts.project)} · export`,
+			title: 'Exports',
+			mark: 'download',
+			desc: 'What leaves this application, and in what shape. Nothing here is uploaded: every export is a file written to the project folder, and the only network step is Publish.',
+			actions: button('Export the Site', 'temcoDocs.exportSite', { kind: 'primary', mark: 'download' }) + button('Back to Releases', 'temcoDocs.releases', { mark: 'upload' })
+		})}
+${tiles([
+			{ value: String(pages.length), label: pages.length === 1 ? 'page' : 'pages' },
+			{ value: '4', label: 'shapes' },
+			{ value: 'dist/', label: 'where it lands' }
+		])}
+<div class="mt-24">${shape({
+			title: 'The site, as a zip',
+			mark: 'download',
+			desc: 'The finished website in one archive — the same pages the built site has, before they are served from anywhere.',
+			command: 'temcoDocs.exportSite',
+			label: 'Export the Site',
+			inside: '<code>index.html</code>, <code>assets/site.css</code>, every page, and each page’s <code>media/</code>',
+			when: 'A colleague wants the website itself, or it is going to a static host you do not publish to from here.'
+		})}</div>
+<div class="mt-24">${shape({
+			title: 'One page, as one file',
+			mark: 'document',
+			desc: 'A single HTML file with the stylesheet and every picture inside it, so it opens on a machine that has never seen this project.',
+			command: 'temcoDocs.exportPage',
+			label: 'Export a Page',
+			inside: `one <code>.html</code> file per page — it asks which page, then writes <code>dist/&lt;page&gt;-&lt;date&gt;.html</code>`,
+			when: 'A page has to survive an e-mail, a chat message or a support ticket. It keeps working with the network unplugged.'
+		})}</div>
+<div class="mt-24">${shape({
+			title: 'One page, as a Word document',
+			mark: 'document',
+			desc: 'A .docx a reviewer can open, comment on and send back — the format people outside the team ask for.',
+			command: 'temcoDocs.exportDocx',
+			label: 'Export a Page as Word',
+			inside: 'one <code>.docx</code> per page — headings, lists, tables and the page’s pictures, embedded',
+			when: 'A reviewer works in Word, or the page has to be marked up by someone who will not read Markdown.'
+		})}</div>
+<div class="mt-24">${shape({
+			title: 'The pages, as a Markdown bundle',
+			mark: 'layers',
+			desc: 'The sources, with their pictures and the registry, in a tree another tool can open.',
+			command: 'temcoDocs.exportMarkdown',
+			label: 'Export the Sources',
+			inside: 'every <code>.md</code>, each folder’s <code>media/</code>, and <code>registry.json</code>',
+			when: 'The documentation moves to another tool, or you want an archive of the sources as they are today.'
+		})}</div>
+<div class="mt-24">${callout(`<b>Every export lands in ${where}</b>, and the notification offers <b>Show in Folder</b>. Nothing is uploaded and nothing leaves this machine; publishing to GitHub Pages is the separate step on the Releases page.`)}</div>`;
+
+		this.open('exports', EXPORTS_VIEW_TYPE, 'Exports', body, 'download');
+	}
+
+	/**
+	 * S6: the registry, reviewed.
+	 *
+	 * The registry is the file that decides what exists, what ships and in what order — and the one question people ask
+	 * about it is "*why* is this page not in the site?". Opening the JSON answers that only for someone fluent in it. This
+	 * page lists every registered page with the three reasons a page can be absent, and one action per reason: the file was
+	 * never written (create it), the entry says it does not ship (properties), or the generator recorded a problem (read it).
+	 */
+	private async openRegistryPage(): Promise<void> {
+		const roots = this.roots();
+		const pages = roots.flatMap((root) => collectPages(root));
+		const missing = pages.filter((page) => !page.exists);
+		const unshipped = pages.filter((page) => page.exists && !page.ship);
+		const flagged = pages.filter((page) => page.exists && page.issues.length > 0);
+		const problems = roots.flatMap((root) => root.problems);
+
+		const row = (page: PageEntry) => {
+			const why = !page.exists
+				? 'the file was never written'
+				: page.issues.length > 0
+					? page.issues.map((issue) => issue.message).join(' · ')
+					: 'registered and written';
+			return {
+				mark: !page.exists ? 'alert' : page.issues.length > 0 ? 'warning' : page.ship ? 'check' : 'close',
+				title: page.title,
+				sub: `${page.id} · ${why}${page.ship ? '' : ' · does not ship'}`,
+				command: page.exists ? 'temcoDocs.openFile' : 'temcoDocs.createPage',
+				args: page.exists ? [page.uri.fsPath] : undefined
+			};
+		};
+
+		const body = `${pageHead({
+			eyebrow: 'Documentation',
+			title: 'The Registry',
+			mark: 'list',
+			desc: 'What the registry says exists, what it ships, and why a page might not appear in the built site. The file itself is one click away; this is the same answer without reading JSON.',
+			actions: button('Validate', 'temcoDocs.validate', { kind: 'primary', mark: 'check' })
+				+ button('Open registry.json', 'temcoDocs.openRegistryFile', { mark: 'code' })
+				+ button('Start a Registry', 'temcoDocs.startRegistry', { mark: 'plus' })
+		})}
+${tiles([
+			{ value: String(pages.length), label: pages.length === 1 ? 'page' : 'pages' },
+			{ value: String(missing.length), label: 'no file' },
+			{ value: String(unshipped.length), label: 'not shipped' },
+			{ value: String(flagged.length + problems.length), label: 'with problems' }
+		])}
+${problems.length === 0 ? '' : `<div class="mt-16">${group({
+			label: 'The registry itself',
+			count: String(problems.length),
+			note: 'Problems that belong to the file rather than to a page.',
+			body: problems.map((problem) => factRow(problem.severity === 'error' ? 'error' : 'warning', esc(problem.message), '')).join('')
+		})}</div>`}
+${roots.length === 0
+			? `<div class="mt-16">${callout('<b>No registry is being read.</b> A documentation folder with a <code>registry.json</code> under it is what this page describes. Use <b>Start a Registry</b> to create one from what is already on disk.')}</div>`
+			: roots.map((root) => `<div class="mt-24">${group({
+				label: root.folder.name,
+				count: `${root.pages} pages · ${root.errors} errors · ${root.warnings} warnings`,
+				note: vscode.workspace.asRelativePath(root.registryUri),
+				body: list(collectPages(root).map(row))
+			})}</div>`).join('')}`;
+
+		this.open('registry', REGISTRY_VIEW_TYPE, 'The Registry', body, 'list');
+	}
+
 	private async openReview(): Promise<void> {
 		let project = selection.project();
 		let drafts: DraftRow[] = [];
@@ -408,6 +606,7 @@ ${never.length === 0 ? '' : `<div class="mt-24">${group({
 		let builds: BuildRow[] = [];
 		let artifacts: ArtifactFact[] = [];
 		let releases: ReleaseRow[] = [];
+		let publish: BuildFacts['publish'];
 		let catalog: Catalog | undefined;
 		try {
 			catalog = await Catalog.open(this.context);
@@ -423,7 +622,16 @@ ${never.length === 0 ? '' : `<div class="mt-24">${group({
 		} finally {
 			catalog?.close();
 		}
-		return { project, builds, artifacts, releases };
+		// Where it would go: read from the documentation folder's own git remote, so the page can name the address before
+		// anything is published — and say plainly when there is nowhere to publish to.
+		const folder = this.roots()[0]?.folder.uri;
+		if (folder !== undefined) {
+			const target = await pagesTarget(folder);
+			if (target !== undefined) {
+				publish = { owner: target.owner, repo: target.repo, base: target.base, branch: 'gh-pages' };
+			}
+		}
+		return { project, builds, artifacts, releases, publish };
 	}
 
 	private async openBuilds(): Promise<void> {
@@ -1098,7 +1306,7 @@ function buildsBody(facts1: BuildFacts): string {
 		title: 'Build Center',
 		mark: 'play',
 		desc: 'A build is the repository&#39;s own script, run as a task and then judged by what it left: the attempt, its exit code and every file that appeared are recorded here.',
-		actions: button('Build Site', 'temcoDocs.buildSite', { kind: 'primary', mark: 'play' }) + button('Build Offline Help', 'temcoDocs.buildHelp', { mark: 'package' }) + button('Refresh', 'temcoDocs.builds', { mark: 'refresh' })
+		actions: button('Build Site', 'temcoDocs.buildSite', { kind: 'primary', mark: 'play' }) + button('Build Offline Help', 'temcoDocs.buildHelp', { mark: 'package' }) + button('Refresh', 'temcoDocs.builds', { mark: 'refresh' }) + button('Releases', 'temcoDocs.releases', { mark: 'upload' })
 	})}
 ${tiles([
 		{ value: String(builds.length), label: builds.length === 1 ? 'Build recorded' : 'Builds recorded' },
@@ -1133,7 +1341,7 @@ ${card({
 
 /** *Releases* — what a build left behind, grouped by what it is. The files are the release. */
 function releasesBody(facts1: BuildFacts): string {
-	const { project, artifacts, releases } = facts1;
+	const { project, artifacts, releases, publish } = facts1;
 	const kinds = [...new Set(artifacts.map((artifact) => artifact.kind))];
 
 	const releaseRow = (release: ReleaseRow): string =>
@@ -1159,7 +1367,7 @@ ${card({
 		title: 'Releases',
 		mark: 'upload',
 		desc: 'A release is what a build left that a reader can be given: the website, the offline help, the PDF, the search index. Publishing copies the site where it can be opened; serving it puts it on loopback so its own links resolve.',
-		actions: button('Publish', 'temcoDocs.publishRelease', { kind: 'primary', mark: 'upload' }) + button('Publish to GitHub Pages', 'temcoDocs.publishSite', { mark: 'cloud-upload' }) + button('Export…', 'temcoDocs.export', { mark: 'download' }) + button('Serve the Newest', 'temcoDocs.servePublished', { mark: 'radio-tower' }) + button('Build Site', 'temcoDocs.buildSite', { mark: 'play' }) + button('Build Offline Help', 'temcoDocs.buildHelp', { mark: 'package' })
+		actions: button('Publish', 'temcoDocs.publishRelease', { kind: 'primary', mark: 'upload' }) + button('Publish to GitHub Pages', 'temcoDocs.publishSite', { mark: 'upload' }) + button('Export…', 'temcoDocs.export', { mark: 'download' }) + button('Serve the Newest', 'temcoDocs.servePublished', { mark: 'server' }) + button('Build Site', 'temcoDocs.buildSite', { mark: 'play' }) + button('Build Center', 'temcoDocs.builds', { mark: 'list' })
 	})}
 ${tiles([
 		{ value: project ?? '—', label: 'Project' },
@@ -1184,6 +1392,17 @@ ${artifacts.length === 0
 				body: factRow('upload', 'Copies the site', 'the files a build wrote, into a folder the platform owns — nothing is uploaded anywhere')
 					+ factRow('document', 'Records the release', 'version, build, destination and date, so "when did 13.0 go out" is a query rather than a memory')
 					+ factRow('check', 'Leaves the old one alone', 'a new version is a new row beside the last one; no published file is ever rewritten in place')
+			})}</div>
+<div class="mt-24">${group({
+				label: 'Where It Publishes',
+				count: publish === undefined ? 'nowhere yet' : `${publish.owner}/${publish.repo}`,
+				note: 'The address is read from the documentation folder’s own git remote, so it can be named before anything is pushed.',
+				actions: button('Publish to GitHub Pages', 'temcoDocs.publishSite', { mark: 'upload' }),
+				body: publish === undefined
+					? factRow('alert', 'No GitHub remote', 'This folder is not a git repository with a GitHub <code>origin</code>, so there is nowhere to publish to. Add one, then publish again.')
+					: factRow('globe', esc(publish.base), `pushed to the <code>${esc(publish.branch)}</code> branch of <code>${esc(`${publish.owner}/${publish.repo}`)}</code>, which is what Pages serves`)
+						+ factRow('gear', 'One time only', 'GitHub → Settings → Pages → Source: deploy from a branch, <code>gh-pages</code>, folder <code>/</code>. The command tries this through the <code>gh</code> CLI when it is installed, and prints the two clicks when it is not.')
+						+ factRow('warning', 'Never forced', 'If the branch carries commits this build does not know about, that is reported and nothing is overwritten. The project’s own working tree is never touched.')
 			})}</div>
 <div class="mt-16">${callout('A downloadable CHM or PDF needs no publishing at all — it is a file the build wrote. Publishing is for the site: it puts the same pages in one folder with an entry point, which is what a Learn site is here.')}</div>`;
 }

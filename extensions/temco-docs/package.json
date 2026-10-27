@@ -34,6 +34,7 @@
     "temcocontrols.temco-projects"
   ],
   "activationEvents": [
+    "onView:temcoDocs.panel",
     "onView:temcoDocs.pages",
     "onView:temcoDocs.project",
     "onView:temcoDocs.queue",
@@ -70,8 +71,13 @@
     "views": {
       "temco": [
         {
+          "id": "temcoDocs.panel",
+          "name": "Project",
+          "type": "webview"
+        },
+        {
           "id": "temcoDocs.pages",
-          "name": "Pages",
+          "name": "Pages",
           "initialSize": 3
         },
         {
@@ -236,6 +242,11 @@
         "icon": "$(json)"
       },
       {
+        "command": "temcoDocs.openRegistryFile",
+        "title": "Open registry.json",
+        "icon": "$(json)"
+      },
+      {
         "command": "temcoDocs.openPage",
         "title": "Open the Page",
         "icon": "$(go-to-file)"
@@ -272,7 +283,7 @@
       },
       {
         "command": "temcoDocs.export",
-        "title": "Export…",
+        "title": "Exports",
         "icon": "$(arrow-circle-down)"
       },
       {
@@ -289,6 +300,11 @@
         "command": "temcoDocs.exportMarkdown",
         "title": "Export the Pages as a Markdown Bundle",
         "icon": "$(files)"
+      },
+      {
+        "command": "temcoDocs.exportDocx",
+        "title": "Export the Page as Word",
+        "icon": "$(file)"
       },
       {
         "command": "temcoDocs.buildHelp",
@@ -1065,7 +1081,7 @@
     "activationEvents": null
   },
   "scripts": {
-    "vscode:prepublish": "npm run check-commands && npm run check-record && npm run check-types && npm run compile && npm run check-learn && npm run check-site && npm run check-publish && npm run check-export && npm run check-grid && npm run build-webview",
+    "vscode:prepublish": "npm run check-commands && npm run check-record && npm run check-icons && npm run check-types && npm run compile && npm run check-learn && npm run check-site && npm run check-publish && npm run check-export && npm run check-docx && npm run check-panel && npm run check-status && npm run check-grid && npm run build-webview",
     "check-commands": "node --experimental-strip-types scripts/check-commands.mts",
     "check-record": "node --experimental-strip-types scripts/check-record.mts",
     "check-types": "node node_modules/typescript/bin/tsc -p tsconfig.webview.json && node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
@@ -1074,6 +1090,10 @@
 		"check-site": "node --experimental-strip-types scripts/check-site.mts",
 		"check-publish": "node --experimental-strip-types scripts/check-publish.mts",
 		"check-export": "node --experimental-strip-types scripts/check-export.mts",
+		"check-docx": "node --experimental-strip-types scripts/check-docx.mts",
+		"check-icons": "node --experimental-strip-types scripts/check-icons.mts",
+		"check-panel": "node --experimental-strip-types scripts/check-panel.mts",
+		"check-status": "node --experimental-strip-types scripts/check-status.mts",
 		"check-grid": "node --experimental-strip-types scripts/check-grid.mts",
     "build-webview": "node --experimental-strip-types scripts/build-webview.mts"
   },

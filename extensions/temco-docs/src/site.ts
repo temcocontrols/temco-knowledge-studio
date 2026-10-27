@@ -38,8 +38,9 @@ export function siteDestination(root: DocsRoot): vscode.Uri {
  */
 export async function generateSite(
 	root: DocsRoot,
-	options: { project: string; version?: string; destination?: vscode.Uri; base?: string } = { project: '' }
+	options: { project: string; version?: string; destination?: vscode.Uri; base?: string; onStep?: (step: string) => void } = { project: '' }
 ): Promise<SiteResult> {
+	const step = options.onStep ?? (() => undefined);
 	const destination = options.destination ?? siteDestination(root);
 	const warnings: string[] = [];
 	const pages = collectPages(root).filter(page => page.exists && page.ship);
@@ -48,6 +49,7 @@ export async function generateSite(
 	/** The registry entry and the text read from its file, together: the page is written from both. */
 	const read: { page: PageEntry; entry: SiteEntry }[] = [];
 
+	step(`Resolve: ${pages.length} page(s) to publish, ${where.size} address(es)`);
 	for (const page of pages) {
 		let markdown: string;
 		try {
@@ -69,6 +71,7 @@ export async function generateSite(
 	let files = 0;
 	const written = new Set<string>();
 	await vscode.workspace.fs.createDirectory(destination);
+	step('Render: writing each page beside its own media/');
 
 	for (const { page, entry } of read) {
 		const address = where.get(entry.id);
@@ -88,14 +91,17 @@ export async function generateSite(
 	}
 
 	files += await write(destination, 'index.html', renderIndex(model, where), written);
+	step('Assets: one stylesheet, one index');
 	files += await write(destination, 'assets/site.css', renderStylesheet(), written);
 	if (options.base === undefined) {
 		// A sitemap's locations have to be absolute URLs, and guessing the public address would put wrong URLs in a file
 		// meant to be read by crawlers. Deploy knows the address; until then, the site is served without one.
 		warnings.push('no public URL is known, so sitemap.xml was not written');
+		step('Sitemap: skipped, because no public address is known');
 	} else {
 		const addresses_written = [...where.values()].map(address => ({ address }));
 		files += await write(destination, 'sitemap.xml', renderSitemap(options.base, addresses_written, built), written);
+		step(`Sitemap: ${addresses_written.length} address(es) under ${options.base}`);
 	}
 	// GitHub Pages runs Jekyll unless told not to, and Jekyll drops files whose name starts with an underscore.
 	files += await write(destination, '.nojekyll', '', written);
