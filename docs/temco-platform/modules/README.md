@@ -10,6 +10,7 @@ A module is a real VS Code extension inside the application. Namespaces follow t
 | `temco-ui` | where a page of ours opens, and what a command argument means | `temcoUi` | **active** |
 | `temco-store` | the platform's own memory: the catalog database, the selection, the naming rules | `temcoStore` | **active** |
 | `temco-docs` | the registry, pages, checks, editor surfaces, and the writes | `temcoDocs` | **active** |
+| `temco-editor` | the comparison surface: a second Tiptap editor for a page, for judging the shipped one against a quieter one | `temcoEditor` | **active** |
 | `temco-repositories` | the organisation, local copies, the working area, reading a source | `temcoRepositories` | **active** |
 | `temco-ai` | the local runtime and models, the prompts, the panel, drafts and answers | `temcoAi` | **active** |
 | `temco-projects` | projects, sources, outputs, builds | `temcoProjects` | **active** |

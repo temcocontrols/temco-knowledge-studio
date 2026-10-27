@@ -251,8 +251,10 @@ ships because the round trip **is a module with a check**, and nothing reaches i
 |---|---|
 | `src/pageMarkdown.ts` | the whole contract: `toHtml` (`marked`), `toMarkdown` (`turndown` + GFM), `roundTrip` |
 | `webview/page/main.tsx` | the Tiptap editor and its ribbon; it never sees a file, only Markdown over the message port |
+| `webview/page/taskLists.mts` | Tiptap's `TaskList`/`TaskItem`, extended to accept the shape `marked` writes as well as their own |
 | `pageEditor.ts` | `temcoDocs.page`, a `CustomTextEditorProvider` on the same text document the source surface edits |
-| `scripts/check-page.mts` | eleven cases, one of them a whole page that must come back byte-identical |
+| `scripts/check-page.mts` | thirteen cases, one of them a whole page that must come back byte-identical |
+| `scripts/check-task-lists.mts` | the two task-list shapes, through a real editor in jsdom: open, save, and the lists that must not be claimed |
 
 **The rules the conversion needs, each one a case in `check-page`:**
 
@@ -266,6 +268,13 @@ ships because the round trip **is a module with a check**, and nothing reaches i
   strikethrough at all, so it is overridden to `~~`.
 * Underline and highlight have no Markdown spelling. They are kept as the inline HTML Markdown already allows
   (`<u>`, `<mark>`), because a button whose effect disappears on the next save is a lie.
+* **A task list is two shapes, and both are accepted.** `marked` writes `- [x] done` as
+  `<ul><li><input type="checkbox" checked> done</li></ul>`; Tiptap renders it as
+  `ul[data-type="taskList"] > li[data-type="taskItem"]` with the checkbox inside a `<label>`. Without a rule for each
+  direction the checkbox was lost twice — the page opened as a plain bullet list, and an item that did survive saved as
+  `- done`. `webview/page/taskLists.mts` adds the second shape to the parser, and the `taskCheckbox` rule in
+  `pageMarkdown.ts` reads the checkbox wherever it sits. `check-task-lists.mts` drives a real editor over both shapes;
+  `check-page.mts` keeps the serialised result byte-identical.
 * **Alignment and colour are not in the toolbar.** A paragraph's alignment lives in a `style` attribute Markdown cannot
   hold, which is the same reason table widths are not kept. The reader decides both.
 
@@ -282,7 +291,8 @@ writer recognises in the source surface is the strip in the page, drawn from the
 Two questions come back often enough to answer once.
 
 **Tiptap is not the editor; it is the document model.** It owns the schema, the text, the caret, the undo history and the
-HTML — `webview/page/document.tsx`, 315 lines, is the only file in the product that imports `@tiptap/*`. Everything that a
+HTML — `webview/page/document.tsx` (the schema and the editor) and `webview/page/taskLists.mts` (the two task-list
+shapes) are the only files in the product that import `@tiptap/*`. Everything that a
 person sees or presses is ours: `ribbon.tsx` (348 lines), `main.tsx` (509), `outline.tsx`, `find.tsx`, and the round trip
 in `src/pageMarkdown.ts`, which converts HTML ⇄ Markdown with `marked`/`turndown` and has no Tiptap import at all. The
 contract between the two is `PageState` (a snapshot) and `PageActions` (25 named operations), and `reading.tsx` runs the
