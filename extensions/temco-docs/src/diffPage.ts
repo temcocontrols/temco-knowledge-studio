@@ -6,14 +6,13 @@
 // The right-hand side is the editor's buffer, not the file on disk, so an unsaved change is part of the diff — which
 // is what a person pressing *Diff* while writing expects. Nothing is written and nothing is staged.
 
-import { execFile } from 'child_process';
+import { git } from './git';
 import { createHash } from 'crypto';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
 /** Largest file this will ask git for, so a stray binary cannot be read into memory and shown as text. */
-const LIMIT = 32 * 1024 * 1024;
 
 /** The head snapshots written for open diffs, so each one can be removed when its tab closes. */
 const snapshots = new Set<string>();
@@ -128,18 +127,4 @@ async function snapshot(content: string, uri: vscode.Uri, context: vscode.Extens
 	} catch {
 		return undefined;
 	}
-}
-
-/** One git command, its standard output, and a rejection that keeps the message people need to read. */
-function git(cwd: string, args: readonly string[]): Promise<string> {
-	return new Promise<string>((resolve, reject) => {
-		execFile('git', ['-C', cwd, ...args], { maxBuffer: LIMIT, windowsHide: true }, (error, stdout, stderr) => {
-			if (error !== null) {
-				const detail = stderr.trim();
-				reject(new Error(detail.length > 0 ? detail : error.message));
-				return;
-			}
-			resolve(stdout);
-		});
-	});
 }

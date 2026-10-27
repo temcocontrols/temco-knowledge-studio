@@ -27,7 +27,8 @@ const HELP_SCRIPTS = ['build:help:dry'];
 export function registerBuildCommands(
   context: vscode.ExtensionContext,
   roots: () => readonly DocsRoot[],
-  output: vscode.OutputChannel
+  output: vscode.OutputChannel,
+  site: (root: DocsRoot) => Promise<string | undefined> = async () => undefined
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('temcoDocs.buildSite', async () => {
@@ -41,9 +42,10 @@ export function registerBuildCommands(
         scripts: SITE_SCRIPTS,
         missing: 'This repository has no `docs:site` (or `docs:build`) script, so nothing was run.',
         // docfx.json writes here: the generated project names its destination `../dist/docs`.
-        roots: [path.join(root.folder.uri.fsPath, 'dist', 'docs')],
+        roots: [path.join(root.folder.uri.fsPath, 'dist', 'docs'), path.join(root.folder.uri.fsPath, 'dist', 'site')],
         siblingHelpDocs: false,
         pattern: /\.(html|json)$/i,
+        generate: site,
       });
     }),
 
@@ -88,6 +90,14 @@ interface Recipe {
   /** Whether a `HelpDocs` folder beside the repository may be searched too. */
   siblingHelpDocs: boolean;
   pattern: RegExp;
+  /**
+   * The built-in build, used when the project has no script to run.
+   *
+   * A folder of Markdown is a documentation project whether or not it has build tooling; with no `package.json` there is
+   * nothing to invoke, and refusing to publish would mean a project could be written here and never read anywhere else.
+   * Returns the file it wrote, or undefined when it could not build.
+   */
+  generate?: (root: DocsRoot) => Promise<string | undefined>;
 }
 
 /**
@@ -150,15 +160,31 @@ function bytesOf(file: string): number | undefined {
  */
 async function build(context: vscode.ExtensionContext, root: DocsRoot, output: vscode.OutputChannel, recipe: Recipe): Promise<void> {
   const scripts = scriptsOf(root);
-  if (!scripts) {
+  /** Nothing to invoke: the built-in build gets its chance, then the reader is told why nothing happened. */
+  const decline = async (): Promise<void> => {
+    if (recipe.generate !== undefined) {
+      const produced = await recipe.generate(root);
+      if (produced !== undefined) {
+        output.appendLine('');
+        output.appendLine(`[${recipe.label}] built here: ${produced}`);
+        void vscode.window.showInformationMessage(`Temco Docs: ${recipe.label} is ready at ${produced}.`);
+      }
+      // Whatever happened, the generator explained it; a second, vaguer warning on top would only confuse.
+      return;
+    }
     void vscode.window.showWarningMessage(
-      `Temco Docs: ${vscode.workspace.asRelativePath(root.folder.uri)} has no package.json, so there is no build to invoke.`
+      scripts === undefined
+        ? `Temco Docs: ${vscode.workspace.asRelativePath(root.folder.uri)} has no package.json, so there is no build to invoke.`
+        : `Temco Docs: ${recipe.missing}`
     );
+  };
+  if (scripts === undefined) {
+    await decline();
     return;
   }
   const script = recipe.scripts.find((name) => typeof scripts[name] === 'string');
   if (!script) {
-    void vscode.window.showWarningMessage(`Temco Docs: ${recipe.missing}`);
+    await decline();
     return;
   }
 

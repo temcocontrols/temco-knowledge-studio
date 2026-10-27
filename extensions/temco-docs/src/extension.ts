@@ -13,6 +13,7 @@ import { ai, aiInstalled } from './aiModule';
 import { LinkablePage, TemcoDocsApi } from './api';
 import { currentVersion, landImage, setCaption } from './attachments';
 import { registerBuildCommands, registerScriptCommands, scriptsIn } from './builds';
+import { registerExportCommands } from './export';
 import { publishDiagnostics } from './diagnostics';
 import { registerFeedbackCommands } from './feedback';
 import { registerDiffCommand } from './diffPage';
@@ -21,6 +22,9 @@ import { GridEditor, openGrid } from './gridEditor';
 import { registerFormatCommands } from './format';
 import { registerImportCommand } from './importer';
 import { looseByRoot } from './loose';
+import { pagesTarget } from './pages';
+import { registerPublishCommands } from './publish';
+import { generateSite } from './site';
 import { rowSlug } from './ui';
 import { DocsPages } from './docsPages';
 import { DraftView } from './draftView';
@@ -839,7 +843,8 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
         catalog?.close();
       }
     }),
-    vscode.commands.registerCommand('temcoDocs.builds', () => focusView('temcoDocs.section.pipeline')),
+    // The Build Center page: the same command its own Refresh button runs, so opening and refreshing are one thing.
+    vscode.commands.registerCommand('temcoDocs.builds', () => docsPages.builds()),
     vscode.commands.registerCommand('temcoDocs.releases', () => docsPages.releases()),
     // Publishing hands files to a reader: copied into a folder the platform owns, recorded, then opened.
     vscode.commands.registerCommand('temcoDocs.publishRelease', () => publishRelease()),
@@ -991,7 +996,38 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   // What the other modules may look for. The AI module tests this before it offers a row or a menu entry, so an
   // install without it never shows a door that does not open.
   void vscode.commands.executeCommand('setContext', 'temcoDocs.aiInstalled', aiInstalled());
-  registerBuildCommands(context, () => roots, output);
+  registerBuildCommands(context, () => roots, output, async (root) => {
+    // Publishing with no build tooling: the generator in `site.ts` renders the registry's pages itself, so a project
+    // written in this editor can be read in a browser without the project owning a site build.
+    try {
+      // The repository's remote decides the address the site will be served from, so the sitemap can hold real URLs.
+      const target = await pagesTarget(root.folder.uri);
+      const site = await generateSite(root, { project: root.folder.name, base: target?.base });
+      for (const warning of site.warnings) {
+        output.appendLine(`[site] ${warning}`);
+      }
+      if (site.pages === 0) {
+        void vscode.window.showWarningMessage(
+          `Temco Docs: ${root.folder.name} has no pages marked for publishing, so the site is empty.`
+        );
+        return undefined;
+      }
+      output.appendLine(`[site] ${site.pages} page(s), ${site.files} file(s) → ${site.destination.fsPath}`);
+      if (target !== undefined) {
+        output.appendLine(`[site] it will be served from ${target.base}`);
+      }
+      return vscode.workspace.asRelativePath(site.destination);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      output.appendLine(`[site] ${message}`);
+      void vscode.window.showErrorMessage(`Temco Docs: the site could not be built — ${message}`);
+      return undefined;
+    }
+  });
+  // Publishing: the built site, committed to the branch GitHub Pages serves.
+  registerPublishCommands(context, () => roots, output);
+  // Export: the site, a page, or the sources, as something another person can open.
+  registerExportCommands(context, () => roots, output);
   // The repository's own maintenance scripts — the generator, the gates, the media audit, the owed check.
   registerScriptCommands(context, () => roots, output, () => void refresh());
   registerReportCommands(context, () => roots);
