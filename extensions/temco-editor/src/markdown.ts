@@ -1,9 +1,9 @@
-// The Markdown ⇄ HTML round trip a page is saved through, kept identical to the one `temco-docs` saves pages with.
+// The Markdown ⇄ HTML round trip a page is saved through.
 //
-// The file on disk is Markdown and stays Markdown. Both editors write the same bytes for the same document — that is
-// what makes the comparison between them a comparison of the *surface* and not of the file format. The rules are
-// therefore deliberately the same ones `extensions/temco-docs/src/pageMarkdown.ts` applies: no re-wrapping, one space
-// after a bullet, `<u>` and `<mark>` as the inline HTML Markdown already allows.
+// The file on disk is Markdown and stays Markdown: a page is opened by rendering it into the editor, and it is saved by
+// writing the editor back as Markdown. That means the conversion is the contract — if it drops a table, re-indents a
+// bullet or re-wraps a line, every save rewrites text the writer did not touch. It is pure and lives in `src/` beside the
+// rest of the module's logic, so the rule can be checked outside a browser (`scripts/check-page.mts`).
 
 import { Marked } from 'marked';
 import TurndownService from 'turndown';
@@ -89,7 +89,8 @@ export function toHtml(markdown: string): string {
 /** HTML from the editor, back to Markdown for the file. */
 export function toMarkdown(html: string): string {
 	// Tiptap wraps every table in a `<colgroup>`, and the GFM rule only recognises a table whose first child is a row —
-	// with the colgroup left in, a table serialises as raw HTML and the file loses its Markdown.
+	// with the colgroup left in, a table serialises as raw HTML and the file loses its Markdown. Widths are not ours to
+	// keep: the reader decides them.
 	const markdown = turndown.turndown(html.replace(/<colgroup>[\s\S]*?<\/colgroup>/gi, ''));
 	return `${
 		markdown
