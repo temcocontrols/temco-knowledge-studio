@@ -17,7 +17,6 @@ import { rm, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
-import * as sass from 'sass';
 
 const here = fileURLToPath(new URL('..', import.meta.url));
 
@@ -29,17 +28,6 @@ const SURFACES = [
 	{ name: 'grid', entry: join(here, 'webview', 'grid.ts') },
 ];
 
-/** esbuild has no Sass; this compiles a `.scss` import into CSS the bundle can carry. */
-const scss = {
-	name: 'scss',
-	setup(buildApi) {
-		buildApi.onLoad({ filter: /\.scss$/ }, (args) => {
-			const result = sass.compile(args.path, { loadPaths: [join(here, 'webview')], style: 'compressed' });
-			return { contents: result.css, loader: 'css' };
-		});
-	},
-};
-
 const shared = {
 	bundle: true,
 	minify: true,
@@ -48,9 +36,7 @@ const shared = {
 	target: ['chrome120'],
 	sourcemap: false,
 	logLevel: 'warning',
-	jsx: 'automatic',
 	define: { 'process.env.NODE_ENV': '"production"' },
-	plugins: [scss],
 	// Fonts and images a bundled theme references. They land beside the bundle and are loaded by relative URL.
 	loader: {
 		'.woff2': 'file',

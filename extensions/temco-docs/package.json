@@ -22,14 +22,9 @@
   ],
   "main": "./out/extension.js",
   "devDependencies": {
-    "@types/turndown": "^5.0.6",
     "@univerjs/preset-sheets-core": "1.2.0",
     "@univerjs/presets": "1.2.0",
     "esbuild": "0.28.2",
-    "jsdom": "26.1.0",
-    "react": "19.3.1",
-    "react-dom": "19.3.1",
-    "sass": "1.95.1",
     "typescript": "^5.9.3"
   },
   "extensionDependencies": [
