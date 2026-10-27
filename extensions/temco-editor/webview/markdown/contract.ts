@@ -61,6 +61,12 @@ export interface PageActions {
 	/** Replaces the image at `at`; false when there is no image there any more. */
 	replaceImage(at: number, src: string, alt: string): boolean;
 	insertLinkText(title: string, href: string): void;
+	/** How wide the selected picture is — `480`, `50%` — or `undefined` when the selection is not a picture. */
+	imageWidth(): string | undefined;
+	/** Sets it, or clears it with `null` so the picture fills the page again. */
+	setImageWidth(width: string | null): void;
+	/** Deletes whatever is selected: a picture, or a run of text. */
+	deleteSelection(): void;
 	/** Where the selection starts — what an annotation has to replace when the picture comes back. */
 	selectionStart(): number;
 	goto(from: number, to?: number): void;

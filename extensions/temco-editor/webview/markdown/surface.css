@@ -59,19 +59,11 @@ body {
 	flex: none;
 }
 
-.page-surface .ribbon__tabs {
-	padding: 0 8px;
-}
-
-.page-surface .ribbon__tab {
-	padding: 6px 14px 5px;
-	font-size: calc(var(--fs-ui, 13px));
-}
-
 .page-surface .ribbon__panel {
-	padding: 5px 8px;
+	/* One row: no tab strip above it, so the panel is the whole bar. */
+	padding: 6px 10px;
 	gap: 2px;
-	min-height: 44px;
+	min-height: 46px;
 }
 
 /* No captions under the groups: the controls are named by their tooltips and their aria-labels, and the hairline between
@@ -178,7 +170,7 @@ body {
 	outline: none;
 }
 
-/* The document's own typography. These are the nodes Tiptap produces; `page.css` has no classes for them because the
+/* The document's own typography. These are the nodes Tiptap produces; `chrome.css` has no classes for them because the
    rich page draws blocks, not lines. */
 .page-surface__doc h1 { font-size: 26px; line-height: 1.3; margin: 0 0 10px; color: var(--fg-strong); }
 .page-surface__doc h2 { font-size: 20px; margin: 26px 0 8px; color: var(--fg-strong); }
@@ -221,6 +213,41 @@ body {
 	height: auto;
 	border: 1px solid var(--border);
 	border-radius: var(--radius-sm);
+	/* A picture is a block with its own handles, not a link to drag. */
+	cursor: default;
+}
+
+/* A selection has to look like one. ProseMirror puts `ProseMirror-selectednode` on the selected node — a picture, a table
+   — and with no rule the element looks untouched, so a click that did select it reads as a click that did nothing. */
+.page-surface__doc .ProseMirror-selectednode {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+/* The engine's resize handles are absolutely positioned but not drawn: a headless editor leaves the look to the surface.
+   They appear on the selected picture only — handles on every picture are furniture. */
+.page-surface__doc [data-resize-handle] {
+	width: 11px;
+	height: 11px;
+	border: 1px solid var(--editor-bg);
+	border-radius: 50%;
+	background: var(--accent);
+	opacity: 0;
+	transition: opacity 100ms ease-out;
+}
+
+.page-surface__doc .ProseMirror-selectednode [data-resize-handle] {
+	opacity: 1;
+}
+
+.page-surface__doc [data-resize-handle='top-left'],
+.page-surface__doc [data-resize-handle='bottom-right'] {
+	cursor: nwse-resize;
+}
+
+.page-surface__doc [data-resize-handle='top-right'],
+.page-surface__doc [data-resize-handle='bottom-left'] {
+	cursor: nesw-resize;
 }
 
 /* Tables: Tiptap's nodes, the vocabulary's borders. */
@@ -290,6 +317,12 @@ body {
 	height: 24px;
 }
 
+/* The numerals in the picture's menu: a symbol for a number reads worse than the number. */
+.bubble__text {
+	font-size: var(--fs-xs);
+	font-variant-numeric: tabular-nums;
+}
+
 /* The block handle: a grip in the margin, invisible until the pointer is over the block it moves. It is an affordance for
    a mouse, so it never takes focus and never takes space from the text. */
 .drag-handle {
@@ -320,6 +353,14 @@ body {
 }
 
 /* The status strip's own bits. */
+
+/* A footer, not part of the document: it keeps its height when the page is long, and every control in it is centred on
+   the same line — the panel rule from `chrome.css` is the platform's, and a page that is a whole window wants both. */
+.page-surface .md-editor__status {
+	flex: none;
+	align-items: center;
+	min-height: 26px;
+}
 
 .statusbar__spacer {
 	flex: 1 1 auto;

@@ -71,7 +71,7 @@ surface a person actually uses.
 
 | | |
 |---|---|
-| writing | a two-tab ribbon (Home / View) with groups, tiers and an overflow menu; every control's effect is something Markdown can carry |
+| writing | one flat bar — history · block style · lists · marks · blocks · insert — with `⋯` for what the width cannot hold; every control's effect is something Markdown can carry |
 | marks | on the bar **and** in a selection bubble menu, from one list (`MARKS`) so they cannot drift apart |
 | blocks | a drag handle beside the block under the pointer; headings, quotes, code blocks, three list kinds, rules |
 | tables | insert, add/remove rows and columns, delete — with a header row |

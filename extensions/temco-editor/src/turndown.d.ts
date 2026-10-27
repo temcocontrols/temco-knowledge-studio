@@ -6,6 +6,9 @@
 declare module 'turndown' {
 	export interface TurndownNode {
 		textContent: string | null;
+		nodeName: string;
+		getAttribute(name: string): string | null;
+		parentNode?: { childNodes: ArrayLike<TurndownNode> } | null;
 		querySelectorAll(selector: string): ArrayLike<TurndownNode>;
 	}
 

@@ -37,14 +37,6 @@ import { LinkPopover, ListMenu, StyleMenu } from '../shared/menus';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import type { Mark, PageActions, PageState } from './contract';
 
-/** The tabs. Two, because there are only two kinds of thing here: what writes the page, and what reads or hands it off. */
-export type Tab = 'home' | 'view';
-
-const TABS: ReadonlyArray<{ id: Tab; label: string }> = [
-	{ id: 'home', label: 'Home' },
-	{ id: 'view', label: 'View' },
-];
-
 interface ToolProps {
 	label: string;
 	glyph: React.ReactElement;
@@ -81,8 +73,6 @@ export function Tool({ label, glyph, run, active, disabled, shortcut }: ToolProp
 export interface RibbonProps {
 	state: PageState;
 	actions: PageActions;
-	tab: Tab;
-	onTab: (tab: Tab) => void;
 	finding: boolean;
 	outlining: boolean;
 	reading: boolean;
@@ -222,34 +212,19 @@ function MoreMenu({ items }: { items: readonly Item[] }): React.ReactElement {
 	);
 }
 
+/**
+ * The bar draws what it has room for and hands the rest to `⋯`.
+ *
+ * There is one row, as in the engine's own demos: writing on the left in the order a writer reaches for it, and what
+ * reads the page or hands it to another surface pushed to the far right.
+ */
 export function PageRibbon(props: RibbonProps): React.ReactElement {
-	const { state, actions, tab, onTab, reading } = props;
+	const { state, actions, reading } = props;
 	const { ref, density } = useDensity();
-	// Read mode has no editing tabs to offer; the only thing it can do is leave.
-	const tabs = reading ? TABS.filter(entry => entry.id === 'view') : TABS;
-	const shown = reading ? 'view' : tab;
 
-	/** Left/Right/Home/End, the way a tab list is expected to answer — and focus follows the selection. */
-	const onTabKey = (event: React.KeyboardEvent<HTMLDivElement>): void => {
-		if (tabs.length < 2) {
-			return;
-		}
-		const at = tabs.findIndex(entry => entry.id === shown);
-		const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
-		const jump = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1;
-		if (step === 0 && jump < 0) {
-			return;
-		}
-		event.preventDefault();
-		const next = jump >= 0 ? tabs[jump] : tabs[(at + step + tabs.length) % tabs.length];
-		onTab(next.id);
-		document.getElementById(`ribbon-tab-${next.id}`)?.focus();
-	};
-
-	// Everything that writes the page, on one tab: the marks, the block commands and the things you insert are one
-	// activity, and a tab per ~6 controls meant guessing where a control lived. What reads the page or hands it to
-	// another surface is the other tab.
-	const home: GroupSpec[] = [
+	// Everything that writes the page, in the order a writer reaches for it: undo, the block style, the lists, the marks,
+	// the blocks, and what is inserted rather than typed. One row, the way the engine's own demos draw it.
+	const writing: GroupSpec[] = [
 		{
 			id: 'history',
 			items: [
@@ -257,6 +232,8 @@ export function PageRibbon(props: RibbonProps): React.ReactElement {
 				{ key: 'redo', label: 'Redo', glyph: <ArrowClockwise24Regular />, shortcut: 'Ctrl+Y', tier: 1, disabled: !state.canRedo, run: actions.redo },
 			],
 		},
+		{ id: 'style', lead: <StyleMenu state={state} actions={actions} />, items: [] },
+		{ id: 'lists', lead: <ListMenu state={state} actions={actions} />, items: [] },
 		{
 			id: 'text',
 			items: MARKS.map(entry => ({
@@ -269,8 +246,6 @@ export function PageRibbon(props: RibbonProps): React.ReactElement {
 				run: () => actions.toggleMark(entry.mark),
 			})),
 		},
-		{ id: 'style', lead: <StyleMenu state={state} actions={actions} />, items: [] },
-		{ id: 'lists', lead: <ListMenu state={state} actions={actions} />, items: [] },
 		{
 			id: 'blocks',
 			items: [
@@ -290,81 +265,44 @@ export function PageRibbon(props: RibbonProps): React.ReactElement {
 				{ key: 'linkPage', label: 'Link to page', glyph: <DocumentLink24Regular />, tier: 2, run: () => props.onHostAction('linkPage') },
 			],
 		},
-		{
-			// The rail is used while writing, so its toggle sits where the writing happens — and at the far right, because it
-			// is about the view of the page, not part of the sentence.
-			id: 'rail',
-			align: 'end',
-			items: [
-				{ key: 'outline', label: 'Outline', glyph: <List24Regular />, shortcut: 'Ctrl+Alt+O', tier: 1, active: props.outlining, run: props.onOutline },
-			],
-		},
 	];
 
-	const view: GroupSpec[] = [
-		{
-			id: 'navigate',
-			items: [
-				{ key: 'find', label: 'Find', glyph: <Search24Regular />, shortcut: 'Ctrl+F', tier: 1, active: props.finding, run: props.onFind },
-				{ key: 'outline', label: 'Outline', glyph: <List24Regular />, tier: 1, active: props.outlining, run: props.onOutline },
-			],
-		},
-		{
-			id: 'read',
-			// Reading a page is not editing one: the same surface, a second engine behind it, and no caret.
-			items: [
-				{ key: 'read', label: reading ? 'Edit the page' : 'Read the page', glyph: <BookOpen24Regular />, tier: 1, active: reading, run: props.onReading },
-			],
-		},
-		{
-			id: 'handoff',
-			items: [
-				{ key: 'preview', label: 'Preview the page', glyph: <Eye24Regular />, shortcut: 'Ctrl+Alt+P', tier: 1, run: () => props.onHostAction('preview') },
-				{ key: 'diff', label: 'Diff with HEAD', glyph: <BranchCompare24Regular />, shortcut: 'Ctrl+Alt+D', tier: 1, run: () => props.onHostAction('diff') },
-				{ key: 'source', label: 'Open the source', glyph: <Code24Regular />, tier: 2, run: () => props.onHostAction('source') },
-				{ key: 'properties', label: 'Page properties', glyph: <Settings24Regular />, tier: 2, run: () => props.onHostAction('properties') },
-			],
-		},
-	];
+	// What reads the page or hands it to another surface, pushed to the far right and away from the writing controls.
+	const viewing: GroupSpec = {
+		id: 'view',
+		align: 'end',
+		items: [
+			{ key: 'find', label: 'Find', glyph: <Search24Regular />, shortcut: 'Ctrl+F', tier: 1, active: props.finding, run: props.onFind },
+			{ key: 'outline', label: 'Outline', glyph: <List24Regular />, shortcut: 'Ctrl+Alt+O', tier: 1, active: props.outlining, run: props.onOutline },
+			// Reading a page is not editing one: the same surface, no caret, and the writing groups are not drawn.
+			{ key: 'read', label: reading ? 'Edit the page' : 'Read the page', glyph: <BookOpen24Regular />, tier: 1, active: reading, run: props.onReading },
+			{ key: 'preview', label: 'Preview the page', glyph: <Eye24Regular />, shortcut: 'Ctrl+Alt+P', tier: 2, run: () => props.onHostAction('preview') },
+			{ key: 'diff', label: 'Diff with HEAD', glyph: <BranchCompare24Regular />, shortcut: 'Ctrl+Alt+D', tier: 2, run: () => props.onHostAction('diff') },
+			{ key: 'source', label: 'Open the source', glyph: <Code24Regular />, tier: 2, run: () => props.onHostAction('source') },
+			{ key: 'properties', label: 'Page properties', glyph: <Settings24Regular />, tier: 2, run: () => props.onHostAction('properties') },
+		],
+	};
 
-	const groups = shown === 'home' ? home : view;
-	const folded = groups.flatMap(group => split(group.items, density).folded);
+	// Read mode keeps every viewing control, however narrow the tab is: there are only seven, and a `⋯` next to a chip
+	// that says "Reading" would be the only way to leave the mode.
+	const drawnOf = (group: GroupSpec): readonly Item[] =>
+		reading && group.id === 'view' ? group.items : split(group.items, density).drawn;
+	const foldedOf = (group: GroupSpec): readonly Item[] =>
+		reading && group.id === 'view' ? [] : split(group.items, density).folded;
+
+	const groups = reading ? [viewing] : [...writing, viewing];
+	const folded = groups.flatMap(foldedOf);
 
 	return (
 		<div className={`ribbon${density === 'full' ? '' : ' is-compact'}`} ref={ref} data-density={density}>
-			<div className="ribbon__tabs" role="tablist" aria-label="Ribbon" onKeyDown={event => onTabKey(event)}>
-				{tabs.map(entry => (
-					<button
-						key={entry.id}
-						type="button"
-						role="tab"
-						id={`ribbon-tab-${entry.id}`}
-						aria-controls={`ribbon-panel-${entry.id}`}
-						className="ribbon__tab"
-						aria-selected={shown === entry.id}
-						// Only the chosen tab is in the tab order: the arrow keys move between tabs, Tab leaves the bar.
-						tabIndex={shown === entry.id ? 0 : -1}
-						onClick={() => onTab(entry.id)}
-					>
-						{entry.label}
-					</button>
-				))}
+			<div className="ribbon__panel" role="toolbar" aria-label={reading ? 'Reading' : 'Writing'}>
 				{reading ? <span className="ribbon__mode">Reading</span> : null}
-			</div>
-
-			<div
-				className="ribbon__panel"
-				role="tabpanel"
-				id={`ribbon-panel-${shown}`}
-				aria-labelledby={`ribbon-tab-${shown}`}
-				aria-label={shown === 'home' ? 'Writing' : 'View'}
-			>
 				{groups.filter(group => group.align !== 'end').map(group => (
-					<Group key={group.id} lead={group.lead} items={split(group.items, density).drawn} />
+					<Group key={group.id} lead={group.lead} items={drawnOf(group)} />
 				))}
 				{folded.length === 0 ? null : <MoreMenu items={folded} />}
 				{groups.filter(group => group.align === 'end').map(group => (
-					<Group key={group.id} align="end" lead={group.lead} items={split(group.items, density).drawn} />
+					<Group key={group.id} align="end" lead={group.lead} items={drawnOf(group)} />
 				))}
 			</div>
 		</div>

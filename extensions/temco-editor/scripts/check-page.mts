@@ -146,5 +146,55 @@ check('an empty page stays empty', () => {
 	assert.equal(roundTrip(''), '\n');
 });
 
+check('a resized picture keeps its width in the title', () => {
+	// Markdown has no syntax for a width, so the drag writes it into the title — which does survive, both ways. The page
+	// stays one Markdown file, and the size comes back with it.
+	assert.equal(
+		toMarkdown('<p><img src="media/cabinet.png" alt="The cabinet" width="480"></p>'),
+		'![The cabinet](media/cabinet.png "w=480")\n'
+	);
+	assert.equal(roundTrip('![The cabinet](media/cabinet.png "w=480")\n'), '![The cabinet](media/cabinet.png "w=480")\n');
+	assert.equal(roundTrip('![The cabinet](media/cabinet.png "w=50%")\n'), '![The cabinet](media/cabinet.png "w=50%")\n');
+});
+
+check('a picture with no width is written with no title', () => {
+	assert.equal(toMarkdown('<p><img src="media/cabinet.png" alt="The cabinet"></p>'), '![The cabinet](media/cabinet.png)\n');
+});
+
+check('a table cell keeps a picture in the cell it was put in', () => {
+	// A cell is one line, and GFM's rule passed the content through untouched — so a picture followed by a paragraph, or a
+	// caption with a `|` in it, split the row into extra lines and columns. The page then had no table at all: lines of
+	// pipes with raw `<img>` between them, which is what a preview shows as stray characters.
+	const table = (cell: string): string =>
+		`<table><tbody><tr><th><p>Step</p></th><th><p>Picture</p></th></tr><tr><td><p>1</p></td>${cell}</tr></tbody></table>`;
+
+	const clean = toMarkdown(table('<td><img src="media/x.png" alt="cabinet"></td>'));
+	assert.equal(clean, '| Step | Picture |\n| --- | --- |\n| 1 | ![cabinet](media/x.png) |\n');
+
+	// A block after the picture, a caption that is itself a table separator, and the blocks GFM has no way to put in a
+	// cell at all.
+	for (const cell of [
+		'<td><img src="media/x.png" alt="cabinet"><p>after</p></td>',
+		'<td><p>before</p><img src="media/x.png" alt="a | b"><p>after</p></td>',
+		'<td><ul><li><p>one</p></li><li><p>two</p></li></ul></td>',
+		'<td><h3><p>t</p></h3></td>',
+	]) {
+		const written = toMarkdown(table(cell));
+		assert.equal(written.includes('<img'), false, `raw HTML reached the file: ${JSON.stringify(written)}`);
+		// Three rows: the heading, the border, and the one body row — nothing spilled onto a line of its own.
+		assert.equal(written.split('\n').filter(line => line.startsWith('|')).length, 3, `the row split: ${JSON.stringify(written)}`);
+		// Two cells, so three unescaped pipes: a `|` in a caption escapes to `\|` and stays inside its cell.
+		const body = written.split('\n')[2];
+		assert.equal((body.match(/(?<!\\)\|/gu) ?? []).length, 3, `a pipe in the caption became a column: ${JSON.stringify(body)}`);
+		assert.equal(roundTrip(written), written, `the table did not survive its own round trip: ${JSON.stringify(written)}`);
+	}
+
+	// Blocks that meet inside a cell are joined with a space, not glued: `![x](y)after` is not what the writer typed.
+	assert.equal(
+		toMarkdown(table('<td><img src="media/x.png" alt="cabinet"><p>after</p></td>')),
+		'| Step | Picture |\n| --- | --- |\n| 1 | ![cabinet](media/x.png) after |\n'
+	);
+});
+
 console.log(failures === 0 ? '\nAll page round-trip checks passed.' : `\n${failures} page round-trip check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

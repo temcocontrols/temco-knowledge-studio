@@ -10,7 +10,7 @@
 import { EditorContent, useEditor, type Editor, type Extensions } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
-import Image from '@tiptap/extension-image';
+import { ImageWithSize } from './image';
 import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table/row';
 import { TableHeader } from '@tiptap/extension-table/header';
@@ -211,6 +211,18 @@ export function actionsFor(editor: Editor): PageActions {
 		insertLinkText: (title, href) => {
 			chain().insertContent({ type: 'text', text: title, marks: [{ type: 'link', attrs: { href } }] }).run();
 		},
+		imageWidth: () => {
+			const width = editor.getAttributes('image').width;
+			return typeof width === 'string' || typeof width === 'number' ? String(width) : undefined;
+		},
+		setImageWidth: width => {
+			// Only ever on a selected picture: `updateAttributes` finds the node the selection is on, and does nothing when
+			// there is none — which is what a `null` width means here, "back to the width of the page".
+			editor.chain().focus().updateAttributes('image', { width }).run();
+		},
+		deleteSelection: () => {
+			editor.chain().focus().deleteSelection().run();
+		},
 		selectionStart: () => editor.state.selection.from,
 		goto: (from, to) => {
 			chain().setTextSelection({ from, to: to ?? from }).scrollIntoView().run();
@@ -264,7 +276,9 @@ function extensions(): Extensions {
 		}),
 		Underline,
 		Link.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noopener' } }),
-		Image.configure({ inline: false }),
+		// The picture is a block with handles: dragging one writes a width, and `image.ts` keeps that width in the file.
+		// A picture smaller than 120 px is a thumbnail nobody can read, so that is the floor the drag stops at.
+		ImageWithSize.configure({ inline: false, resize: { enabled: true, minWidth: 120 } }),
 		Table.configure({ resizable: true }),
 		TableRow,
 		TableHeader,

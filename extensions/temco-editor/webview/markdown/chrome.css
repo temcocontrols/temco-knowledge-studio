@@ -6,11 +6,27 @@
  * The page chrome: the colour roles, the reset, the type scale, and the controls the ribbon and the selection menu are
  * built from.
  *
- * Lifted from `extensions/temco-ui/media/page.css`: lines 17 to 470 of it, which is the tokens, the reset, `.page-head`,
- * `.btn`, `.view` and `.ribbon`, ending where that file starts its layout utilities. This module keeps its own copy
- * rather than reaching across a module boundary for a stylesheet, so the editor bundle builds from this folder alone.
- * A platform rule a page surface starts to need belongs here too; `scripts/check-surface.mts` names every class the
- * surface draws, so a rule that goes missing is a failure rather than a quiet re-style.
+ * Lifted from `extensions/temco-ui/media/page.css` (its tokens through the end of its ribbon section). This module
+ * keeps its own copy rather than reaching across a module boundary for a stylesheet, so the editor bundle builds from
+ * this folder alone. It is the subset the page surface actually draws; a platform rule a page surface starts to need
+ * belongs here too.
+ */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Temco Controls. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+/*
+ * The page vocabulary — what a module draws inside a webview tab.
+ *
+ * The design is the mock site's (`docs/mock/css/views.css`), and this file is that vocabulary
+ * shipped to the product: the same class names, the same shapes, so a page can be designed in the
+ * mock and built here without being re-designed. What changes is the colour roles: the mock owns
+ * literal colours, the product reads the theme the user chose. The block below is the whole of
+ * that difference — after it, every rule in this file means the same thing in both hosts.
+ *
+ * Sizes `--fs-*` follow the workbench font, so a person who raised the editor font size gets a
+ * larger page rather than a page that ignores them.
  */
 
 :root {
@@ -399,37 +415,6 @@ button.link:hover {
 	overflow: hidden;
 }
 
-.ribbon__tabs {
-	display: flex;
-	gap: 2px;
-	padding: 0 6px;
-	border-bottom: 1px solid var(--border);
-}
-
-.ribbon__tab {
-	border: 0;
-	background: none;
-	padding: 5px 12px 4px;
-	border-bottom: 2px solid transparent;
-	color: var(--fg-muted);
-	font-size: var(--fs-sm);
-	cursor: pointer;
-}
-
-.ribbon__tab:hover {
-	color: var(--fg);
-}
-
-.ribbon__tab[aria-selected='true'] {
-	color: var(--fg-strong);
-	border-bottom-color: var(--accent);
-}
-
-.ribbon__tab:focus-visible {
-	outline: 1px solid var(--vscode-focusBorder, var(--accent));
-	outline-offset: -2px;
-}
-
 .ribbon__panel {
 	display: flex;
 	align-items: flex-start;
@@ -465,3 +450,46 @@ button.link:hover {
 	pointer-events: none;
 }
 
+/* ---------------------------------------------------------------- the strip under the page */
+
+/* The row of facts at the bottom of the surface: the word count, the state of the save, the table controls, the zoom.
+   Ported from the same file as the rest of this sheet — it is the platform's name for that row, and the mount writes it. */
+.md-editor__status {
+	display: flex;
+	gap: 14px;
+	flex-wrap: wrap;
+	padding: 4px 10px;
+	border-top: 1px solid var(--border);
+	background: var(--bg-card);
+	color: var(--fg-subtle);
+	font-size: 11px;
+}
+
+/* A state said in a pill rather than in a sentence: saved, writing, stale. */
+.badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 1px 8px;
+	border-radius: 10px;
+	font-size: var(--fs-xs);
+	line-height: 17px;
+	white-space: nowrap;
+	background: var(--badge-bg);
+	color: var(--badge-fg);
+}
+
+.badge--ok {
+	background: color-mix(in srgb, var(--ok) 18%, transparent);
+	color: var(--ok);
+}
+
+.badge--warn {
+	background: color-mix(in srgb, var(--warn) 18%, transparent);
+	color: var(--warn);
+}
+
+/* The compact form of a text field, for a control that sits in a row of controls. */
+.input--sm {
+	height: 26px;
+}

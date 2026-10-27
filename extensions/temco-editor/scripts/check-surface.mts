@@ -10,7 +10,8 @@
 // Run with `npm run check-surface`, after `npm run compile && npm run build-webview`.
 
 import assert from 'node:assert/strict';
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 
@@ -104,6 +105,55 @@ async function drawn(tryIt: () => boolean, what: string, timeout = 5000): Promis
 
 const root = window.document.getElementById('root');
 
+/**
+ * Every class the surface writes, against every class these stylesheets define.
+ *
+ * This is the check that would have caught the regression it was written after: when the surface stopped importing the
+ * platform stylesheet and took a copy of its chrome instead, `badge`, `input--sm` and the status row lived *past* the
+ * section that was copied. Nothing failed — the mount simply drew "0 words" and its badge with no gap and no pill, and a
+ * missing class is invisible to a compiler, to a type and to a DOM check that does not know what it should look like.
+ */
+function unstyled(): string[] {
+	const sources: string[] = [];
+	const walk = (folder: string): void => {
+		for (const entry of readdirSync(fileURLToPath(new URL(`../${folder}`, import.meta.url)), { withFileTypes: true })) {
+			const path = join(folder, entry.name);
+			if (entry.isDirectory()) {
+				walk(path);
+			} else if (entry.name.endsWith('.tsx')) {
+				sources.push(path);
+			}
+		}
+	};
+	walk('webview');
+
+	const used = new Set<string>();
+	for (const file of sources) {
+		const text = readFileSync(fileURLToPath(new URL(`../${file}`, import.meta.url)), 'utf8');
+		// `className="a b"` and `className={cond ? 'a b' : 'c d'}` — the whole expression, so a class built inside a
+		// template or a conditional is still seen.
+		for (const match of text.matchAll(/className=(?:"([^"]*)"|\{([\s\S]*?)\}\s)/g)) {
+			for (const token of (match[1] ?? match[2] ?? '').matchAll(/(?<![\w-])([a-z][a-z0-9]*(?:[-_]{1,2}[a-z0-9]+)+)/g)) {
+				used.add(token[1]);
+			}
+		}
+	}
+
+	const defined = new Set<string>();
+	for (const file of ['webview/markdown/chrome.css', 'webview/markdown/surface.css', 'webview/shared/surface-controls.css']) {
+		for (const match of readFileSync(fileURLToPath(new URL(`../${file}`, import.meta.url)), 'utf8').matchAll(/\.([a-zA-Z][a-zA-Z0-9_-]*)/g)) {
+			defined.add(match[1]);
+		}
+	}
+
+	return [...used].filter(name => !defined.has(name)).sort();
+}
+
+await check('every class the surface writes has a rule', () => {
+	assert.deepEqual(unstyled(), [], 'classes with no rule in chrome.css, surface.css or surface-controls.css');
+});
+
+
 /** The control the surface draws for `label`: a `Tool` names itself with `aria-label`, a tab with its own text. */
 function button(label: string): HTMLElement {
 	const byLabel = root?.querySelector<HTMLElement>(`[aria-label="${label}"]`) ?? null;
@@ -131,6 +181,9 @@ await check('the ribbon, the status strip and the engine furniture are there', a
 	await drawn(() => root?.querySelector('.ribbon') !== null, 'the ribbon to be drawn');
 	assert.equal((root?.querySelectorAll('.ribbon .btn').length ?? 0) > 5, true, 'the ribbon has no controls');
 	assert.equal(/\d+ words/.test(root?.textContent ?? ''), true, 'no word count');
+	// One row: the bar is a toolbar, not a tab strip with a panel under it.
+	assert.equal(root?.querySelectorAll('[role="toolbar"]').length, 1, 'the bar is not a single toolbar');
+	assert.equal(root?.querySelector('[role="tablist"]') === null, true, 'the tab strip is still there');
 	// The block handle and the selection menu are the engine's own: mounted by `actions.node()`, not by the ribbon.
 	assert.ok(root?.querySelector('.drag-handle'), 'the block handle was not mounted');
 	assert.equal(root?.querySelector('.bubble') === null, true, 'the selection menu showed with nothing selected');
@@ -169,13 +222,14 @@ await check('an edit is written back as Markdown, once', async () => {
 });
 
 await check('Read mode hides the editor and keeps the page', async () => {
-	// Read mode lives on the View tab, so the tab has to be opened before its control exists.
-	button('View').click();
-	await drawn(() => root?.querySelector('[aria-label="Read the page"]') !== null, 'the read control');
 	button('Read the page').click();
 	await drawn(() => root?.querySelector('.page-surface__doc--reading') !== null, 'Read mode to appear');
 	assert.equal(root?.querySelector('[contenteditable]') !== null, false, 'the editor is still there');
 	assert.equal(root?.querySelector('.page-surface__doc--reading h1')?.textContent, 'Wiring a T3000 controller');
+	// The writing groups are not drawn in this mode — not disabled, absent — and the bar says which mode it is in.
+	assert.equal(root?.querySelector('[aria-label="Writing"]') === null, true, 'the writing bar is still there');
+	assert.equal(root?.querySelector('[role="toolbar"][aria-label="Reading"]') !== null, true, 'no reading bar');
+	assert.equal(root?.textContent?.includes('Reading'), true, 'no mode chip');
 });
 
 await check('leaving Read mode gives the editor back with the same words', async () => {

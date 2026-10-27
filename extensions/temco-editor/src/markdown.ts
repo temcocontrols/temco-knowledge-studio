@@ -15,6 +15,7 @@ const marked = new Marked({ gfm: true, breaks: false });
 interface RuleNode {
 	nodeName: string;
 	parentElement?: { closest(selectors: string): unknown } | null;
+	parentNode?: { childNodes: ArrayLike<RuleNode> } | null;
 	getAttribute?(name: string): string | null;
 }
 
@@ -78,8 +79,68 @@ turndown.addRule('noWrapping', {
 // item's words in is the same exception one level out — it is a wrapper the editor adds, not a block Markdown has.
 turndown.addRule('tightBlock', {
 	filter: node => (node.nodeName === 'P' || node.nodeName === 'DIV') && node.parentElement?.closest('li, td, th') !== null,
-	replacement: content => content,
+	// Inside a cell the blocks are joined with a space: a cell is one line, and `![x](y)after` is not what was written.
+	replacement: (content, node) => (node.parentElement?.closest('td, th') !== null ? ` ${content}` : content),
 });
+
+// A picture's width has no Markdown syntax, so it rides in the title: `![caption](media/a.png "w=480")`. `marked` reads
+// that title back and `engine/tiptap/image.ts` turns it into the width the drag produced, so a resized picture keeps its
+// size in the file rather than only in the session that resized it. With no width this writes exactly what the default
+// rule would.
+turndown.addRule('imageWithWidth', {
+	filter: 'img',
+	replacement: (_content, node) => {
+		const alt = node.getAttribute?.('alt') ?? '';
+		const src = node.getAttribute?.('src') ?? '';
+		const width = node.getAttribute?.('width');
+		const carried = width !== null && width !== undefined && width !== '' ? `w=${width}` : (node.getAttribute?.('title') ?? '');
+		return `![${alt}](${src}${carried === '' ? '' : ` "${carried}"`})`;
+	},
+});
+
+// A table cell is one line, and GFM's rule does not say so: it hands a cell's content through untouched, so a newline in
+// it ends the row and a `|` in it starts a new column. Both corrupt the page silently — the row becomes two lines of
+// pipes, and what used to be a table is a paragraph of `|` and raw `<img>`. A cell holds inline content by definition
+// (no fence, no list, no second paragraph), so everything that would break that is collapsed here: pipes escaped, runs of
+// whitespace and newlines flattened to one space.
+turndown.addRule('tableCell', {
+	filter: ['th', 'td'],
+	replacement: (content, node) => {
+		const siblings = node.parentNode?.childNodes;
+		let index = 0;
+		if (siblings !== undefined && siblings !== null) {
+			for (let at = 0; at < siblings.length; at += 1) {
+				if (siblings[at] === node) {
+					index = at;
+					break;
+				}
+			}
+		}
+		// The same shape `turndown-plugin-gfm` builds, so its row and border rules still find their cells.
+		return `${index === 0 ? '| ' : ' '}${oneLine(content)} |`;
+	},
+});
+
+/** A cell's content, made safe for a Markdown table row. */
+function oneLine(content: string): string {
+	return content
+		// GFM has one line per row and no way to write a list inside a cell, so each item's marker becomes a separator:
+		// `-   one` and `-   two` read `one; two` rather than a run of dashes that no round trip reproduces.
+		.replace(/^\s*[-*+]\s+/gmu, '; ')
+		.replace(/^\s*\d+[.)]\s+/gmu, '; ')
+		// A heading or a quote is the same problem one level up: GFM has no block inside a cell, so the marker goes and the
+		// words stay.
+		.replace(/^\s*#{1,6}\s+/gmu, '')
+		.replace(/^\s*>\s?/gmu, '')
+		.replace(/\\\|/gu, '\u0000')
+		.replace(/\|/gu, '\\|')
+		.replace(/\u0000/gu, '\\|')
+		.replace(/\s*\n+\s*/gu, ' ')
+		.replace(/^;\s*/u, '')
+		.replace(/\s+;/gu, ';')
+		.replace(/\s{2,}/gu, ' ')
+		.trim();
+}
 
 /** Markdown in, HTML for the editor. */
 export function toHtml(markdown: string): string {

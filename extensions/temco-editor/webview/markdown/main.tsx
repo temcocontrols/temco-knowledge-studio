@@ -1,7 +1,7 @@
 // The mount: how a page gets here, how it leaves, and the few things around the bar that are not the bar.
 //
 // It knows no Tiptap and no command names. It knows the host protocol (`ready`, `set`, `change`, the five actions), it
-// holds the tab that is open, and it draws the document, the find bar and the outline rail. The engine is behind
+// holds the surface's own state, and it draws the document, the find bar and the outline rail. The engine is behind
 // `engine/tiptap`; the surface's own vocabulary is `./contract`; the bar is behind `./ribbon`.
 //
 // The file is the source of truth: what arrives is Markdown, what leaves is Markdown, and the round trip is
@@ -24,7 +24,7 @@ import { toHtml, toMarkdown } from '../../src/markdown';
 import type { Match, PageActions, PageState } from './contract';
 import { actionsFor, headingsIn, matchesIn, stateOf, usePageDocument } from './engine/tiptap';
 import { staticNode } from './reading';
-import { PageRibbon, type Tab } from './ribbon';
+import { PageRibbon } from './ribbon';
 
 interface Host {
 	postMessage(message: unknown): void;
@@ -128,7 +128,6 @@ const EMPTY: PageState = {
 function Surface(): React.ReactElement {
 	const [state, setState] = React.useState<PageState>(EMPTY);
 	const [settled, setSettled] = React.useState(true);
-	const [tab, setTab] = React.useState<Tab>('home');
 	const [zoom, setZoom] = React.useState(100);
 	const [finding, setFinding] = React.useState(false);
 	const [query, setQuery] = React.useState('');
@@ -433,8 +432,6 @@ function Surface(): React.ReactElement {
 			<PageRibbon
 				state={state}
 				actions={actions}
-				tab={tab}
-				onTab={setTab}
 				finding={finding}
 				outlining={outlining}
 				reading={reading}
