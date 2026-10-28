@@ -25,24 +25,6 @@ export const HELP_ABOUT_VIEW_TYPE = 'temcoWorkbench.help.about';
 /** The setting the welcome page's checkbox writes. */
 const START_OPEN = 'start.open';
 
-/**
- * What only the welcome page changes about the shared page shell.
- *
- * The title band is the front page's one piece of colour, so it runs to the edges of the tab instead of stopping at
- * the content's side margin, and the content sits closer to those edges than a page that is read rather than
- * scanned needs to. (The introduction's full width is `descWide`, which belongs to the title block itself.)
- */
-const WELCOME_CSS = `
-.view__inner {
-	padding: 0 4px 32px;
-}
-
-.az-wash {
-	margin: 0 -4px;
-	padding: var(--sp-5) 4px var(--sp-4);
-}
-`;
-
 /* ------------------------------------------------------------------ page vocabulary */
 
 interface ActionOptions {
@@ -111,7 +93,7 @@ export class HelpPages {
 	) { }
 
 	welcome(): void {
-		this.open('welcome', HELP_WELCOME_VIEW_TYPE, 'Welcome', this.welcomeBody(), WELCOME_CSS);
+		this.open('welcome', HELP_WELCOME_VIEW_TYPE, 'Welcome', this.welcomeBody());
 	}
 
 	home(): void {
@@ -147,7 +129,7 @@ export class HelpPages {
 	refresh(): void {
 		const panel = this.panels.get('welcome');
 		if (panel) {
-			panel.webview.html = page(this.welcomeBody(), { title: 'Welcome', script: commandScript, extraCss: WELCOME_CSS });
+			panel.webview.html = page(this.welcomeBody(), { title: 'Welcome', script: commandScript });
 		}
 	}
 
@@ -199,11 +181,10 @@ export class HelpPages {
 		this.panels.clear();
 	}
 
-	private open(key: string, viewType: string, title: string, body: string, extraCss?: string): void {
+	private open(key: string, viewType: string, title: string, body: string): void {
 		const html = page(body, {
 			title,
-			script: key === 'issue' ? commandScript + ISSUE_SCRIPT : commandScript,
-			extraCss
+			script: key === 'issue' ? commandScript + ISSUE_SCRIPT : commandScript
 		});
 		const existing = this.panels.get(key);
 		if (existing) {

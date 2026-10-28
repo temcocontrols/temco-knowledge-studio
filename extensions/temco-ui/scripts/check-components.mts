@@ -37,7 +37,7 @@ try {
 	rmSync(staging, { recursive: true, force: true });
 }
 
-const { callout, cards, code, entryRow, escapeHtml, floatAction, hero, numbers, optionCards, questions, section } = components;
+const { actionBar, callout, cards, checkCards, choiceCards, code, entryRow, escapeHtml, floatAction, formFields, hero, numbers, optionCards, questions, section } = components;
 
 const failures: string[] = [];
 const check = (condition: boolean, message: string): void => {
@@ -92,6 +92,10 @@ const rendered = [
 	cards([{ title: dangerous, desc: dangerous, command: dangerous }], { dense: true }),
 	cards([{ title: dangerous, desc: dangerous, note: dangerous, progress: 0.4, command: dangerous }]),
 	entryRow({ mark: 'plus', title: dangerous, meta: dangerous, command: dangerous, go: dangerous }),
+	choiceCards({ items: [{ value: dangerous, title: dangerous, desc: dangerous, mark: 'plus', tag: dangerous }], selected: dangerous }),
+	formFields([{ label: dangerous, control: '<input class="az-input" value="kept">', hint: dangerous }]),
+	checkCards({ field: 'targets', items: [{ value: dangerous, label: dangerous, note: dangerous, mark: 'plus' }], ticked: [dangerous] }),
+	actionBar({ summary: dangerous, summaryId: 'foot-summary', actions: '<button class="az-btn">kept</button>' }),
 	code({ language: dangerous, lines: [{ text: dangerous }] }),
 	floatAction({ label: dangerous, command: dangerous, mark: 'sparkle' })
 ].join('\n');
@@ -153,6 +157,32 @@ check(cards([{ mark: 'plus', title: 'T', desc: 'd' }]).includes('class="az-card_
 const entry = entryRow({ mark: 'plus', title: 'T', meta: 'm', command: 'c.d' });
 check(entry.includes('class="az-entry__icon"') && entry.includes('class="az-entry__go"'), 'an entry must draw its mark and its way in');
 check(!entryRow({ title: 'T' }).includes('az-entry__go'), 'an entry with no command must not draw a way in');
+
+// A choice is a card that states which of them is on, and carries the value the page posts.
+const choiceHtml = choiceCards({
+	items: [{ value: 'a', title: 'A', desc: 'a' }, { value: 'b', title: 'B', desc: 'b' }],
+	selected: 'b'
+});
+check((choiceHtml.match(/"az-choice is-on"/g) ?? []).length === 1, 'only the chosen choice may be drawn as on');
+check(choiceHtml.includes('data-type="b"') && choiceHtml.includes('aria-selected="true"'), 'a choice must carry its value and its state');
+check(choiceCards({ items: [{ value: 'a', title: 'A', desc: 'a' }], attribute: 'data-kind' }).includes('data-kind="a"'), 'a choice must be able to name the attribute it writes its value in');
+
+// A form row is a label, the control it was given, and the hint under it; a wide one spans both columns.
+const formHtml = formFields([
+	{ label: 'Name', control: '<input class="az-input">', hint: 'a note' },
+	{ label: 'Wide', control: '<select></select>', wide: true }
+]);
+check((formHtml.match(/class="az-form__field"/g) ?? []).length === 1, 'a field must be one column unless it says otherwise');
+check(formHtml.includes('class="az-form__field az-form__field--wide"'), 'a wide field must span the row');
+
+// A tick card opens on the ticks it was given, and posts its own field.
+const checksHtml = checkCards({ field: 'targets', items: [{ value: 'web', label: 'Web', note: 'the site' }], ticked: ['web'] });
+check(checksHtml.includes('data-field="targets"') && checksHtml.includes('checked'), 'a tick card must post its field and open ticked');
+check(!checkCards({ field: 'targets', items: [{ value: 'web', label: 'Web', note: 'the site' }] }).includes('checked'), 'an unticked card must not open ticked');
+
+// The foot of a form names the line the page writes, and holds the buttons it was given.
+const footHtml = actionBar({ summaryId: 'foot-summary', actions: '<button class="az-btn">ok</button>' });
+check(footHtml.includes('id="foot-summary"') && footHtml.includes('class="az-actions__buttons"'), 'the foot must name its summary and hold its buttons');
 
 // The number row and the callout.
 check(numbers([{ value: '1', label: 'l' }]).includes('class="az-number__value"'), 'a figure must render its value');
@@ -235,4 +265,4 @@ if (failures.length > 0) {
 	process.exit(1);
 }
 
-console.log(`10 components, ${[...new Set(rendered.split('\n').flatMap(classesIn))].length} classes drawn, one wash, sample copies back intact.`);
+console.log(`14 components, ${[...new Set(rendered.split('\n').flatMap(classesIn))].length} classes drawn, one wash, sample copies back intact.`);

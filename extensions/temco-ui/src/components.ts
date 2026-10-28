@@ -228,6 +228,98 @@ export function entryRow(options: EntryRowOptions): string {
 	return `<div class="az-entry${plain ? '' : ' az-entry--action'}"${attr}>${mark}<div class="az-entry__main"><span class="az-entry__title">${escapeHtml(options.title)}</span>${meta}</div>${go}</div>`;
 }
 
+/** One of a set of mutually exclusive starting points, drawn as a card you choose. */
+export interface ChoiceCard {
+	value: string;
+	title: string;
+	desc: string;
+	mark?: string;
+	/** A small brand label above the title, e.g. `Recommended`. */
+	tag?: string;
+}
+
+export interface ChoiceCardsOptions {
+	items: readonly ChoiceCard[];
+	/** The value drawn as chosen. */
+	selected?: string;
+	/** The attribute the chosen value is written in, e.g. `data-type`. */
+	attribute?: string;
+}
+
+/**
+ * Mutually exclusive choices, as cards.
+ *
+ * A rail of them is navigation and belongs to a settings surface with many entries; three starting points are one
+ * decision, and a decision drawn as cards can be compared in a glance. The value travels in the attribute the page
+ * names, the chosen one carries `is-on`, and the page's own script does the switching.
+ */
+export function choiceCards(options: ChoiceCardsOptions): string {
+	const attribute = options.attribute ?? 'data-type';
+	return `<div class="az-choices" role="listbox">${options.items.map(item => {
+		const on = item.value === options.selected;
+		const chip = item.mark === undefined ? '' : `<span class="az-choice__icon">${icon(item.mark)}</span>`;
+		const tag = item.tag === undefined ? '' : `<span class="az-choice__tag">${escapeHtml(item.tag)}</span>`;
+		return `<button type="button" class="az-choice${on ? ' is-on' : ''}" role="option" aria-selected="${on}" ${attribute}="${escapeHtml(item.value)}" data-title="${escapeHtml(item.title)}">${chip}<span class="az-choice__main">${tag}<span class="az-choice__title">${escapeHtml(item.title)}</span><span class="az-choice__desc">${escapeHtml(item.desc)}</span></span><span class="az-choice__check">${icon('check', 'icon--sm')}</span></button>`;
+	}).join('')}</div>`;
+}
+
+/** One field of a form: a label, the control, and the sentence under it. */
+export interface FormField {
+	label: string;
+	/** The pre-rendered control: an input, a select, a textarea. */
+	control: string;
+	hint?: string;
+	/** Takes the whole row instead of one column. */
+	wide?: boolean;
+}
+
+/** A form's fields: two columns, the label above the control, the hint under it. */
+export function formFields(fields: readonly FormField[]): string {
+	return `<div class="az-form">${fields.map(field => `<div class="az-form__field${field.wide === true ? ' az-form__field--wide' : ''}"><span class="az-form__label">${escapeHtml(field.label)}</span>${field.control}${field.hint === undefined ? '' : `<span class="az-form__hint">${escapeHtml(field.hint)}</span>`}</div>`).join('')}</div>`;
+}
+
+/** One thing a build or a project includes, drawn as a card that carries its own tick. */
+export interface CheckCard {
+	value: string;
+	label: string;
+	note: string;
+	mark?: string;
+}
+
+export interface CheckCardsOptions {
+	/** The field the ticks are posted in, e.g. `targets`. */
+	field: string;
+	items: readonly CheckCard[];
+	ticked?: readonly string[];
+}
+
+/**
+ * Several things that can each be on or off, as cards.
+ *
+ * A column of ticks has to be read line by line to learn its state; a card carries the state in its border, its wash
+ * and its check, so the question is answered by a glance. The input stays a real checkbox, hidden but focusable, so a
+ * click, a tap and the space bar all do the same thing.
+ */
+export function checkCards(options: CheckCardsOptions): string {
+	const ticked = options.ticked ?? [];
+	return `<div class="az-checks">${options.items.map(item => `<label class="az-check"><input type="checkbox" data-field="${escapeHtml(options.field)}" data-multi value="${escapeHtml(item.value)}"${ticked.includes(item.value) ? ' checked' : ''}><span class="az-check__icon">${icon(item.mark ?? 'check')}</span><span class="az-check__main"><span class="az-check__label">${escapeHtml(item.label)}</span><span class="az-check__note">${escapeHtml(item.note)}</span></span><span class="az-check__tick">${icon('check', 'icon--sm')}</span></label>`).join('')}</div>`;
+}
+
+export interface ActionBarOptions {
+	/** The line at the left: what will happen, in one sentence. */
+	summary?: string;
+	/** The id a page's script writes that line into. */
+	summaryId?: string;
+	/** Pre-rendered buttons, right-aligned. */
+	actions: string;
+}
+
+/** The foot of a form: what will happen, and the one button that makes it happen. */
+export function actionBar(options: ActionBarOptions): string {
+	const id = options.summaryId === undefined ? '' : ` id="${escapeHtml(options.summaryId)}"`;
+	return `<div class="az-actions"><span class="az-actions__summary"${id}>${escapeHtml(options.summary ?? '')}</span><span class="az-actions__buttons">${options.actions}</span></div>`;
+}
+
 /** One line of a code card, and the tone the tokens on it are drawn in. */
 export interface CodeLine {
 	text: string;

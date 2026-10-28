@@ -20,6 +20,38 @@ interface UiApi {
 	commandScript: string;
 	/** Runs one of those messages: `{ command, args }`. */
 	runCommand(message: { command?: unknown; args?: unknown }): void;
+	/** The title block: breadcrumb, the page's only h1, its mark, and one line of why. */
+	hero(options: {
+		crumbs?: string;
+		eyebrow?: string;
+		title: string;
+		mark?: string;
+		desc?: string;
+		descWide?: boolean;
+		search?: { label: string; command: string; hint?: string };
+		actions?: readonly { label: string; command: string; args?: unknown; mark?: string; kind?: 'primary' | 'link' }[];
+		hero?: boolean;
+	}): string;
+	/** A section heading: the h2 a page's parts are told apart by. */
+	section(options: { title: string; desc?: string; actions?: string }): string;
+	/** The one tinted callout a page is allowed. */
+	callout(options: { title: string; desc: string; mark?: string; actions?: string }): string;
+	/** Mutually exclusive starting points, drawn as cards. */
+	choiceCards(options: {
+		items: readonly { value: string; title: string; desc: string; mark?: string; tag?: string }[];
+		selected?: string;
+		attribute?: string;
+	}): string;
+	/** A form's fields: two columns, a label above each control, the hint under it. */
+	formFields(fields: readonly { label: string; control: string; hint?: string; wide?: boolean }[]): string;
+	/** What a build or a project includes, as cards that carry their own tick. */
+	checkCards(options: {
+		field: string;
+		items: readonly { value: string; label: string; note: string; mark?: string }[];
+		ticked?: readonly string[];
+	}): string;
+	/** The foot of a form: a summary line and its buttons. */
+	actionBar(options: { summary?: string; summaryId?: string; actions: string }): string;
 }
 
 const extension = vscode.extensions.getExtension<UiApi>(UI_EXTENSION_ID);
@@ -52,6 +84,27 @@ export const commandScript = ui.commandScript;
 
 /** Runs one of those messages — what a page's `onDidReceiveMessage` is. */
 export const runCommand = ui.runCommand;
+
+/** The title block at the top of a page. */
+export const hero = ui.hero;
+
+/** A section heading. */
+export const section = ui.section;
+
+/** The one tinted callout a page is allowed. */
+export const callout = ui.callout;
+
+/** Mutually exclusive starting points, drawn as cards. */
+export const choiceCards = ui.choiceCards;
+
+/** A form's fields, two columns with a label and a hint. */
+export const formFields = ui.formFields;
+
+/** What a build or a project includes, as cards that carry their own tick. */
+export const checkCards = ui.checkCards;
+
+/** The foot of a form: a summary line and its buttons. */
+export const actionBar = ui.actionBar;
 
 /**
  * Shows the list of projects.

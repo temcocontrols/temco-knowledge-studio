@@ -7,7 +7,7 @@
 
 import * as vscode from 'vscode';
 import { fileColumn, pageColumn } from './columns';
-import { CalloutOptions, CodeOptions, EntryRowOptions, FeatureCard, HeroOptions, NumberItem, OptionCard, Question, SectionOptions, callout, cards, code, entryRow, floatAction, hero, icon, numbers, optionCards, questions, section, toneMark } from './components';
+import { ActionBarOptions, CalloutOptions, CheckCardsOptions, ChoiceCardsOptions, CodeOptions, EntryRowOptions, FeatureCard, FormField, HeroOptions, NumberItem, OptionCard, Question, SectionOptions, actionBar, callout, cards, checkCards, choiceCards, code, entryRow, floatAction, formFields, hero, icon, numbers, optionCards, questions, section, toneMark } from './components';
 import { COMMAND_SCRIPT, PageMessage, PageOptions, escapeHtml, page, runPageCommand } from './page';
 import { rowSlug } from './rows';
 
@@ -43,6 +43,14 @@ export interface TemcoUiApi {
 	cards(items: readonly FeatureCard[], options?: { dense?: boolean }): string;
 	/** One entry lying on its side: the mark, the thing itself, and the way in at its right-hand end. */
 	entryRow(options: EntryRowOptions): string;
+	/** Mutually exclusive starting points, drawn as cards. */
+	choiceCards(options: ChoiceCardsOptions): string;
+	/** A form's fields: two columns, a label above each control, the hint under it. */
+	formFields(fields: readonly FormField[]): string;
+	/** What a build or a project includes, as cards that carry their own tick. */
+	checkCards(options: CheckCardsOptions): string;
+	/** The foot of a form: a summary line and its buttons. */
+	actionBar(options: ActionBarOptions): string;
 	/** A code card, with drawn line numbers and four tones of syntax. */
 	code(options: CodeOptions): string;
 	/** The floating action in the corner of the page. */
@@ -70,6 +78,10 @@ export function activate(context: vscode.ExtensionContext): TemcoUiApi {
 		section,
 		cards,
 		entryRow,
+		choiceCards,
+		formFields,
+		checkCards,
+		actionBar,
 		code,
 		floatAction,
 		commandScript: COMMAND_SCRIPT,

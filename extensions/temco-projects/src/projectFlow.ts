@@ -20,7 +20,7 @@ import * as path from 'node:path';
 import { draftProjectPage } from './aiModule';
 import { RepositoryFile, RepositorySource, repositoryFiles, repositoryMaterial } from './repositories';
 import { Catalog, CatalogUnavailable, Selection, slugOf, SourceRow } from './store';
-import { escapeHtml as esc, icon, page, pageColumn } from './ui';
+import { actionBar, callout, checkCards, choiceCards, escapeHtml as esc, formFields, hero, icon, page, pageColumn, section } from './ui';
 
 export const NEW_PROJECT_VIEW_TYPE = 'temcoProjects.newProject';
 
@@ -749,59 +749,29 @@ const TEMPLATE_FILES = [
 	'scripts/docs-site.mjs.txt'
 ];
 
-const field = (label: string, control: string, hint?: string): string =>
-	`<div class="field"><label>${esc(label)}</label>${control}${hint ? `<div class="field__hint">${esc(hint)}</div>` : ''}</div>`;
-
 /**
- * The outputs, as compact ticks.
+ * The three ways a project can begin, as the cards that choose between them.
  *
- * A column of five ticks has to be read line by line to learn which are on; a tile carries its own state in its
- * border, its wash and a check, so "what does this project build?" is answered by a glance. Each one stays a single
- * line high — these are switches, not panels. The input stays a real checkbox, hidden but focusable, so a click, a tap
- * and the space bar all do the same thing and a screen reader still announces a check box.
+ * The choice is a decision, not navigation: three cards can be compared in a glance, where a 244px rail of the same
+ * three put a second column on the page for a control three rows tall.
  */
-const tiles = (items: { value: string; label: string; sub: string; mark: string }[], ticked: readonly string[]): string =>
-	`<div class="out-grid">${items.map((item) => `<label class="out-tile"><input type="checkbox" data-field="targets" data-multi value="${esc(item.value)}"${ticked.includes(item.value) ? ' checked' : ''}><span class="out-tile__mark">${icon(item.mark)}</span><span class="out-tile__text"><span class="out-tile__label">${esc(item.label)}</span><span class="out-tile__note">${esc(item.sub)}</span></span><span class="out-tile__check">${icon('check', 'icon--sm')}</span></label>`).join('')}</div>`;
-
-/**
- * The three starting points, as a side rail against the form.
- *
- * This is the master/detail shape a settings surface has in Fluent and in Material: the choice is a narrow rail on the
- * left that stays put, and the right side is the thing itself — no second screen, no step rail, and no box drawn round
- * each choice. The rail also shows every type's one-line identity at once, so a person can compare without going back.
- */
-function typeOptions(initial: string): string {
-	const options = [
-		{ value: 'empty', mark: 'document', label: 'Empty project', note: 'No sources, no pages yet' },
-		{ value: 'repository', mark: 'repo', label: 'From a repository', note: 'Cite repositories already recorded' },
-		{ value: 'files', mark: 'layers', label: 'From existing files', note: 'HTML, Markdown, Word, CHM — or a docs folder' }
-	];
-
-	// The wrapper is part of the answer, not of the template: a closing `</div>` that sits between two `${…}` holes is
-	// the first thing a later edit drops, and dropping it puts the whole form inside the rail.
-	return `<div class="split__side">
-		<div class="split__label">Start from</div>
-		<div class="opt-list" role="listbox" aria-label="Starting point">${options.map((option) => {
-		const on = option.value === initial;
-		return `<button type="button" class="opt${on ? ' is-on' : ''}" role="option" aria-selected="${on}" data-type="${option.value}" data-title="${esc(option.label)}">
-	<span class="opt__mark">${icon(option.mark)}</span>
-	<span class="opt__text"><span class="opt__title">${esc(option.label)}</span><span class="opt__desc">${esc(option.note)}</span></span>
-</button>`;
-	}).join('')}</div>
-	</div>`;
-}
+const CHOICES = [
+	{ value: 'empty', mark: 'document', title: 'Empty project', desc: 'No sources, no pages yet' },
+	{ value: 'repository', mark: 'repo', title: 'From a repository', desc: 'Cite repositories already recorded' },
+	{ value: 'files', mark: 'layers', title: 'From existing files', desc: 'HTML, Markdown, Word, CHM — or a docs folder' }
+];
 
 /**
  * The flow's markup.
  *
- * Everything the flow needs is on this one page: a starting point on the left, its form on the right. It never sends a
- * person to another page to finish an answer — a wizard that jumps away and comes back loses both the thread and the
- * half-filled form.
+ * Everything the flow needs is on this one page: the choice of where the pages come from, and the form that follows
+ * it. It never sends a person to another page to finish an answer — a wizard that jumps away and comes back loses both
+ * the thread and the half-filled form.
  */
 function html(pinned: PinnedRepository | undefined, unavailable?: string): string {
 	const initial = pinned === undefined ? 'empty' : 'repository';
 	const empty = unavailable
-		? `<div class="callout callout--warn">${icon('alert')}<div><b>The store is not available.</b> ${esc(unavailable)}</div></div>`
+		? callout({ mark: 'alert', title: 'The store is not available.', desc: unavailable })
 		: '';
 
 	// Opened from a repository: it is already the answer to *where the pages come from*, so the chooser is replaced by
@@ -811,143 +781,149 @@ function html(pinned: PinnedRepository | undefined, unavailable?: string): strin
 	// the download and the files are — and the form only states what was picked. A checkbox in a form that shows a
 	// filtered copy of another page is a checkbox that lies about what it is choosing from.
 	const sourceSection = pinned === undefined
-		? `<div class="split__section-title">Where the pages come from</div>
-			<p class="split__section-note">Chosen on the repositories page: browse it, pick the repositories this project is built from, then come back with <b>Cite in the new project</b>. What you picked is listed here.</p>
-			<div class="chosen" id="chosen-list"></div>
-			<p class="split__section-note" id="source-summary">No repository chosen yet — open the repositories page and pick one.</p>
-			<div class="checklist-tools">
-				<button type="button" class="btn btn--sm" id="manage-repositories">${icon('repo')}<span>Open the repositories page</span></button>
-				<button type="button" class="link" id="source-clear">Clear the choice</button>
-			</div>`
-		: `<div class="split__section-title">Where the pages come from</div>
-			<p class="split__section-note">This project starts from <b>${esc(pinned.name)}</b>: it is added as the project's source, and nothing is written into the repository.</p>
-			<div class="checklist"><label class="checklist__row is-fixed"><input type="checkbox" data-field="sources" value="${esc(pinned.name)}" checked disabled><span class="checklist__text"><span class="checklist__title">${esc(pinned.name)}</span><span class="checklist__sub">repository${pinned.branch === undefined ? '' : ` · ${esc(pinned.branch)}`} · added by this project</span></span></label></div>
-
-			<div class="split__section-title mt-16">What inside it</div>
-			<p class="split__section-note">The documentation it already has, and the files a page could be written from. Nothing is copied: the draft is kept with the project.</p>
-			<div class="checklist-tools">
-				<input class="input input--sm" data-filter="files" placeholder="Search files" aria-label="Search files">
-				<button type="button" class="btn btn--sm" id="file-all">Select all</button>
-				<button type="button" class="btn btn--sm" id="file-none">Clear</button>
-			</div>
-			<div class="checklist src-list" id="file-list"><p class="cell-muted" style="font-size:12px;margin:8px 0">Reading the file list…</p></div>
-			<p class="split__section-note" id="file-summary" style="margin-top:10px">No file selected yet.</p>
-			<div class="draft-row">
-				<button type="button" class="btn" id="draft-run">AI draft from these</button>
-				<button type="button" class="btn btn--ghost" id="draft-clear" hidden>Clear the draft</button>
-				<span class="cell-muted" style="font-size:12px" id="draft-note"></span>
-			</div>
-			<pre class="draft-preview" id="draft-preview" hidden></pre>`;
-
-	return `<div class="page-head">
-	<div class="page-head__main">
-		<div class="eyebrow">Documentation</div>
-		<h1 class="page-head__title">${icon('plus')}New Project</h1>
-		<p class="page-head__desc">A project is a version of a product’s documentation: the sources it reads, the pages it holds and the artifacts it builds.</p>
-	</div>
-	<div class="page-head__actions"><button type="button" class="btn btn--ghost" id="wizard-cancel">${icon('close')}<span>Cancel</span></button></div>
+		? `${section({ title: 'Where the pages come from', desc: 'Chosen on the repositories page: browse it, pick the repositories this project is built from, then come back with Cite in the new project. What you picked is listed here.' })}
+<div class="chosen" id="chosen-list"></div>
+<p class="flow-note" id="source-summary">No repository chosen yet — open the repositories page and pick one.</p>
+<div class="flow-tools">
+	<button type="button" class="az-btn az-btn--sm" id="manage-repositories">${icon('repo')}<span>Open the repositories page</span></button>
+	<button type="button" class="az-btn az-btn--link" id="source-clear">Clear the choice</button>
+</div>`
+		: `${section({ title: 'Where the pages come from', desc: 'This project starts from the repository it was opened from: it is added as the project’s source, and nothing is written into it.' })}
+<div class="flow-pin"><span class="flow-pin__icon">${icon('repo')}</span><span class="flow-pin__main"><span class="flow-pin__name">${esc(pinned.name)}</span><span class="flow-pin__sub">repository${pinned.branch === undefined ? '' : ` · ${esc(pinned.branch)}`} · added by this project</span></span></div>
+${section({ title: 'What is inside it', desc: 'The documentation it already has, and the files a page could be written from. Nothing is copied: the draft is kept with the project.' })}
+<div class="flow-tools">
+	<input class="az-input" data-filter="files" placeholder="Search files" aria-label="Search files">
+	<button type="button" class="az-btn az-btn--sm" id="file-all">Select all</button>
+	<button type="button" class="az-btn az-btn--sm" id="file-none">Clear</button>
 </div>
+<div class="flow-list" id="file-list"><p class="flow-note">Reading the file list…</p></div>
+<p class="flow-note" id="file-summary">No file selected yet.</p>
+<div class="flow-tools">
+	<button type="button" class="az-btn" id="draft-run">AI draft from these</button>
+	<button type="button" class="az-btn az-btn--link" id="draft-clear" hidden>Clear the draft</button>
+	<span class="flow-note" id="draft-note"></span>
+</div>
+<pre class="flow-draft" id="draft-preview" hidden></pre>`;
 
+	return `${hero({
+		mark: 'plus',
+		title: 'New Project',
+		desc: 'A project is a version of a product’s documentation: the sources it reads, the pages it holds and the artifacts it builds.',
+		descWide: true
+	})}
 ${empty}
 
-<div class="split" data-initial-type="${esc(initial)}">
-	${typeOptions(initial)}
-	<div class="split__main">
-		<div class="split__title" id="form-title">Empty project</div>
-		<p class="split__hint" id="form-hint"></p>
+<div class="az-flow" data-initial-type="${esc(initial)}">
+	${choiceCards({ items: CHOICES, selected: initial })}
+	<div class="flow-head">
+		<span class="flow-head__title" id="form-title">Empty project</span>
+		<span class="flow-head__hint" id="form-hint"></span>
+	</div>
 
-		<div class="split__section">
-			<div class="split__section-title">The project</div>
-			<p class="split__section-note">What it is called, and who answers for it.</p>
-			<div class="form">
-				${field('Name', `<input class="input" data-field="name" value="${esc(DEFAULTS.name)}" aria-label="Project name">`)}
-				${field('Version', `<input class="input" data-field="version" value="${esc(DEFAULTS.version)}" aria-label="Version">`, 'A project publishes one version at a time.')}
-			</div>
-		</div>
+	${section({ title: 'The project', desc: 'What it is called, and who answers for it.' })}
+	${formFields([
+		{ label: 'Name', control: `<input class="az-input" data-field="name" value="${esc(DEFAULTS.name)}" aria-label="Project name">` },
+		{ label: 'Version', control: `<input class="az-input" data-field="version" value="${esc(DEFAULTS.version)}" aria-label="Version">`, hint: 'A project publishes one version at a time.' }
+	])}
 
-		<div class="split__section" data-form="empty">
-			<div class="split__section-title">Where the pages come from</div>
-			<p class="split__section-note">An empty project has no sources at all. A starter writes the first ones — an overview area, two topics, and the registry the platform reads.</p>
-			<div class="form">
-				${field('Starter', `<select class="select" data-field="template" aria-label="Starter"><option value="">Nothing — begin with no pages</option>${TEMPLATES.map((template) => `<option value="${esc(template.value)}">${esc(template.label)} — ${esc(template.sub)}</option>`).join('')}</select>`)}
-			</div>
-			<div class="form" data-starter-folder hidden>
-				${field('Write it under', `<input class="input" data-field="folder" value="${esc(DEFAULTS.folder)}" aria-label="Folder">`, 'A path; ~ is your home folder. The project name becomes the folder under it.')}
-			</div>
-		</div>
-
-		<div class="split__section" data-form="repository" hidden>
-			${sourceSection}
-		</div>
-
-		<div class="split__section" data-form="files" hidden>
-			<div class="split__section-title">What the material is</div>
-			<p class="split__section-note">Choose the folder or file. A folder that already has a registry is cited as it stands; anything else — Markdown, HTML, Word or CHM — is converted once into <code>docs/</code> and <code>docs/help/registry.json</code>.</p>
-			<div class="pick-row">
-				<button type="button" class="btn" id="pick-material">${icon('folder')}<span>Choose a folder or file…</span></button>
-				<span class="pick-row__path" id="material-path">Nothing chosen yet</span>
-			</div>
-			<p class="split__section-note" id="material-note" style="margin-top:8px"></p>
-		</div>
-
-		<div class="split__section">
-			<div class="split__section-title">What it builds</div>
-			<p class="split__section-note">One build produces every target you tick here — and every one of them can be turned on later in the Build Center.</p>
-			${tiles(TARGETS, DEFAULT_TARGETS)}
-		</div>
-
-		<div class="wizard__error" id="wizard-error" hidden></div>
-
-		<div class="wizard__foot">
-			<span class="cell-muted" style="font-size:12px" id="wizard-summary"></span>
-			<span class="wizard__spacer"></span>
-			<button type="button" class="btn btn--primary" id="wizard-create">${icon('check')}<span>Create Project</span></button>
+	<div data-form="empty">
+		${section({ title: 'Where the pages come from', desc: 'An empty project has no sources at all. A starter writes the first ones — an overview area, two topics, and the registry the platform reads.' })}
+		${formFields([
+		{ label: 'Starter', control: `<select class="az-input" data-field="template" aria-label="Starter"><option value="">Nothing — begin with no pages</option>${TEMPLATES.map((template) => `<option value="${esc(template.value)}">${esc(template.label)} — ${esc(template.sub)}</option>`).join('')}</select>`, wide: true }
+	])}
+		<div data-starter-folder hidden>
+			${formFields([
+		{ label: 'Write it under', control: `<input class="az-input" data-field="folder" value="${esc(DEFAULTS.folder)}" aria-label="Folder">`, hint: 'A path; ~ is your home folder. The project name becomes the folder under it.', wide: true }
+	])}
 		</div>
 	</div>
+
+	<div data-form="repository" hidden>
+		${sourceSection}
+	</div>
+
+	<div data-form="files" hidden>
+		${section({ title: 'What the material is', desc: 'Choose the folder or file. A folder that already has a registry is cited as it stands; anything else — Markdown, HTML, Word or CHM — is converted once into docs/ and docs/help/registry.json.' })}
+		<div class="flow-tools">
+			<button type="button" class="az-btn" id="pick-material">${icon('folder')}<span>Choose a folder or file…</span></button>
+			<span class="flow-path" id="material-path">Nothing chosen yet</span>
+		</div>
+		<p class="flow-note" id="material-note"></p>
+	</div>
+
+	${section({ title: 'What it builds', desc: 'One build produces every target you tick here — and every one of them can be turned on later in the Build Center.' })}
+	${checkCards({
+		field: 'targets',
+		items: TARGETS.map((target) => ({ value: target.value, label: target.label, note: target.sub, mark: target.mark })),
+		ticked: DEFAULT_TARGETS
+	})}
+
+	<div class="flow-error" id="wizard-error" hidden></div>
+
+	${actionBar({
+		summaryId: 'wizard-summary',
+		actions: `<button type="button" class="az-btn" id="wizard-cancel">${icon('close')}<span>Cancel</span></button><button type="button" class="az-btn az-btn--primary" id="wizard-create">${icon('check')}<span>Create Project</span></button>`
+	})}
 </div>`;
 }
 
 /**
- * The flow's own layout: the file list as a bounded area, and a draft that reads like text rather than like code.
+ * The flow's own shapes: what the shared vocabulary does not name.
  *
- * A `pre` is the honest element for text that already has line breaks and must not be re-wrapped by markup rules, and
- * it is set in the mono face only because Markdown's indentation is part of what was drafted.
+ * The line that confirms the choice, the receipt of a pinned repository, the bounded file list, the error line and the
+ * draft. Colours, radii and type come from the vocabulary — nothing here decides a tone of its own.
  */
 const FLOW_CSS = `
-/* The chose-outside list: a mark, the name, its facts right-aligned, and one quiet action. No borders and no boxes —
-   a hover surface says "row", the alignment says "table", and the weight difference says which part is the name. */
-.chosen { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 10px; }
+.flow-head { display: flex; flex-direction: column; gap: 2px; margin-top: 14px; }
+.flow-head__title { color: var(--ink-1); font-size: 13px; line-height: 18px; font-weight: 600; }
+.flow-head__hint { color: var(--ink-2); font-size: 12px; line-height: 16px; }
+.flow-note { margin: 4px 0 8px; color: var(--ink-2); font-size: 12px; line-height: 18px; }
+.flow-note:empty { display: none; }
+.flow-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
+.flow-path { color: var(--ink-3); font-family: var(--font-mono); font-size: 12px; }
+.flow-pin { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--hairline);
+  border-radius: var(--r-2); background: var(--surface-card); }
+.flow-pin__icon { display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--r-2);
+  background: var(--az-blue-selected); color: var(--az-blue); }
+.flow-pin__icon .icon { width: 15px; height: 15px; }
+.flow-pin__main { display: flex; flex-direction: column; min-width: 0; }
+.flow-pin__name { color: var(--ink-1); font-size: 13px; line-height: 18px; }
+.flow-pin__sub { color: var(--ink-3); font-size: 12px; line-height: 16px; }
+.flow-list { max-height: 300px; overflow: auto; border: 1px solid var(--hairline); border-radius: var(--r-2);
+  background: var(--surface-card); }
+.flow-error { margin-top: 12px; padding: 8px 12px; border: 1px solid var(--err-ink); border-radius: var(--r-2);
+  color: var(--err-ink); font-size: 12px; }
+.flow-draft { margin: 10px 0 0; max-height: 300px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+  padding: 12px 14px; border: 1px solid var(--hairline); border-radius: var(--r-2);
+  background: var(--surface-subtle); color: var(--ink-1);
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; }
+
+/* The receipt of a repository picked elsewhere — rows this page's script writes. */
+.chosen { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 8px; }
 .chosen__row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto auto; align-items: center;
-  gap: 0 12px; padding: 8px 10px; border-radius: var(--radius); }
-.chosen__row:hover { background: var(--bg-hover); }
-.chosen__mark { display: flex; align-items: center; color: var(--fg-subtle); }
+  gap: 0 12px; padding: 8px 12px; border: 1px solid var(--hairline); border-radius: var(--r-2);
+  background: var(--surface-card); }
+.chosen__mark { display: grid; place-items: center; color: var(--az-blue); }
 .chosen__mark .icon { width: 14px; height: 14px; }
-.chosen__name { color: var(--fg-strong); font-weight: 600; overflow-wrap: anywhere; }
-.chosen__facts { color: var(--fg-muted); font-size: var(--fs-sm); white-space: nowrap;
-  font-variant-numeric: tabular-nums; }
-.chosen__remove { border: 0; background: none; padding: 2px 4px; font: inherit; font-size: var(--fs-sm);
-  color: var(--fg-subtle); cursor: pointer; border-radius: var(--radius-sm); }
-.chosen__remove:hover { color: var(--err); background: color-mix(in srgb, var(--err) 12%, transparent); }
-.chosen__remove:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
-/* The rail is the narrow column on the left and the form the wide one on the right, stated here rather than
-   inferred from the DOM order: the shared \`.split\` sizes its columns \`1fr 320px\`, which put this page's rail in
-   the wide column and the form in a 320px strip — so choosing a type changed something nobody was looking at. */
-.split { grid-template-columns: 244px minmax(0, 1fr); }
-.split__side { grid-column: 1; }
-.split__main { grid-column: 2; }
-@media (max-width: 820px) {
-  .split { grid-template-columns: minmax(0, 1fr); gap: 20px; }
-  .split__side, .split__main { grid-column: 1; }
-}
-.checklist__row.is-fixed { cursor: default; background: transparent; }
-.draft-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
-.draft-preview { margin: 10px 0 0; max-height: 300px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
-  background: var(--bg-inset); border-radius: var(--radius); padding: 12px 14px;
-  font-family: ui-monospace, monospace; font-size: 12.5px; line-height: 1.6; color: var(--fg); }
+.chosen__name { color: var(--ink-1); font-size: 13px; overflow-wrap: anywhere; }
+.chosen__facts { color: var(--ink-3); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.chosen__remove { border: 0; background: none; padding: 2px 6px; font: inherit; font-size: 12px;
+  color: var(--az-blue); cursor: pointer; border-radius: var(--r-2); }
+.chosen__remove:hover { background: var(--az-blue-selected); }
+.chosen__remove:focus-visible { outline: 2px solid var(--az-blue); outline-offset: 1px; }
+
+/* The file rows the script writes into the list: the same row vocabulary as a chosen repository. */
+.checklist-heading { padding: 8px 12px 4px; color: var(--ink-3); font-size: 12px; }
+.checklist__row { display: flex; align-items: center; gap: 8px; padding: 6px 12px; cursor: pointer; }
+.checklist__row:hover { background: var(--az-blue-selected); }
+.checklist__text { display: flex; flex-direction: column; min-width: 0; }
+.checklist__title { color: var(--ink-1); font-size: 12px; overflow-wrap: anywhere; }
+.checklist__sub { color: var(--ink-3); font-size: 11px; }
+.cell-muted { color: var(--ink-3); }
 `;
 
 /**
- * The flow's behaviour: one screen, a rail of three starting points, and a form that follows the rail.
+ * The flow's behaviour: one screen, three cards that choose where the pages come from, and a form that follows them.
  *
  * The origin the host receives is derived here — `empty` plus a starter is a `template`, a folder that already has a
  * registry is a `folder`, anything else under *existing files* is an `import` — so `create()` keeps its one code path.
@@ -959,8 +935,8 @@ const WIZARD_SCRIPT = `
 	const summary = document.getElementById('wizard-summary');
 	const titleEl = document.getElementById('form-title');
 	const hintEl = document.getElementById('form-hint');
-	const rails = Array.prototype.slice.call(document.querySelectorAll('.opt'));
-	const split = document.querySelector('.split');
+	const rails = Array.prototype.slice.call(document.querySelectorAll('.az-choice'));
+	const split = document.querySelector('.az-flow');
 	let type = split ? split.getAttribute('data-initial-type') || 'empty' : 'empty';
 	// The page the AI wrote for this project, kept here until *Create Project* records it.
 	let draftText = '';
@@ -1099,7 +1075,7 @@ const WIZARD_SCRIPT = `
 		});
 		const starter = document.querySelector('[data-starter-folder]');
 		if (starter) { starter.hidden = !value('template'); }
-		const rail = document.querySelector('.opt[data-type="' + type + '"]');
+		const rail = document.querySelector('.az-choice[data-type="' + type + '"]');
 		titleEl.textContent = rail ? rail.getAttribute('data-title') : 'The project';
 		hintEl.textContent = HINTS[type] || '';
 		refresh();
