@@ -16,7 +16,7 @@ import { screenshotPng } from './capture';
 import { docsApi, LinkablePage } from './docs';
 
 /** What a bar button may ask the extension to do. */
-type PageAction = 'preview' | 'diff' | 'source' | 'properties';
+type PageAction = 'preview' | 'diff' | 'source' | 'properties' | 'assist';
 
 /** One message from a webview: the editor's own protocol, in either direction. */
 interface HostMessage {
@@ -34,10 +34,13 @@ const COMMANDS: Record<PageAction, string> = {
 	diff: 'temcoEditor.diff',
 	source: 'temcoEditor.openSource',
 	properties: 'temcoEditor.pageProperties',
+	assist: 'temcoEditor.assist',
 };
 
 function actionOf(value: unknown): PageAction | undefined {
-	return value === 'preview' || value === 'diff' || value === 'source' || value === 'properties' ? value : undefined;
+	return value === 'preview' || value === 'diff' || value === 'source' || value === 'properties' || value === 'assist'
+		? value
+		: undefined;
 }
 
 /**
@@ -65,6 +68,12 @@ function stamped(uri: vscode.Uri): string {
 	} catch {
 		return address;
 	}
+}
+
+/** The page's text size: `temcoEditor.fontSize`, clamped the way the contribution clamps it. */
+function pageFontSize(): number {
+	const size = vscode.workspace.getConfiguration('temcoEditor').get<number>('fontSize', 12);
+	return typeof size === 'number' && Number.isFinite(size) ? Math.min(32, Math.max(8, Math.round(size))) : 12;
 }
 
 /**
@@ -191,8 +200,7 @@ export abstract class WebviewTextEditor implements vscode.CustomTextEditorProvid
 		});
 
 		this.context.subscriptions.push(
-			vscode.workspace.onDidChangeTextDocument((event) => {
-				if (event.document.uri.toString() !== document.uri.toString() || event.contentChanges.length === 0) {
+			vscode.workspace.onDidChangeTextDocument((event) => {				if (event.document.uri.toString() !== document.uri.toString() || event.contentChanges.length === 0) {
 					return;
 				}
 				const now = event.document.getText();
@@ -204,6 +212,16 @@ export abstract class WebviewTextEditor implements vscode.CustomTextEditorProvid
 					return;
 				}
 				redraw();
+			})
+		);
+
+		// The page's size is a setting, so changing it must not cost the reader their place: the surface is told the new
+		// number and sets one variable, rather than the webview being rebuilt under the caret.
+		this.context.subscriptions.push(
+			vscode.workspace.onDidChangeConfiguration((event) => {
+				if (event.affectsConfiguration('temcoEditor.fontSize')) {
+					void panel.webview.postMessage({ type: 'fontSize', value: pageFontSize() });
+				}
 			})
 		);
 	}
@@ -440,6 +458,7 @@ export abstract class WebviewTextEditor implements vscode.CustomTextEditorProvid
 		const script = stamped(webview.asWebviewUri(vscode.Uri.joinPath(base, `${this.assets}.js`)));
 		const style = stamped(webview.asWebviewUri(vscode.Uri.joinPath(base, `${this.assets}.css`)));
 		const page = `${webview.asWebviewUri(vscode.Uri.file(path.dirname(document.uri.fsPath)))}/`;
+		const size = pageFontSize();
 		return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -447,6 +466,7 @@ export abstract class WebviewTextEditor implements vscode.CustomTextEditorProvid
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data: https:; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource} data:; script-src ${webview.cspSource};">
 <base href="${page}">
 <link rel="stylesheet" href="${style}">
+<style>:root { --page-font-size: ${size}px; }</style>
 <title>${path.basename(document.uri.fsPath)}</title>
 </head>
 <body>

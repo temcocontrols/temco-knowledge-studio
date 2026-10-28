@@ -9,28 +9,31 @@
 
 import * as React from 'react';
 import {
-	ArrowClockwise24Regular,
-	ArrowUndo24Regular,
-	BookOpen24Regular,
-	BranchCompare24Regular,
-	Camera24Regular,
-	Code24Regular,
-	ColorBackground24Regular,
-	DocumentLink24Regular,
-	DrawShape24Regular,
-	Eye24Regular,
-	Image24Regular,
-	List24Regular,
-	LineHorizontal124Regular,
-	MoreHorizontal24Regular,
-	Search24Regular,
-	Settings24Regular,
-	Table24Regular,
-	TextBold24Regular,
-	TextItalic24Regular,
-	TextQuote24Regular,
-	TextStrikethrough24Regular,
-	TextUnderline24Regular,
+	ArrowClockwise16Regular,
+	ArrowUndo16Regular,
+	BookOpen16Regular,
+	BranchCompare16Regular,
+	Camera16Regular,
+	Code16Regular,
+	// Fluent draws these two at 20 and above only; they are rendered at 16 like the rest, so the bar stays one size.
+	ColorBackground20Regular,
+	DocumentLink16Regular,
+	DrawShape20Regular,
+	Eye16Regular,
+	Image16Regular,
+	List16Regular,
+	LineHorizontal116Regular,
+	MoreHorizontal16Regular,
+	Search16Regular,
+	Settings16Regular,
+	Table16Regular,
+	TextBold16Regular,
+	TextItalic16Regular,
+	TextQuote16Regular,
+	TextStrikethrough16Regular,
+	TextUnderline16Regular,
+	// The assistant's glyph: a sparkle, which is what the AI panel's own command wears.
+	Sparkle16Regular,
 } from '@fluentui/react-icons';
 
 import { LinkPopover, ListMenu, StyleMenu } from '../shared/menus';
@@ -124,12 +127,12 @@ function useDensity(): { ref: React.RefObject<HTMLDivElement | null>; density: D
 
 /** The six marks a page can hold, in the order every editor puts them — the bar's first group and the whole selection menu. */
 export const MARKS: ReadonlyArray<{ mark: Mark; label: string; glyph: React.ReactElement; shortcut: string }> = [
-	{ mark: 'bold', label: 'Bold', glyph: <TextBold24Regular />, shortcut: 'Ctrl+B' },
-	{ mark: 'italic', label: 'Italic', glyph: <TextItalic24Regular />, shortcut: 'Ctrl+I' },
-	{ mark: 'underline', label: 'Underline', glyph: <TextUnderline24Regular />, shortcut: 'Ctrl+U' },
-	{ mark: 'strike', label: 'Strikethrough', glyph: <TextStrikethrough24Regular />, shortcut: 'Ctrl+Shift+X' },
-	{ mark: 'code', label: 'Inline code', glyph: <Code24Regular />, shortcut: 'Ctrl+E' },
-	{ mark: 'highlight', label: 'Highlight', glyph: <ColorBackground24Regular />, shortcut: 'Ctrl+Shift+H' },
+	{ mark: 'bold', label: 'Bold', glyph: <TextBold16Regular />, shortcut: 'Ctrl+B' },
+	{ mark: 'italic', label: 'Italic', glyph: <TextItalic16Regular />, shortcut: 'Ctrl+I' },
+	{ mark: 'underline', label: 'Underline', glyph: <TextUnderline16Regular />, shortcut: 'Ctrl+U' },
+	{ mark: 'strike', label: 'Strikethrough', glyph: <TextStrikethrough16Regular />, shortcut: 'Ctrl+Shift+X' },
+	{ mark: 'code', label: 'Inline code', glyph: <Code16Regular />, shortcut: 'Ctrl+E' },
+	{ mark: 'highlight', label: 'Highlight', glyph: <ColorBackground20Regular />, shortcut: 'Ctrl+Shift+H' },
 ];
 
 /** One control on the bar. */
@@ -195,7 +198,7 @@ function MoreMenu({ items }: { items: readonly Item[] }): React.ReactElement {
 		<DropdownMenu.Root>
 			<DropdownMenu.Trigger asChild>
 				<button type="button" className="btn btn--sm btn--ghost" aria-label="More" title="More" onMouseDown={event => event.preventDefault()}>
-					<MoreHorizontal24Regular />
+					<MoreHorizontal16Regular />
 				</button>
 			</DropdownMenu.Trigger>
 			<DropdownMenu.Portal>
@@ -228,8 +231,8 @@ export function PageRibbon(props: RibbonProps): React.ReactElement {
 		{
 			id: 'history',
 			items: [
-				{ key: 'undo', label: 'Undo', glyph: <ArrowUndo24Regular />, shortcut: 'Ctrl+Z', tier: 1, disabled: !state.canUndo, run: actions.undo },
-				{ key: 'redo', label: 'Redo', glyph: <ArrowClockwise24Regular />, shortcut: 'Ctrl+Y', tier: 1, disabled: !state.canRedo, run: actions.redo },
+				{ key: 'undo', label: 'Undo', glyph: <ArrowUndo16Regular />, shortcut: 'Ctrl+Z', tier: 1, disabled: !state.canUndo, run: actions.undo },
+				{ key: 'redo', label: 'Redo', glyph: <ArrowClockwise16Regular />, shortcut: 'Ctrl+Y', tier: 1, disabled: !state.canRedo, run: actions.redo },
 			],
 		},
 		{ id: 'style', lead: <StyleMenu state={state} actions={actions} />, items: [] },
@@ -249,20 +252,20 @@ export function PageRibbon(props: RibbonProps): React.ReactElement {
 		{
 			id: 'blocks',
 			items: [
-				{ key: 'quote', label: 'Block quote', glyph: <TextQuote24Regular />, shortcut: 'Ctrl+Shift+B', tier: 1, run: actions.toggleQuote },
-				{ key: 'codeBlock', label: 'Code block', glyph: <Code24Regular />, shortcut: 'Ctrl+Alt+C', tier: 1, run: actions.toggleCodeBlock },
-				{ key: 'rule', label: 'Horizontal rule', glyph: <LineHorizontal124Regular />, tier: 2, run: actions.horizontalRule },
-				{ key: 'table', label: 'Table', glyph: <Table24Regular />, tier: 2, run: actions.insertTable },
+				{ key: 'quote', label: 'Block quote', glyph: <TextQuote16Regular />, shortcut: 'Ctrl+Shift+B', tier: 1, run: actions.toggleQuote },
+				{ key: 'codeBlock', label: 'Code block', glyph: <Code16Regular />, shortcut: 'Ctrl+Alt+C', tier: 1, run: actions.toggleCodeBlock },
+				{ key: 'rule', label: 'Horizontal rule', glyph: <LineHorizontal116Regular />, tier: 2, run: actions.horizontalRule },
+				{ key: 'table', label: 'Table', glyph: <Table16Regular />, tier: 2, run: actions.insertTable },
 			],
 		},
 		{
 			id: 'insert',
 			lead: <LinkPopover state={state} actions={actions} />,
 			items: [
-				{ key: 'picture', label: 'Picture', glyph: <Image24Regular />, tier: 1, run: () => props.onHostAction('image') },
-				{ key: 'screenshot', label: 'Screenshot', glyph: <Camera24Regular />, tier: 2, run: () => props.onHostAction('capture') },
-				{ key: 'annotate', label: 'Annotate the picture', glyph: <DrawShape24Regular />, tier: 2, disabled: !state.onImage, run: props.onAnnotate },
-				{ key: 'linkPage', label: 'Link to page', glyph: <DocumentLink24Regular />, tier: 2, run: () => props.onHostAction('linkPage') },
+				{ key: 'picture', label: 'Picture', glyph: <Image16Regular />, tier: 1, run: () => props.onHostAction('image') },
+				{ key: 'screenshot', label: 'Screenshot', glyph: <Camera16Regular />, tier: 2, run: () => props.onHostAction('capture') },
+				{ key: 'annotate', label: 'Annotate the picture', glyph: <DrawShape20Regular />, tier: 2, disabled: !state.onImage, run: props.onAnnotate },
+				{ key: 'linkPage', label: 'Link to page', glyph: <DocumentLink16Regular />, tier: 2, run: () => props.onHostAction('linkPage') },
 			],
 		},
 	];
@@ -272,14 +275,16 @@ export function PageRibbon(props: RibbonProps): React.ReactElement {
 		id: 'view',
 		align: 'end',
 		items: [
-			{ key: 'find', label: 'Find', glyph: <Search24Regular />, shortcut: 'Ctrl+F', tier: 1, active: props.finding, run: props.onFind },
-			{ key: 'outline', label: 'Outline', glyph: <List24Regular />, shortcut: 'Ctrl+Alt+O', tier: 1, active: props.outlining, run: props.onOutline },
+			{ key: 'find', label: 'Find', glyph: <Search16Regular />, shortcut: 'Ctrl+F', tier: 1, active: props.finding, run: props.onFind },
+			{ key: 'outline', label: 'Outline', glyph: <List16Regular />, shortcut: 'Ctrl+Alt+O', tier: 1, active: props.outlining, run: props.onOutline },
 			// Reading a page is not editing one: the same surface, no caret, and the writing groups are not drawn.
-			{ key: 'read', label: reading ? 'Edit the page' : 'Read the page', glyph: <BookOpen24Regular />, tier: 1, active: reading, run: props.onReading },
-			{ key: 'preview', label: 'Preview the page', glyph: <Eye24Regular />, shortcut: 'Ctrl+Alt+P', tier: 2, run: () => props.onHostAction('preview') },
-			{ key: 'diff', label: 'Diff with HEAD', glyph: <BranchCompare24Regular />, shortcut: 'Ctrl+Alt+D', tier: 2, run: () => props.onHostAction('diff') },
-			{ key: 'source', label: 'Open the source', glyph: <Code24Regular />, tier: 2, run: () => props.onHostAction('source') },
-			{ key: 'properties', label: 'Page properties', glyph: <Settings24Regular />, tier: 2, run: () => props.onHostAction('properties') },
+			{ key: 'read', label: reading ? 'Edit the page' : 'Read the page', glyph: <BookOpen16Regular />, tier: 1, active: reading, run: props.onReading },
+			{ key: 'preview', label: 'Preview the page', glyph: <Eye16Regular />, shortcut: 'Ctrl+Alt+P', tier: 2, run: () => props.onHostAction('preview') },
+			{ key: 'diff', label: 'Diff with HEAD', glyph: <BranchCompare16Regular />, shortcut: 'Ctrl+Alt+D', tier: 2, run: () => props.onHostAction('diff') },
+			{ key: 'source', label: 'Open the source', glyph: <Code16Regular />, tier: 2, run: () => props.onHostAction('source') },
+			{ key: 'properties', label: 'Page properties', glyph: <Settings16Regular />, tier: 2, run: () => props.onHostAction('properties') },
+			// The assistant is a view of the page, not a writing tool: it opens the AI panel beside what is on screen.
+			{ key: 'assist', label: 'Draft with the AI', glyph: <Sparkle16Regular />, shortcut: 'Ctrl+Alt+A', tier: 1, run: () => props.onHostAction('assist') },
 		],
 	};
 

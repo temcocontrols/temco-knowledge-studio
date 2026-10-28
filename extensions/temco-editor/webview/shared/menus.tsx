@@ -7,7 +7,7 @@
 import * as React from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Popover from '@radix-ui/react-popover';
-import { Checkmark24Regular, ChevronDown16Regular, Dismiss24Regular, Link24Regular } from '@fluentui/react-icons';
+import { Checkmark16Regular, ChevronDown16Regular, Dismiss16Regular, Link16Regular } from '@fluentui/react-icons';
 import type { PageActions, PageState } from '../markdown/contract';
 
 /** The block types a Markdown page can hold, which is the whole list — no quote, no custom style. */
@@ -35,7 +35,7 @@ export function StyleMenu({ state, actions }: { state: PageState; actions: PageA
 					{BLOCKS.map(block => (
 						<DropdownMenu.Item key={block.level} className="menu__item" onSelect={() => actions.setBlock(block.level)}>
 							<span className={`menu__sample menu__sample--${block.level}`}>{block.sample}</span>
-							{state.block === block.level ? <Checkmark24Regular /> : null}
+							{state.block === block.level ? <Checkmark16Regular /> : null}
 						</DropdownMenu.Item>
 					))}
 				</DropdownMenu.Content>
@@ -65,7 +65,7 @@ export function ListMenu({ state, actions }: { state: PageState; actions: PageAc
 					{lists.map(list => (
 						<DropdownMenu.Item key={list.label} className="menu__item" onSelect={() => actions.toggleList(list.kind)}>
 							<span>{list.label}</span>
-							{list.active ? <Checkmark24Regular /> : null}
+							{list.active ? <Checkmark16Regular /> : null}
 						</DropdownMenu.Item>
 					))}
 				</DropdownMenu.Content>
@@ -108,7 +108,7 @@ export function LinkPopover({ state, actions }: { state: PageState; actions: Pag
 					aria-label="Link"
 					title="Link"
 				>
-					<Link24Regular />
+					<Link16Regular />
 				</button>
 			</Popover.Trigger>
 			<Popover.Portal>
@@ -138,7 +138,7 @@ export function LinkPopover({ state, actions }: { state: PageState; actions: Pag
 								setOpen(false);
 							}}
 						>
-							<Dismiss24Regular />
+							<Dismiss16Regular />
 						</button>
 						<button type="button" className="btn btn--sm btn--primary" onClick={apply}>Apply</button>
 					</div>

@@ -15,7 +15,7 @@ import * as React from 'react';
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
-import { Delete24Regular } from '@fluentui/react-icons';
+import { Delete16Regular } from '@fluentui/react-icons';
 
 import type { PageActions } from '../../contract';
 import { MARKS, Tool } from '../../ribbon';
@@ -59,7 +59,7 @@ export function SelectionMenu({ editor, actions }: { editor: Editor; actions: Pa
 						run={() => actions.setImageWidth(entry.value)}
 					/>
 				))}
-				<Tool label="Delete the picture" glyph={<Delete24Regular />} run={actions.deleteSelection} />
+				<Tool label="Delete the picture" glyph={<Delete16Regular />} run={actions.deleteSelection} />
 			</BubbleMenu>
 		);
 	}

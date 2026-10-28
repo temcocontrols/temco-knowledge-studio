@@ -43,6 +43,24 @@
 	--radius: 6px;
 	--radius-lg: 10px;
 
+	/* ---------------------------------------------------------------- Azure portal / Fluent 2
+	 *
+	 * The product's own colours, on top of whatever theme the window is using. Azure's portal blue is the accent in both
+	 * light and dark — it is the one colour that reads as "this is a Temco surface" whoever chose the theme — and every
+	 * neutral is mixed from the theme's own foreground, so a dark window gets dark surfaces and not a light portal
+	 * dropped into it.
+	 */
+	--azure: #0078d4;
+	--azure-hover: #106ebe;
+	--azure-pressed: #005a9e;
+	--azure-tint: color-mix(in srgb, #0078d4 12%, transparent);
+	--azure-tint-strong: color-mix(in srgb, #0078d4 20%, transparent);
+
+	/* Fluent's neutral ramp, mixed from the theme rather than fixed: `8%` of the ink is Fluent's `#f3f2f1` on a light
+	   theme and its `#333` on a dark one. */
+	--neutral-hover: color-mix(in srgb, var(--vscode-foreground) 7%, transparent);
+	--neutral-pressed: color-mix(in srgb, var(--vscode-foreground) 12%, transparent);
+
 	--editor-bg: var(--vscode-editor-background);
 	--panel-bg: var(--vscode-panel-background, var(--vscode-editor-background));
 
@@ -64,10 +82,10 @@
 	--bg-card: color-mix(in srgb, var(--vscode-foreground) 3%, transparent);
 	--bg-card-hover: color-mix(in srgb, var(--vscode-foreground) 7%, transparent);
 
-	--accent: var(--vscode-textLink-foreground);
-	--accent-bg: var(--vscode-button-background);
-	--accent-fg: var(--vscode-button-foreground);
-	--link: var(--vscode-textLink-foreground);
+	--accent: var(--azure);
+	--accent-bg: var(--azure);
+	--accent-fg: #ffffff;
+	--link: var(--azure);
 
 	--ok: var(--vscode-charts-green, #3fb950);
 	--warn: var(--vscode-charts-yellow, #d29922);
@@ -342,17 +360,31 @@ button.link:hover {
 	height: 28px;
 	padding: 0 12px;
 	border: 1px solid var(--border-strong);
-	border-radius: var(--radius);
+	/* Fluent's control radius, not the pill the page used to have: a 4px corner is what makes a row of controls read as
+	   one family with the window's own buttons. */
+	border-radius: var(--radius-sm);
 	background: var(--bg-card);
 	color: var(--fg);
 	cursor: pointer;
 	font-size: var(--fs-ui);
 	white-space: nowrap;
+	transition: background-color 90ms ease-out, border-color 90ms ease-out, color 90ms ease-out;
 }
 
 .btn:hover {
 	background: var(--bg-card-hover);
 	border-color: var(--fg-subtle);
+}
+
+.btn:active {
+	background: var(--neutral-pressed);
+}
+
+/* The Fluent focus rectangle: inside the control, 2px, in the accent — a ring drawn outside the border moved every
+   neighbour a pixel when it appeared. */
+.btn:focus-visible {
+	outline: 2px solid var(--azure);
+	outline-offset: -2px;
 }
 
 .btn--primary {
@@ -362,8 +394,13 @@ button.link:hover {
 }
 
 .btn--primary:hover {
-	background: color-mix(in srgb, var(--accent-bg) 86%, #fff);
-	border-color: color-mix(in srgb, var(--accent-bg) 86%, #fff);
+	background: var(--azure-hover);
+	border-color: var(--azure-hover);
+}
+
+.btn--primary:active {
+	background: var(--azure-pressed);
+	border-color: var(--azure-pressed);
 }
 
 .btn--ghost {
@@ -373,9 +410,13 @@ button.link:hover {
 }
 
 .btn--ghost:hover {
-	background: var(--bg-hover);
+	background: var(--neutral-hover);
 	border-color: transparent;
 	color: var(--fg);
+}
+
+.btn--ghost:active {
+	background: var(--neutral-pressed);
 }
 
 .btn--sm {

@@ -20,6 +20,18 @@
     "temcocontrols.temco-docs"
   ],
   "contributes": {
+    "configuration": {
+      "title": "Temco Editor",
+      "properties": {
+        "temcoEditor.fontSize": {
+          "type": "number",
+          "default": 12,
+          "minimum": 8,
+          "maximum": 32,
+          "markdownDescription": "The size of the page's text, in pixels. It is the page's own size rather than a copy of `#editor.fontSize#`: a document is read at a different scale from the code beside it."
+        }
+      }
+    },
     "customEditors": [
       {
         "viewType": "temcoEditor.markdown",
@@ -62,6 +74,12 @@
         "title": "Page Properties",
         "category": "Temco Editor",
         "icon": "$(settings-gear)"
+      },
+      {
+        "command": "temcoEditor.assist",
+        "title": "Draft with the AI",
+        "category": "Temco Editor",
+        "icon": "$(sparkle)"
       }
     ],
     "keybindings": [
@@ -73,6 +91,11 @@
       {
         "command": "temcoEditor.diff",
         "key": "ctrl+alt+d",
+        "when": "activeCustomEditorId == 'temcoEditor.markdown' && resourceScheme == file"
+      },
+      {
+        "command": "temcoEditor.assist",
+        "key": "ctrl+alt+a",
         "when": "activeCustomEditorId == 'temcoEditor.markdown' && resourceScheme == file"
       }
     ],

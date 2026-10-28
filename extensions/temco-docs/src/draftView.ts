@@ -71,15 +71,14 @@ export class DraftView implements vscode.WebviewViewProvider {
 	/**
 	 * Brings the panel into view.
 	 *
-	 * The panel lives in the **secondary side bar**, which a window can have closed — and a closed bar swallows
-	 * `<view>.focus` without a word, which is why running the command looked like it did nothing. Opening the
-	 * container by its id is what actually shows the bar; the view focus is the fallback for older windows.
+	 * One command and nothing else: focusing the *view* is the only reveal that cannot move another part of the window —
+	 * VS Code opens the container the view lives in, in the part that container belongs to. The two attempts before this
+	 * one both reached for the container by its id (`workbench.view.extension.temcoDraft`), which reopens a container
+	 * wherever the window last kept it — a window whose secondary bar was closed got the container back in the primary bar,
+	 * and the left panel flipped to Explorer while the properties never appeared.
 	 */
 	private reveal(): void {
-		void vscode.commands.executeCommand('workbench.view.extension.temcoDraft').then(
-			() => vscode.commands.executeCommand('temcoDocs.draft.focus'),
-			() => vscode.commands.executeCommand('temcoDocs.draft.focus')
-		);
+		void vscode.commands.executeCommand('temcoDocs.draft.focus').then(undefined, () => undefined);
 	}
 
 	private async receive(message: PanelMessage): Promise<void> {

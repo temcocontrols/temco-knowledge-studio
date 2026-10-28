@@ -41,7 +41,10 @@ export function activate(context: vscode.ExtensionContext): void {
 		),
 		vscode.commands.registerCommand('temcoEditor.preview', delegating('temcoDocs.previewPage')),
 		vscode.commands.registerCommand('temcoEditor.diff', delegating('temcoDocs.diffPage')),
-		vscode.commands.registerCommand('temcoEditor.pageProperties', delegating('temcoDocs.pageProperties'))
+		vscode.commands.registerCommand('temcoEditor.pageProperties', delegating('temcoDocs.pageProperties')),
+		// *Draft with the AI* is the AI module's chat panel beside this page — the panel, not its page: the page is an
+		// editor tab that would cover the document being drafted into, which is the opposite of what the button is for.
+		vscode.commands.registerCommand('temcoEditor.assist', () => vscode.commands.executeCommand('temcoAi.openPanel'))
 	);
 }
 

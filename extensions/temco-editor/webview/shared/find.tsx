@@ -6,7 +6,7 @@
 // truthfully hides the controls rather than faking them.
 
 import * as React from 'react';
-import { ArrowDown24Regular, ArrowUp24Regular, Dismiss24Regular } from '@fluentui/react-icons';
+import { ArrowDown16Regular, ArrowUp16Regular, Dismiss16Regular } from '@fluentui/react-icons';
 
 export interface FindProps {
 	query: string;
@@ -50,10 +50,10 @@ export function FindBar(props: FindProps): React.ReactElement {
 				{props.error ?? (props.query === '' ? '' : `${props.position} / ${props.total}`)}
 			</span>
 			<button type="button" className="btn btn--sm btn--ghost" aria-label="Previous match" title="Previous match" onClick={() => props.onNext(true)}>
-				<ArrowUp24Regular />
+					<ArrowUp16Regular />
 			</button>
 			<button type="button" className="btn btn--sm btn--ghost" aria-label="Next match" title="Next match" onClick={() => props.onNext(false)}>
-				<ArrowDown24Regular />
+					<ArrowDown16Regular />
 			</button>
 			{replaces
 				? (
@@ -76,7 +76,7 @@ export function FindBar(props: FindProps): React.ReactElement {
 				)
 				: null}
 			<button type="button" className="btn btn--sm btn--ghost" aria-label="Close find" title="Close find" onClick={props.onClose}>
-				<Dismiss24Regular />
+					<Dismiss16Regular />
 			</button>
 		</div>
 	);

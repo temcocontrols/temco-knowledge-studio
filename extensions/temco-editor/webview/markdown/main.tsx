@@ -18,7 +18,7 @@ import { AnnotateDialog } from '../shared/annotate';
 import { FindBar } from '../shared/find';
 import { OutlineList } from '../shared/outline';
 import { fluentTheme } from '../shared/theme';
-import { Dismiss24Regular } from '@fluentui/react-icons';
+import { Dismiss16Regular } from '@fluentui/react-icons';
 import { OUTLINE_WHEN, type HeadingAt } from '../../src/outlineModel';
 import { toHtml, toMarkdown } from '../../src/markdown';
 import type { Match, PageActions, PageState } from './contract';
@@ -65,19 +65,24 @@ type Inbound =
 	| { kind: 'set'; text: string }
 	| { kind: 'image'; src: string; alt: string; askForCaption: boolean }
 	| { kind: 'captureReady' }
-	| { kind: 'pageLink'; title: string; address: string };
+	| { kind: 'pageLink'; title: string; address: string }
+	| { kind: 'fontSize'; value: number };
 
 const queue: Inbound[] = [];
 const hands = new Set<(message: Inbound) => void>();
 
 /** What the host said, in the one shape this file has to know about. Unknown messages are dropped, not guessed at. */
 function read(message: unknown): Inbound | undefined {
-	const data = message as { type?: unknown; text?: unknown; src?: unknown; alt?: unknown; askForCaption?: unknown; title?: unknown; address?: unknown };
+	const data = message as { type?: unknown; text?: unknown; src?: unknown; alt?: unknown; askForCaption?: unknown; title?: unknown; address?: unknown; value?: unknown };
 	if (data === null || typeof data !== 'object') {
 		return undefined;
 	}
 	if (data.type === 'set' && typeof data.text === 'string') {
 		return { kind: 'set', text: data.text };
+	}
+	// The page's size is a setting: one variable, set below, so the reader keeps their place when it changes.
+	if (data.type === 'fontSize' && typeof data.value === 'number') {
+		return { kind: 'fontSize', value: data.value };
 	}
 	if (data.type === 'image' && typeof data.src === 'string') {
 		return {
@@ -99,6 +104,11 @@ function read(message: unknown): Inbound | undefined {
 window.addEventListener('message', event => {
 	const message = read(event.data);
 	if (message === undefined) {
+		return;
+	}
+	// A size change is not the document: it is answered here, whatever the editor is doing.
+	if (message.kind === 'fontSize') {
+		document.documentElement.style.setProperty('--page-font-size', `${message.value}px`);
 		return;
 	}
 	// Every hand hears it; a hand stays registered, because the next `set` is another edit.
@@ -477,8 +487,9 @@ function Surface(): React.ReactElement {
 							aria-label="Page outline"
 							style={{ flexBasis: railWidth, width: railWidth, minWidth: railWidth, maxWidth: railWidth }}
 						>
-							{/* A real handle, not a hint: dragging it left makes the rail wider, because the rail is on the right.
-							    The arrow keys move it too, so a keyboard can set the width without a mouse. */}
+							{/* A real handle, not a hint: the rail is on the left, so dragging the edge right makes it wider and dragging it
+							    left gives the page the room back. The arrow keys move it too, so a keyboard can set the width without a
+							    mouse. */}
 							<div
 								className="page-surface__outline-grip"
 								role="separator"
@@ -499,7 +510,7 @@ function Surface(): React.ReactElement {
 									if (held === undefined) {
 										return;
 									}
-									resizeTo(held.from + (held.at - event.clientX));
+									resizeTo(held.from + (event.clientX - held.at));
 								}}
 								onPointerUp={event => {
 									if (drag.current === undefined) {
@@ -510,7 +521,7 @@ function Surface(): React.ReactElement {
 									remember({ outline: outlining, collapsed: folded, width: liveWidth.current });
 								}}
 								onKeyDown={event => {
-									const step = event.key === 'ArrowLeft' ? RAIL_STEP : event.key === 'ArrowRight' ? -RAIL_STEP : 0;
+									const step = event.key === 'ArrowRight' ? RAIL_STEP : event.key === 'ArrowLeft' ? -RAIL_STEP : 0;
 									if (step === 0) {
 										return;
 									}
@@ -529,7 +540,7 @@ function Surface(): React.ReactElement {
 									title="Close the outline (Ctrl+Alt+O)"
 									onClick={() => setOutline(false)}
 								>
-									<Dismiss24Regular />
+									<Dismiss16Regular />
 								</button>
 							</div>
 							<OutlineList

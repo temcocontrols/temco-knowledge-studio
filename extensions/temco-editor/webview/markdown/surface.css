@@ -30,6 +30,7 @@ body {
 	/* Flush to the tab, like a document application: the ribbon is the top of the surface, not a card floating in it. */
 	padding: 0;
 	gap: 0;
+	font-size: var(--page-font-size, 12px);
 }
 
 /* The provider Fluent needs is an element, and it must not become the page's own box: it keeps the height the page
@@ -57,21 +58,26 @@ body {
 	border-bottom: 1px solid var(--border);
 	border-radius: 0;
 	flex: none;
+	/* A strip of its own, one step off the page: the bar belongs to the window, the sheet belongs to the document. The
+	   tint is mixed from the theme's ink, so it darkens in a dark window and warms in a light one — never a fixed grey. */
+	background: color-mix(in srgb, var(--vscode-foreground) 3%, var(--editor-bg));
 }
 
 .page-surface .ribbon__panel {
-	/* One row: no tab strip above it, so the panel is the whole bar. */
-	padding: 6px 10px;
-	gap: 2px;
-	min-height: 46px;
+	/* One row: no tab strip above it, so the panel is the whole bar. Fluent's toolbar height rather than a ribbon's: 40px
+	   holds a 26px control with 7px above and below, which is what makes a bar read as compact instead of padded. */
+	padding: 6px 8px;
+	gap: 1px;
+	min-height: 40px;
+	align-items: center;
 }
 
 /* No captions under the groups: the controls are named by their tooltips and their aria-labels, and the hairline between
    groups is what says where one ends. A caption under every group is how a ribbon looks when it has room to be a teaching
    aid; this one has to fit an editor pane. */
 .page-surface .ribbon__group {
-	padding: 0 10px;
-	gap: 3px;
+	padding: 0 6px;
+	gap: 1px;
 }
 
 .page-surface .ribbon__group + .ribbon__group {
@@ -85,22 +91,23 @@ body {
 }
 
 /* Only an icon-only control gets a square. A button with words keeps its own width — forcing 30 px on every `.btn` is
-   what made "Preview", "Diff with HEAD" and "Open source" draw on top of each other. */
+   what made "Preview", "Diff with HEAD" and "Open source" draw on top of each other. Every glyph is Fluent's 16px
+   drawing in the same 26px target, which is what makes the row one size across. */
 .page-surface .ribbon .btn--icon {
-	width: 30px;
-	height: 30px;
+	width: 26px;
+	height: 26px;
 	padding: 0;
 	justify-content: center;
 }
 
 .page-surface .ribbon .btn--icon svg {
-	width: 20px;
-	height: 20px;
+	width: 16px;
+	height: 16px;
 }
 
 .page-surface .ribbon .btn:not(.btn--icon) {
-	height: 30px;
-	padding: 0 10px;
+	height: 26px;
+	padding: 0 8px;
 }
 
 /* A narrow editor gets a denser bar rather than a clipped one: the block group folds into `⋯` and the groups tighten. */
@@ -148,8 +155,11 @@ body {
    canvas, and `min-height` is the sheet height while the content is short; the content decides it once it is longer. */
 .page-surface__paper {
 	width: min(860px, 100%);
-	margin: 16px auto 0;
-	min-height: calc(100% - 16px);
+	/* 16px above and 8px below, the same margins the outline rail takes, so the two sheets start and end on the same
+	   lines. `min-height` is the canvas minus both margins: the sheet fills the space it is given while the content is
+	   short, and the content decides it once it is longer. */
+	margin: 16px auto 8px;
+	min-height: calc(100% - 24px);
 	background: var(--page-sheet);
 	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18), 0 6px 20px rgba(0, 0, 0, 0.12);
 	border: 0;
@@ -161,8 +171,9 @@ body {
 	padding: 44px 56px 72px;
 	min-height: 100%;
 	outline: none;
-	/* 12px, fixed: the page is a document, and its size is the page's own decision rather than a copy of the code editor's. */
-	font-size: 12px;
+	/* The configured page size — `temcoEditor.fontSize`, published as a variable on the page — with 12px as the default
+	   a window that has never set it gets. */
+	font-size: var(--page-font-size, 12px);
 	line-height: 1.7;
 	color: var(--fg);
 }
@@ -346,22 +357,32 @@ body {
 	opacity: 1;
 }
 
-/* A toolbar button that is on: the glyph takes the accent, a hairline ring says "pressed". Not a filled block — a toggle
-   is a state, and a block of the selection colour reads as a button that was just clicked rather than a mode that is on. */
+/* A toolbar button that is on: a soft fill and the ink glyph, the way every ribbon marks a running mode. Azure is kept for
+   the focus rectangle and the primary button — a row of blue-tinted toggles competes with the writing itself. */
 .ribbon .btn.is-on {
-	background: var(--bg-hover);
-	color: var(--accent);
-	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+	background: var(--neutral-pressed);
+	color: var(--fg);
+	box-shadow: none;
+}
+
+.ribbon .btn.is-on:hover {
+	background: color-mix(in srgb, var(--vscode-foreground) 18%, transparent);
 }
 
 /* The status strip's own bits. */
 
 /* A footer, not part of the document: it keeps its height when the page is long, and every control in it is centred on
-   the same line — the panel rule from `chrome.css` is the platform's, and a page that is a whole window wants both. */
+   the same line — the panel rule from `chrome.css` is the platform's, and a page that is a whole window wants both. It
+   is the bar's twin, so it wears the bar's surface and the bar's 26px line. */
 .page-surface .md-editor__status {
 	flex: none;
 	align-items: center;
 	min-height: 26px;
+	padding: 0 8px;
+	gap: 12px;
+	background: color-mix(in srgb, var(--vscode-foreground) 4%, var(--editor-bg));
+	border-top: 1px solid var(--border);
+	font-size: 11px;
 }
 
 .statusbar__spacer {
@@ -441,6 +462,9 @@ body {
 	min-height: 0;
 	display: flex;
 	position: relative;
+	/* The canvas runs under the rail as well as under the sheet, so the gaps beside the rail are the same tone as the gap
+	   above the page — one working surface with two sheets on it. */
+	background: var(--page-canvas);
 }
 
 .page-surface__canvas {
@@ -450,11 +474,15 @@ body {
 	min-width: 0;
 }
 
-/* The outline rail. It mirrors the table of contents the published page shows — on the right, where a reader finds it — so
-   the structure you edit is the structure you ship. A fixed 216 px: it is a list of headings, not a pane to be dragged, and
-   a rail that grew with the window would keep taking space from the page it is only supposed to navigate. */
+/* The outline rail. It is read before the page it navigates, so it sits on the left, where a reader starts. A fixed 300 px:
+   it is a list of headings, not a pane to be dragged, and a rail that grew with the window would keep taking space from the
+   page it is only supposed to navigate. Nothing separates it from the page but its own tint — an edge-to-edge hairline in
+   a window that already has three was one line too many. */
 .page-surface__outline {
 	position: relative;
+	/* `order` and not a DOM move: the rail is the page's sibling either side of the canvas, and which side is a styling
+	   decision rather than a structural one. */
+	order: -1;
 	display: flex;
 	flex-direction: column;
 	/* Pinned four ways on purpose: a flex item's automatic minimum is its content, so a long heading or the filter's
@@ -465,26 +493,40 @@ body {
 	min-width: 300px;
 	max-width: 300px;
 	min-height: 0;
-	border-left: 1px solid var(--border);
-	background: var(--vscode-sideBar-background, var(--page-canvas));
+	/* The same paper the page is, on the same canvas: 16px above, like the sheet, and a small gap under it so the two are
+	   two sheets rather than one column with a seam. Square corners, like the page's own sheet — a sheet is a sheet. */
+	margin: 16px 8px 8px 0;
+	border: 0;
+	border-radius: 0;
+	overflow: hidden;
+	padding: 2px 8px 8px;
+	background: var(--page-sheet);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18), 0 6px 20px rgba(0, 0, 0, 0.12);
 }
 
-/* The divider that resizes the rail: a strip over the hairline, wide enough to grab and invisible until it is used. */
+/* The edge that resizes the rail: a strip along its right side, wide enough to grab and drawn as nothing. The close button
+   is the only control the rail shows — a coloured seam was a second, louder one that said "drag me" more than it said
+   "this is a boundary". */
 .page-surface__outline-grip {
 	position: absolute;
-	left: -3px;
+	right: 0;
 	top: 0;
 	bottom: 0;
-	width: 6px;
+	width: 8px;
 	z-index: 1;
 	cursor: col-resize;
 	background: transparent;
 }
 
-.page-surface__outline-grip:hover,
+.page-surface__outline-grip:hover {
+	background: transparent;
+}
+
+/* A keyboard still has to see where it is: the ring is drawn only when the separator itself has focus. */
 .page-surface__outline-grip:focus-visible {
-	background: var(--accent);
-	outline: none;
+	background: transparent;
+	outline: 1px solid var(--vscode-focusBorder, var(--accent));
+	outline-offset: -1px;
 }
 
 .page-surface__outline-head {
@@ -492,8 +534,7 @@ body {
 	align-items: center;
 	gap: 6px;
 	flex: none;
-	padding: 4px 4px 4px 10px;
-	border-bottom: 1px solid var(--border);
+	padding: 6px 0 2px 4px;
 }
 
 .page-surface__outline-title {
@@ -523,5 +564,5 @@ body {
 
 .page-surface__outline > .outline {
 	flex: 1 1 auto;
-	padding: 4px 4px 0;
+	padding: 4px 0 0;
 }
