@@ -33,7 +33,7 @@
       "temco": [
         {
           "id": "temcoRepositories.list",
-          "name": "Repositories"
+          "name": "Sources"
         }
       ]
     },

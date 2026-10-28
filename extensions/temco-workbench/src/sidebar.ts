@@ -1,13 +1,13 @@
 // The application's side-bar groups that are not a data view.
 //
-// Each of these containers — AI Hub, Temco Learn, Settings, Help — is a short list of rows, one per thing
-// that can be done from there. They are rows rather than a page because a side bar answers "where do I go next"; the
-// page behind each row is the module's.
+// Settings is the one container left that is a short list of rows, one per thing that can be done from there. They are
+// rows rather than a page because a side bar answers "where do I go next"; the page behind each row is the module's.
+// The rest of the side bar is data: Projects and What needs doing in Home, the project and its pages in Documentation.
 //
 // They live in the workbench module for one reason: **the order of the activity bar is the order the containers were
 // registered**, and a container cannot declare an order. Declaring them all in one manifest is the only way to get the
-// mock's sequence — Dashboard, Documentation, Documents, AI Hub, Temco Learn, Devices, I/O, BACnet,
-// Network, SQL, Settings, Help — instead of whichever module happened to be scanned first.
+// intended sequence — Home, Documentation, AI, Tools, Settings — instead of whichever module happened to be scanned
+// first.
 
 import * as vscode from 'vscode';
 
@@ -34,30 +34,6 @@ interface Group {
 
 const GROUPS: Group[] = [
 	{
-		id: 'temcoWorkbench.activityView',
-		title: 'Recent activity',
-		rows: [
-			{ label: 'Recent Activity', note: 'everything every module recorded, newest first', icon: 'history', command: 'temcoWorkbench.activity' }
-		]
-	},
-	{
-		id: 'temcoWorkbench.learnView',
-		title: 'Site',
-		rows: [
-			{ label: 'Home', note: 'the published site, as a reader sees it', icon: 'home', command: 'temcoWorkbench.learn.home' },
-			{ label: 'T3000', note: 'one product, area by area', icon: 'book', command: 'temcoWorkbench.learn.t3000' },
-			{ label: 'Article Preview', note: 'a page as the site renders it', icon: 'preview', command: 'temcoWorkbench.learn.article' }
-		]
-	},
-	{
-		id: 'temcoWorkbench.learnDelivery',
-		title: 'Delivery',
-		rows: [
-			{ label: 'Downloads', note: 'the offline artifacts of a published version', icon: 'download', command: 'temcoWorkbench.learn.downloads' },
-			{ label: 'Learning Paths', note: 'ordered reading for a job', icon: 'mortar-board', command: 'temcoWorkbench.learn.paths' }
-		]
-	},
-	{
 		id: 'temcoWorkbench.settingsProfile',
 		title: 'Profile',
 		rows: [
@@ -73,24 +49,6 @@ const GROUPS: Group[] = [
 			{ label: 'Modules', note: 'the built-in extensions that ship with the platform', icon: 'package', command: 'temcoWorkbench.settings.modules', countKey: 'modules' },
 			{ label: 'Branding', note: 'the mark, the theme and the identity', icon: 'paintcan', command: 'temcoWorkbench.settings.branding' },
 			{ label: 'Publishing', note: 'where a release goes and what it may overwrite', icon: 'cloud-upload', command: 'temcoWorkbench.settings.publishing' }
-		]
-	},
-	{
-		id: 'temcoWorkbench.helpLearn',
-		title: 'Learn',
-		rows: [
-			{ label: 'Welcome', note: 'what the application is for, and the ways in', icon: 'dashboard', command: 'temcoWorkbench.help.welcome' },
-			{ label: 'Help', note: 'where to start, and what this window is', icon: 'info', command: 'temcoWorkbench.help.home' },
-			{ label: 'Keyboard Shortcuts', note: 'every binding, by group', icon: 'key', command: 'temcoWorkbench.help.keys' }
-		]
-	},
-	{
-		id: 'temcoWorkbench.helpSupport',
-		title: 'Support',
-		rows: [
-			{ label: 'Logs', note: 'four files, and how to read one', icon: 'output', command: 'temcoWorkbench.help.logs' },
-			{ label: 'Report an Issue', note: 'the facts a report needs, collected', icon: 'report', command: 'temcoWorkbench.help.issue' },
-			{ label: 'About Temco Platform', note: 'the version in front of you', icon: 'info', command: 'temcoWorkbench.help.about' }, { label: 'Documentation', note: 'what is being read', icon: 'book', command: 'temcoDocs.overview' }
 		]
 	}
 ];

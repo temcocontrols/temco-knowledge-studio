@@ -20,26 +20,19 @@ import { LearnPages } from './learnPages';
 import { NeedsPage } from './needsPage';
 import { registerSettings } from './settingsPages';
 import { registerSidebarViews } from './sidebar';
-import { OverviewTree } from './overviewTree';
 import { Catalog, selection } from './store';
 export function activate(context: vscode.ExtensionContext): void {
 	// How many drafts a person still has to settle. A queue is not in the registry, so it is read from the catalog
 	// once per refresh and kept here — the badge is drawn synchronously, and a number that lags one refresh is
 	// honest, whereas a badge that cannot be drawn is not.
 	let waiting = 0;
-	// The group views whose containers this module declares: AI Hub, Temco Learn, Settings, Help.
-	// The two rows that carry a number — Modules and Needs Review — read it when they are drawn, so installing a
-	// module or reviewing a page changes the panel without a reload.
+	// The group views whose container this module declares: Settings.
+	// The row that carries a number — Modules — reads it when it is drawn, so installing a module changes the panel
+	// without a reload.
 	const sidebars = registerSidebarViews(context, () => ({
 		modules: vscode.extensions.all.filter((extension) => extension.packageJSON.publisher === 'temcocontrols').length,
 		needs: totals(roots()).neverReviewed + waiting,
 	}));
-	// The Dashboard's Overview: the facts as rows, each opening the page behind it.
-	const overview = new OverviewTree();
-	context.subscriptions.push(
-		vscode.window.createTreeView('temcoWorkbench.platformView', { treeDataProvider: overview }),
-		onDidChange(() => overview.refresh())
-	);
 	/** Re-read the queue, then redraw the panel: what is left is what a person still has to look at. */
 	const countDrafts = async (): Promise<void> => {
 		try {

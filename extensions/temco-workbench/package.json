@@ -29,14 +29,8 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onView:temcoWorkbench.learnView",
-    "onView:temcoWorkbench.learnDelivery",
     "onView:temcoWorkbench.settingsProfile",
-    "onView:temcoWorkbench.settingsPlatform",
-    "onView:temcoWorkbench.helpLearn",
-    "onView:temcoWorkbench.helpSupport",
-    "onView:temcoWorkbench.platformView",
-    "onView:temcoWorkbench.activityView"
+    "onView:temcoWorkbench.settingsPlatform"
   ],
   "contributes": {
     "views": {
@@ -46,20 +40,9 @@
           "name": "Projects"
         },
         {
-          "id": "temcoWorkbench.platformView",
-          "name": "Overview"
-        },
-        {
-          "id": "temcoWorkbench.activityView",
-          "name": "Recent activity"
-        },
-        {
-          "id": "temcoWorkbench.learnView",
-          "name": "Site"
-        },
-        {
-          "id": "temcoWorkbench.learnDelivery",
-          "name": "Delivery"
+          "id": "temcoDocs.queue",
+          "name": "What needs doing",
+          "initialSize": 1
         }
       ],
       "temcoSettings": [
@@ -70,14 +53,6 @@
         {
           "id": "temcoWorkbench.settingsPlatform",
           "name": "Platform"
-        },
-        {
-          "id": "temcoWorkbench.helpLearn",
-          "name": "Learn"
-        },
-        {
-          "id": "temcoWorkbench.helpSupport",
-          "name": "Support"
         }
       ]
     },
@@ -289,7 +264,7 @@
         },
         {
           "id": "temco",
-          "title": "Docs",
+          "title": "Documentation",
           "icon": "media/document.svg"
         },
         {

@@ -36,7 +36,6 @@ import { statusLine } from './statusLine';
 import { OverviewPage } from './overview';
 import { AREA_CHAPTER, KINDS, PageDeps, PageOperations, registerPageCommands, sourceAt, writePage } from './pageOps';
 import { writePortal, writeReader } from './learnPortal';
-import { ProjectSection } from './projectSection';
 import { projects } from './projects';
 import { PreviewPanels } from './previewPanel';
 import { openSource } from './webview';
@@ -197,14 +196,11 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
    */
   let picked = false;
 
-  // **Needs You** — the queue that lives on the Dashboard: screenshots with no page yet, pages the code moved away
-  // from, pages never reviewed. It reads the same roots the tree reads, so the two can never disagree.
+  // **What needs doing** — the queue that lives in Home: screenshots with no page yet, pages the code moved away from,
+  // pages never reviewed. It reads the same roots the tree reads, so the two can never disagree.
   const queue = new QueueTreeProvider({ roots: () => roots });
   const queueView = vscode.window.createTreeView(QUEUE_ID, { treeDataProvider: queue });
-  // The Documentation panel's second section: what the project is made of, above the pipeline it feeds.
-  const projectSection = new ProjectSection(() => roots);
-  const projectView = vscode.window.createTreeView('temcoDocs.project', { treeDataProvider: projectSection });
-  context.subscriptions.push(queueView, projectView);
+  context.subscriptions.push(queueView);
 
   /**
    * The file in front, whether it is a text editor or a custom one.
@@ -424,7 +420,6 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     );
     provider.setRoots(unique, notes, loose);
     sidebar.refresh();
-    projectSection.refresh();
     queue.refresh();
     draftView.refresh();
     // The view says which project it is showing: it answers about a project, never about the window, and a view
@@ -864,7 +859,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
       await createProjectFolder(context, typeof slug === 'string' ? slug : undefined, typeof name === 'string' ? name : undefined);
     }),
     // A source is the repositories module's page; this module only knows which source a page came from.
-    vscode.commands.registerCommand('temcoDocs.repository', () => focusView('temcoRepositories.sources')),
+    vscode.commands.registerCommand('temcoDocs.repository', () => focusView('temcoRepositories.list')),
     vscode.commands.registerCommand('temcoDocs.documents', () => focusView('temcoDocs.pages')),
     // An area row on the Documents page: open that area. Registered rather than left implicit because the page draws
     // the row; without this the row was a button that posted a message nothing answered.

@@ -59,9 +59,9 @@ export function registerProjectCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand('temcoProjects.showProject', async () => {
       // Focusing the view is what brings its panel forward — VS Code registers `<viewId>.focus` for every
-      // contributed view and opens the container with it. Naming the container's own command would have to guess an
-      // id that no API promises, which is exactly what failed here.
-      await vscode.commands.executeCommand('temcoDocs.project.focus');
+      // contributed view and opens the container with it. The project's own section is its pages, so that is the
+      // view to bring forward.
+      await vscode.commands.executeCommand('temcoDocs.pages.focus');
     })
   );
 

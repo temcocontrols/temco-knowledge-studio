@@ -36,7 +36,6 @@
   "activationEvents": [
     "onView:temcoDocs.panel",
     "onView:temcoDocs.pages",
-    "onView:temcoDocs.project",
     "onView:temcoDocs.queue",
     "onView:temcoDocs.draft",
     "onView:temcoDocs.outline",
@@ -77,20 +76,9 @@
         },
         {
           "id": "temcoDocs.pages",
-          "name": "Pages",
+          "name": "Pages"
+,
           "initialSize": 3
-        },
-        {
-          "id": "temcoDocs.queue",
-          "name": "Needs You",
-          "initialSize": 1,
-          "visibility": "collapsed"
-        },
-        {
-          "id": "temcoDocs.project",
-          "name": "Sources",
-          "initialSize": 1,
-          "visibility": "collapsed"
         },
         {
           "id": "temcoDocs.section.pipeline",
@@ -145,6 +133,10 @@
         "command": "temcoDocs.documents",
         "title": "Show the Pages",
         "icon": "$(book)"
+      },
+      {
+        "command": "temcoDocs.knowledge",
+        "title": "Open an Area"
       },
       {
         "command": "temcoDocs.page",

@@ -27,7 +27,6 @@
   ],
   "activationEvents": [
     "onView:temcoAi.panel",
-    "onView:temcoAi.assistant",
     "onView:temcoAi.runtime"
   ],
   "contributes": {
@@ -49,10 +48,6 @@
         }
       ],
       "temcoAiHub": [
-        {
-          "id": "temcoAi.assistant",
-          "name": "Assistant"
-        },
         {
           "id": "temcoAi.runtime",
           "name": "Runtime"

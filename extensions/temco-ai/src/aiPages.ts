@@ -285,7 +285,7 @@ ${card({
 </div>`;
 }
 
-/** The AI Hub's two side-bar groups: the mock's *Assistant* and *Runtime*. */
+/** The AI Hub's side-bar group: the mock's *Runtime*. The chat is the panel, not a row that opens a page. */
 interface Row {
 	label: string;
 	note: string;
@@ -294,14 +294,6 @@ interface Row {
 }
 
 const GROUPS: { id: string; rows: Row[] }[] = [
-	{
-		id: 'assistant',
-		rows: [
-			{ label: 'Chat', note: 'ask about the page that is open', mark: 'sparkle', command: 'temcoAi.chat' },
-			{ label: 'Actions', note: 'what the AI is allowed to do', mark: 'play', command: 'temcoAi.actions' },
-			{ label: 'Citations', note: 'where each answer came from', mark: 'link', command: 'temcoAi.citations' }
-		]
-	},
 	{
 		id: 'runtime',
 		rows: [
