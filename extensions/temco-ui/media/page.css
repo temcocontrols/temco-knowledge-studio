@@ -3497,6 +3497,24 @@ body.vscode-high-contrast {
 	line-height: 34px;
 }
 
+/* A glyph before the title: the page's own mark, in the same chip a card uses. */
+.az-title__mark {
+	display: inline-grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	margin-right: var(--sp-2);
+	border-radius: var(--r-2);
+	background: var(--az-blue-selected);
+	color: var(--az-blue);
+	vertical-align: -4px;
+}
+
+.az-title__mark .icon {
+	width: 17px;
+	height: 17px;
+}
+
 .az-intro {
 	margin: var(--sp-2) 0 0;
 	max-width: 78ch;
@@ -3683,8 +3701,8 @@ body.vscode-high-contrast {
 .az-option {
 	display: flex;
 	flex-direction: column;
-	gap: var(--sp-2);
-	padding: var(--sp-3);
+	gap: 6px;
+	padding: var(--sp-2) var(--sp-3);
 	border: 1px solid var(--hairline);
 	border-radius: var(--r-2);
 	background: var(--surface-card);
@@ -3697,10 +3715,10 @@ body.vscode-high-contrast {
 	box-shadow: var(--el-2);
 }
 
+/* The picked card is marked by its fill and its tag, not by a stripe down one edge. */
 .az-option--pick {
 	border-color: var(--az-blue-pale);
 	background: var(--surface-card);
-	border-left: 3px solid var(--az-blue);
 }
 
 .az-option__top {
@@ -3712,8 +3730,8 @@ body.vscode-high-contrast {
 .az-option__icon {
 	display: grid;
 	place-items: center;
-	width: 28px;
-	height: 28px;
+	width: 24px;
+	height: 24px;
 	border-radius: var(--r-2);
 	background: var(--az-blue-selected);
 	color: var(--az-blue);
@@ -3721,8 +3739,8 @@ body.vscode-high-contrast {
 }
 
 .az-option__icon .icon {
-	width: 16px;
-	height: 16px;
+	width: 14px;
+	height: 14px;
 }
 
 .az-option__title {
@@ -3756,7 +3774,7 @@ body.vscode-high-contrast {
 	list-style: none;
 	display: flex;
 	flex-direction: column;
-	gap: var(--sp-2);
+	gap: 4px;
 }
 
 .az-option__tick {
@@ -3926,6 +3944,9 @@ body.vscode-high-contrast {
 }
 
 .az-card {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
 	padding: var(--sp-2) var(--sp-3);
 	border: 1px solid var(--hairline);
 	border-radius: var(--r-2);
@@ -3962,12 +3983,21 @@ body.vscode-high-contrast {
 	height: 15px;
 }
 
+/* The mark and the name share the card's first line; the description starts under both. */
+.az-card__head {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+	min-width: 0;
+}
+
 .az-card__title {
-	margin-top: var(--sp-2);
+	min-width: 0;
 	color: var(--ink-1);
 	font-size: 13px;
 	font-weight: 400;
 	line-height: 18px;
+	overflow-wrap: anywhere;
 }
 
 .az-card__desc {
@@ -3977,17 +4007,124 @@ body.vscode-high-contrast {
 	line-height: 16px;
 }
 
+/* A counted fact under the description: "2 of 5 steps". */
+.az-card__note {
+	margin: var(--sp-2) 0 0;
+	color: var(--ink-3);
+	font-size: 12px;
+	line-height: 16px;
+}
+
+/* How far the thing the card describes has got, drawn only when the window can attest to it. */
+.az-card__bar {
+	display: block;
+	height: 4px;
+	margin-top: var(--sp-1);
+	border-radius: 2px;
+	background: var(--hairline);
+	overflow: hidden;
+}
+
+.az-card__fill {
+	display: block;
+	height: 100%;
+	border-radius: inherit;
+	background: var(--az-blue);
+}
+
 .az-card__go {
 	display: inline-flex;
 	align-items: center;
 	gap: var(--sp-1);
-	margin-top: var(--sp-2);
+	margin-top: auto;
+	padding-top: var(--sp-2);
 	color: var(--az-blue);
 	font-size: 12px;
 	font-weight: 400;
 }
 
 .az-card__go .icon {
+	width: 12px;
+	height: 12px;
+}
+
+/* ---- an entry: the one thing a page already knows about, lying on its side ---- */
+
+.az-entry {
+	display: grid;
+	grid-template-columns: 26px minmax(0, 1fr) auto;
+	align-items: center;
+	gap: var(--sp-3);
+	padding: var(--sp-2) var(--sp-3);
+	border: 1px solid var(--hairline);
+	border-radius: var(--r-2);
+	background: var(--surface-card);
+}
+
+.az-entry--action {
+	cursor: pointer;
+	transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.az-entry--action:hover {
+	border-color: var(--az-blue-pale);
+	box-shadow: var(--el-1);
+}
+
+.az-entry--action:focus-visible {
+	outline: 2px solid var(--az-blue);
+	outline-offset: 1px;
+}
+
+.az-entry__icon {
+	display: grid;
+	place-items: center;
+	width: 26px;
+	height: 26px;
+	border-radius: var(--r-2);
+	background: var(--az-blue-selected);
+	color: var(--az-blue);
+	flex: none;
+}
+
+.az-entry__icon .icon {
+	width: 15px;
+	height: 15px;
+}
+
+.az-entry__main {
+	min-width: 0;
+}
+
+.az-entry__title {
+	display: block;
+	color: var(--ink-1);
+	font-size: 13px;
+	line-height: 18px;
+}
+
+.az-entry__meta {
+	display: block;
+	margin-top: 1px;
+	color: var(--ink-3);
+	font-size: 12px;
+	line-height: 16px;
+	font-family: var(--font-mono);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.az-entry__go {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--sp-1);
+	color: var(--az-blue);
+	font-size: 12px;
+	white-space: nowrap;
+}
+
+.az-entry__go .icon {
 	width: 12px;
 	height: 12px;
 }

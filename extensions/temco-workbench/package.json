@@ -120,7 +120,7 @@
       {
         "command": "temcoWorkbench.welcome",
         "title": "Welcome",
-        "icon": "$(info)"
+        "icon": "$(dashboard)"
       },
       {
         "command": "temcoWorkbench.toggleWelcomeStartup",
@@ -210,7 +210,7 @@
       {
         "command": "temcoWorkbench.help.welcome",
         "title": "Welcome",
-        "icon": "$(home)"
+        "icon": "$(dashboard)"
       },
       {
         "command": "temcoWorkbench.help.home",

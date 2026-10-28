@@ -1,6 +1,7 @@
 ﻿<svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
 	<defs>
 		<g id="i-home" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.4 12 4l8 6.4V20a1 1 0 0 1-1 1h-4.5v-6.2h-5V21H5a1 1 0 0 1-1-1z"/></g>
+		<g id="i-dashboard" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.2"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.2"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.2"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.2"/></g>
 		<g id="i-clock" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v4.9l3.2 1.9"/></g>
 		<g id="i-check" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.6l4.8 4.8L19.5 7"/></g>
 		<g id="i-alert" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6 21 20H3z"/><path d="M12 9.4v4.4"/><circle cx="12" cy="16.8" r=".9" fill="currentColor" stroke="none"/></g>

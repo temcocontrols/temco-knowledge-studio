@@ -25,6 +25,10 @@ interface FeatureCard {
 	command?: string;
 	args?: unknown;
 	go?: string;
+	/** A counted fact under the description, e.g. `2 of 5 steps`. */
+	note?: string;
+	/** How far the thing described has got, 0–1. */
+	progress?: number;
 }
 
 /** One of the three options the front page offers side by side. */
@@ -45,6 +49,8 @@ interface HeroOptions {
 	crumbs?: string;
 	eyebrow?: string;
 	title: string;
+	/** A glyph before the title, drawn in a brand-tinted chip. */
+	mark?: string;
 	desc?: string;
 	/** The description takes the full width instead of a 78-character reading measure. */
 	descWide?: boolean;
@@ -74,10 +80,12 @@ interface UiApi {
 	section(options: { title: string; desc?: string; actions?: string }): string;
 	/** A row of cards that are ways in. */
 	cards(items: readonly FeatureCard[], options?: { dense?: boolean }): string;
+	/** One entry lying on its side: the mark, the thing itself, and the way in at its right-hand end. */
+	entryRow(options: { title: string; meta?: string; mark?: string; command?: string; args?: unknown; go?: string }): string;
 	/** A code card, with drawn line numbers and four tones of syntax. */
 	code(options: { language: string; lines: readonly { text: string; tokens?: readonly [number, number, 'keyword' | 'string' | 'name' | 'comment'][] }[] }): string;
 	/** The floating action in the corner of the page. */
-	floatAction(options: { label: string; command: string; mark?: string }): string;	commandScript: string;
+	floatAction(options: { label: string; command: string; mark?: string }): string; commandScript: string;
 	runCommand(message: PageMessage): void;
 }
 
@@ -127,6 +135,9 @@ export const section = ui.section;
 
 /** A row of cards that are ways in. */
 export const cards = ui.cards;
+
+/** One entry lying on its side: the mark, the thing itself, and the way in at its right-hand end. */
+export const entryRow = ui.entryRow;
 
 /** A code card. */
 export const code = ui.code;

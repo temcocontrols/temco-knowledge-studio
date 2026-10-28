@@ -59,6 +59,8 @@ export interface HeroOptions {
 	/** A line above the title, when there is no breadcrumb. */
 	eyebrow?: string;
 	title: string;
+	/** A glyph before the title, drawn in a brand-tinted chip. */
+	mark?: string;
 	desc?: string;
 	/**
 	 * The description takes the full width instead of a reading measure.
@@ -100,7 +102,8 @@ export function hero(options: HeroOptions): string {
 	const actions = options.actions === undefined || options.actions.length === 0 ? '' : buttons(options.actions);
 	const row = search === '' && actions === '' ? '' : `<div class="az-row">${search}${actions}</div>`;
 	const size = options.hero === true ? ' az-title--hero' : '';
-	return `<div class="az-wash"><header class="az-lead">${crumbs}<h1 class="az-title${size}">${escapeHtml(options.title)}</h1>${desc}${row}</header></div>`;
+	const mark = options.mark === undefined ? '' : `<span class="az-title__mark">${icon(options.mark)}</span>`;
+	return `<div class="az-wash"><header class="az-lead">${crumbs}<h1 class="az-title${size}">${mark}${escapeHtml(options.title)}</h1>${desc}${row}</header></div>`;
 }
 
 /** One figure in the number row. */
@@ -177,6 +180,10 @@ export interface FeatureCard {
 	args?: unknown;
 	/** The words on the way in, when the card is one. */
 	go?: string;
+	/** A counted fact under the description, e.g. `2 of 5 steps`. */
+	note?: string;
+	/** How far the thing described has got, 0–1. Drawn only when a page can attest to it. */
+	progress?: number;
 }
 
 /** A row of cards that are ways in. A card without a command is drawn as a plain card, not as a dead button. */
@@ -185,8 +192,40 @@ export function cards(items: readonly FeatureCard[], options: { dense?: boolean 
 		const plain = item.command === undefined;
 		const args = item.args === undefined ? '' : ` data-args="${escapeHtml(JSON.stringify(item.args))}"`;
 		const attr = plain ? '' : ` data-command="${escapeHtml(item.command as string)}"${args}`;
-		return `<div class="az-card${plain ? '' : ' az-card--action'}"${attr}>${item.mark === undefined ? '' : `<span class="az-card__icon">${icon(item.mark)}</span>`}<div class="az-card__title">${escapeHtml(item.title)}</div><p class="az-card__desc">${escapeHtml(item.desc)}</p>${plain ? '' : `<span class="az-card__go">${escapeHtml(item.go ?? 'Open')}${icon('chevron-right', 'icon--sm')}</span>`}</div>`;
+		const chip = item.mark === undefined ? '' : `<span class="az-card__icon">${icon(item.mark)}</span>`;
+		const head = `<span class="az-card__head">${chip}<span class="az-card__title">${escapeHtml(item.title)}</span></span>`;
+		const note = item.note === undefined ? '' : `<p class="az-card__note">${escapeHtml(item.note)}</p>`;
+		const share = item.progress === undefined ? 0 : Math.round(Math.min(1, Math.max(0, item.progress)) * 100);
+		const bar = item.progress === undefined ? '' : `<span class="az-card__bar"><span class="az-card__fill" style="width:${share}%"></span></span>`;
+		return `<div class="az-card${plain ? '' : ' az-card--action'}"${attr}>${head}<p class="az-card__desc">${escapeHtml(item.desc)}</p>${note}${bar}${plain ? '' : `<span class="az-card__go">${escapeHtml(item.go ?? 'Open')}${icon('chevron-right', 'icon--sm')}</span>`}</div>`;
 	}).join('')}</div>`;
+}
+
+/**
+ * One entry lying on its side: the mark, the thing itself, and the way back into it at the right-hand end.
+ *
+ * A card is a thing to choose between; an entry is the one thing a page already knows about — the page a workspace
+ * remembers. It is drawn as a row because a single card in a row of cards reads as an option that did not arrive.
+ */
+export interface EntryRowOptions {
+	title: string;
+	/** The line under the title: a path, a count, where the thing lives. */
+	meta?: string;
+	mark?: string;
+	command?: string;
+	args?: unknown;
+	/** The words of the way in, at the right-hand end. */
+	go?: string;
+}
+
+export function entryRow(options: EntryRowOptions): string {
+	const plain = options.command === undefined;
+	const args = options.args === undefined ? '' : ` data-args="${escapeHtml(JSON.stringify(options.args))}"`;
+	const attr = plain ? '' : ` data-command="${escapeHtml(options.command as string)}"${args}`;
+	const mark = options.mark === undefined ? '' : `<span class="az-entry__icon">${icon(options.mark)}</span>`;
+	const meta = options.meta === undefined ? '' : `<span class="az-entry__meta">${escapeHtml(options.meta)}</span>`;
+	const go = plain ? '' : `<span class="az-entry__go">${escapeHtml(options.go ?? 'Open')}${icon('chevron-right', 'icon--sm')}</span>`;
+	return `<div class="az-entry${plain ? '' : ' az-entry--action'}"${attr}>${mark}<div class="az-entry__main"><span class="az-entry__title">${escapeHtml(options.title)}</span>${meta}</div>${go}</div>`;
 }
 
 /** One line of a code card, and the tone the tokens on it are drawn in. */

@@ -13,7 +13,7 @@
 import * as vscode from 'vscode';
 import { ISSUE_INCLUDES, LOG_FILES, SHORTCUTS } from './helpSample';
 import type { Selection } from './store';
-import { callout as calloutCard, cards, commandScript, escapeHtml as esc, floatAction, hero, icon, optionCards, page, pageColumn, questions, section, toneMark } from './ui';
+import { callout as calloutCard, cards, commandScript, entryRow, escapeHtml as esc, floatAction, hero, icon, optionCards, page, pageColumn, questions, section, toneMark } from './ui';
 
 export const HELP_WELCOME_VIEW_TYPE = 'temcoWorkbench.help.welcome';
 export const HELP_HOME_VIEW_TYPE = 'temcoWorkbench.help.home';
@@ -215,7 +215,7 @@ export class HelpPages {
 			enableScripts: true,
 			localResourceRoots: []
 		});
-		panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'help.svg');
+		panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', key === 'welcome' ? 'dashboard.svg' : 'help.svg');
 		panel.webview.html = html;
 		panel.webview.onDidReceiveMessage((message: HelpMessage) => {
 			if (message.type !== 'command' || typeof message.command !== 'string') {
@@ -241,18 +241,18 @@ export class HelpPages {
 		const recent = page?.path === undefined
 			? ''
 			: `${section({ title: t('Pick up where you left off'), desc: t('The page this workspace remembers. It is what the AI answers about when no editor is in front.') })}
-<div class="record-row" data-command="temcoRepositories.openFile" data-args="${esc(JSON.stringify([{ path: page.path, id: page.id, title: page.title }]))}">
-	${toneMark('document')}
-	<div class="record-row__main">
-		<div class="record-row__title"><span class="record-row__name">${esc(page.title)}</span></div>
-		<div class="record-row__meta"><span class="cell-mono">${esc(page.path)}</span></div>
-	</div>
-	<div class="record-row__state"></div>
-	<span class="record-row__go"></span>
-</div>`;
+${entryRow({
+				mark: 'document',
+				title: page.title,
+				meta: page.path,
+				command: 'temcoRepositories.openFile',
+				args: [{ path: page.path, id: page.id, title: page.title }],
+				go: t('Open')
+			})}`;
 
 		return `${hero({
 			title: t('Temco Platform'),
+			mark: 'dashboard',
 			desc: t('One window for the technical documentation of Temco products: the pages, the repositories they are written from, the AI that drafts them, the devices they describe, and the release that ships them. Everything runs on this machine; nothing is uploaded unless you publish it.'),
 			descWide: true,
 			search: { label: t('Find a page, a file or a command'), command: 'workbench.action.quickOpen', hint: 'Ctrl P' },
@@ -282,11 +282,19 @@ ${optionCards([
 			},
 			{
 				mark: 'upload',
-				title: t('Ship a release'),
+				title: t('Publish a release'),
 				desc: t('Build every artifact, freeze the version, hand it to a reader.'),
 				ticks: [t('HTML, Word, CHM and a Markdown bundle'), t('One folder, ready to hand over'), t('GitHub Pages when there is a remote')],
 				label: t('Open Ship'),
 				command: 'temcoDocs.releases'
+			},
+			{
+				mark: 'sparkle',
+				title: t('Ask the AI'),
+				desc: t('A local model answers from the pages you have written, and says which ones.'),
+				ticks: [t('Answers cite the page they came from'), t('Runs on this machine'), t('Nothing leaves the window')],
+				label: t('Open the AI'),
+				command: 'temcoAi.chat'
 			}
 		])}
 ${section({ title: t('What the platform contains'), desc: t('Nine modules. Only the first four take up a place in the activity bar.'), actions: button(t('All Commands'), 'workbench.action.showCommands', { small: true, kind: 'ghost' }) })}
@@ -295,7 +303,6 @@ ${cards([
 			{ mark: 'repo', title: t('Repositories'), desc: t('The Temco code a page is written from: organisations, local copies, reading.'), command: 'temcoProjects.addSource', go: t('Open') },
 			{ mark: 'sparkle', title: t('AI'), desc: t('A local model and the drafts it proposes, with the pages it cited.'), command: 'temcoAi.chat', go: t('Open') },
 			{ mark: 'database', title: t('Tools'), desc: t('SQL, BACnet objects, IO points and the network, on the machine in front of you.'), command: 'workbench.view.extension.temcoSql', go: t('Open') },
-			{ mark: 'document', title: t('Editor'), desc: t('Temco Editor: the Markdown surface with its ribbon, preview and diff.'), command: 'temcoDocs.documents', go: t('Open') },
 			{ mark: 'gear', title: t('Settings'), desc: t('Appearance, modules, models, publishing — and Help, which answers the rest.'), command: 'temcoWorkbench.settings', go: t('Open') }
 		], { dense: true })}
 ${calloutCard({
@@ -306,11 +313,11 @@ ${calloutCard({
 		})}
 ${recent}
 ${section({ title: t('Guides'), desc: t('Three walks through the whole of it, each counted from what this window can actually see.') })}
-<div class="grid grid--3 mt-16">
-	${walkthrough(t('Set up a project'), t('A name, the sources it reads, and the devices it can reach.'), 4, folder ? 1 : 0, 'temcoProjects.newProject')}
-	${walkthrough(t('Write and review a page'), t('From a source read to a reviewed page in an area.'), 5, project ? 1 : 0, 'temcoDocs.documents')}
-	${walkthrough(t('Publish a version'), t('Build every artifact, then freeze the version for readers.'), 4, undefined, 'temcoDocs.releases')}
-</div>
+${cards([
+			guide(t('Set up a project'), t('A name, the sources it reads, and the devices it can reach.'), 4, folder ? 1 : 0, 'temcoProjects.newProject', 'plus'),
+			guide(t('Write and review a page'), t('From a source read to a reviewed page in an area.'), 5, project ? 1 : 0, 'temcoDocs.documents', 'document'),
+			guide(t('Publish a version'), t('Build every artifact, then freeze the version for readers.'), 4, undefined, 'temcoDocs.releases', 'upload')
+		])}
 ${section({ title: t('Questions') })}
 ${questions([
 			{ ask: t('What is this application for?'), answer: t('Writing the technical documentation of a Temco product: the pages, the code they are written from, the review before they ship, and the release a customer reads.') },
@@ -334,23 +341,22 @@ export function opensAtStartup(): boolean {
 }
 
 /**
- * A walkthrough.
+ * A guide card.
  *
  * `done` is what this window can attest to — a folder is open, a project is selected — and `undefined` when it can
- * attest to nothing, in which case the card lists the steps and draws no bar. A bar that filled itself from a sample
+ * attest to nothing, in which case the card counts the steps and draws no bar. A bar that filled itself from a sample
  * would be the one dishonest thing on a page about learning where to start.
  */
-function walkthrough(title: string, note: string, steps: number, done: number | undefined, command: string): string {
-	const facts = done === undefined ? `${steps} steps` : `${done} of ${steps} steps`;
-	const bar = done === undefined
-		? ''
-		: `<div class="mt-16"><span class="bar"><span class="bar__fill${done === steps ? ' bar__fill--ok' : ''}" style="width:${Math.round((done / steps) * 100)}%"></span></span></div>`;
-	return `<div class="card card--plain">
-	<div class="card__head"><div class="card__title">${esc(title)}</div><div class="card__actions">${button('Open', command, { small: true, kind: 'ghost' })}</div></div>
-	<p class="card__desc">${esc(note)}</p>
-	<div class="facts" style="margin-top:0"><span>${esc(facts)}</span></div>
-	${bar}
-</div>`;
+function guide(title: string, note: string, steps: number, done: number | undefined, command: string, mark: string) {
+	return {
+		mark,
+		title,
+		desc: note,
+		note: done === undefined ? `${steps} steps` : `${done} of ${steps} steps`,
+		progress: done === undefined ? undefined : done / steps,
+		command,
+		go: 'Open'
+	};
 }
 
 /* ------------------------------------------------------------------ Help */

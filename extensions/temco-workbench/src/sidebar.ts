@@ -79,7 +79,7 @@ const GROUPS: Group[] = [
 		id: 'temcoWorkbench.helpLearn',
 		title: 'Learn',
 		rows: [
-			{ label: 'Welcome', note: 'what the application is for, and the ways in', icon: 'home', command: 'temcoWorkbench.help.welcome' },
+			{ label: 'Welcome', note: 'what the application is for, and the ways in', icon: 'dashboard', command: 'temcoWorkbench.help.welcome' },
 			{ label: 'Help', note: 'where to start, and what this window is', icon: 'info', command: 'temcoWorkbench.help.home' },
 			{ label: 'Keyboard Shortcuts', note: 'every binding, by group', icon: 'key', command: 'temcoWorkbench.help.keys' }
 		]

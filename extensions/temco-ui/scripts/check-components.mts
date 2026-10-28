@@ -37,7 +37,7 @@ try {
 	rmSync(staging, { recursive: true, force: true });
 }
 
-const { callout, cards, code, escapeHtml, floatAction, hero, numbers, optionCards, questions, section } = components;
+const { callout, cards, code, entryRow, escapeHtml, floatAction, hero, numbers, optionCards, questions, section } = components;
 
 const failures: string[] = [];
 const check = (condition: boolean, message: string): void => {
@@ -65,6 +65,7 @@ const rendered = [
 	hero({
 		crumbs: dangerous,
 		title: dangerous,
+		mark: 'dashboard',
 		desc: dangerous,
 		search: { label: dangerous, command: dangerous, hint: dangerous },
 		actions: [
@@ -89,6 +90,8 @@ const rendered = [
 	section({ title: dangerous, desc: dangerous, actions: '<button class="btn">kept</button>' }),
 	cards([{ mark: 'plus', title: dangerous, desc: dangerous, command: dangerous, go: dangerous }]),
 	cards([{ title: dangerous, desc: dangerous, command: dangerous }], { dense: true }),
+	cards([{ title: dangerous, desc: dangerous, note: dangerous, progress: 0.4, command: dangerous }]),
+	entryRow({ mark: 'plus', title: dangerous, meta: dangerous, command: dangerous, go: dangerous }),
 	code({ language: dangerous, lines: [{ text: dangerous }] }),
 	floatAction({ label: dangerous, command: dangerous, mark: 'sparkle' })
 ].join('\n');
@@ -112,6 +115,7 @@ const lead = hero({
 check(lead.startsWith('<div class="az-wash">'), 'the title block must sit on the wash');
 check(lead.includes('<h1 class="az-title az-title--hero">Documentation</h1>'), 'the front page must use the 40/52 title');
 check(hero({ title: 'T' }).includes('<h1 class="az-title">T</h1>'), 'another page must use the 32/40 title');
+check(hero({ title: 'T', mark: 'dashboard' }).includes('class="az-title__mark"'), 'a title with a mark must draw the chip');
 check(lead.includes('class="az-crumbs"'), 'a breadcrumb must be drawn above the title');
 check(lead.includes('class="az-field"'), 'a search must render the field');
 check(lead.includes('data-command="workbench.action.quickOpen"'), 'the field must open the command it names');
@@ -137,6 +141,18 @@ check((options.match(/az-option__tick/g) ?? []).length === 4, 'every tick of eve
 check((options.match(/class="az-option__actions"/g) ?? []).length === 2, 'every card ends in an action row');
 check(options.includes('class="az-btn az-btn--primary"'), 'the picked card\'s button must be the filled one');
 check(!options.includes('alert(1)'), 'option text must be escaped');
+
+// A card that counts its steps: the note and the bar are drawn only when the page can attest to them.
+const guided = cards([{ title: 'T', desc: 'd', note: '2 of 5 steps', progress: 0.4 }]);
+check(guided.includes('class="az-card__note"'), 'a card with a note must draw it');
+check(guided.includes('class="az-card__bar"') && guided.includes('width:40%'), 'a card with progress must draw the share it was given');
+check(!cards([{ title: 'T', desc: 'd' }]).includes('az-card__bar'), 'a card without progress must not draw a bar');
+check(cards([{ mark: 'plus', title: 'T', desc: 'd' }]).includes('class="az-card__head"'), 'a card must put its mark and its title on one line');
+
+// An entry lies on its side: the mark, the thing, and the way in at its right-hand end.
+const entry = entryRow({ mark: 'plus', title: 'T', meta: 'm', command: 'c.d' });
+check(entry.includes('class="az-entry__icon"') && entry.includes('class="az-entry__go"'), 'an entry must draw its mark and its way in');
+check(!entryRow({ title: 'T' }).includes('az-entry__go'), 'an entry with no command must not draw a way in');
 
 // The number row and the callout.
 check(numbers([{ value: '1', label: 'l' }]).includes('class="az-number__value"'), 'a figure must render its value');
@@ -219,4 +235,4 @@ if (failures.length > 0) {
 	process.exit(1);
 }
 
-console.log(`9 components, ${[...new Set(rendered.split('\n').flatMap(classesIn))].length} classes drawn, one wash, sample copies back intact.`);
+console.log(`10 components, ${[...new Set(rendered.split('\n').flatMap(classesIn))].length} classes drawn, one wash, sample copies back intact.`);

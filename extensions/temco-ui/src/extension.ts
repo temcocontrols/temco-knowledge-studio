@@ -7,7 +7,7 @@
 
 import * as vscode from 'vscode';
 import { fileColumn, pageColumn } from './columns';
-import { CalloutOptions, CodeOptions, FeatureCard, HeroOptions, NumberItem, OptionCard, Question, SectionOptions, callout, cards, code, floatAction, hero, icon, numbers, optionCards, questions, section, toneMark } from './components';
+import { CalloutOptions, CodeOptions, EntryRowOptions, FeatureCard, HeroOptions, NumberItem, OptionCard, Question, SectionOptions, callout, cards, code, entryRow, floatAction, hero, icon, numbers, optionCards, questions, section, toneMark } from './components';
 import { COMMAND_SCRIPT, PageMessage, PageOptions, escapeHtml, page, runPageCommand } from './page';
 import { rowSlug } from './rows';
 
@@ -41,6 +41,8 @@ export interface TemcoUiApi {
 	section(options: SectionOptions): string;
 	/** A row of cards that are ways in. */
 	cards(items: readonly FeatureCard[], options?: { dense?: boolean }): string;
+	/** One entry lying on its side: the mark, the thing itself, and the way in at its right-hand end. */
+	entryRow(options: EntryRowOptions): string;
 	/** A code card, with drawn line numbers and four tones of syntax. */
 	code(options: CodeOptions): string;
 	/** The floating action in the corner of the page. */
@@ -67,6 +69,7 @@ export function activate(context: vscode.ExtensionContext): TemcoUiApi {
 		questions,
 		section,
 		cards,
+		entryRow,
 		code,
 		floatAction,
 		commandScript: COMMAND_SCRIPT,
