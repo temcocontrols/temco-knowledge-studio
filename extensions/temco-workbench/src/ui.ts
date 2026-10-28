@@ -1,8 +1,9 @@
 // What this module reads of the UI conventions.
 //
-// Where a page of ours opens is one rule for the whole application — the group that already holds a page of ours,
-// never a split — and what a command argument names is another. Both are the UI module's, as is what a page looks
-// like (`media/page.css`) and how it runs a command. The definition is `extensions/temco-ui/src/`; this is the copy.
+// The rules are owned by `temco-ui` and read here rather than re-decided: where a page of ours opens (one group,
+// never a split), what a command argument means (a slug, a row, or a row's own command argument), what a page looks
+// like (`media/page.css`), the components a page is built from, and how a page runs a command (a message, never a
+// link). The definition is `extensions/temco-ui/src/`; this is the copy.
 
 import * as vscode from 'vscode';
 
@@ -16,6 +17,41 @@ export interface PageMessage {
 	args?: unknown;
 }
 
+/** One card that is a way into the application. */
+interface FeatureCard {
+	title: string;
+	desc: string;
+	mark?: string;
+	command?: string;
+	args?: unknown;
+	go?: string;
+}
+
+/** One of the three options the front page offers side by side. */
+interface OptionCard {
+	title: string;
+	desc: string;
+	tag?: string;
+	mark?: string;
+	ticks: readonly string[];
+	label: string;
+	command: string;
+	args?: unknown;
+	pick?: boolean;
+}
+
+/** The title block's arguments: what it says, and the ways in it offers. */
+interface HeroOptions {
+	crumbs?: string;
+	eyebrow?: string;
+	title: string;
+	desc?: string;
+	/** The description takes the full width instead of a 78-character reading measure. */
+	descWide?: boolean;
+	search?: { label: string; command: string; hint?: string };
+	actions?: readonly { label: string; command: string; args?: unknown; mark?: string; kind?: 'primary' | 'link' }[];
+	hero?: boolean;
+}
 /** The UI module's exports. */
 interface UiApi {
 	pageColumn(): vscode.ViewColumn;
@@ -24,7 +60,24 @@ interface UiApi {
 	escapeHtml(text: string): string;
 	icon(name: string, cls?: string): string;
 	toneMark(name: string, tone?: 'ok' | 'warn' | 'err' | 'info' | 'accent'): string;
-	commandScript: string;
+	/** The title block: wash, breadcrumb, the page's only h1, the field and the ways in. */
+	hero(options: HeroOptions): string;
+	/** The row of figures under a title. */
+	numbers(items: readonly { value: string; label: string }[]): string;
+	/** Three options side by side, each ending in a button. */
+	optionCards(items: readonly OptionCard[]): string;
+	/** The one tinted callout a page is allowed. */
+	callout(options: { title: string; desc: string; mark?: string; actions?: string }): string;
+	/** The questions at the bottom of a page. */
+	questions(items: readonly { ask: string; answer: string }[]): string;
+	/** A section heading. */
+	section(options: { title: string; desc?: string; actions?: string }): string;
+	/** A row of cards that are ways in. */
+	cards(items: readonly FeatureCard[], options?: { dense?: boolean }): string;
+	/** A code card, with drawn line numbers and four tones of syntax. */
+	code(options: { language: string; lines: readonly { text: string; tokens?: readonly [number, number, 'keyword' | 'string' | 'name' | 'comment'][] }[] }): string;
+	/** The floating action in the corner of the page. */
+	floatAction(options: { label: string; command: string; mark?: string }): string;	commandScript: string;
 	runCommand(message: PageMessage): void;
 }
 
@@ -38,6 +91,7 @@ const ui = extension.exports;
 /** The editor column every page of ours opens in. */
 export const pageColumn = ui.pageColumn;
 
+/** The column for something that is not a page of ours — a documentation page, a registry. */
 /** The slug a command argument names, whether it is a slug, a row, or a row's own command argument. */
 export const rowSlug = ui.rowSlug;
 
@@ -53,6 +107,32 @@ export const icon = ui.icon;
 /** One glyph in a tinted circle: a state you can see before you read it. */
 export const toneMark = ui.toneMark;
 
+/** The title block at the top of a page. */
+export const hero = ui.hero;
+
+/** The row of figures under a title. */
+export const numbers = ui.numbers;
+
+/** Three options side by side. */
+export const optionCards = ui.optionCards;
+
+/** The one tinted callout a page is allowed. */
+export const callout = ui.callout;
+
+/** The questions at the bottom of a page. */
+export const questions = ui.questions;
+
+/** A section heading, with the page's parts told apart by it. */
+export const section = ui.section;
+
+/** A row of cards that are ways in. */
+export const cards = ui.cards;
+
+/** A code card. */
+export const code = ui.code;
+
+/** The floating action in the corner of the page. */
+export const floatAction = ui.floatAction;
 /** The script a page runs so its `data-command` buttons reach this module. */
 export const commandScript = ui.commandScript;
 

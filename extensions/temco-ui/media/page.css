@@ -3371,3 +3371,789 @@ text-align: center;
 white-space: nowrap;
 }
 
+
+/* ---------------------------------------------------------------- the Azure portal's page language (v4) */
+
+/*
+ * The palette and the sizes are the ones measured from the Azure portal and recorded beside this project in
+ * `AZURE_COLORS_ANALYSIS.md` — not Fluent 2's web scale, which is a different product:
+ *
+ *   primary text #1f2327 · secondary #63707e · links and primary actions #0078d4 (hover #106ebe, pressed #005a9e)
+ *   page #faf9f8 · card #ffffff · subtle #f3f2f1 · sidebar #f8f9fa · selected #e1f3ff · borders #edebe9 / #e1e1e1
+ *   "no pure black anywhere" · "soft borders" · "azure blue used sparingly" · "3–4px left accent on the chosen row"
+ *
+ * The sizes are the portal's, not a marketing page's: a 24px page title, an 18px section, a 14px card title and 13px
+ * text. The previous attempt used the marketing scale (40px) inside an application window, which is what made it read
+ * as a poster rather than as part of the product.
+ *
+ * The theme still owns the surfaces in a dark window: the values above are the light theme, and `body.vscode-dark`
+ * restates them from the portal's own dark palette.
+ */
+
+:root {
+	/* Azure portal spectrum */
+	--az-blue: #0078d4;
+	--az-blue-hover: #106ebe;
+	--az-blue-pressed: #005a9e;
+	--az-blue-pale: #c7e0f4;
+	--az-blue-selected: #e1f3ff;
+	--az-wash: #f0f6fc;
+
+	--ink-1: #1f2327;
+	--ink-2: #63707e;
+	--ink-3: #8a9199;
+
+	--surface-page: #faf9f8;
+	--surface-card: #ffffff;
+	--surface-subtle: #f3f2f1;
+	--surface-rail: #f8f9fa;
+
+	--hairline: #edebe9;
+	--hairline-strong: #e1e1e1;
+
+	--ok-ink: #107c10;
+	--warn-ink: #b54708;
+	--err-ink: #d13438;
+
+	/* Space: the 4px grid Azure's own layout uses. */
+	--sp-1: 4px;
+	--sp-2: 8px;
+	--sp-3: 12px;
+	--sp-4: 16px;
+	--sp-5: 20px;
+	--sp-6: 24px;
+	--sp-8: 32px;
+	--sp-10: 40px;
+
+	--r-2: 2px;
+	--r-4: 4px;
+	--r-6: 6px;
+	--r-8: 8px;
+
+	--el-1: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04);
+	--el-2: 0 2px 4px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+body.vscode-dark,
+body.vscode-high-contrast {
+	--az-blue: #59a6e8;
+	--az-blue-hover: #84c0f5;
+	--az-blue-pressed: #3d8ad4;
+	--az-blue-pale: #1e3a52;
+	--az-blue-selected: #082338;
+	--az-wash: #16222e;
+
+	--ink-1: #f3f2f1;
+	--ink-2: #b8bec4;
+	--ink-3: #8f979e;
+
+	--surface-page: #1b1a19;
+	--surface-card: #252423;
+	--surface-subtle: #2d2c2b;
+	--surface-rail: #292929;
+
+	--hairline: #3b3a39;
+	--hairline-strong: #4a4948;
+
+	--ok-ink: #6bb700;
+	--warn-ink: #f7a501;
+	--err-ink: #e37a7a;
+
+	--el-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 4px rgba(0, 0, 0, 0.3);
+	--el-2: 0 2px 4px rgba(0, 0, 0, 0.44), 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* ---- the wash: the title band, and nothing else ---- */
+
+.az-wash {
+	margin: calc(-1 * var(--sp-2)) 0 0;
+	padding: var(--sp-5) 0 var(--sp-4);
+	background: linear-gradient(180deg, var(--az-wash) 0%, transparent 100%);
+}
+
+.az-lead {
+	min-width: 0;
+}
+
+.az-crumbs {
+	margin: 0 0 var(--sp-2);
+	color: var(--ink-3);
+	font-size: 12px;
+	line-height: 16px;
+}
+
+/* 24px, not 40: this is a title inside an application, and the portal's own page titles are 24. */
+.az-title {
+	margin: 0;
+	color: var(--ink-1);
+	font-size: 24px;
+	line-height: 32px;
+	font-weight: 600;
+	letter-spacing: -0.005em;
+}
+
+.az-title--hero {
+	font-size: 26px;
+	line-height: 34px;
+}
+
+.az-intro {
+	margin: var(--sp-2) 0 0;
+	max-width: 78ch;
+	color: var(--ink-2);
+	font-size: 13px;
+	line-height: 20px;
+}
+
+/* A front page's introduction is a summary, not a paragraph to read: it takes the column's width. */
+.az-intro--wide {
+	max-width: none;
+}
+
+.az-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--sp-2);
+	margin-top: var(--sp-3);
+}
+
+/* ---- the field: a button that opens the search it names ---- */
+
+.az-field {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+	flex: 0 1 380px;
+	min-width: 200px;
+	height: 28px;
+	padding: 0 var(--sp-2) 0 var(--sp-3);
+	border: 1px solid var(--hairline-strong);
+	border-radius: var(--r-2);
+	background: var(--surface-card);
+	color: var(--ink-3);
+	cursor: pointer;
+	text-align: left;
+}
+
+.az-field:hover {
+	border-color: var(--az-blue);
+	color: var(--ink-2);
+}
+
+.az-field:focus-visible {
+	outline: 2px solid var(--az-blue);
+	outline-offset: 1px;
+}
+
+.az-field .icon {
+	width: 14px;
+	height: 14px;
+	flex: none;
+}
+
+.az-field__label {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 12px;
+	line-height: 18px;
+}
+
+.az-field__hint {
+	flex: none;
+	padding: 0 4px;
+	border: 1px solid var(--hairline-strong);
+	border-radius: var(--r-2);
+	color: var(--ink-3);
+	font-family: var(--font-mono);
+	font-size: 11px;
+	line-height: 16px;
+}
+
+/* ---- buttons: the portal's two shapes, 32px high, 2px corner ---- */
+
+.az-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--sp-2);
+	height: 28px;
+	padding: 0 var(--sp-3);
+	border: 1px solid var(--hairline-strong);
+	border-radius: var(--r-2);
+	background: var(--surface-card);
+	color: var(--ink-1);
+	cursor: pointer;
+	font-size: 12px;
+	font-weight: 400;
+	line-height: 18px;
+	white-space: nowrap;
+}
+
+.az-btn:hover {
+	border-color: var(--hairline-strong);
+	background: var(--surface-subtle);
+}
+
+.az-btn--primary {
+	background: var(--az-blue);
+	border-color: var(--az-blue);
+	color: #ffffff;
+}
+
+.az-btn--primary:hover {
+	background: var(--az-blue-hover);
+	border-color: var(--az-blue-hover);
+}
+
+.az-btn--primary:active {
+	background: var(--az-blue-pressed);
+	border-color: var(--az-blue-pressed);
+}
+
+.az-btn--link {
+	height: auto;
+	padding: 0;
+	border: none;
+	background: none;
+	color: var(--az-blue);
+}
+
+.az-btn--link:hover {
+	background: none;
+	color: var(--az-blue-hover);
+	text-decoration: underline;
+}
+
+.az-btn .icon {
+	width: 14px;
+	height: 14px;
+}
+
+.az-btn--sm {
+	height: 24px;
+	padding: 0 var(--sp-2);
+	font-size: 11px;
+}
+
+/* The page vocabulary's own buttons, when a module renders one inside one of these blocks. */
+.az-options .btn,
+.az-callout .btn,
+.az-row .btn,
+.az-section .btn {
+	height: 28px;
+	padding: 0 var(--sp-3);
+	border-radius: var(--r-2);
+	border-color: var(--hairline-strong);
+	background: var(--surface-card);
+	color: var(--ink-1);
+	font-size: 12px;
+	font-weight: 400;
+}
+
+.az-options .btn--primary,
+.az-callout .btn--primary,
+.az-row .btn--primary {
+	background: var(--az-blue);
+	border-color: var(--az-blue);
+	color: #ffffff;
+}
+
+.az-options .btn--ghost,
+.az-callout .btn--ghost,
+.az-section .btn--ghost,
+.az-row .btn--ghost {
+	border-color: transparent;
+	background: none;
+	color: var(--az-blue);
+}
+
+/* ---- the three option cards ---- */
+
+.az-options {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+	gap: var(--sp-3);
+	margin: var(--sp-2) 0 0;
+}
+
+.az-option {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-2);
+	padding: var(--sp-3);
+	border: 1px solid var(--hairline);
+	border-radius: var(--r-2);
+	background: var(--surface-card);
+	box-shadow: var(--el-1);
+	transition: box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.az-option:hover {
+	border-color: var(--az-blue-pale);
+	box-shadow: var(--el-2);
+}
+
+.az-option--pick {
+	border-color: var(--az-blue-pale);
+	background: var(--surface-card);
+	border-left: 3px solid var(--az-blue);
+}
+
+.az-option__top {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+}
+
+.az-option__icon {
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	border-radius: var(--r-2);
+	background: var(--az-blue-selected);
+	color: var(--az-blue);
+	flex: none;
+}
+
+.az-option__icon .icon {
+	width: 16px;
+	height: 16px;
+}
+
+.az-option__title {
+	margin: 0;
+	color: var(--ink-1);
+	font-size: 14px;
+	font-weight: 400;
+	line-height: 20px;
+}
+
+.az-option__tag {
+	display: block;
+	margin: 0 0 2px;
+	color: var(--az-blue);
+	font-size: 11px;
+	font-weight: 400;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.az-option__desc {
+	margin: 0;
+	color: var(--ink-2);
+	font-size: 13px;
+	line-height: 18px;
+}
+
+.az-option__ticks {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-2);
+}
+
+.az-option__tick {
+	display: grid;
+	grid-template-columns: 14px 1fr;
+	gap: var(--sp-2);
+	align-items: start;
+	color: var(--ink-2);
+	font-size: 13px;
+	line-height: 18px;
+}
+
+.az-option__tick .icon {
+	width: 14px;
+	height: 14px;
+	margin-top: 2px;
+	color: var(--az-blue);
+}
+
+.az-option__actions {
+	margin-top: auto;
+	padding-top: var(--sp-1);
+	display: flex;
+	gap: var(--sp-2);
+}
+
+.az-option__actions .btn,
+.az-option__actions .az-btn {
+	width: 100%;
+	justify-content: center;
+}
+
+/* ---- the number row ---- */
+
+.az-numbers {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+	gap: var(--sp-3);
+	margin: var(--sp-5) 0;
+	padding: var(--sp-4) var(--sp-5);
+	border: 1px solid var(--hairline);
+	border-radius: var(--r-2);
+	background: var(--surface-card);
+}
+
+.az-number + .az-number {
+	border-left: 1px solid var(--hairline);
+	padding-left: var(--sp-5);
+}
+
+.az-number__value {
+	margin: 0;
+	color: var(--ink-1);
+	font-size: 18px;
+	font-weight: 600;
+	line-height: 24px;
+	font-variant-numeric: tabular-nums;
+}
+
+.az-number__label {
+	margin: 2px 0 0;
+	color: var(--ink-3);
+	font-size: 12px;
+	line-height: 16px;
+}
+
+/* ---- the one callout on a page ---- */
+
+.az-callout {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-4);
+	margin: var(--sp-4) 0;
+	padding: var(--sp-2) var(--sp-3);
+	border: 1px solid var(--az-blue-pale);
+	border-radius: var(--r-2);
+	background: var(--az-blue-selected);
+}
+
+.az-callout__main {
+	min-width: 0;
+	flex: 1 1 auto;
+	display: flex;
+	gap: var(--sp-3);
+}
+
+.az-callout__icon {
+	flex: none;
+	color: var(--az-blue);
+	display: grid;
+	place-items: center;
+	width: 16px;
+	height: 16px;
+	margin-top: 2px;
+}
+
+.az-callout__icon .icon {
+	width: 16px;
+	height: 16px;
+}
+
+.az-callout__title {
+	margin: 0;
+	color: var(--ink-1);
+	font-size: 13px;
+	font-weight: 400;
+	line-height: 18px;
+}
+
+.az-callout__desc {
+	margin: 2px 0 0;
+	color: var(--ink-2);
+	font-size: 13px;
+	line-height: 18px;
+}
+
+.az-callout__actions {
+	flex: none;
+	display: flex;
+	gap: var(--sp-2);
+}
+
+/* ---- sections and cards ---- */
+
+.az-section {
+	display: flex;
+	align-items: flex-end;
+	gap: var(--sp-3);
+	margin: var(--sp-6) 0 var(--sp-2);
+}
+
+.az-section__text {
+	min-width: 0;
+}
+
+.az-section__title {
+	margin: 0;
+	color: var(--ink-1);
+	font-size: 16px;
+	font-weight: 500;
+	line-height: 22px;
+}
+
+.az-section__desc {
+	margin: 2px 0 0;
+	color: var(--ink-2);
+	font-size: 12px;
+	line-height: 16px;
+}
+
+.az-section__actions {
+	margin-left: auto;
+	display: flex;
+	gap: var(--sp-2);
+	flex: none;
+}
+
+.az-cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: var(--sp-2);
+}
+
+.az-cards--dense {
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: var(--sp-2);
+}
+
+.az-card {
+	padding: var(--sp-2) var(--sp-3);
+	border: 1px solid var(--hairline);
+	border-radius: var(--r-2);
+	background: var(--surface-card);
+	transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.az-card--action {
+	cursor: pointer;
+}
+
+.az-card--action:hover {
+	border-color: var(--az-blue-pale);
+	box-shadow: var(--el-1);
+}
+
+.az-card--action:focus-visible {
+	outline: 2px solid var(--az-blue);
+	outline-offset: 1px;
+}
+
+.az-card__icon {
+	display: grid;
+	place-items: center;
+	width: 26px;
+	height: 26px;
+	border-radius: var(--r-2);
+	background: var(--az-blue-selected);
+	color: var(--az-blue);
+}
+
+.az-card__icon .icon {
+	width: 15px;
+	height: 15px;
+}
+
+.az-card__title {
+	margin-top: var(--sp-2);
+	color: var(--ink-1);
+	font-size: 13px;
+	font-weight: 400;
+	line-height: 18px;
+}
+
+.az-card__desc {
+	margin: 2px 0 0;
+	color: var(--ink-2);
+	font-size: 12px;
+	line-height: 16px;
+}
+
+.az-card__go {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--sp-1);
+	margin-top: var(--sp-2);
+	color: var(--az-blue);
+	font-size: 12px;
+	font-weight: 400;
+}
+
+.az-card__go .icon {
+	width: 12px;
+	height: 12px;
+}
+
+/* ---- the questions at the bottom ---- */
+
+.az-questions {
+	margin: var(--sp-3) 0 0;
+	border-top: 1px solid var(--hairline);
+}
+
+.az-q {
+	border-bottom: 1px solid var(--hairline);
+}
+
+.az-q__ask {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+	padding: var(--sp-2) var(--sp-1);
+	color: var(--ink-1);
+	font-size: 13px;
+	font-weight: 400;
+	line-height: 18px;
+	cursor: pointer;
+	list-style: none;
+}
+
+.az-q__ask::-webkit-details-marker {
+	display: none;
+}
+
+.az-q__ask .icon {
+	width: 12px;
+	height: 12px;
+	color: var(--ink-3);
+	transition: transform 120ms ease;
+}
+
+.az-q[open] .az-q__ask .icon {
+	transform: rotate(90deg);
+}
+
+.az-q__answer {
+	margin: 0 0 var(--sp-3);
+	padding: 0 var(--sp-1) 0 calc(var(--sp-1) + 12px + var(--sp-2));
+	color: var(--ink-2);
+	font-size: 12px;
+	line-height: 18px;
+}
+
+/* ---- the floating action ---- */
+
+.az-float {
+	position: fixed;
+	right: var(--sp-5);
+	bottom: var(--sp-5);
+	z-index: 10;
+	display: inline-flex;
+	align-items: center;
+	gap: var(--sp-2);
+	height: 28px;
+	padding: 0 var(--sp-3);
+	border: 1px solid var(--az-blue);
+	border-radius: var(--r-2);
+	background: var(--az-blue);
+	color: #ffffff;
+	font-size: 12px;
+	font-weight: 400;
+	cursor: pointer;
+	box-shadow: var(--el-2);
+}
+
+.az-float:hover {
+	background: var(--az-blue-hover);
+	border-color: var(--az-blue-hover);
+}
+
+/* ---- a code card ---- */
+
+.az-code {
+	overflow: hidden;
+	border: 1px solid var(--hairline);
+	border-radius: var(--r-2);
+	background: var(--surface-card);
+}
+
+.az-code__bar {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+	padding: var(--sp-1) var(--sp-3);
+	border-bottom: 1px solid var(--hairline);
+	color: var(--ink-3);
+	font-size: 11px;
+	line-height: 16px;
+}
+
+.az-code__language {
+	margin-left: auto;
+	display: inline-flex;
+	align-items: center;
+	gap: var(--sp-1);
+}
+
+.az-code__body {
+	margin: 0;
+	padding: var(--sp-2) 0;
+	overflow-x: auto;
+	font-family: var(--font-mono);
+	font-size: 12px;
+	line-height: 18px;
+	color: var(--ink-1);
+	tab-size: 2;
+}
+
+.az-code__line {
+	display: grid;
+	grid-template-columns: 3ch 1fr;
+	gap: var(--sp-3);
+	padding: 0 var(--sp-3);
+	white-space: pre;
+}
+
+.az-code__n {
+	color: var(--ink-3);
+	text-align: right;
+	user-select: none;
+	font-variant-numeric: tabular-nums;
+}
+
+.az-code .tok-keyword { color: #a4262c; }
+.az-code .tok-string { color: #00766c; }
+.az-code .tok-name { color: #5c2d91; }
+.az-code .tok-comment { color: var(--ink-3); font-style: italic; }
+
+body.vscode-dark .az-code .tok-keyword { color: #ff9aa8; }
+body.vscode-dark .az-code .tok-string { color: #7fd8cb; }
+body.vscode-dark .az-code .tok-name { color: #c6b3ff; }
+
+@media (max-width: 900px) {
+	.az-callout {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: var(--sp-3);
+	}
+
+	.az-section {
+		align-items: flex-start;
+		flex-direction: column;
+	}
+
+	.az-section__actions {
+		margin-left: 0;
+	}
+
+	.az-number + .az-number {
+		border-left: none;
+		padding-left: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.az-option,
+	.az-card,
+	.az-q__ask .icon {
+		transition: none;
+	}
+}

@@ -13,7 +13,7 @@
 import * as vscode from 'vscode';
 import { ISSUE_INCLUDES, LOG_FILES, SHORTCUTS } from './helpSample';
 import type { Selection } from './store';
-import { commandScript, escapeHtml as esc, icon, page, pageColumn, toneMark } from './ui';
+import { callout as calloutCard, cards, commandScript, escapeHtml as esc, floatAction, hero, icon, optionCards, page, pageColumn, questions, section, toneMark } from './ui';
 
 export const HELP_WELCOME_VIEW_TYPE = 'temcoWorkbench.help.welcome';
 export const HELP_HOME_VIEW_TYPE = 'temcoWorkbench.help.home';
@@ -24,6 +24,24 @@ export const HELP_ABOUT_VIEW_TYPE = 'temcoWorkbench.help.about';
 
 /** The setting the welcome page's checkbox writes. */
 const START_OPEN = 'start.open';
+
+/**
+ * What only the welcome page changes about the shared page shell.
+ *
+ * The title band is the front page's one piece of colour, so it runs to the edges of the tab instead of stopping at
+ * the content's side margin, and the content sits closer to those edges than a page that is read rather than
+ * scanned needs to. (The introduction's full width is `descWide`, which belongs to the title block itself.)
+ */
+const WELCOME_CSS = `
+.view__inner {
+	padding: 0 4px 32px;
+}
+
+.az-wash {
+	margin: 0 -4px;
+	padding: var(--sp-5) 4px var(--sp-4);
+}
+`;
 
 /* ------------------------------------------------------------------ page vocabulary */
 
@@ -36,6 +54,9 @@ interface ActionOptions {
 
 const button = (label: string, command: string, options: ActionOptions = {}): string =>
 	`<button type="button" class="btn${options.small ? ' btn--sm' : ''}${options.kind ? ` btn--${options.kind}` : ''}" data-command="${command}"${options.args === undefined ? '' : ` data-args="${esc(JSON.stringify(options.args))}"`}>${options.mark ? icon(options.mark) : ''}<span>${esc(label)}</span></button>`;
+
+/** A string a person reads, marked for translation. Bundles arrive from the build; without one this is the text. */
+const t = (message: string, ...args: (string | number | boolean)[]): string => vscode.l10n.t(message, ...args);
 
 const badge = (text: string, tone?: string): string =>
 	`<span class="badge${tone && tone !== 'neutral' ? ` badge--${tone}` : ''}">${esc(text)}</span>`;
@@ -90,7 +111,7 @@ export class HelpPages {
 	) { }
 
 	welcome(): void {
-		this.open('welcome', HELP_WELCOME_VIEW_TYPE, 'Welcome', this.welcomeBody());
+		this.open('welcome', HELP_WELCOME_VIEW_TYPE, 'Welcome', this.welcomeBody(), WELCOME_CSS);
 	}
 
 	home(): void {
@@ -126,7 +147,7 @@ export class HelpPages {
 	refresh(): void {
 		const panel = this.panels.get('welcome');
 		if (panel) {
-			panel.webview.html = page(this.welcomeBody(), { title: 'Welcome', script: commandScript });
+			panel.webview.html = page(this.welcomeBody(), { title: 'Welcome', script: commandScript, extraCss: WELCOME_CSS });
 		}
 	}
 
@@ -178,10 +199,11 @@ export class HelpPages {
 		this.panels.clear();
 	}
 
-	private open(key: string, viewType: string, title: string, body: string): void {
+	private open(key: string, viewType: string, title: string, body: string, extraCss?: string): void {
 		const html = page(body, {
 			title,
-			script: key === 'issue' ? commandScript + ISSUE_SCRIPT : commandScript
+			script: key === 'issue' ? commandScript + ISSUE_SCRIPT : commandScript,
+			extraCss
 		});
 		const existing = this.panels.get(key);
 		if (existing) {
@@ -208,6 +230,8 @@ export class HelpPages {
 	}
 
 	/** *Welcome* — the mock's `help/welcome`, with the progress this window can actually attest to. */
+	/** *Welcome* — the front page: Fluent 2's numbers, Azure's purchase-options anatomy. */
+	/** *Welcome* — what the platform is, in the Azure portal's own page language. */
 	private welcomeBody(): string {
 		const checked = opensAtStartup() ? ' checked' : '';
 		const folder = vscode.workspace.workspaceFolders?.[0];
@@ -216,50 +240,91 @@ export class HelpPages {
 
 		const recent = page?.path === undefined
 			? ''
-			: `<div class="mt-24">
-	${rule({ label: 'Recent Pages', count: '1 open', note: 'The page this workspace remembers. It is what the AI answers about when no editor is in front.' })}
-	${`<div class="record-row" data-command="temcoRepositories.openFile" data-args="${esc(JSON.stringify([{ path: page.path, id: page.id, title: page.title }]))}">
-		${toneMark('document')}
-		<div class="record-row__main">
-			<div class="record-row__title"><span class="record-row__name">${esc(page.title)}</span></div>
-			<div class="record-row__meta"><span class="cell-mono">${esc(page.path)}</span></div>
-		</div>
-		<div class="record-row__state"></div>
-		<span class="record-row__go">›</span>
-	</div>`}
+			: `${section({ title: t('Pick up where you left off'), desc: t('The page this workspace remembers. It is what the AI answers about when no editor is in front.') })}
+<div class="record-row" data-command="temcoRepositories.openFile" data-args="${esc(JSON.stringify([{ path: page.path, id: page.id, title: page.title }]))}">
+	${toneMark('document')}
+	<div class="record-row__main">
+		<div class="record-row__title"><span class="record-row__name">${esc(page.title)}</span></div>
+		<div class="record-row__meta"><span class="cell-mono">${esc(page.path)}</span></div>
+	</div>
+	<div class="record-row__state"></div>
+	<span class="record-row__go"></span>
 </div>`;
 
-		return `<div class="learn-hero">
-	<div class="learn-hero__inner">
-		<div class="row" style="gap:10px;margin-bottom:10px">${badge('Temco Platform', 'accent')}<span class="cell-muted" style="font-size:12px">${esc(vscode.version)} · this profile</span></div>
-		<h1 class="learn-hero__title">Documentation, read and written in one window</h1>
-		<p class="learn-hero__desc">A project holds the pages of a product, the sources they are written from, and the artifacts a build produces. Start with what you came to do.</p>
-	</div>
-</div>
-<div class="mt-24">
-	${rule({ label: 'Start', count: '6 ways in' })}
-	${actionRow('plus', 'Create a documentation project', 'a name, a version, and the sources it reads', 'temcoProjects.newProject')}
-	${actionRow('repo', 'Read a source', 'a repository, a document, a folder or a connected library', 'temcoProjects.addSource')}
-	${actionRow('document', 'Open the content tree', 'every area, folder and page this workspace holds', 'temcoDocs.pages.focus')}
-		${actionRow('book', 'Open the Documentation overview', 'what the set holds, and what is waiting on a person', 'temcoDocs.overview')}
-	${actionRow('chip', 'Bring in a controller', 'discover one on the segment, or add it by address', 'workbench.view.extension.temcoDevices')}
-	${actionRow('sparkle', 'Ask the AI about this workspace', 'answers cite the pages and sources they used', 'temcoAi.chat')}
-</div>
+		return `${hero({
+			title: t('Temco Platform'),
+			desc: t('One window for the technical documentation of Temco products: the pages, the repositories they are written from, the AI that drafts them, the devices they describe, and the release that ships them. Everything runs on this machine; nothing is uploaded unless you publish it.'),
+			descWide: true,
+			search: { label: t('Find a page, a file or a command'), command: 'workbench.action.quickOpen', hint: 'Ctrl P' },
+			actions: [
+				{ label: t('Create a project'), command: 'temcoProjects.newProject', kind: 'primary' },
+				{ label: t('Open the documentation'), command: 'temcoDocs.pages.focus' }
+			]
+		})}
+${optionCards([
+			{
+				mark: 'document',
+				title: t('Write the documentation'),
+				desc: t('The pages of a product, in areas and folders, edited in Temco Editor.'),
+				ticks: [t('Markdown the build reads'), t('Preview and diff beside the editor'), t('Review before anything ships')],
+				label: t('Open the pages'),
+				command: 'temcoDocs.pages.focus'
+			},
+			{
+				mark: 'repo',
+				tag: t('Recommended'),
+				title: t('Draft from the code'),
+				desc: t('Tick the files of a Temco repository and a draft comes back with its provenance.'),
+				ticks: [t('The file, the commit and the budget are recorded'), t('12,000 characters of material, largest first'), t('Nothing is written until you accept')],
+				label: t('Read a source'),
+				command: 'temcoProjects.addSource',
+				pick: true
+			},
+			{
+				mark: 'upload',
+				title: t('Ship a release'),
+				desc: t('Build every artifact, freeze the version, hand it to a reader.'),
+				ticks: [t('HTML, Word, CHM and a Markdown bundle'), t('One folder, ready to hand over'), t('GitHub Pages when there is a remote')],
+				label: t('Open Ship'),
+				command: 'temcoDocs.releases'
+			}
+		])}
+${section({ title: t('What the platform contains'), desc: t('Nine modules. Only the first four take up a place in the activity bar.'), actions: button(t('All Commands'), 'workbench.action.showCommands', { small: true, kind: 'ghost' }) })}
+${cards([
+			{ mark: 'book', title: t('Documentation'), desc: t('Pages, areas, the registry, validation, the site build and every export.'), command: 'temcoDocs.pages.focus', go: t('Open') },
+			{ mark: 'repo', title: t('Repositories'), desc: t('The Temco code a page is written from: organisations, local copies, reading.'), command: 'temcoProjects.addSource', go: t('Open') },
+			{ mark: 'sparkle', title: t('AI'), desc: t('A local model and the drafts it proposes, with the pages it cited.'), command: 'temcoAi.chat', go: t('Open') },
+			{ mark: 'database', title: t('Tools'), desc: t('SQL, BACnet objects, IO points and the network, on the machine in front of you.'), command: 'workbench.view.extension.temcoSql', go: t('Open') },
+			{ mark: 'document', title: t('Editor'), desc: t('Temco Editor: the Markdown surface with its ribbon, preview and diff.'), command: 'temcoDocs.documents', go: t('Open') },
+			{ mark: 'gear', title: t('Settings'), desc: t('Appearance, modules, models, publishing — and Help, which answers the rest.'), command: 'temcoWorkbench.settings', go: t('Open') }
+		], { dense: true })}
+${calloutCard({
+			mark: 'info',
+			title: t('Local first'),
+			desc: t('The catalog, the pages, the models and every artifact stay on this machine. Publishing to GitHub Pages is the one act that leaves it, and it is never forced.'),
+			actions: button(t('Open Settings'), 'temcoWorkbench.settings')
+		})}
 ${recent}
-<div class="mt-24">
-	${rule({ label: 'Walkthroughs', count: '3 guides' })}
-	<div class="grid grid--3 mt-16">
-		${walkthrough('Set up a project', 'A name, the sources it reads, and the devices it can reach.', 4, folder ? 1 : 0, 'temcoProjects.newProject')}
-		${walkthrough('Write and review a page', 'From a source read to a reviewed page in an area.', 5, project ? 1 : 0, 'temcoDocs.documents')}
-		${walkthrough('Publish a version', 'Build every artifact, then freeze the version for readers.', 4, undefined, 'temcoDocs.releases')}
-	</div>
+${section({ title: t('Guides'), desc: t('Three walks through the whole of it, each counted from what this window can actually see.') })}
+<div class="grid grid--3 mt-16">
+	${walkthrough(t('Set up a project'), t('A name, the sources it reads, and the devices it can reach.'), 4, folder ? 1 : 0, 'temcoProjects.newProject')}
+	${walkthrough(t('Write and review a page'), t('From a source read to a reviewed page in an area.'), 5, project ? 1 : 0, 'temcoDocs.documents')}
+	${walkthrough(t('Publish a version'), t('Build every artifact, then freeze the version for readers.'), 4, undefined, 'temcoDocs.releases')}
 </div>
-<div class="mt-24 row" style="gap:16px;align-items:center;font-size:13px;color:var(--fg-muted)">
-	<label class="check"><input type="checkbox" data-command="temcoWorkbench.toggleWelcomeStartup"${checked}><span>Show the welcome page at startup</span></label>
+${section({ title: t('Questions') })}
+${questions([
+			{ ask: t('What is this application for?'), answer: t('Writing the technical documentation of a Temco product: the pages, the code they are written from, the review before they ship, and the release a customer reads.') },
+			{ ask: t('Does it need the internet?'), answer: t('No. The catalog, the pages, the models and the builds are local. A repository read and a GitHub Pages publish are the two things that reach the network, and both are asked for.') },
+			{ ask: t('Where do my pages live?'), answer: t('In the folder a source is read from, as Markdown files the registry declares. This window writes them there and nowhere else.') },
+			{ ask: t('Which languages can a page be translated into?'), answer: t('Eleven, through an Azure AI Translator resource you configure once. The code, the links and the images in a page are never sent.') }
+		])}
+<div class="mt-24 row" style="gap:16px;align-items:center;font-size:12px;color:var(--ink-2)">
+	<label class="check"><input type="checkbox" data-command="temcoWorkbench.toggleWelcomeStartup"${checked}><span>${t('Show this page at startup')}</span></label>
 	<span class="toolbar__spacer"></span>
-	${button('Keyboard Shortcuts', 'temcoWorkbench.help.keys', { small: true, kind: 'ghost' })}
-	${button('Release Notes', 'temcoDocs.releases', { small: true, kind: 'ghost' })}
-</div>`;
+	${button(t('Keyboard Shortcuts'), 'temcoWorkbench.help.keys', { small: true, kind: 'ghost' })}
+	${button(t('Release Notes'), 'temcoDocs.releases', { small: true, kind: 'ghost' })}
+</div>
+${floatAction({ label: t('Ask AI'), command: 'temcoAi.chat', mark: 'sparkle' })}`;
 	}
 }
 

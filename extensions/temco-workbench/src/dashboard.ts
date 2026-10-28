@@ -11,7 +11,7 @@
 import * as vscode from 'vscode';
 import { collectPages, countStale, roots as readRoots, totals } from './docs';
 import { Catalog, DraftRow, EventRow, selection } from './store';
-import { commandScript, escapeHtml, icon, page, pageColumn, runCommand, toneMark } from './ui';
+import { commandScript, escapeHtml, hero, icon, numbers, page, pageColumn, runCommand, toneMark } from './ui';
 
 /** The view types the dashboard opens under. */
 export const OVERVIEW_VIEW_TYPE = 'temcoWorkbench.overview';
@@ -103,9 +103,8 @@ const EVENT_MARK: { [kind: string]: string } = { draft: 'sparkle', release: 'upl
 const action = (label: string, command: string, kind?: 'primary' | 'ghost'): string =>
 	`<button type="button" class="btn${kind ? ` btn--${kind}` : ''}" data-command="${command}"><span>${escapeHtml(label)}</span></button>`;
 
-/** The small line under a KPI's number. */
-const kpi = (entry: { label: string; value: string; note: string }): string =>
-	`<div class="kpi"><div class="kpi__label">${escapeHtml(entry.label)}</div><div class="kpi__value">${escapeHtml(entry.value)}</div><div class="cell-muted" style="font-size:12px">${escapeHtml(entry.note)}</div></div>`;
+/** A string a person reads, marked for translation. Bundles arrive from the build; without one this is the text. */
+const t = (message: string): string => vscode.l10n.t(message);
 
 /** One event: a tone mark, what happened, and when. */
 const eventRow = (event: EventRow): string =>
@@ -113,7 +112,7 @@ const eventRow = (event: EventRow): string =>
 	${toneMark(EVENT_MARK[event.kind] ?? 'info', event.seenAt === undefined ? 'info' : 'ok')}
 	<div class="feed__main">
 		<div class="feed__title">${escapeHtml(event.detail ?? event.kind)}</div>
-		<div class="feed__meta">${escapeHtml(event.kind)} · ${escapeHtml(age(event.at))}</div>
+		<div class="feed__meta">${escapeHtml(event.kind)} 路 ${escapeHtml(age(event.at))}</div>
 	</div>
 	<div class="feed__side"><span class="feed__module">Platform</span></div>
 </li>`;
@@ -135,7 +134,7 @@ function overviewBody(facts: DashboardFacts): string {
 	].join('');
 
 	const waiting = facts.drafts;
-	const hero = waiting.length === 0
+	const waitingPanel = waiting.length === 0
 		? `<div class="hero-panel">
 		<div class="eyebrow">Nothing is waiting</div>
 		<div class="hero-panel__title">Nothing needs a person right now</div>
@@ -156,7 +155,7 @@ function overviewBody(facts: DashboardFacts): string {
 				${toneMark('sparkle', 'accent')}
 				<div class="record-row__main">
 					<div class="record-row__title"><span class="record-row__name">${escapeHtml(draft.title)}</span></div>
-					<div class="record-row__meta"><span class="cell-mono">${escapeHtml(draft.pageId)}</span> · <span>waiting ${escapeHtml(age(draft.createdAt))}</span></div>
+					<div class="record-row__meta"><span class="cell-mono">${escapeHtml(draft.pageId)}</span> 路 <span>waiting ${escapeHtml(age(draft.createdAt))}</span></div>
 				</div>
 				<div class="record-row__state"><span class="badge badge--info">Draft</span></div>
 				<span class="record-row__go"></span>
@@ -166,23 +165,24 @@ function overviewBody(facts: DashboardFacts): string {
 		? '<p class="group-note">Nothing has been recorded yet. Saving a draft, building or publishing writes the first row here.</p>'
 		: `<ol class="feed">${facts.events.slice(0, 6).map(eventRow).join('')}</ol>`;
 
-	return `<div class="page-head">
-	<div class="page-head__main">
-		<div class="eyebrow">Temco Platform</div>
-		<h1 class="page-head__title">${icon('home')}Overview</h1>
-		<p class="page-head__desc">What the platform holds, what changed since you last looked, and the one thing that needs you next.</p>
-	</div>
-	<div class="page-head__actions">${action('New Project', 'temcoProjects.newProject', 'primary')}${action('Build the Site', 'temcoDocs.buildSite')}</div>
-</div>
+	return `${hero({
+		eyebrow: t('Temco Platform'),
+		title: t('Overview'),
+		desc: t('What the platform holds, what changed since you last looked, and the one thing that needs you next.'),
+		actions: [
+			{ label: t('New Project'), command: 'temcoProjects.newProject', mark: 'plus', kind: 'primary' },
+			{ label: t('Build the Site'), command: 'temcoDocs.buildSite', mark: 'play' }
+		]
+	})}
 
-<div class="grid grid--4">${[
-			{ label: 'Projects', value: String(facts.projects), note: facts.projects === 1 ? 'in the platform database' : 'in the platform database' },
-			{ label: 'Pages', value: String(facts.pages), note: `${facts.sources} source${facts.sources === 1 ? '' : 's'} being read` },
-			{ label: 'Drafts waiting', value: String(facts.drafts.length), note: facts.drafts.length === 0 ? 'nothing to review' : 'a person has to settle them' },
-			{ label: 'Never reviewed', value: String(facts.neverReviewed), note: 'readable, but nobody has read it' }
-		].map(kpi).join('')}</div>
+${numbers([
+			{ value: String(facts.projects), label: t('Projects') },
+			{ value: String(facts.pages), label: t('Pages') },
+			{ value: String(facts.drafts.length), label: t('Drafts waiting') },
+			{ value: String(facts.neverReviewed), label: t('Never reviewed') }
+		])}
 
-<div class="mt-16">${hero}</div>
+<div class="mt-16">${waitingPanel}</div>
 
 <div class="mt-24">
 	<div class="row row--between" style="margin-bottom:10px">

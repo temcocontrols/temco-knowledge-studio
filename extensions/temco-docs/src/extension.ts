@@ -51,11 +51,15 @@ import { Catalog, DraftRow, Selection, selection, slugOf } from './store';
 import { fileColumn, pageColumn } from './surface';
 import { DocsRoot, DeclaredPage, PageEntry, RegistryError, collectPages, countStale, fileExists, folderForPath, loadDocsRoot, pageForUri, registryUriFor, rootFromDeclared, totals } from './registry';
 import { DocsNode, DocsTreeProvider, TreeNote, pageFromNode } from './tree';
+import { LANGUAGES, languageOf, translateMarkdown, translatedPath } from './translate';
 
 const OUTPUT_NAME = 'Temco Docs';
 const VIEW_ID = 'temcoDocs.pages';
 /** The queue lives on the Dashboard, next to the project list it is about. */
 const QUEUE_ID = 'temcoDocs.queue';
+
+/** Where the translator's subscription key is kept: the OS keychain, never a settings file. */
+const TRANSLATOR_KEY = 'temcoDocs.translatorKey';
 
 /**
  * Copy a build's files into the publish folder, keeping each path as it was under the folder they share.
@@ -717,6 +721,87 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   // The page's properties are a tab of the right panel, beside the draft: one place about the page in front.
   context.subscriptions.push(
     vscode.commands.registerCommand('temcoDocs.pageProperties', () => draftView.showProperties()),
+    // Translating the page in front into a sibling file. The key is a secret; the endpoint and region are settings,
+    // because they name where the resource lives rather than proving who may use it.
+    vscode.commands.registerCommand('temcoDocs.setTranslatorKey', async () => {
+      const key = await vscode.window.showInputBox({
+        title: 'Translator Key',
+        prompt: 'The subscription key of an Azure AI Translator resource. It is kept in the OS keychain, not in settings.',
+        password: true,
+        ignoreFocusOut: true
+      });
+      if (key === undefined || key.trim() === '') {
+        return;
+      }
+      await context.secrets.store(TRANSLATOR_KEY, key.trim());
+      void vscode.window.showInformationMessage('Temco Docs: the translator key is saved for this machine.');
+    }),
+    vscode.commands.registerCommand('temcoDocs.translatePage', async (target?: unknown) => {
+      const document = markdownInFront(target);
+      if (document === undefined) {
+        void vscode.window.showInformationMessage(
+          'Temco Docs: open the Markdown page you want to translate first — the page in front is what is translated.'
+        );
+        return;
+      }
+      const language = await vscode.window.showQuickPick(
+        LANGUAGES.map((entry) => ({ label: entry.label, description: entry.tag, tag: entry.tag })),
+        { title: 'Translate This Page', placeHolder: 'The language to translate into' }
+      );
+      if (language === undefined || languageOf(language.tag) === undefined) {
+        return;
+      }
+      const key = await context.secrets.get(TRANSLATOR_KEY);
+      if (key === undefined || key === '') {
+        const answer = await vscode.window.showInformationMessage(
+          'Temco Docs: translating needs an Azure AI Translator key. Set it once and it is kept in the OS keychain.',
+          'Set the Key'
+        );
+        if (answer === 'Set the Key') {
+          await vscode.commands.executeCommand('temcoDocs.setTranslatorKey');
+        }
+        return;
+      }
+      const configuration = vscode.workspace.getConfiguration('temcoDocs');
+      const endpoint = configuration.get<string>('translator.endpoint', 'https://api.cognitive.microsofttranslator.com');
+      const region = configuration.get<string>('translator.region', '');
+      const destination = vscode.Uri.file(translatedPath(document.uri.fsPath, language.tag));
+      const exists = await vscode.workspace.fs.stat(destination).then(() => true, () => false);
+      if (exists) {
+        const overwrite = await vscode.window.showWarningMessage(
+          `Temco Docs: ${vscode.workspace.asRelativePath(destination)} already exists. Translate over it?`,
+          { modal: true },
+          'Replace It'
+        );
+        if (overwrite !== 'Replace It') {
+          return;
+        }
+      }
+      try {
+        const result = await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: `Translating ${path.basename(document.uri.fsPath)} into ${language.label}`,
+            cancellable: false
+          },
+          () => translateMarkdown(document.getText(), { endpoint, key, region, to: language.tag })
+        );
+        if (result.text === undefined) {
+          void vscode.window.showErrorMessage(`Temco Docs: nothing was translated — ${result.error ?? 'the service gave no text'}.`);
+          return;
+        }
+        await vscode.workspace.fs.writeFile(destination, Buffer.from(result.text, 'utf8'));
+        const opened = await vscode.workspace.openTextDocument(destination);
+        await vscode.window.showTextDocument(opened, { preview: false });
+        void vscode.window.showInformationMessage(
+          `Temco Docs: ${result.sent} ${result.sent === 1 ? 'passage' : 'passages'} translated into ${language.label} — ${vscode.workspace.asRelativePath(destination)}. Code, links and images were left exactly as they were.`
+        );
+      } catch (error) {
+        void vscode.window.showErrorMessage(
+          `Temco Docs: translating failed — ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }),
     // The page as a reader sees it, in a tab beside the source. A Markdown file is the only thing this can show;
     // anything else is told so rather than given an empty tab.
     vscode.commands.registerCommand('temcoDocs.previewPage', async (target?: unknown) => {
@@ -781,6 +866,11 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     // A source is the repositories module's page; this module only knows which source a page came from.
     vscode.commands.registerCommand('temcoDocs.repository', () => focusView('temcoRepositories.sources')),
     vscode.commands.registerCommand('temcoDocs.documents', () => focusView('temcoDocs.pages')),
+    // An area row on the Documents page: open that area. Registered rather than left implicit because the page draws
+    // the row; without this the row was a button that posted a message nothing answered.
+    vscode.commands.registerCommand('temcoDocs.knowledge', (area?: unknown) =>
+      docsPages.documents(typeof area === 'string' ? area : undefined)
+    ),
     // The side bar's project row: *become* that project. The row says where you are; the picker says what else
     // there is. A slug that no longer exists falls through to the picker rather than to an error.
     vscode.commands.registerCommand('temcoDocs.selectProject', async (slug?: unknown) => {

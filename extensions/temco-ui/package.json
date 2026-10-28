@@ -23,6 +23,8 @@
   "main": "./out/extension.js",
   "activationEvents": [],
   "scripts": {
-    "check-commands": "node --experimental-strip-types scripts/check-commands.mts"
+    "check-commands": "node --experimental-strip-types scripts/check-commands.mts",
+    "check-components": "node --experimental-strip-types scripts/check-components.mts",
+    "vscode:prepublish": "node --experimental-strip-types scripts/check-commands.mts && node --experimental-strip-types scripts/check-components.mts"
   }
 }

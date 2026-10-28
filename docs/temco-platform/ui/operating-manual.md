@@ -443,6 +443,26 @@ Every export writes to the project's `dist/` and the notification offers **Show 
 
 ---
 
+## 12b. Translating a page
+
+Open the page in the editor, then **Command Palette → `Temco Docs: Translate This Page…`** (`temcoDocs.translatePage`). Pick a language. The result is written **beside the page**, not over it:
+
+```
+docs/guide/setup.md   ──translate into German──▶   docs/guide/setup.de.md
+```
+
+- **What is translated:** the prose, and only the prose. Code fences, inline `code`, table rules, link targets, image paths, front matter and the `#`/`-`/`>` markers at the start of a line are preserved byte for byte — a translated page still builds, still links, still shows its pictures.
+- **What you need once:** an Azure AI Translator resource. Put its key in the OS keychain with **`Temco Docs: Set the Translator Key`** (`temcoDocs.setTranslatorKey`); the endpoint and region are settings (`temcoDocs.translator.endpoint`, `temcoDocs.translator.region`).
+- **What it costs:** one request per page, sent only when you run the command. Nothing is translated in the background, and nothing is sent while you edit.
+- **What it says when it fails:** a 401 is a key that was refused (*set it again*), 403 is a key without a Translator resource (*check the region*), 429 is the free tier's rate limit (*wait, or use a paid tier*). A page of code only says there is no prose, and costs nothing.
+- **Existing translation:** translating again asks before replacing the sibling file.
+
+> Translations are ordinary pages: the **Registry** and **Review** treat `setup.de.md` like any other file, and a build includes it. Adding it to a language menu on the published site is a page-level decision you make in the registry, not something the translator assumes.
+
+---
+
+---
+
 ## 13. When something does not work
 
 | Symptom | What it means | What to do |

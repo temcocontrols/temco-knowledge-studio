@@ -578,6 +578,18 @@
         "title": "Open in Temco Editor",
         "category": "Temco Docs",
         "icon": "$(book)"
+      },
+      {
+        "command": "temcoDocs.translatePage",
+        "title": "Translate This Page…",
+        "category": "Temco Docs",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "temcoDocs.setTranslatorKey",
+        "title": "Set the Translator Key",
+        "category": "Temco Docs",
+        "icon": "$(key)"
       }
     ],
     "keybindings": [
@@ -651,6 +663,12 @@
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "temcoDocs.knowledge",
+          "when": "false"
+        }
+      ],
       "editor/title": [
         {
           "command": "temcoDocs.format.bold",
@@ -1077,11 +1095,25 @@
       ]
     },
     "viewsWelcome": [],
-    "configuration": [],
+    "configuration": {
+      "title": "Temco Docs",
+      "properties": {
+        "temcoDocs.translator.endpoint": {
+          "type": "string",
+          "default": "https://api.cognitive.microsofttranslator.com",
+          "markdownDescription": "The endpoint of the Azure AI Translator resource used by **Temco Docs: Translate This Page**. The subscription key is not a setting: it is kept in the OS keychain by **Temco Docs: Set the Translator Key**."
+        },
+        "temcoDocs.translator.region": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "The resource's region, for a regional Translator resource (for example `westeurope`). Leave empty for a global one, or when the key was made for a single region and the service accepts it without."
+        }
+      }
+    },
     "activationEvents": null
   },
   "scripts": {
-    "vscode:prepublish": "npm run check-commands && npm run check-record && npm run check-icons && npm run check-types && npm run compile && npm run check-learn && npm run check-site && npm run check-publish && npm run check-export && npm run check-docx && npm run check-panel && npm run check-status && npm run check-grid && npm run build-webview",
+    "vscode:prepublish": "npm run check-commands && npm run check-record && npm run check-icons && npm run check-types && npm run compile && npm run check-learn && npm run check-site && npm run check-publish && npm run check-export && npm run check-docx && npm run check-panel && npm run check-status && npm run check-grid && npm run check-translate && npm run build-webview",
     "check-commands": "node --experimental-strip-types scripts/check-commands.mts",
     "check-record": "node --experimental-strip-types scripts/check-record.mts",
     "check-types": "node node_modules/typescript/bin/tsc -p tsconfig.webview.json && node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
@@ -1095,6 +1127,7 @@
 		"check-panel": "node --experimental-strip-types scripts/check-panel.mts",
 		"check-status": "node --experimental-strip-types scripts/check-status.mts",
 		"check-grid": "node --experimental-strip-types scripts/check-grid.mts",
+		"check-translate": "node --experimental-strip-types scripts/check-translate.mts",
     "build-webview": "node --experimental-strip-types scripts/build-webview.mts"
   },
   "dependencies": {

@@ -14,7 +14,7 @@ import { capturesOf } from './media';
 import { pagesTarget } from './pages';
 import { firstVersionReport } from './versionReport';
 import { BuildRow, Catalog, DocumentRow, DraftRow, ReleaseRow, ScanRow, selection, slugOf } from './store';
-import { commandScript, escapeHtml as esc, icon, page, pageColumn, runCommand, toneMark } from './ui';
+import { cards, commandScript, escapeHtml as esc, hero, icon, numbers, page, pageColumn, runCommand, section, toneMark } from './ui';
 
 /** The view types, one per surface. `pagePanel` is a panel this dashboard opens, not the editor's `temcoEditor.markdown`. */
 export const PROJECTS_VIEW_TYPE = 'temcoDocs.projects';
@@ -38,6 +38,9 @@ interface ActionOptions {
 
 const button = (label: string, command: string, options: ActionOptions = {}): string =>
 	`<button type="button" class="btn${options.small ? ' btn--sm' : ''}${options.kind ? ` btn--${options.kind}` : ''}" data-command="${command}"${options.args === undefined ? '' : ` data-args="${esc(JSON.stringify(options.args))}"`}${options.title ? ` title="${esc(options.title)}"` : ''}>${options.mark ? icon(options.mark) : ''}<span>${esc(label)}</span></button>`;
+
+/** A string a person reads, marked for translation. Bundles arrive from the build; without one this is the text. */
+const t = (message: string): string => vscode.l10n.t(message);
 
 const rule = (options: { label: string; count?: string; note?: string; actions?: string; plain?: boolean }): string =>
 	`<div class="group-head"><span class="group-head__label${options.plain ? ' group-head__label--plain' : ''}">${esc(options.label)}</span><span class="group-head__rule"></span>${options.count ? `<span class="group-head__count">${esc(options.count)}</span>` : ''}${options.actions ? `<span class="group-head__actions">${options.actions}</span>` : ''}</div>${options.note ? `<p class="group-note">${options.note}</p>` : ''}`;
@@ -673,14 +676,35 @@ function projectsBody(
 		return `<div class="record-row${isCurrent ? ' record-row--current' : ''}" data-command="temcoDocs.selectProject" data-args="${esc(JSON.stringify([document.slug]))}">${toneMark(isCurrent ? 'layers' : 'folder', isCurrent ? 'accent' : undefined)}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">${esc(document.name)}</span>${isCurrent ? badge('Current', 'accent') : ''}</div><div class="record-row__meta">${facts(items)}</div></div><div class="record-row__state">${button('Edit', 'temcoProjects.editProject', { small: true, kind: 'ghost', args: [document.slug] })}${isCurrent ? badge('Working on it', 'ok') : badge('Switch to', 'neutral')}</div><span class="record-row__go">${icon('chevron-right', 'icon--sm')}</span></div>`;
 	};
 
-	return `${pageHead({
-		title: 'Projects',
-		mark: 'folder',
-		desc: 'A project is a version of a product&#39;s documentation: its sources, its pages and the artifacts it builds. Choosing one decides what every other page is about.',
-		actions: button('New Project', 'temcoProjects.newProject', { kind: 'primary', mark: 'plus' }) + button('Import', 'temcoProjects.addSource', { mark: 'download' })
+	const sources = documents.reduce((total, document) => total + document.sources, 0);
+	const built = documents
+		.map((document) => document.builtAt)
+		.filter((at): at is string => at !== undefined)
+		.sort()
+		.at(-1);
+
+	return `${hero({
+		eyebrow: t('Temco Platform · Documentation'),
+		title: t('Projects'),
+		desc: t("A project is a version of a product's documentation: its sources, its pages and the artifacts it builds. Choosing one decides what every other page is about."),
+		actions: [
+			{ label: t('New Project'), command: 'temcoProjects.newProject', mark: 'plus', kind: 'primary' },
+			{ label: t('Import'), command: 'temcoProjects.addSource', mark: 'download' }
+		]
 	})}
+${numbers([
+			{ value: String(documents.length), label: documents.length === 1 ? t('Project') : t('Projects') },
+			{ value: String(sources), label: sources === 1 ? t('Source') : t('Sources') },
+			{ value: on?.version ?? t('not set'), label: t('Version') },
+			{ value: built === undefined ? t('never') : waitingSince(built), label: t('Last build') }
+		])}
+${section({ title: t('All Projects'), desc: t('Pick one and every other page starts talking about it.') })}
 ${documents.length === 0
-			? `<div class="mt-16">${callout('<b>No project yet.</b> A project is a row in the platform database that sources, pages, drafts and builds all point at. Create one and it appears here.')}</div>`
+			? cards([
+				{ mark: 'plus', title: 'Create a project', desc: 'A name and a version. The sources it reads come next, and every other page follows from it.', command: 'temcoProjects.newProject', go: 'New project' },
+				{ mark: 'repo', title: 'Read a repository', desc: 'Point at the Temco code this documentation is written from, and cite the pages it already holds.', command: 'temcoProjects.addSource', go: 'Add a source' },
+				{ mark: 'book', title: 'Open the overview', desc: 'What this workspace already holds, before you add anything to it.', command: 'temcoDocs.overview', go: 'Open the overview' }
+			])
 			: `<div class="record-list">${documents.map(row).join('')}</div>`}
 ${on === undefined ? '' : `<div class="mt-24">
 ${card({
@@ -991,11 +1015,11 @@ function documentsBody(roots: readonly DocsRoot[], areaName?: string): string {
 		desc: `${pages.length.toLocaleString('en-US')} pages in ${areas.length} ${areas.length === 1 ? 'area' : 'areas'}, ${reviewed.toLocaleString('en-US')} of them read by a person. The registry order is the order the documentation ships in, not the order the files sit on disk.`,
 		actions: button('New Page', 'temcoDocs.newPage', { kind: 'primary', mark: 'plus' }) + button('Generate from Sources', 'temcoDocs.createPage', { mark: 'sparkle' }) + button('Open Tree', 'temcoDocs.pages.focus', { mark: 'sidebar', title: 'Show this content as a folder tree in the side bar' })
 	})}
-${tiles([
-		{ value: pages.length.toLocaleString('en-US'), label: 'Pages' },
-		{ value: String(reviewed), label: 'Read by a person' },
-		{ value: String(missing), label: 'Registry, no file' },
-		{ value: String(problems), label: 'Problems found' }
+${numbers([
+		{ value: pages.length.toLocaleString('en-US'), label: t('Pages') },
+		{ value: String(reviewed), label: t('Read by a person') },
+		{ value: String(missing), label: t('Registry, no file') },
+		{ value: String(problems), label: t('Problems found') }
 	])}
 ${roots.length === 0
 			? `<div class="mt-16">${callout('<b>No registry is being read.</b> A page is a file the registry declares, so this list is empty until a source with a <code>docs/</code> folder is open in this window.')}</div>`

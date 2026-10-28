@@ -18,6 +18,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
+import { escapeHtml } from './components';
+
+export { escapeHtml };
 
 /** What a page is called in the tab, and the script it runs, if any. */
 export interface PageOptions {
@@ -81,24 +84,8 @@ ${script}
 </html>`;
 }
 
-/** Text from the workspace, a model or a person: everything interpolated into a page goes through this. */
-export function escapeHtml(text: string): string {
-	return text
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;')
-		.replace(/"/g, '&quot;');
-}
-
-/** One glyph from the page's own sprite, at the size the class asks for. */
-export function icon(name: string, cls?: string): string {
-	return `<svg viewBox="0 0 24 24" class="icon${cls ? ` ${cls}` : ''}" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
-}
-
-/** A state you can see before you read it: one icon inside a tinted circle, the mock's tone mark. */
-export function toneMark(name: string, tone?: 'ok' | 'warn' | 'err' | 'info' | 'accent'): string {
-	return `<span class="tone-mark${tone ? ` tone-mark--${tone}` : ''}">${icon(name, 'icon--sm')}</span>`;
-}
+/** One glyph from the page's own sprite, and one inside a tinted circle: both live with the components. */
+export { icon, toneMark } from './components';
 
 /**
  * The script every page of ours runs: a click on anything carrying `data-command` posts that command to the module.

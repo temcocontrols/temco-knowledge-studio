@@ -7,7 +7,7 @@ A module is a real VS Code extension inside the application. Namespaces follow t
 | Module | Purpose | Namespace | State |
 |---|---|---|---|
 | `temco-workbench` | the application's own surfaces: the Library, the dashboard, what needs doing | `temcoWorkbench` | **active** |
-| `temco-ui` | where a page of ours opens, and what a command argument means | `temcoUi` | **active** |
+| `temco-ui` | where a page of ours opens, what a command argument means, and the shared page components (hero, figures, sections, cards) | `temcoUi` | **active** |
 | `temco-store` | the platform's own memory: the catalog database, the selection, the naming rules | `temcoStore` | **active** |
 | `temco-docs` | the registry, pages, checks, and the writes | `temcoDocs` | **active** |
 | `temco-editor` | the editor for a page: the Markdown surface, its ribbon, its engine seam | `temcoEditor` | **active** |
@@ -35,7 +35,7 @@ A module becomes active on the day it has a first real feature. Reserving a modu
 
 **`temco-docs`** — the content side: the registry of areas, chapters and pages, the structural checks, the **Workspace tree** (its own view), the pages, the Markdown surfaces, the reports and the builds, and the five writes. It owns the only write a page ever gets, and it publishes the documentation model other modules read (`src/api.ts`) — the Library and the dashboard are the workbench's, and they read that model rather than a copy of it.
 
-**`temco-ui`** — the shared UI conventions, and nothing else: the editor column a page of ours opens in (one group, never a split) and what a command argument names (a slug, a row, or a row's own command argument). It has no command, no view and no setting.
+**`temco-ui`** — the shared UI conventions, and nothing else: the editor column a page of ours opens in (one group, never a split), what a command argument names (a slug, a row, or a row's own command argument), and the page components a first screen is built from — the banded hero, the band of figures, a section heading, and a row of cards. It has no command, no view and no setting.
 
 **`temco-workbench`** — the application's own surfaces, and the only module that is not a domain: the **Library** (the index of what every module has; each row's action is that module's own command), the **dashboard** (the application talking about itself), the **needs page**, which tab opens at startup, and which sidebar section comes forward when the project changes. It writes nothing and owns no data: its rows come from the store and from the documentation module's published model.
 
