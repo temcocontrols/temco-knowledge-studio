@@ -54,7 +54,7 @@ export class ProjectList implements vscode.TreeDataProvider<vscode.TreeItem> {
 				project.description = `${row.sources} source${row.sources === 1 ? '' : 's'}${row.slug === current ? ' · current' : ''}`;
 				project.tooltip = `${row.name}\n${row.slug}${row.version === undefined ? '' : ` · ${row.version}`}${row.builtAt === undefined ? ' · never built' : ` · built ${row.builtAt}`}`;
 				project.contextValue = row.slug === current ? 'project.current' : 'project';
-				project.command = { command: 'temcoDocs.projectPage', title: 'Open the Project', arguments: [row.slug] };
+				project.command = { command: 'temcoProjects.openProjectPage', title: 'Open the Project', arguments: [row.slug] };
 				return project;
 			});
 		} catch {

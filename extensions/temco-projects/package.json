@@ -59,6 +59,12 @@
         "icon": "$(play)"
       },
       {
+        "command": "temcoProjects.openProjectPage",
+        "title": "Open the Project Page",
+        "category": "Temco Projects",
+        "icon": "$(go-to-file)"
+      },
+      {
         "command": "temcoProjects.editProject",
         "title": "Edit",
         "category": "Temco Projects",

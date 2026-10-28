@@ -43,6 +43,22 @@ const button = (label: string, command: string, options: ActionOptions = {}): st
 const azButton = (label: string, command: string, options: ActionOptions = {}): string =>
 	`<button type="button" class="az-btn${options.small === true ? ' az-btn--sm' : ''}${options.kind === 'primary' ? ' az-btn--primary' : ''}" data-command="${command}"${options.args === undefined ? '' : ` data-args="${esc(JSON.stringify(options.args))}"`}${options.title ? ` title="${esc(options.title)}"` : ''}>${options.mark ? icon(options.mark) : ''}<span>${esc(label)}</span></button>`;
 
+/**
+ * The project page's own layout: two columns of blocks, which is what a wide tab is for.
+ *
+ * Sources beside Outputs, and what left the building beside what changed — the four things a person reads before a
+ * build. Under 1100px the columns fold into one, in the same order.
+ */
+const DETAIL_CSS = `
+.detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start;
+  gap: var(--sp-5) var(--sp-8); margin-top: var(--sp-4); }
+.detail-block { min-width: 0; }
+.detail-block .az-section { margin-top: 0; }
+@media (max-width: 1100px) {
+  .detail-grid { grid-template-columns: minmax(0, 1fr); }
+}
+`;
+
 /** A string a person reads, marked for translation. Bundles arrive from the build; without one this is the text. */
 const t = (message: string): string => vscode.l10n.t(message);
 
@@ -110,11 +126,11 @@ export class DocsPages {
 
 	constructor(private readonly context: vscode.ExtensionContext, private readonly roots: () => readonly DocsRoot[]) { }
 
-	open(key: string, viewType: string, title: string, body: string, mark = 'document'): void {
+	open(key: string, viewType: string, title: string, body: string, mark = 'document', extraCss?: string): void {
 		const existing = this.panels.get(key);
 		if (existing) {
 			existing.reveal(pageColumn());
-			existing.webview.html = page(body, { title, script: commandScript });
+			existing.webview.html = page(body, { title, script: commandScript, extraCss });
 			return;
 		}
 		const panel = vscode.window.createWebviewPanel(viewType, title, pageColumn(), {
@@ -123,7 +139,7 @@ export class DocsPages {
 		});
 		panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', `${mark}.svg`);
 		panel.webview.onDidReceiveMessage(runCommand);
-		panel.webview.html = page(body, { title, script: commandScript });
+		panel.webview.html = page(body, { title, script: commandScript, extraCss });
 		this.panels.set(key, panel);
 		panel.onDidDispose(() => this.panels.delete(key));
 	}
@@ -201,7 +217,9 @@ export class DocsPages {
 				? [{ label: 'Create a project', command: 'temcoProjects.newProject', kind: 'primary', mark: 'plus' }]
 				: [
 					{ label: 'Edit the pages', command: 'temcoDocs.pages.focus', kind: 'primary', mark: 'list' },
-					{ label: 'Edit the project', command: 'temcoProjects.editProject', args: [name], mark: 'gear' }
+					{ label: 'Edit the project', command: 'temcoProjects.editProject', args: [name], mark: 'gear' },
+					{ label: 'Build the site', command: 'temcoDocs.buildSite', mark: 'play' },
+					{ label: 'Review center', command: 'temcoDocs.review', mark: 'check' }
 				]
 		})}
 ${drafts.length === 0
@@ -220,6 +238,8 @@ ${drafts.length === 0
 				command: 'temcoDocs.review',
 				go: 'Review'
 			})).join('')}</div>`}
+<div class="detail-grid">
+<div class="detail-block">
 ${section({ title: 'Sources', desc: 'What this project cites — a folder on this machine, or one read over the API.', actions: azButton('Add a source', 'temcoProjects.addSource', { mark: 'plus' }) })}
 <div class="az-entries">${sources.length === 0
 			? entryRow({ mark: 'plus', title: 'Add a source', meta: 'a folder on this machine, or a repository', command: 'temcoProjects.addSource' })
@@ -230,11 +250,15 @@ ${section({ title: 'Sources', desc: 'What this project cites — a folder on thi
 				command: 'temcoDocs.source',
 				args: [source.name]
 			})).join('')}</div>
+</div>
+<div class="detail-block">
 ${section({ title: 'Outputs', desc: outputs.length === 0 ? 'This project has not said what it produces yet.' : `It produces: ${outputs.join(' · ')}.`, actions: azButton('Build the site', 'temcoDocs.buildSite', { mark: 'play' }) + azButton('Build the offline help', 'temcoDocs.buildHelp', { mark: 'package' }) })}
 <div class="az-entries">
 	${entryRow({ mark: 'package', title: 'Site', meta: 'the rendered copy a reader browses', command: 'temcoDocs.builds' })}
 	${entryRow({ mark: 'package', title: 'Offline help', meta: 'the CHM that ships inside the installer', command: 'temcoDocs.builds' })}
 </div>
+</div>
+<div class="detail-block">
 ${lastBuild === undefined && lastRelease === undefined ? '' : `${section({
 				title: 'Last out of the building',
 				desc: 'A build is the attempt, with the files it left; a release is the copy a reader can be given. Both are recorded when they happen, never inferred.',
@@ -246,6 +270,8 @@ ${lastBuild === undefined && lastRelease === undefined ? '' : `${section({
 	${lastBuild === undefined ? '' : entryRow({ mark: 'play', title: `build #${lastBuild.id}`, meta: `${lastBuild.status} · ${lastBuild.finishedAt ?? lastBuild.startedAt}`, command: 'temcoDocs.builds' })}
 	${lastRelease === undefined ? '' : entryRow({ mark: 'upload', title: lastRelease.version, meta: `published · ${lastRelease.files} ${lastRelease.files === 1 ? 'file' : 'files'} · ${lastRelease.destination}`, command: 'temcoDocs.releases' })}
 </div>`}
+</div>
+<div class="detail-block">
 ${changed.length === 0 ? '' : `${section({ title: `Changed in ${version?.report.version ?? 'the new version'}`, desc: 'Named by the workflow that produced this version. Nothing here is inferred by this application.' })}
 <div class="az-entries">${changed.slice(0, 20).map((change) => {
 				const page = change.page === undefined ? undefined : pages.find((entry) => entry.id === change.page);
@@ -256,9 +282,11 @@ ${changed.length === 0 ? '' : `${section({ title: `Changed in ${version?.report.
 					command: page === undefined ? undefined : 'temcoDocs.openFile',
 					args: page === undefined ? undefined : [page.uri.fsPath]
 				});
-			}).join('')}</div>`}`;
+			}).join('')}</div>`}
+</div>
+</div>`;
 
-		this.open('project', 'temcoDocs.projectPage', name === '' ? 'Project' : name, body, 'folders');
+		this.open('project', 'temcoDocs.projectPage', name === '' ? 'Project' : name, body, 'folders', DETAIL_CSS);
 	}
 
 	/** The queue as a page: the three kinds of work, each with the act that settles it. */

@@ -100,6 +100,11 @@ export function registerProjectCommands(
     vscode.commands.registerCommand('temcoProjects.openProject', (target?: ProjectArgument) =>
       withProject(context, (chosen) => void openDocuments(selection, chosen), rowSlug(target))
     ),
+    // A project's own page, and the Documentation panel brought forward with it: the three things "open this
+    // project" means — it becomes current, its summary opens, and the side bar shows the module that owns it.
+    vscode.commands.registerCommand('temcoProjects.openProjectPage', (target?: ProjectArgument) =>
+      withProject(context, (chosen) => void openProjectSummary(selection, chosen), rowSlug(target))
+    ),
     vscode.commands.registerCommand('temcoProjects.editProject', (target?: ProjectArgument) =>
       withProject(context, (chosen) => page.openEdit(chosen), rowSlug(target))
     ),
@@ -126,6 +131,20 @@ async function openDocuments(selection: Selection, slug: string): Promise<void> 
   } catch {
     // Without the documentation module there are no pages to show; the project is still the one being worked on.
   }
+}
+
+/**
+ * Opening a project's page: it becomes current, the page opens, and the Documentation panel comes forward.
+ *
+ * The panel is opened by the container's own command rather than by focusing one of its views: focusing a view moves
+ * the keyboard into the tree, and a person who just clicked a row on a page is looking at the page.
+ */
+async function openProjectSummary(selection: Selection, slug: string): Promise<void> {
+  if (selection.project() !== slug) {
+    await selection.select(slug);
+  }
+  await vscode.commands.executeCommand('temcoDocs.projectPage', slug).then(undefined, () => undefined);
+  await vscode.commands.executeCommand('workbench.view.extension.temco').then(undefined, () => undefined);
 }
 
 /**

@@ -186,7 +186,7 @@ function projectRow(row: ProjectRow, current: boolean): string {
 		: `<span class="prj-badge prj-badge--warn">${row.drafts} draft${row.drafts === 1 ? '' : 's'} waiting</span>`;
 
 	return `<div class="prj-item" tabindex="0"
-		data-command="temcoProjects.openProject" data-args="${esc(JSON.stringify(row.slug))}"
+		data-command="temcoProjects.openProjectPage" data-args="${esc(JSON.stringify(row.slug))}"
 		data-name="${esc(row.name.toLowerCase())}" data-pages="${row.pages}" data-drafts="${row.drafts}"
 		data-built="${esc(row.builtAt ?? '')}" data-current="${current}">
 	<span class="prj-item__icon">${icon(row.origin === 'repository' ? 'repo' : 'folder')}</span>
