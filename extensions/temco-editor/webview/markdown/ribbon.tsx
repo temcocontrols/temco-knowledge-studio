@@ -89,40 +89,69 @@ export interface RibbonProps {
 }
 
 /**
- * How much of the bar fits. A narrow editor gets a denser bar rather than a clipped one.
+ * The order a control leaves the bar when there is no room for it — the least reached-for first.
  *
- * Measured, not guessed, at 30 px a control: history 83 + the marks 215 + the style menu 128 + the list menu 128 + the
- * block group 149 + the insert group 182, plus the five hairlines and the panel's padding, is about 905 — so `full` starts
- * a little above that. A compact bar keeps nine controls and folds five into `⋯`, which needs about 715.
+ * Undo and redo go near the end, because a hand finds them without looking, and the four that say what is on screen
+ * (find, outline, read, the assistant) go last of all: a bar that has folded everything else still has them, and a bar
+ * with room for nothing else still has `⋯` to get them back. Nothing may sit outside this list, or a narrow editor could
+ * overflow with no way to reach what it clipped.
  */
-export type Density = 'full' | 'compact';
-
-export function densityFor(width: number): Density {
-	return width < 940 ? 'compact' : 'full';
-}
+const FOLD_ORDER: readonly string[] = [
+	'rule', 'table', 'screenshot', 'annotate', 'linkPage', 'picture', 'diff', 'preview', 'source', 'properties',
+	'codeBlock', 'quote', 'highlight', 'code', 'strike', 'underline', 'italic', 'bold', 'redo', 'undo',
+	'assist', 'find', 'outline', 'read',
+];
 
 /**
- * The width of the bar, followed as the editor is resized.
+ * Fits the bar to one row, at any width.
  *
- * `ResizeObserver` rather than a window listener: an editor can be narrowed by a split, by dragging a sidebar or by opening
- * a second editor beside it, and none of those is a window resize.
+ * Wrapping is not an option: a wrapped toolbar draws the reading controls *under* the writing ones, and the two rows read
+ * as two different bars — which is what made a narrow editor look broken. So the width is watched, and when the row cannot
+ * hold what it is drawing, the next control in `FOLD_ORDER` leaves for `⋯`; the effect measures again after that render and
+ * keeps going until the row fits. A wider tab starts from zero and folds whatever it still needs.
  */
-function useDensity(): { ref: React.RefObject<HTMLDivElement | null>; density: Density } {
+function useOneRow(): { ref: React.RefObject<HTMLDivElement | null>; panel: React.RefObject<HTMLDivElement | null>; fold: number } {
 	const ref = React.useRef<HTMLDivElement | null>(null);
-	const [density, setDensity] = React.useState<Density>('full');
+	const panel = React.useRef<HTMLDivElement | null>(null);
+	const [fold, setFold] = React.useState(0);
+	// Bumped when the bar changes width, so the measurement below runs again even when the fold is already zero.
+	const [resized, setResized] = React.useState(0);
+
 	React.useEffect(() => {
 		const element = ref.current;
 		if (element === null) {
 			return undefined;
 		}
-		const observer = new ResizeObserver(entries => {
-			const width = entries[0]?.contentRect.width ?? element.clientWidth;
-			setDensity(densityFor(width));
+		// `ResizeObserver` rather than a window listener: an editor is narrowed by a split, a sidebar drag or a second
+		// editor beside it, and none of those is a window resize.
+		const observer = new ResizeObserver(() => {
+			setFold(0);
+			setResized(resized => resized + 1);
 		});
 		observer.observe(element);
 		return () => observer.disconnect();
 	}, []);
-	return { ref, density };
+
+	React.useLayoutEffect(() => {
+		const row = panel.current;
+		if (row === null || fold >= FOLD_ORDER.length) {
+			return;
+		}
+		// Measured from the boxes, not from `scrollWidth`: the panel clips its overflow, and a clipped flex row reports a
+		// scroll width that says nothing about how far the last group actually sits past the edge.
+		const right = row.getBoundingClientRect().right;
+		let over = 0;
+		for (const child of Array.from(row.children)) {
+			over = Math.max(over, child.getBoundingClientRect().right - right);
+		}
+		if (over > 1) {
+			// One control is 26 px, so this folds about as many as the overhang needs instead of one render per pixel.
+			setFold(Math.min(fold + Math.max(1, Math.ceil(over / 26)), FOLD_ORDER.length));
+		}
+		// The bar re-renders on every caret move; measuring then would be a layout read per keystroke for nothing.
+	}, [fold, resized]);
+
+	return { ref, panel, fold };
 }
 
 /** The six marks a page can hold, in the order every editor puts them — the bar's first group and the whole selection menu. */
@@ -142,8 +171,7 @@ interface Item {
 	glyph: React.ReactElement;
 	shortcut?: string;
 	run: () => unknown;
-	/** 1 is drawn while there is room; 2 is folded into `⋯` as soon as the bar is compact. */
-	tier: 1 | 2;
+	/** Which control this is in `FOLD_ORDER`: it says how soon the bar lets it go, and the menu names it by `label`. */
 	active?: boolean;
 	disabled?: boolean;
 }
@@ -180,16 +208,16 @@ function Group({ lead, items, align }: { lead?: React.ReactElement; items: reado
 }
 
 /**
- * What the bar draws at this width, and what it hands to `⋯`.
+ * What the bar draws at `fold`, and what it hands to `⋯`.
  *
- * Each group declares its controls once, with a tier, so the overflow menu is not a second copy that has to be kept in
- * step by hand: a compact bar is the same table with the tier-2 rows taken out.
+ * Each group declares its controls once, so the overflow menu is not a second copy that has to be kept in step by hand: a
+ * folded control is the same row of the same table, left out of the bar and listed in the menu.
  */
-function split(items: readonly Item[], density: Density): { drawn: readonly Item[]; folded: readonly Item[] } {
-	if (density === 'full') {
-		return { drawn: items, folded: [] };
-	}
-	return { drawn: items.filter(item => item.tier === 1), folded: items.filter(item => item.tier === 2) };
+function split(items: readonly Item[], foldedKeys: ReadonlySet<string>): { drawn: readonly Item[]; folded: readonly Item[] } {
+	return {
+		drawn: items.filter(item => !foldedKeys.has(item.key)),
+		folded: items.filter(item => foldedKeys.has(item.key)),
+	};
 }
 
 /** What a `⋯` shows: the controls the current width had to hide. */
@@ -223,7 +251,8 @@ function MoreMenu({ items }: { items: readonly Item[] }): React.ReactElement {
  */
 export function PageRibbon(props: RibbonProps): React.ReactElement {
 	const { state, actions, reading } = props;
-	const { ref, density } = useDensity();
+	const { ref, panel, fold } = useOneRow();
+	const foldedKeys = React.useMemo(() => new Set(FOLD_ORDER.slice(0, fold)), [fold]);
 
 	// Everything that writes the page, in the order a writer reaches for it: undo, the block style, the lists, the marks,
 	// the blocks, and what is inserted rather than typed. One row, the way the engine's own demos draw it.
@@ -231,8 +260,8 @@ export function PageRibbon(props: RibbonProps): React.ReactElement {
 		{
 			id: 'history',
 			items: [
-				{ key: 'undo', label: 'Undo', glyph: <ArrowUndo16Regular />, shortcut: 'Ctrl+Z', tier: 1, disabled: !state.canUndo, run: actions.undo },
-				{ key: 'redo', label: 'Redo', glyph: <ArrowClockwise16Regular />, shortcut: 'Ctrl+Y', tier: 1, disabled: !state.canRedo, run: actions.redo },
+				{ key: 'undo', label: 'Undo', glyph: <ArrowUndo16Regular />, shortcut: 'Ctrl+Z', disabled: !state.canUndo, run: actions.undo },
+				{ key: 'redo', label: 'Redo', glyph: <ArrowClockwise16Regular />, shortcut: 'Ctrl+Y', disabled: !state.canRedo, run: actions.redo },
 			],
 		},
 		{ id: 'style', lead: <StyleMenu state={state} actions={actions} />, items: [] },
@@ -244,7 +273,6 @@ export function PageRibbon(props: RibbonProps): React.ReactElement {
 				label: entry.label,
 				glyph: entry.glyph,
 				shortcut: entry.shortcut,
-				tier: 1,
 				active: state.marks[entry.mark],
 				run: () => actions.toggleMark(entry.mark),
 			})),
@@ -252,20 +280,20 @@ export function PageRibbon(props: RibbonProps): React.ReactElement {
 		{
 			id: 'blocks',
 			items: [
-				{ key: 'quote', label: 'Block quote', glyph: <TextQuote16Regular />, shortcut: 'Ctrl+Shift+B', tier: 1, run: actions.toggleQuote },
-				{ key: 'codeBlock', label: 'Code block', glyph: <Code16Regular />, shortcut: 'Ctrl+Alt+C', tier: 1, run: actions.toggleCodeBlock },
-				{ key: 'rule', label: 'Horizontal rule', glyph: <LineHorizontal116Regular />, tier: 2, run: actions.horizontalRule },
-				{ key: 'table', label: 'Table', glyph: <Table16Regular />, tier: 2, run: actions.insertTable },
+				{ key: 'quote', label: 'Block quote', glyph: <TextQuote16Regular />, shortcut: 'Ctrl+Shift+B', run: actions.toggleQuote },
+				{ key: 'codeBlock', label: 'Code block', glyph: <Code16Regular />, shortcut: 'Ctrl+Alt+C', run: actions.toggleCodeBlock },
+				{ key: 'rule', label: 'Horizontal rule', glyph: <LineHorizontal116Regular />, run: actions.horizontalRule },
+				{ key: 'table', label: 'Table', glyph: <Table16Regular />, run: actions.insertTable },
 			],
 		},
 		{
 			id: 'insert',
 			lead: <LinkPopover state={state} actions={actions} />,
 			items: [
-				{ key: 'picture', label: 'Picture', glyph: <Image16Regular />, tier: 1, run: () => props.onHostAction('image') },
-				{ key: 'screenshot', label: 'Screenshot', glyph: <Camera16Regular />, tier: 2, run: () => props.onHostAction('capture') },
-				{ key: 'annotate', label: 'Annotate the picture', glyph: <DrawShape20Regular />, tier: 2, disabled: !state.onImage, run: props.onAnnotate },
-				{ key: 'linkPage', label: 'Link to page', glyph: <DocumentLink16Regular />, tier: 2, run: () => props.onHostAction('linkPage') },
+				{ key: 'picture', label: 'Picture', glyph: <Image16Regular />, run: () => props.onHostAction('image') },
+				{ key: 'screenshot', label: 'Screenshot', glyph: <Camera16Regular />, run: () => props.onHostAction('capture') },
+				{ key: 'annotate', label: 'Annotate the picture', glyph: <DrawShape20Regular />, disabled: !state.onImage, run: props.onAnnotate },
+				{ key: 'linkPage', label: 'Link to page', glyph: <DocumentLink16Regular />, run: () => props.onHostAction('linkPage') },
 			],
 		},
 	];
@@ -275,32 +303,30 @@ export function PageRibbon(props: RibbonProps): React.ReactElement {
 		id: 'view',
 		align: 'end',
 		items: [
-			{ key: 'find', label: 'Find', glyph: <Search16Regular />, shortcut: 'Ctrl+F', tier: 1, active: props.finding, run: props.onFind },
-			{ key: 'outline', label: 'Outline', glyph: <List16Regular />, shortcut: 'Ctrl+Alt+O', tier: 1, active: props.outlining, run: props.onOutline },
+			{ key: 'find', label: 'Find', glyph: <Search16Regular />, shortcut: 'Ctrl+F', active: props.finding, run: props.onFind },
+			{ key: 'outline', label: 'Outline', glyph: <List16Regular />, shortcut: 'Ctrl+Alt+O', active: props.outlining, run: props.onOutline },
 			// Reading a page is not editing one: the same surface, no caret, and the writing groups are not drawn.
-			{ key: 'read', label: reading ? 'Edit the page' : 'Read the page', glyph: <BookOpen16Regular />, tier: 1, active: reading, run: props.onReading },
-			{ key: 'preview', label: 'Preview the page', glyph: <Eye16Regular />, shortcut: 'Ctrl+Alt+P', tier: 2, run: () => props.onHostAction('preview') },
-			{ key: 'diff', label: 'Diff with HEAD', glyph: <BranchCompare16Regular />, shortcut: 'Ctrl+Alt+D', tier: 2, run: () => props.onHostAction('diff') },
-			{ key: 'source', label: 'Open the source', glyph: <Code16Regular />, tier: 2, run: () => props.onHostAction('source') },
-			{ key: 'properties', label: 'Page properties', glyph: <Settings16Regular />, tier: 2, run: () => props.onHostAction('properties') },
+			{ key: 'read', label: reading ? 'Edit the page' : 'Read the page', glyph: <BookOpen16Regular />, active: reading, run: props.onReading },
+			{ key: 'preview', label: 'Preview the page', glyph: <Eye16Regular />, shortcut: 'Ctrl+Alt+P', run: () => props.onHostAction('preview') },
+			{ key: 'diff', label: 'Diff with HEAD', glyph: <BranchCompare16Regular />, shortcut: 'Ctrl+Alt+D', run: () => props.onHostAction('diff') },
+			{ key: 'source', label: 'Open the source', glyph: <Code16Regular />, run: () => props.onHostAction('source') },
+			{ key: 'properties', label: 'Page properties', glyph: <Settings16Regular />, run: () => props.onHostAction('properties') },
 			// The assistant is a view of the page, not a writing tool: it opens the AI panel beside what is on screen.
-			{ key: 'assist', label: 'Draft with the AI', glyph: <Sparkle16Regular />, shortcut: 'Ctrl+Alt+A', tier: 1, run: () => props.onHostAction('assist') },
+			{ key: 'assist', label: 'Draft with the AI', glyph: <Sparkle16Regular />, shortcut: 'Ctrl+Alt+A', run: () => props.onHostAction('assist') },
 		],
 	};
 
-	// Read mode keeps every viewing control, however narrow the tab is: there are only seven, and a `⋯` next to a chip
-	// that says "Reading" would be the only way to leave the mode.
-	const drawnOf = (group: GroupSpec): readonly Item[] =>
-		reading && group.id === 'view' ? group.items : split(group.items, density).drawn;
-	const foldedOf = (group: GroupSpec): readonly Item[] =>
-		reading && group.id === 'view' ? [] : split(group.items, density).folded;
+	// The bar draws what fits and hands the rest to `⋯`. Read mode draws the same table minus the writing groups; if the
+	// tab is too narrow for its own controls, they fold like any other.
+	const drawnOf = (group: GroupSpec): readonly Item[] => split(group.items, foldedKeys).drawn;
+	const foldedOf = (group: GroupSpec): readonly Item[] => split(group.items, foldedKeys).folded;
 
 	const groups = reading ? [viewing] : [...writing, viewing];
 	const folded = groups.flatMap(foldedOf);
 
 	return (
-		<div className={`ribbon${density === 'full' ? '' : ' is-compact'}`} ref={ref} data-density={density}>
-			<div className="ribbon__panel" role="toolbar" aria-label={reading ? 'Reading' : 'Writing'}>
+		<div className={`ribbon${fold === 0 ? '' : ' is-compact'}`} ref={ref} data-fold={fold}>
+			<div className="ribbon__panel" ref={panel} role="toolbar" aria-label={reading ? 'Reading' : 'Writing'}>
 				{reading ? <span className="ribbon__mode">Reading</span> : null}
 				{groups.filter(group => group.align !== 'end').map(group => (
 					<Group key={group.id} lead={group.lead} items={drawnOf(group)} />

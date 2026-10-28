@@ -1,102 +1,106 @@
-// The right-hand panel: **DRAFT**.
+﻿/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Temco Controls. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+// **Page properties** — a sheet, not a form.
 //
-// It is the one panel that is about the page in front rather than about a list, which is why it lives in the
-// auxiliary bar: while you write, the thing you may want next is what the model makes of the same page. Three ways
-// to feed it — the page's own history, one file of the repository, or another page — then a diff you accept or
-// reject. Nothing here writes: `acceptDraft` is the only act that does, and it is the same command the Review
-// Center runs.
+// It began as a *Draft* panel in the side bar, then a Properties form with a Save button. The button was the problem:
+// `docs/help/registry.json` is written by the generator, the moves and the renames, so a save from here was a second
+// writer whose only certain outcome was a value that disagreed with the file after the next run. A sheet cannot
+// disagree with anything — it reads the entry of the page in front and shows it beside that page, and the two things a
+// person actually needs are one click away: the registry file, and the page.
 
 import * as vscode from 'vscode';
-import { FIELDS, control, locate, normalise, read } from './pageProperties';
+import { PropertyRow, describe, locate, placement } from './pageProperties';
 import { DocsRoot, PageEntry } from './registry';
-import { RegistryEdit, describeChange } from './registryEdit';
-import { Catalog, DraftRow, selection } from './store';
+import { RegistryEdit } from './registryEdit';
 import { escapeHtml as esc } from './ui';
 
-export interface DraftDeps {
+export interface PropertiesDeps {
 	/** The page in front, or the row the tree has selected — the rule every command here follows. */
 	page: () => PageEntry | undefined;
-	/** The roots the page belongs to, so the Properties tab can find its registry. */
+	/** The roots the page belongs to, so the sheet can find its registry. */
 	roots: () => readonly DocsRoot[];
-	/** Redraws the tree after a registry write. */
-	redraw: () => void;
 }
-
-type Tab = 'draft' | 'preview' | 'properties';
 
 interface PanelMessage {
 	command?: unknown;
 	args?: unknown;
 	type?: unknown;
-	tab?: unknown;
-	values?: Record<string, unknown>;
 }
 
-export class DraftView implements vscode.WebviewViewProvider {
-	static readonly TYPE = 'temcoDocs.draft';
+export class PagePropertiesPanel {
+	static readonly VIEW_TYPE = 'temcoDocs.properties';
 
-	private view: vscode.WebviewView | undefined;
-	private tab: Tab = 'draft';
+	private panel: vscode.WebviewPanel | undefined;
 
-	constructor(private readonly context: vscode.ExtensionContext, private readonly deps: DraftDeps) { }
+	constructor(private readonly deps: PropertiesDeps) { }
 
-	resolveWebviewView(view: vscode.WebviewView): void {
-		this.view = view;
-		view.webview.options = { enableScripts: true };
-		view.webview.onDidReceiveMessage((message: PanelMessage) => void this.receive(message));
-		view.onDidDispose(() => {
-			this.view = undefined;
-		});
-		void this.render();
+	/** Opens the properties of the page in front, in a tab beside it. One tab, reused while it is open. */
+	async show(): Promise<void> {
+		const page = this.deps.page();
+		if (page === undefined) {
+			void vscode.window.showInformationMessage(
+				'Temco Docs: open a page first — these are that page’s registry properties.'
+			);
+			return;
+		}
+		const panel = this.panel ?? await this.create(page);
+		panel.title = title(page);
+		panel.reveal(panel.viewColumn, false);
+		await this.render();
 	}
 
+	/** Redraws the sheet if it is open; called whenever the registry or the page in front changes. */
 	refresh(): void {
 		void this.render();
 	}
 
-	/** Opens the panel on its Properties tab — what *Page Properties* does now that the form lives here. */
-	showProperties(): void {
-		this.tab = 'properties';
-		this.reveal();
-		void this.render();
-	}
-
-	/** Opens the panel on its Preview tab: the page as a reader sees it, beside the Markdown being written. */
-	showPreview(): void {
-		this.tab = 'preview';
-		this.reveal();
-		void this.render();
-	}
-
 	/**
-	 * Brings the panel into view.
-	 *
-	 * One command and nothing else: focusing the *view* is the only reveal that cannot move another part of the window —
-	 * VS Code opens the container the view lives in, in the part that container belongs to. The two attempts before this
-	 * one both reached for the container by its id (`workbench.view.extension.temcoDraft`), which reopens a container
-	 * wherever the window last kept it — a window whose secondary bar was closed got the container back in the primary bar,
-	 * and the left panel flipped to Explorer while the properties never appeared.
+	 * A tab opens at half the window, because the grid splits the active group evenly. `vscode.setEditorLayout` is the
+	 * only way to ask for another proportion — and it lays out *every* group, so it runs only when the window has a
+	 * single one: the page keeps the room and the sheet gets a narrow column of its own.
 	 */
-	private reveal(): void {
-		void vscode.commands.executeCommand('temcoDocs.draft.focus').then(undefined, () => undefined);
+	private async narrowColumn(): Promise<vscode.ViewColumn> {
+		if (vscode.window.tabGroups.all.length !== 1) {
+			return vscode.ViewColumn.Beside;
+		}
+		await vscode.commands.executeCommand('vscode.setEditorLayout', {
+			orientation: 0,
+			groups: [{ size: 0.72 }, { size: 0.28 }]
+		}).then(undefined, () => undefined);
+		return vscode.ViewColumn.Two;
+	}
+
+	private async create(page: PageEntry): Promise<vscode.WebviewPanel> {
+		const column = await this.narrowColumn();
+		const panel = vscode.window.createWebviewPanel(
+			PagePropertiesPanel.VIEW_TYPE,
+			title(page),
+			{ viewColumn: column, preserveFocus: false },
+			{ enableScripts: true, retainContextWhenHidden: true }
+		);
+		panel.iconPath = new vscode.ThemeIcon('info');
+		panel.webview.onDidReceiveMessage((message: PanelMessage) => void this.receive(message));
+		panel.onDidDispose(() => {
+			this.panel = undefined;
+		});
+		this.panel = panel;
+		return panel;
 	}
 
 	private async receive(message: PanelMessage): Promise<void> {
-		if (message.type === 'tab' && (message.tab === 'draft' || message.tab === 'preview' || message.tab === 'properties')) {
-			this.tab = message.tab;
-			await this.render();
-			return;
-		}
-		if (message.type === 'save' && message.values !== undefined) {
-			await this.save(message.values);
-			return;
-		}
 		if (message.type === 'registry') {
 			const page = this.deps.page();
 			const located = page === undefined ? undefined : locate(this.deps.roots(), page.uri);
 			if (located !== undefined) {
 				const document = await vscode.workspace.openTextDocument(located.root.registryUri);
-				await vscode.window.showTextDocument(document, { preview: true, viewColumn: vscode.ViewColumn.Beside });
+				// In the sheet's own column, as a tab beside it — so the two stay side by side and nothing new splits.
+				await vscode.window.showTextDocument(document, {
+					preview: true,
+					viewColumn: this.panel?.viewColumn ?? vscode.ViewColumn.Beside
+				});
 			}
 			return;
 		}
@@ -107,227 +111,98 @@ export class DraftView implements vscode.WebviewViewProvider {
 		void vscode.commands.executeCommand(message.command, ...args);
 	}
 
-	/** The registry write: the same edit the standalone form made, naming each value it changes. */
-	private async save(values: Record<string, unknown>): Promise<void> {
-		const page = this.deps.page();
-		const located = page === undefined ? undefined : locate(this.deps.roots(), page.uri);
-		if (located === undefined) {
-			return;
-		}
-		const edit = await RegistryEdit.open(located.root.registryUri);
-		if (edit === undefined) {
-			return;
-		}
-		for (const field of FIELDS) {
-			edit.set(located.entry.id, field.key, normalise(field, values[field.key]));
-		}
-		const changes = edit.changed;
-		if (changes.length === 0) {
-			void vscode.window.showInformationMessage('Temco Docs: nothing changed, so nothing was written.');
-			return;
-		}
-		const confirmed = await vscode.window.showWarningMessage(
-			`Write ${changes.length} ${changes.length === 1 ? 'value' : 'values'} to ${vscode.workspace.asRelativePath(located.root.registryUri)}?`,
-			{ modal: true, detail: changes.map(describeChange).join('\n') },
-			'Write'
-		);
-		if (confirmed !== 'Write') {
-			return;
-		}
-		await edit.save();
-		this.deps.redraw();
-		void this.render();
-	}
-
 	private async render(): Promise<void> {
-		const view = this.view;
-		if (view === undefined) {
+		const panel = this.panel;
+		if (panel === undefined) {
 			return;
 		}
 		const page = this.deps.page();
-		view.description = page?.title;
-		let properties = '';
-		if (this.tab === 'properties' && page !== undefined) {
+		panel.title = page === undefined ? 'Page properties' : title(page);
+		let body = empty();
+		if (page !== undefined) {
 			const located = locate(this.deps.roots(), page.uri);
 			const edit = located === undefined ? undefined : await RegistryEdit.open(located.root.registryUri);
-			properties = located === undefined || edit === undefined
-				? `<p class="note">This page is not in a docs registry, so it has no properties to edit.</p>`
-				: propertiesForm(read(edit, located.entry));
+			body = located === undefined || edit === undefined
+				? head(page, true) + `<p class="note">This page is not in a docs registry, so there are no properties to show.</p>`
+				: head(page, false)
+				+ section('Owner and search', describe(edit, page))
+				+ section('Placement', placement(page))
+				+ actions();
 		}
-		const preview = this.tab === 'preview' && page !== undefined ? await rendered(page) : '';
-		const start = page === undefined ? false : await isBlank(page);
-		view.webview.html = html(
-			page,
-			page === undefined ? [] : await waiting(this.context, page),
-			start,
-			this.tab,
-			properties,
-			preview
-		);
+		panel.webview.html = html(body);
 	}
 }
 
-/**
- * The page as a reader sees it.
- *
- * The rendering is the editor's own: the built-in Markdown extension exposes `markdown.api.render`, so the preview
- * and the Markdown preview beside the editor cannot disagree about what the page means. Nothing new is bundled and
- * nothing here can diverge from what VS Code shows.
- */
-async function rendered(page: PageEntry): Promise<string> {
-	let text = '';
-	try {
-		text = Buffer.from(await vscode.workspace.fs.readFile(page.uri)).toString('utf8');
-	} catch {
-		return `<p class="note">The file could not be read, so there is nothing to preview.</p>`;
-	}
-	try {
-		const body = await vscode.commands.executeCommand<string>('markdown.api.render', text);
-		return body ?? `<p class="note">The Markdown renderer returned nothing for this page.</p>`;
-	} catch {
-		return `<p class="note">Markdown rendering is not available — the built-in Markdown extension is not active in ` +
-			`this window.</p>`;
-	}
+function title(page: PageEntry): string {
+	return `Properties — ${page.title}`;
 }
 
-/** The registry fields as a compact form; saving posts the values and the extension writes them. */
-function propertiesForm(values: Record<string, string | number | boolean>): string {
-	const rows = FIELDS.map((field) =>
-		`<div class="field"><label for="prop-${field.key}">${esc(field.label)}</label>${control(field, values[field.key] ?? '')}<div class="note">${esc(field.hint)}</div></div>`
-	).join('');
-	return `${rows}<div class="row"><button id="properties-save">Save Properties</button><button class="ghost" data-type="registry">Show the Registry</button></div>`;
+/** The page's name, the two facts that say which file it is, and what this sheet is. */
+function head(page: PageEntry, outside: boolean): string {
+	const where = outside ? 'not in a docs root' : vscode.workspace.asRelativePath(page.uri);
+	const lede = outside
+		? 'This file is not listed in a docs registry, so the help build does not know it exists.'
+		: 'What the docs registry records about this page — who keeps it, how a reader finds it, and where it sits in the help.';
+	return `<header><h1>${esc(page.title)}</h1><div class="where" title="${esc(page.uri.fsPath)}">${esc(where)}</div><code class="id">${esc(page.id)}</code><p class="lede">${esc(lede)}</p></header>`;
 }
 
-/** Whether the page has nothing but its headings — the state a page is in the moment it is created. */
-async function isBlank(page: PageEntry): Promise<boolean> {
-	try {
-		const text = Buffer.from(await vscode.workspace.fs.readFile(page.uri)).toString('utf8');
-		const prose = text
-			.split(/\r?\n/)
-			.filter((line) => line.trim().length > 0 && !line.trim().startsWith('#'))
-			.join('');
-		return prose.length === 0;
-	} catch {
-		return false;
-	}
+/** A named group of rows; an empty value says so in the same small voice as the label. */
+function section(name: string, rows: readonly PropertyRow[]): string {
+	const body = rows
+		.map((row) => `<div class="row"><div class="k">${esc(row.label)}</div><div class="v${row.value === '' ? ' unset' : ''}">${row.value === '' ? 'Not set' : esc(row.value)}</div><div class="hint">${esc(row.hint)}</div></div>`)
+		.join('');
+	return `<section><h2>${esc(name)}</h2>${body}</section>`;
 }
 
-/** The drafts waiting for this page, from the catalog — the same rows the Review Center settles. */
-async function waiting(context: vscode.ExtensionContext, page: PageEntry): Promise<DraftRow[]> {
-	let catalog: Catalog | undefined;
-	try {
-		catalog = await Catalog.open(context);
-		const documents = catalog.documents();
-		const project = selection.project() ?? (documents.length === 1 ? documents[0].slug : undefined);
-		if (project === undefined) {
-			return [];
-		}
-		return catalog.drafts(project).filter((draft) => draft.state === 'draft' && draft.pageId === page.id);
-	} catch {
-		return [];
-	} finally {
-		catalog?.close();
-	}
+/** The two things a person can do about the values they are looking at, and why there is no Save. */
+function actions(): string {
+	return `<footer><button data-type="registry">Edit the Registry</button><button class="ghost" data-command="temcoDocs.openSource">Open Source</button><p class="note">These values are read from the registry, never written from here: the help generator, page moves and renames all write that one file, so a second writer could only ever disagree with it. Change a value in the registry, and this sheet follows the next refresh.</p></footer>`;
 }
 
-function html(
-	page: PageEntry | undefined,
-	drafts: readonly DraftRow[],
-	start: boolean,
-	tab: Tab,
-	properties: string,
-	preview: string
-): string {
-	const draftBody = page === undefined
-		? `<p class="note">No page is in front. Open one from <b>Pages</b> and its draft panel appears here.</p>`
-		: `<div class="head"><div class="title">${esc(page.title)}</div><div class="note">${esc(page.id)}</div></div>
-${start ? `<div class="label">Start it</div>
-<p class="note">The page has its title and its headings. Three ways in:</p>
-<div class="row">
-  <button data-command="temcoDocs.captureImage">Capture a screen</button>
-  <button class="ghost" data-command="temcoDocs.chooseImage">Insert an image…</button>
-</div>
-<div class="row">
-  <button data-command="temcoDocs.revisePage" data-args="${esc(JSON.stringify([{ id: page.id, title: page.title }]))}">Draft it from a source</button>
-</div>` : ''}
-<p class="note">Draft from this page’s history, a source file, or another page. The model reads the page as it
-stands, and nothing is written until you apply the result.</p>
-<div class="row">
-  <button data-command="temcoDocs.revisePage" data-args="${esc(JSON.stringify([{ id: page.id, title: page.title }]))}">Draft a Change</button>
-  <button class="ghost" data-command="temcoDocs.review">Review Center</button>
-</div>
-<div class="label">Waiting (${drafts.length})</div>
-${drafts.length === 0
-			? `<p class="note">No draft is waiting for this page.</p>`
-			: drafts.map((draft) => `<div class="draft">
-  <div class="draft__title">${esc(draft.title || draft.kind || 'Draft')}<span class="note"> · ${esc(draft.createdAt)}</span></div>
-  <div class="row">
-    <button data-command="temcoDocs.acceptDraft" data-args="${esc(JSON.stringify([draft.id]))}">Apply</button>
-    <button class="ghost" data-command="temcoDocs.discardDraft" data-args="${esc(JSON.stringify([draft.id]))}">Reject</button>
-  </div>
-</div>`).join('')}`;
+function empty(): string {
+	return `<div class="blank"><p class="note">No page is in front.</p><p class="note">Open one from <b>Pages</b> and what the registry says about it appears here.</p></div>`;
+}
 
-	const tabs = `<div class="tabs"><button class="tab${tab === 'draft' ? ' tab--on' : ''}" data-type="tab" data-tab="draft">Draft</button><button class="tab${tab === 'preview' ? ' tab--on' : ''}" data-type="tab" data-tab="preview">Preview</button><button class="tab${tab === 'properties' ? ' tab--on' : ''}" data-type="tab" data-tab="properties">Properties</button></div>`;
-	const body = page === undefined
-		? draftBody
-		: tab === 'preview'
-			? `<div class="preview">${preview}</div>`
-			: tab === 'properties'
-				? `<div class="head"><div class="title">${esc(page.title)}</div><div class="note">${esc(page.id)}</div></div>${properties}`
-				: draftBody;
-
+function html(body: string): string {
 	return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><style>
-	.tabs { display: flex; gap: 2px; margin: -2px 0 10px; border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,.25)); }
-	.tab { background: none; color: var(--vscode-foreground); border-radius: 0; padding: 4px 10px; opacity: .7; border-bottom: 2px solid transparent; }
-	.tab:hover { background: none; opacity: 1; }
-	.tab--on { opacity: 1; border-bottom-color: var(--vscode-focusBorder); }
-	.field { margin: 8px 0; }
-	.field label { display: block; font-weight: 500; margin-bottom: 3px; }
-	.input { width: 100%; box-sizing: border-box; padding: 3px 6px; font-family: inherit; font-size: 12px;
-		color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, transparent); }
-	.check { display: flex; gap: 6px; align-items: center; font-weight: normal; }
-	body { font-family: var(--vscode-font-family); font-size: 12px; color: var(--vscode-foreground); padding: 10px 12px; }
-	.head { margin-bottom: 8px; }
-	.title { font-size: 13px; font-weight: 600; }
-	.note { color: var(--vscode-descriptionForeground); line-height: 1.45; margin: 6px 0; }
-	.label { margin: 14px 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--vscode-descriptionForeground); }
-	.row { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
-	button { font-family: inherit; font-size: 12px; padding: 4px 10px; border: none; border-radius: 2px; cursor: pointer;
-		color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+	:root { color-scheme: light dark; }
+	body { margin: 0; padding: 0 18px 18px; font-family: var(--vscode-font-family); font-size: 12px;
+		color: var(--vscode-foreground); max-width: 400px; }
+	header { padding: 18px 0 12px; }
+	h1 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.3; }
+	.where { margin-top: 3px; font-size: 11px; color: var(--vscode-descriptionForeground);
+		overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.id { display: inline-block; margin-top: 7px; padding: 1px 6px; font-family: var(--vscode-editor-font-family);
+		font-size: 11px; color: var(--vscode-descriptionForeground);
+		background: var(--vscode-textCodeBlock-background); border-radius: 3px; }
+	.lede { margin: 10px 0 0; color: var(--vscode-descriptionForeground); line-height: 1.55; }
+	section { border-top: 1px solid var(--vscode-widget-border, rgba(128,128,128,.22)); padding: 10px 0 6px; }
+	h2 { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+		color: var(--vscode-descriptionForeground); }
+	.row { display: grid; grid-template-columns: 108px 1fr; gap: 2px 10px; padding: 6px 0 8px; align-items: baseline; }
+	.k { color: var(--vscode-descriptionForeground); }
+	.v { line-height: 1.5; overflow-wrap: anywhere; }
+	.v.unset { color: var(--vscode-disabledForeground, var(--vscode-descriptionForeground)); font-style: italic; }
+	.hint { grid-column: 2; font-size: 11px; line-height: 1.5; color: var(--vscode-descriptionForeground); opacity: .85; }
+	.note { color: var(--vscode-descriptionForeground); font-size: 11px; line-height: 1.55; margin: 10px 0 0; }
+	footer { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px;
+		border-top: 1px solid var(--vscode-widget-border, rgba(128,128,128,.22)); padding-top: 14px; }
+	footer .note { flex-basis: 100%; }
+	button { font-family: inherit; font-size: 12px; height: 26px; padding: 0 10px; cursor: pointer; border: none;
+		border-radius: 2px; color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
 	button.ghost { color: var(--vscode-button-secondaryForeground); background: var(--vscode-button-secondaryBackground); }
 	button:hover { background: var(--vscode-button-hoverBackground); }
-	.draft { border-top: 1px solid var(--vscode-panel-border, rgba(128,128,128,.25)); padding: 8px 0; }
-	.draft__title { font-weight: 500; }
-	.preview { line-height: 1.5; }
-	.preview h1, .preview h2, .preview h3 { line-height: 1.25; margin: 14px 0 6px; }
-	.preview h1 { font-size: 18px; } .preview h2 { font-size: 15px; } .preview h3 { font-size: 13px; }
-	.preview h1, .preview h2 { padding-bottom: 4px; border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,.25)); }
-	.preview code { font-family: var(--vscode-editor-font-family); background: var(--vscode-textCodeBlock-background); padding: 1px 4px; border-radius: 2px; }
-	.preview pre { background: var(--vscode-textCodeBlock-background); padding: 8px; overflow: auto; }
-	.preview pre code { background: none; padding: 0; }
-	.preview blockquote { margin: 8px 0; padding: 2px 10px; border-left: 3px solid var(--vscode-textBlockQuote-border); background: var(--vscode-textBlockQuote-background); }
-	.preview table { border-collapse: collapse; } .preview th, .preview td { border: 1px solid var(--vscode-panel-border, rgba(128,128,128,.25)); padding: 4px 8px; }
-	.preview img { max-width: 100%; }
-	</style></head><body>${page === undefined ? '' : tabs}${body}
+	button.ghost:hover { background: var(--vscode-button-secondaryHoverBackground); }
+	.blank { padding: 48px 0; text-align: center; }
+	</style></head><body>${body}
 	<script>
 	const api = acquireVsCodeApi();
 	document.addEventListener('click', (event) => {
-		const typed = event.target.closest('[data-type]');
-		if (typed) {
-			api.postMessage({ type: typed.dataset.type, tab: typed.dataset.tab });
-			return;
-		}
-		if (event.target.closest('#properties-save')) {
-			const values = {};
-			document.querySelectorAll('[data-field]').forEach((element) => {
-				values[element.getAttribute('data-field')] = element.type === 'checkbox' ? element.checked : element.value;
-			});
-			api.postMessage({ type: 'save', values });
-			return;
-		}
+		const registry = event.target.closest('[data-type="registry"]');
+		if (registry) { api.postMessage({ type: 'registry' }); return; }
 		const button = event.target.closest('[data-command]');
 		if (!button) { return; }
-		api.postMessage({ command: button.dataset.command, args: JSON.parse(button.dataset.args || '[]') });
+		api.postMessage({ command: button.dataset.command, args: [] });
 	});
 	</script></body></html>`;
 }

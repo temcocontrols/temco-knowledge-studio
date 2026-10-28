@@ -135,10 +135,8 @@ test('the four acts are icon buttons, named for a screen reader', () => {
 	assert.equal((html.match(/aria-label="[^"]+"/gu) ?? []).length, 4, 'an icon without a label is a mystery');
 });
 
-test('the second description line says where the words come from and where they go', () => {
-	const html = panelHtml(withProject, 'NONCE1234567890ABCDEFGH');
-	assert.ok(html.includes('never read from a source · not published anywhere yet'));
-	const known = panelHtml({
+test('the read and publish activity line is not drawn', () => {
+	const html = panelHtml({
 		...withProject,
 		project: {
 			name: 'Temco',
@@ -148,7 +146,9 @@ test('the second description line says where the words come from and where they 
 			lastRelease: { version: '1.4.2', destination: 'GitHub Pages', publishedAt: new Date().toISOString() }
 		}
 	}, 'NONCE1234567890ABCDEFGH');
-	assert.ok(known.includes('read 2 h ago from handbook · publishes to GitHub Pages'));
+	assert.ok(!html.includes('class="activity"'), 'the fold between read and publish is gone');
+	assert.ok(!html.includes('never read from a source'));
+	assert.ok(!html.includes('publishes to'));
 });
 
 test('unshipped is only mentioned when something is', () => {

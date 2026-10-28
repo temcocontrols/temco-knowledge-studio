@@ -27,10 +27,10 @@ import { registerPublishCommands } from './publish';
 import { generateSite } from './site';
 import { rowSlug } from './ui';
 import { DocsPages } from './docsPages';
-import { DraftView } from './draftView';
+import { PagePropertiesPanel } from './draftView';
 import { registerMediaCommands } from './media';
 import { NewPagePage } from './newPagePage';
-import { registerPagePane } from './outline';
+import { registerWordCount } from './outline';
 import { PANEL_VIEW_TYPE, DocsPanel, DocsPanelState } from './panelView';
 import { statusLine } from './statusLine';
 import { OverviewPage } from './overview';
@@ -233,13 +233,12 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     return uri === undefined ? undefined : pageForUri(roots, uri);
   };
 
-  // The right-hand panel: the page in front, what the model may read, and the drafts waiting on a person.
-  const draftView = new DraftView(context, {
+  // Page properties: the registry entry of the page in front, opened as a tab beside it. It has no side-bar view of its
+  // own — a form about a page belongs next to that page, not in the Explorer.
+  const properties = new PagePropertiesPanel({
     page: () => currentPage(),
     roots: () => roots,
-    redraw: () => void vscode.commands.executeCommand('temcoDocs.refresh'),
   });
-  context.subscriptions.push(vscode.window.registerWebviewViewProvider(DraftView.TYPE, draftView));
 
   // The page as a reader sees it, in a tab of its own beside the source, and the same page against its last commit.
   // Both follow the editor rather than the tree: they are about the file being written, not the row being read.
@@ -445,7 +444,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     provider.setRoots(unique, notes, loose);
     sidebar.refresh();
     queue.refresh();
-    draftView.refresh();
+    properties.refresh();
     // The view says which project it is showing: it answers about a project, never about the window, and a view
     // that silently answers a different question is worse than an empty one. The name and the page count are the
     // project row's own; the title carries the count only when there is no such row to carry it.
@@ -739,7 +738,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
 
   // The page's properties are a tab of the right panel, beside the draft: one place about the page in front.
   context.subscriptions.push(
-    vscode.commands.registerCommand('temcoDocs.pageProperties', () => draftView.showProperties()),
+    vscode.commands.registerCommand('temcoDocs.pageProperties', () => void properties.show()),
     // Translating the page in front into a sibling file. The key is a secret; the endpoint and region are settings,
     // because they name where the resource lives rather than proving who may use it.
     vscode.commands.registerCommand('temcoDocs.setTranslatorKey', async () => {
@@ -1224,7 +1223,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   // Importing a Word document as a page: mammoth for the text, turndown for the Markdown.
   registerDocxCommand(context);
   // The Page pane: the page's headings as a jump list, and its length in the status bar.
-  registerPagePane(context);
+  registerWordCount(context);
   // The Library's project rows are read from the catalog, so a project created, edited or removed in the
   // projects module has to bring them back: its own signal, listened to here.
   context.subscriptions.push(projects().onDidChange(() => void refresh()));

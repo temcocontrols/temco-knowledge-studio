@@ -65,69 +65,16 @@ export function headingsOf(text: string): Heading[] {
 	return roots;
 }
 
-/** The outline as the tree view reads it. */
-class Outline implements vscode.TreeDataProvider<Heading> {
-	private readonly changed = new vscode.EventEmitter<void>();
-	readonly onDidChangeTreeData = this.changed.event;
-
-	private roots: Heading[] = [];
-	private note: string | undefined;
-
-	/** Rebuilds from the editor in front. */
-	refresh(): void {
-		const document = vscode.window.activeTextEditor?.document;
-		if (document === undefined || !isMarkdown(document)) {
-			this.roots = [];
-			this.note = 'No Markdown page is in front. Open one from Pages and its headings appear here.';
-		} else {
-			this.roots = headingsOf(document.getText());
-			this.note = this.roots.length === 0 ? 'This page has no headings yet.' : undefined;
-		}
-		this.changed.fire();
-	}
-
-	getChildren(element?: Heading): Heading[] {
-		if (element !== undefined) {
-			return element.children;
-		}
-		return this.roots;
-	}
-
-	getTreeItem(element: Heading): vscode.TreeItem {
-		const item = new vscode.TreeItem(
-			element.text,
-			element.children.length === 0 ? vscode.TreeItemCollapsibleState.None : vscode.TreeItemCollapsibleState.Expanded
-		);
-		item.description = `H${element.level}`;
-		item.tooltip = `${element.text} — line ${element.line + 1}`;
-		item.contextValue = 'temcoDocs.heading';
-		item.command = { command: 'temcoDocs.outline.reveal', title: 'Go to the Heading', arguments: [element.line] };
-		return item;
-	}
-
-	/** The sentence a tree shows instead of nothing, so an empty pane still explains itself. */
-	get noteText(): string | undefined {
-		return this.note;
-	}
-
-	hasHeadings(): boolean {
-		return this.roots.length > 0;
-	}
-}
-
 /**
- * Builds the pane and its word count.
+ * The word count that follows the editor in front.
  *
- * Both follow the editor in front: the outline redraws when the page or its text changes, and the count follows the
- * same signal so the two never describe different pages.
+ * It is the only thing VS Code does not already show: line, column, encoding and end-of-line are the status bar's own
+ * business, so nothing here repeats them. Clicking it opens VS Code's own Outline, which reads the same headings.
  */
-export function registerPagePane(context: vscode.ExtensionContext): void {
-	const outline = new Outline();
-	const tree = vscode.window.createTreeView('temcoDocs.outline', { treeDataProvider: outline, showCollapseAll: true });
-
+export function registerWordCount(context: vscode.ExtensionContext): void {
 	const count = vscode.window.createStatusBarItem('temcoDocs.words', vscode.StatusBarAlignment.Right, 100);
 	count.name = 'Temco Docs — page length';
-	count.command = 'temcoDocs.outline';
+	count.command = 'outline.focus';
 
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	const schedule = (): void => {
@@ -141,7 +88,6 @@ export function registerPagePane(context: vscode.ExtensionContext): void {
 	};
 
 	const redraw = (): void => {
-		outline.refresh();
 		const document = vscode.window.activeTextEditor?.document;
 		if (document === undefined || !isMarkdown(document)) {
 			count.hide();
@@ -155,12 +101,11 @@ export function registerPagePane(context: vscode.ExtensionContext): void {
 			.filter((word) => /[\p{L}\p{N}]/u.test(word)).length;
 		const minutes = Math.max(1, Math.round(words / 200));
 		count.text = `$(book) ${words.toLocaleString()} ${words === 1 ? 'word' : 'words'}`;
-		count.tooltip = `About ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} to read · ${outline.hasHeadings() ? 'Outline in the Page pane' : 'No headings yet'}`;
+		count.tooltip = `About ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} to read`;
 		count.show();
 	};
 
 	context.subscriptions.push(
-		tree,
 		count,
 		{
 			dispose: () => {
@@ -179,24 +124,9 @@ export function registerPagePane(context: vscode.ExtensionContext): void {
 			if (document === vscode.window.activeTextEditor?.document) {
 				redraw();
 			}
-		}),
-		vscode.commands.registerCommand('temcoDocs.outline', () => {
-			void vscode.commands.executeCommand('workbench.view.extension.temcoDraft').then(
-				() => vscode.commands.executeCommand('temcoDocs.outline.focus'),
-				() => vscode.commands.executeCommand('temcoDocs.outline.focus')
-			);
-		}),
-		vscode.commands.registerCommand('temcoDocs.outline.reveal', (line?: unknown) => {
-			const editor = vscode.window.activeTextEditor;
-			if (editor === undefined || typeof line !== 'number') {
-				return;
-			}
-			const position = new vscode.Position(Math.min(Math.max(line, 0), Math.max(editor.document.lineCount - 1, 0)), 0);
-			editor.selection = new vscode.Selection(position, position);
-			editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.AtTop);
-			void vscode.window.showTextDocument(editor.document, { viewColumn: editor.viewColumn, preserveFocus: false });
 		})
 	);
 
 	redraw();
 }
+

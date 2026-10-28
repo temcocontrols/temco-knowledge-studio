@@ -70,6 +70,12 @@ body {
 	gap: 1px;
 	min-height: 40px;
 	align-items: center;
+	/* Never two rows. A wrapped toolbar draws the reading controls under the writing ones and reads as two bars, so the
+	   bar keeps one row at any width and the overflow goes to `⋯` — `ribbon.tsx` measures the row and folds what it cannot
+	   hold. `nowrap` here is the guarantee; the folding is what keeps the row from clipping. */
+	flex-wrap: nowrap;
+	min-width: 0;
+	overflow: hidden;
 }
 
 /* No captions under the groups: the controls are named by their tooltips and their aria-labels, and the hairline between
@@ -78,6 +84,8 @@ body {
 .page-surface .ribbon__group {
 	padding: 0 6px;
 	gap: 1px;
+	/* A group keeps its controls' own width: shrinking them is how a row fits by making the icons overlap. */
+	flex: 0 0 auto;
 }
 
 .page-surface .ribbon__group + .ribbon__group {
@@ -88,6 +96,7 @@ body {
 .page-surface .ribbon__group--end {
 	margin-left: auto;
 	border-left: 1px solid var(--border);
+	flex: 0 0 auto;
 }
 
 /* Only an icon-only control gets a square. A button with words keeps its own width — forcing 30 px on every `.btn` is
@@ -110,16 +119,18 @@ body {
 	padding: 0 8px;
 }
 
-/* A narrow editor gets a denser bar rather than a clipped one: the block group folds into `⋯` and the groups tighten. */
+/* Once anything has been folded the groups tighten: the bar is doing more work in less room, and still on one row. */
 .page-surface .ribbon.is-compact .ribbon__group {
-	padding: 0 6px;
+	padding: 0 4px;
 	gap: 2px;
 }
 
 .page-surface .ribbon.is-compact .ribbon__panel {
-	min-height: 46px;
-	padding: 4px 6px;
+	padding: 6px 6px;
 }
+
+/* The overflow button belongs to the row, not to a group: no hairline of its own and no extra padding. */
+.page-surface .ribbon__panel > .btn { flex: 0 0 auto; }
 
 /* Read mode says so, and says nothing else: the editing tabs are not offered, so a reader cannot think they are editing. */
 .ribbon__mode {

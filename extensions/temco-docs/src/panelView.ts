@@ -48,7 +48,9 @@ const TYPE = 'temcoDocs.panel';
 // copied verbatim on the 16-unit grid, so the two icon rows above and below are the same family. Inline, because the
 // panel's policy loads nothing.
 const glyph = (paths: string, size = 20): string => `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">${paths}</svg>`;
-const FILE = glyph('<path fill-rule="evenodd" clip-rule="evenodd" d="M13.71 4.29l-3-3L10 1H4L3 2v12l1 1h9l1-1V5l-.29-.71zM13 14H4V2h5v4h4v8zm-3-9V2l3 3h-3z"/>');
+// A project is a folder of sources, not a file: the glyph says which kind of thing the name is before the name is read.
+// One step under the acts' size, because it labels the name rather than offering an action of its own.
+const PROJECT = glyph('<path d="M14.5 3H7.71l-.85-.85L6.51 2h-5l-.5.5v11l.5.5h13l.5-.5v-10L14.5 3zm-.51 8.49V13h-12V7h4.49l.35-.15.86-.86H14v1.5l-.01 4zm0-6.49h-6.5l-.35.15-.86.86H2v-3h4.29l.85.85.36.15H14l-.01.99z"/>', 16);
 const NEW_FILE = glyph('<path fill-rule="evenodd" clip-rule="evenodd" d="M9.5 1.1l3.4 3.5.1.4v2h-1V6H8V2H3v11h4v1H2.5l-.5-.5v-12l.5-.5h6.7l.3.1zM9 2v3h2.9L9 2zm4 14h-1v-3H9v-1h3V9h1v3h3v1h-3v3z"/>');
 const CHECK = glyph('<path fill-rule="evenodd" clip-rule="evenodd" d="M14.431 3.323l-8.47 10-.79-.036-3.35-4.77.818-.574 2.978 4.24 8.051-9.506.764.646z"/>');
 const PLAY = glyph('<path d="M3.78 2L3 2.41v12l.78.42 9-6V8l-9-6zM4 13.48V3.35l7.6 5.07L4 13.48z"/>');
@@ -214,21 +216,19 @@ export function panelHtml(state: DocsPanelState, nonceValue: string): string {
 	/* What the project holds, as one plain paragraph: numbers in ink, what they count in grey. */
 	.info { margin: 4px 0 0; padding-left: 18px; font-size: 11.5px; line-height: 17px; color: var(--vscode-descriptionForeground); }
 	.info b { font-weight: 600; color: var(--vscode-foreground); font-variant-numeric: tabular-nums; }
-	.activity { margin: 3px 0 0; padding-left: 18px; font-size: 11px; line-height: 16px; color: var(--vscode-descriptionForeground); }
 </style>
 </head>
 <body>
 ${project === undefined
-	? `<div class="open open--empty"><span class="glyph" aria-hidden="true">${FILE}</span><span class="name">No project</span></div>
+	? `<div class="open open--empty"><span class="glyph" aria-hidden="true">${PROJECT}</span><span class="name">No project</span></div>
 <p class="facts">Pick a project in <b>Home ▸ Projects</b>.</p>`
-	: `<div class="head"><button type="button" class="open" data-command="temcoDocs.projectPage" title="Open the project page"><span class="glyph" aria-hidden="true">${FILE}</span><span class="name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>${version}</button>
+	: `<div class="head"><button type="button" class="open" data-command="temcoDocs.projectPage" title="Open the project page"><span class="glyph" aria-hidden="true">${PROJECT}</span><span class="name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>${version}</button>
 	<button type="button" class="icon" data-command="temcoDocs.newPage" title="New page" aria-label="New page">${NEW_FILE}</button>
 	<button type="button" class="icon" data-command="temcoDocs.review" title="Review the drafts" aria-label="Review the drafts">${CHECK}</button>
 	<button type="button" class="icon" data-command="temcoDocs.buildSite" title="Build the site" aria-label="Build the site">${PLAY}</button>
 	<button type="button" class="icon" data-command="temcoDocs.publishSite" title="Publish to GitHub Pages" aria-label="Publish to GitHub Pages">${CLOUD_UPLOAD}</button></div>
 ${about(state)}
-<p class="info">${facts(state)}</p>
-${activity(state)}`}
+<p class="info">${facts(state)}</p>`}
 <script nonce="${nonceValue}">
 	const vscode = acquireVsCodeApi();
 	const post = (message) => vscode.postMessage(message);
@@ -273,21 +273,6 @@ function about(state: DocsPanelState): string {
 		sentences.push(`Built with ${project.engine}.`);
 	}
 	return sentences.length === 0 ? '' : `<p class="desc">${escapeHtml(sentences.join(' '))}</p>`;
-}
-
-/** Where the words come from and where they go: the two facts a project's shape cannot show. */
-function activity(state: DocsPanelState): string {
-	const project = state.project;
-	if (project === undefined) {
-		return '';
-	}
-	const read = project.readAt === undefined
-		? 'never read from a source'
-		: `read ${since(project.readAt)}${project.sourceName === undefined ? '' : ` from ${project.sourceName}`}`;
-	const ships = project.lastRelease === undefined
-		? 'not published anywhere yet'
-		: `publishes to ${project.lastRelease.destination}`;
-	return `<p class="activity">${escapeHtml(`${read} · ${ships}`)}</p>`;
 }
 
 /** The facts, as one paragraph a person can read rather than a table they have to scan. */

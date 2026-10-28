@@ -37,8 +37,6 @@
     "onView:temcoDocs.panel",
     "onView:temcoDocs.pages",
     "onView:temcoDocs.queue",
-    "onView:temcoDocs.draft",
-    "onView:temcoDocs.outline",
     "onCustomEditor:temcoDocs.grid",
     "onView:temcoDocs.section.pipeline"
   ],
@@ -58,15 +56,6 @@
         "priority": "option"
       }
     ],
-    "viewsContainers": {
-      "auxiliarybar": [
-        {
-          "id": "temcoDraft",
-          "title": "Page",
-          "icon": "media/docs.svg"
-        }
-      ]
-    },
     "views": {
       "temco": [
         {
@@ -84,19 +73,6 @@
           "id": "temcoDocs.section.pipeline",
           "name": "Publish",
           "initialSize": 1,
-          "visibility": "collapsed"
-        }
-      ],
-      "temcoDraft": [
-        {
-          "id": "temcoDocs.outline",
-          "name": "Outline",
-          "initialSize": 2
-        },
-        {
-          "id": "temcoDocs.draft",
-          "name": "Draft",
-          "type": "webview",
           "visibility": "collapsed"
         }
       ]
@@ -159,12 +135,6 @@
         "title": "Diff the Page with HEAD",
         "category": "Temco Docs",
         "icon": "$(git-compare)"
-      },
-      {
-        "command": "temcoDocs.outline",
-        "title": "Show the Page Outline",
-        "category": "Temco Docs",
-        "icon": "$(list-unordered)"
       },
       {
         "command": "temcoDocs.openSource",

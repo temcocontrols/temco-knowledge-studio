@@ -1,42 +1,31 @@
-// Page properties — the registry fields a person curates, for the page in front.
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Temco Controls. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+// Page properties — what the registry says about the page in front.
 //
-// They are the **Properties** tab of the right panel, beside the draft: one place that is about the page you are
-// looking at. The write is `docs/help/registry.json` through `RegistryEdit`, the same write the rest of the module
-// uses, so nothing here re-implements that file and the repository's generator keeps every value written here.
-//
-// What it does not offer is as deliberate as what it does: header, footer and page numbering belong to the printed
-// profile, not to a topic, and a body is edited in the editor rather than in a form.
+// It is a read-only sheet. The registry file is the single place a value is written — the generator reads it, the
+// moves and renames write it — and a form here could only ever disagree with that file after the next run. So the
+// sheet shows the curated entry *beside the page it describes*, which is the one thing about a page that nothing else
+// in the window shows, and offers the two ways to change it: the registry, and the page itself.
 
 import * as vscode from 'vscode';
 import { DocsRoot, PageEntry, collectPages } from './registry';
 import { RegistryEdit } from './registryEdit';
-import { escapeHtml as esc } from './ui';
 
-export interface Field {
-	key: string;
+/** One line of the sheet: a name, what the registry holds for it (`''` when it says nothing), and what it means. */
+export interface PropertyRow {
 	label: string;
+	value: string;
 	hint: string;
-	kind: 'text' | 'number' | 'check' | 'list';
 }
-
-/** The registry's own names, so nothing has to be translated on the way to disk. */
-export const FIELDS: Field[] = [
-	{ key: 'title', label: 'Title', hint: 'What the topic is called in the tree and at the top of the page.', kind: 'text' },
-	{ key: 'owner', label: 'Owner', hint: 'Who answers for this page.', kind: 'text' },
-	{ key: 'audience', label: 'Audience', hint: 'Who it is written for.', kind: 'text' },
-	{ key: 'order', label: 'Order', hint: 'Position inside its chapter. The generator hands out 10, 20, 30 to whatever nobody curated.', kind: 'number' },
-	{ key: 'ship', label: 'Ships', hint: 'The export condition: a page that does not ship is in neither the site nor the offline help.', kind: 'check' },
-	{ key: 'keywords', label: 'Keywords', hint: 'Index entries, separated by commas — what a reader searches for.', kind: 'list' },
-	{ key: 'tags', label: 'Tags', hint: 'Search facets, separated by commas.', kind: 'list' },
-	{ key: 'help_ids', label: 'Help context IDs', hint: 'The IDs the application asks for when a person presses Help. Separated by commas.', kind: 'list' }
-];
 
 /** The page whose file is in front, and the root it belongs to. */
 interface Located {
 	root: DocsRoot;
 	entry: PageEntry;
 }
-
 
 /** The registry entry of the page whose file is `uri`, and the root it came from. */
 export function locate(roots: readonly DocsRoot[], uri: vscode.Uri): Located | undefined {
@@ -51,10 +40,12 @@ export function locate(roots: readonly DocsRoot[], uri: vscode.Uri): Located | u
 }
 
 /**
- * What the form starts with: the curated entry where it has a value, and what the tree already knows where it
- * does not — so an empty field means "not curated", never "not known".
+ * The curated values, in the order a person reads them.
+ *
+ * A row nobody curated starts from what the tree already knows, so an empty line means "not curated", never
+ * "not known".
  */
-export function read(edit: RegistryEdit, entry: PageEntry): Record<string, string | number | boolean> {
+export function describe(edit: RegistryEdit, entry: PageEntry): PropertyRow[] {
 	const raw = edit.entry(entry.id) ?? {};
 	const text = (key: string, fallback: string): string => {
 		const value = raw[key];
@@ -62,48 +53,23 @@ export function read(edit: RegistryEdit, entry: PageEntry): Record<string, strin
 	};
 	const list = (key: string, fallback: readonly string[]): string => {
 		const value = raw[key];
-		return Array.isArray(value) ? value.map((item) => String(item)).join(', ') : fallback.join(', ');
+		const items = Array.isArray(value) ? value.map((item) => String(item)) : fallback;
+		return items.length > 0 ? items.join(', ') : '';
 	};
 
-	return {
-		title: text('title', entry.title),
-		owner: text('owner', entry.owner),
-		audience: text('audience', entry.audience),
-		order: typeof raw['order'] === 'number' ? raw['order'] : entry.order,
-		ship: typeof raw['ship'] === 'boolean' ? raw['ship'] : entry.ship,
-		keywords: list('keywords', entry.keywords),
-		tags: list('tags', entry.tags),
-		help_ids: list('help_ids', [])
-	};
+	return [
+		{ label: 'Owner', value: text('owner', entry.owner), hint: 'Who answers for this page. A person keeping the page true is the only thing that keeps it true.' },
+		{ label: 'Keywords', value: list('keywords', entry.keywords), hint: 'What a reader types to find this page. It feeds the search index, in the writer\u2019s own words.' },
+		{ label: 'Tags', value: list('tags', entry.tags), hint: 'Facets shared with other pages, so a search can narrow to a set of topics rather than one page.' },
+		{ label: 'Help context IDs', value: list('help_ids', []), hint: 'The IDs the application passes when somebody presses Help. This is how a screen finds this page.' }
+	];
 }
 
-/** One posted value, in the shape the registry holds it. An empty field is removed rather than written as `""`. */
-export function normalise(field: Field, posted: unknown): unknown {
-	if (field.kind === 'check') {
-		return posted === true;
-	}
-	if (field.kind === 'number') {
-		const number = Number(posted);
-		return Number.isFinite(number) ? number : undefined;
-	}
-	if (field.kind === 'list') {
-		const items = String(posted ?? '')
-			.split(',')
-			.map((item) => item.trim())
-			.filter((item) => item.length > 0);
-		return items.length > 0 ? items : undefined;
-	}
-	const text = String(posted ?? '').trim();
-	return text.length > 0 ? text : undefined;
+/** Where the registry puts the page. Shown, never typed: a move writes these, not a person. */
+export function placement(entry: PageEntry): PropertyRow[] {
+	return [
+		{ label: 'Area', value: entry.area, hint: 'The part of the help this page lives in. Moving the page between areas is what changes it.' },
+		{ label: 'Chapter', value: entry.chapter, hint: 'The page\u2019s home inside its area, and the group it is listed under in the tree.' },
+		{ label: 'Last reviewed', value: entry.reviewed ?? '', hint: 'The date somebody last read the page against the product and said it was still right.' }
+	];
 }
-
-export const control = (field: Field, value: string | number | boolean): string => {
-	const id = `prop-${field.key}`;
-	if (field.kind === 'check') {
-		return `<label class="check"><input type="checkbox" id="${id}" data-field="${field.key}"${value === true ? ' checked' : ''}><span>Include this page in the built output</span></label>`;
-	}
-	if (field.kind === 'number') {
-		return `<input class="input" id="${id}" type="number" data-field="${field.key}" value="${esc(String(value))}">`;
-	}
-	return `<input class="input" id="${id}" data-field="${field.key}" value="${esc(String(value))}">`;
-};
