@@ -45,10 +45,18 @@ interface HeroOptions {
 	crumbs?: string;
 	eyebrow?: string;
 	title: string;
+	/** A glyph before the title, drawn in a brand-tinted chip. */
+	mark?: string;
 	desc?: string;
+	/** The description takes the full width instead of a 78-character reading measure. */
+	descWide?: boolean;
 	search?: { label: string; command: string; hint?: string };
 	actions?: readonly { label: string; command: string; args?: unknown; mark?: string; kind?: 'primary' | 'link' }[];
 	hero?: boolean;
+	/** The band is drawn as an inset card instead of running edge to edge. */
+	panel?: boolean;
+	/** The figures the page opens on, drawn on the panel's own floor. */
+	stats?: readonly { value: string; label: string }[];
 }
 /** The UI module's exports. */
 interface UiApi {
@@ -73,6 +81,8 @@ interface UiApi {
 	section(options: { title: string; desc?: string; actions?: string }): string;
 	/** A row of cards that are ways in. */
 	cards(items: readonly FeatureCard[], options?: { dense?: boolean }): string;
+	/** One entry lying on its side: the mark, the thing itself, and the way in at its right-hand end. */
+	entryRow(options: { title: string; meta?: string; mark?: string; command?: string; args?: unknown; go?: string }): string;
 	/** A code card, with drawn line numbers and four tones of syntax. */
 	code(options: { language: string; lines: readonly { text: string; tokens?: readonly [number, number, 'keyword' | 'string' | 'name' | 'comment'][] }[] }): string;
 	/** The floating action in the corner of the page. */
@@ -128,6 +138,9 @@ export const section = ui.section;
 
 /** A row of cards that are ways in. */
 export const cards = ui.cards;
+
+/** One entry lying on its side: the mark, the thing itself, and the way in at its right-hand end. */
+export const entryRow = ui.entryRow;
 
 /** A code card. */
 export const code = ui.code;

@@ -73,6 +73,20 @@ export interface HeroOptions {
 	actions?: readonly HeroAction[];
 	/** The front page's title is 40/52; every other page's is 32/40. */
 	hero?: boolean;
+	/**
+	 * The band is drawn as an inset card instead of running edge to edge.
+	 *
+	 * A page that opens on a *thing* — a project, a workspace — puts its header in a rounded panel, the way a
+	 * workspace's own header does; a page that is the thing itself keeps the full-bleed band.
+	 */
+	panel?: boolean;
+	/**
+	 * The figures the page opens on, drawn on the panel's own floor.
+	 *
+	 * A number row under the panel is a second block that says what the first one is about; inside it, the page opens
+	 * once, and the facts read as the panel's own foot rather than as a card that happens to follow it.
+	 */
+	stats?: readonly { value: string; label: string }[];
 }
 
 /** Buttons, rendered the one way this application renders them. */
@@ -94,7 +108,7 @@ function buttons(actions: readonly HeroAction[]): string {
 export function hero(options: HeroOptions): string {
 	const crumbs = options.crumbs !== undefined
 		? `<p class="az-crumbs">${escapeHtml(options.crumbs)}</p>`
-		: options.eyebrow === undefined ? '' : `<p class="az-crumbs">${escapeHtml(options.eyebrow)}</p>`;
+		: options.eyebrow === undefined ? '' : `<p class="az-crumbs az-crumbs--eyebrow">${escapeHtml(options.eyebrow)}</p>`;
 	const desc = options.desc === undefined ? '' : `<p class="az-intro${options.descWide === true ? ' az-intro--wide' : ''}">${escapeHtml(options.desc)}</p>`;
 	const search = options.search === undefined
 		? ''
@@ -103,7 +117,15 @@ export function hero(options: HeroOptions): string {
 	const row = search === '' && actions === '' ? '' : `<div class="az-row">${search}${actions}</div>`;
 	const size = options.hero === true ? ' az-title--hero' : '';
 	const mark = options.mark === undefined ? '' : `<span class="az-title__mark">${icon(options.mark)}</span>`;
-	return `<div class="az-wash"><header class="az-lead">${crumbs}<h1 class="az-title${size}">${mark}${escapeHtml(options.title)}</h1>${desc}${row}</header></div>`;
+	const stats = options.stats === undefined || options.stats.length === 0
+		? ''
+		: `<div class="az-lead__stats">${options.stats.map(item => `<div class="az-stat"><span class="az-stat__value">${escapeHtml(item.value)}</span><span class="az-stat__label">${escapeHtml(item.label)}</span></div>`).join('')}</div>`;
+	// A panel puts its ways in and its figures beside the sentence; a band keeps them under the title, where a page
+	// that opens on nothing but itself has room for them.
+	const tail = row === '' && stats === ''
+		? ''
+		: options.panel === true ? `<div class="az-lead__side">${row}${stats}</div>` : `${row}${stats}`;
+	return `<div class="az-wash${options.panel === true ? ' az-wash--panel' : ''}"><header class="az-lead">${crumbs}<h1 class="az-title${size}">${mark}${escapeHtml(options.title)}</h1>${desc}${tail}</header></div>`;
 }
 
 /** One figure in the number row. */

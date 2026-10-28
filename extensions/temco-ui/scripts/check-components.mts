@@ -67,6 +67,7 @@ const rendered = [
 		title: dangerous,
 		mark: 'dashboard',
 		desc: dangerous,
+		stats: [{ value: dangerous, label: dangerous }],
 		search: { label: dangerous, command: dangerous, hint: dangerous },
 		actions: [
 			{ label: dangerous, command: dangerous, mark: 'plus', kind: 'primary' },
@@ -120,6 +121,10 @@ check(lead.startsWith('<div class="az-wash">'), 'the title block must sit on the
 check(lead.includes('<h1 class="az-title az-title--hero">Documentation</h1>'), 'the front page must use the 40/52 title');
 check(hero({ title: 'T' }).includes('<h1 class="az-title">T</h1>'), 'another page must use the 32/40 title');
 check(hero({ title: 'T', mark: 'dashboard' }).includes('class="az-title__mark"'), 'a title with a mark must draw the chip');
+check(hero({ title: 'T', eyebrow: 'Project' }).includes('class="az-crumbs az-crumbs--eyebrow"'), 'an eyebrow must be drawn as one');
+check(hero({ title: 'T', panel: true }).includes('class="az-wash az-wash--panel"'), 'a panel must be the wash, inset');
+check(hero({ title: 'T', stats: [{ value: '3', label: 'projects' }] }).includes('class="az-lead__stats"'), 'a panel must be able to carry its own figures');
+check(!hero({ title: 'T' }).includes('az-lead__stats'), 'a panel with no figures must not leave an empty foot');
 check(lead.includes('class="az-crumbs"'), 'a breadcrumb must be drawn above the title');
 check(lead.includes('class="az-field"'), 'a search must render the field');
 check(lead.includes('data-command="workbench.action.quickOpen"'), 'the field must open the command it names');
@@ -241,10 +246,12 @@ check(/\.az-option__title\s*\{[^}]*font-size:\s*14px/.test(css), 'an option titl
 check(/\.az-intro\s*\{[^}]*font-size:\s*13px/.test(css), 'the intro line must be 13px');
 check(/\.az-option__desc\s*\{[^}]*font-size:\s*13px/.test(css), 'body copy must be 13px');
 
-// Exactly one wash, and no other gradient anywhere in the layer.
+// Exactly one wash, and no other gradient anywhere in the layer. It is named once, so the band and the inset panel
+// cannot drift into two different washes.
 const gradients = [...layer.matchAll(/(linear|radial|conic)-gradient/g)].map((match) => match[1]);
 check(gradients.length === 1 && gradients[0] === 'linear', `the layer may paint exactly one gradient (the wash); found: ${gradients.join(', ') || 'none'}`);
-check(/\.az-wash\s*\{[^}]*linear-gradient\(180deg, var\(--az-wash\)/.test(css), 'the one gradient must be the wash, the portal tint to transparent');
+check(/--az-wash-gradient:\s*linear-gradient\(180deg, var\(--az-wash\) 0%, transparent 100%\)/.test(css), 'the one gradient must be the wash, the portal tint to transparent');
+check(/\.az-wash\s*\{[^}]*background:\s*var\(--az-wash-gradient\)/.test(css), 'the band must paint that one gradient');
 
 // The theme owns surfaces and text; the portal owns the brand and the scale.
 for (const [rule, background, reason] of [

@@ -31,9 +31,15 @@ interface UiApi {
 		search?: { label: string; command: string; hint?: string };
 		actions?: readonly { label: string; command: string; args?: unknown; mark?: string; kind?: 'primary' | 'link' }[];
 		hero?: boolean;
+		/** The band is drawn as an inset card instead of running edge to edge. */
+		panel?: boolean;
+		/** The figures the page opens on, drawn on the panel's own floor. */
+		stats?: readonly { value: string; label: string }[];
 	}): string;
 	/** A section heading: the h2 a page's parts are told apart by. */
 	section(options: { title: string; desc?: string; actions?: string }): string;
+	/** The row of figures under a title. */
+	numbers(items: readonly { value: string; label: string }[]): string;
 	/** The one tinted callout a page is allowed. */
 	callout(options: { title: string; desc: string; mark?: string; actions?: string }): string;
 	/** Mutually exclusive starting points, drawn as cards. */
@@ -90,6 +96,9 @@ export const hero = ui.hero;
 
 /** A section heading. */
 export const section = ui.section;
+
+/** The row of figures under a title. */
+export const numbers = ui.numbers;
 
 /** The one tinted callout a page is allowed. */
 export const callout = ui.callout;

@@ -14,7 +14,7 @@ import { capturesOf } from './media';
 import { pagesTarget } from './pages';
 import { firstVersionReport } from './versionReport';
 import { BuildRow, Catalog, DocumentRow, DraftRow, ReleaseRow, ScanRow, selection, slugOf } from './store';
-import { cards, commandScript, escapeHtml as esc, hero, icon, numbers, page, pageColumn, runCommand, section, toneMark } from './ui';
+import { callout as azCallout, cards, commandScript, entryRow, escapeHtml as esc, hero, icon, numbers, page, pageColumn, runCommand, section, toneMark } from './ui';
 
 /** The view types, one per surface. `pagePanel` is a panel this dashboard opens, not the editor's `temcoEditor.markdown`. */
 export const PROJECTS_VIEW_TYPE = 'temcoDocs.projects';
@@ -38,6 +38,10 @@ interface ActionOptions {
 
 const button = (label: string, command: string, options: ActionOptions = {}): string =>
 	`<button type="button" class="btn${options.small ? ' btn--sm' : ''}${options.kind ? ` btn--${options.kind}` : ''}" data-command="${command}"${options.args === undefined ? '' : ` data-args="${esc(JSON.stringify(options.args))}"`}${options.title ? ` title="${esc(options.title)}"` : ''}>${options.mark ? icon(options.mark) : ''}<span>${esc(label)}</span></button>`;
+
+/** The same act in the page language: a section heading's own buttons, and a card's. */
+const azButton = (label: string, command: string, options: ActionOptions = {}): string =>
+	`<button type="button" class="az-btn${options.small === true ? ' az-btn--sm' : ''}${options.kind === 'primary' ? ' az-btn--primary' : ''}" data-command="${command}"${options.args === undefined ? '' : ` data-args="${esc(JSON.stringify(options.args))}"`}${options.title ? ` title="${esc(options.title)}"` : ''}>${options.mark ? icon(options.mark) : ''}<span>${esc(label)}</span></button>`;
 
 /** A string a person reads, marked for translation. Bundles arrive from the build; without one this is the text. */
 const t = (message: string): string => vscode.l10n.t(message);
@@ -153,6 +157,7 @@ export class DocsPages {
 
 	private async openProjectPage(wanted?: string): Promise<void> {
 		let name = wanted ?? '';
+		let projectVersion = '';
 		let sources: { name: string; kind: string; branch?: string }[] = [];
 		let outputs: string[] = [];
 		let drafts: DraftRow[] = [];
@@ -164,6 +169,7 @@ export class DocsPages {
 			if (slug !== undefined) {
 				const detail = catalog.document(slug);
 				name = detail?.name ?? slug;
+				projectVersion = detail?.version ?? '';
 				sources = catalog.documentSources(slug);
 				outputs = Array.isArray(detail?.outputs) ? detail.outputs : [];
 				drafts = catalog.drafts(slug);
@@ -177,7 +183,6 @@ export class DocsPages {
 		const pages = this.roots().flatMap((root) => collectPages(root));
 		const stale = pages.filter((page) => page.provenance?.stale === true).length;
 		const never = pages.filter((page) => page.reviewed === null).length;
-		const issues = pages.reduce((total, page) => total + page.issues.length, 0);
 		const version = await firstVersionReport(this.roots());
 		const changed = version?.report.changed ?? [];
 		// The same facts the Build Center and the Releases page read: one answer per question, three places that show it.
@@ -185,95 +190,73 @@ export class DocsPages {
 		const lastBuild = facts.builds[0];
 		const lastRelease = facts.releases[0];
 
-		const body = `${pageHead({
-			eyebrow: 'Project',
-			title: name === '' ? 'No project yet' : name,
+		const body = `${hero({
 			mark: 'layers',
-			desc: 'What this project cites, what it produces, and the acts on it. Nothing is published from here.',
+			title: name === '' ? 'No project yet' : name,
+			desc: projectVersion === ''
+				? 'What this project cites, what it produces, and the acts on it. Nothing is published from here.'
+				: `Version ${projectVersion}. What this project cites, what it produces, and the acts on it. Nothing is published from here.`,
+			descWide: true,
 			actions: name === ''
-				? button('Create a Project', 'temcoProjects.newProject', { kind: 'primary', mark: 'plus' })
-				: button('Edit the Pages', 'temcoDocs.pages.focus', { kind: 'primary', mark: 'list' }) + button('Edit the Project', 'temcoProjects.editProject', { mark: 'gear', args: [name] })
+				? [{ label: 'Create a project', command: 'temcoProjects.newProject', kind: 'primary', mark: 'plus' }]
+				: [
+					{ label: 'Edit the pages', command: 'temcoDocs.pages.focus', kind: 'primary', mark: 'list' },
+					{ label: 'Edit the project', command: 'temcoProjects.editProject', args: [name], mark: 'gear' }
+				]
 		})}
-${pages.length === 0 ? '' : `<div class="mt-16">${tiles([
-			{ value: String(pages.length), label: 'pages' },
-			{ value: String(drafts.length), label: drafts.length === 1 ? 'draft' : 'drafts' },
-			{ value: String(stale), label: 'stale' },
-			{ value: String(issues), label: issues === 1 ? 'issue' : 'issues' },
-		])}</div>`}
 ${drafts.length === 0
-			? `<div class="mt-16">${callout(never === 0 && stale === 0
-				? '<b>Nothing is waiting.</b> No draft is unsettled, no page unreviewed, no screenshot stale.'
-				: `<b>No draft is waiting.</b> ${never} ${never === 1 ? 'page has' : 'pages have'} never been reviewed and ${stale} ${stale === 1 ? 'claims' : 'claim'} code that has moved since.`)}</div>`
-			: `<div class="mt-16">${group({
-			label: 'Needs you',
-			count: String(drafts.length),
-			note: 'Drafts the local model wrote that no person has settled yet. Opening one shows it beside the page it would change.',
-			actions: button('Open the Review Center', 'temcoDocs.review', { mark: 'check', kind: 'primary' }),
-			body: list(drafts.slice(0, 5).map((draft) => ({
+			? azCallout({
+				mark: 'check',
+				title: 'Nothing is waiting',
+				desc: never === 0 && stale === 0
+					? 'No draft is unsettled, no page unreviewed, no screenshot stale.'
+					: `${never} ${never === 1 ? 'page has' : 'pages have'} never been reviewed and ${stale} ${stale === 1 ? 'claims' : 'claim'} code that has moved since.`
+			})
+			: `${section({ title: 'Needs you', desc: 'Drafts the local model wrote that no person has settled yet. Opening one shows it beside the page it would change.', actions: azButton('Open the Review Center', 'temcoDocs.review', { kind: 'primary', mark: 'check' }) })}
+<div class="az-entries">${drafts.slice(0, 5).map((draft) => entryRow({
 				mark: 'sparkle',
 				title: draft.title === '' ? draft.pageId : draft.title,
-				sub: `${draft.pageId} · ${draft.kind}`,
-				command: 'temcoDocs.review'
-			}))),
-		})}</div>`}
-<div class="mt-24">${group({
-			label: 'Sources',
-			count: String(sources.length),
-			body: sources.length === 0
-				? `<div class="record-row record-row--action" data-command="temcoProjects.addSource" data-args="[]">${icon('plus')}<span class="record-row__title">Add a source</span><span class="record-row__facts">a folder on this machine, or a repository</span></div>`
-				: list(sources.map((source) => ({
-					mark: source.kind === 'repository' ? 'repo' : 'folder',
-					title: source.name,
-					sub: `${source.kind}${source.branch === undefined ? '' : ` · ${source.branch}`}`,
-					command: 'temcoDocs.source',
-					args: [source.name],
-				}))),
-		})}</div>
-<div class="mt-24">${group({
-			label: 'Outputs',
-			note: outputs.length === 0 ? 'This project has not said what it produces yet.' : `It produces: ${outputs.join(' · ')}.`,
-			actions: button('Build the Site', 'temcoDocs.buildSite', { mark: 'play' }) + button('Build the Offline Help', 'temcoDocs.buildHelp', { mark: 'package' }),
-			body: list([
-				{ mark: 'package', title: 'Site', sub: 'the rendered copy a reader browses', command: 'temcoDocs.builds' },
-				{ mark: 'package', title: 'Offline help', sub: 'the CHM that ships inside the installer', command: 'temcoDocs.builds' },
-			]),
-		})}</div>
-${lastBuild === undefined && lastRelease === undefined ? '' : `<div class="mt-24">${group({
-			label: 'Last out of the building',
-			note: 'A build is the attempt, with the files it left; a release is the copy a reader can be given. Both are recorded when they happen, never inferred.',
-			actions: lastRelease === undefined
-				? button('Build the Site', 'temcoDocs.buildSite', { mark: 'play' }) + button('Build Center', 'temcoDocs.builds', { mark: 'list' })
-				: button('Open', 'temcoDocs.openPublished', { mark: 'globe', args: [lastRelease.destination] }) + button('Serve', 'temcoDocs.servePublished', { mark: 'server', args: [lastRelease.destination] }) + button('Releases', 'temcoDocs.releases', { mark: 'upload' }),
-			body: list([
-				...(lastBuild === undefined ? [] : [{
-					mark: 'play',
-					title: `build #${lastBuild.id}`,
-					sub: `${lastBuild.status} · ${lastBuild.finishedAt ?? lastBuild.startedAt}`,
-					command: 'temcoDocs.builds'
-				}]),
-				...(lastRelease === undefined ? [] : [{
-					mark: 'upload',
-					title: lastRelease.version,
-					sub: `published · ${lastRelease.files} ${lastRelease.files === 1 ? 'file' : 'files'} · ${lastRelease.destination}`,
-					command: 'temcoDocs.releases'
-				}])
-			]),
-		})}</div>`}
-${changed.length === 0 ? '' : `<div class="mt-24">${group({
-			label: `Changed in ${version?.report.version ?? 'the new version'}`,
-			count: String(changed.length),
-			note: 'Named by the workflow that produced this version. Nothing here is inferred by this application.',
-			body: list(changed.slice(0, 20).map((change) => {
+				meta: `${draft.pageId} · ${draft.kind}`,
+				command: 'temcoDocs.review',
+				go: 'Review'
+			})).join('')}</div>`}
+${section({ title: 'Sources', desc: 'What this project cites — a folder on this machine, or one read over the API.', actions: azButton('Add a source', 'temcoProjects.addSource', { mark: 'plus' }) })}
+<div class="az-entries">${sources.length === 0
+			? entryRow({ mark: 'plus', title: 'Add a source', meta: 'a folder on this machine, or a repository', command: 'temcoProjects.addSource' })
+			: sources.map((source) => entryRow({
+				mark: source.kind === 'repository' ? 'repo' : 'folder',
+				title: source.name,
+				meta: `${source.kind}${source.branch === undefined ? '' : ` · ${source.branch}`}`,
+				command: 'temcoDocs.source',
+				args: [source.name]
+			})).join('')}</div>
+${section({ title: 'Outputs', desc: outputs.length === 0 ? 'This project has not said what it produces yet.' : `It produces: ${outputs.join(' · ')}.`, actions: azButton('Build the site', 'temcoDocs.buildSite', { mark: 'play' }) + azButton('Build the offline help', 'temcoDocs.buildHelp', { mark: 'package' }) })}
+<div class="az-entries">
+	${entryRow({ mark: 'package', title: 'Site', meta: 'the rendered copy a reader browses', command: 'temcoDocs.builds' })}
+	${entryRow({ mark: 'package', title: 'Offline help', meta: 'the CHM that ships inside the installer', command: 'temcoDocs.builds' })}
+</div>
+${lastBuild === undefined && lastRelease === undefined ? '' : `${section({
+				title: 'Last out of the building',
+				desc: 'A build is the attempt, with the files it left; a release is the copy a reader can be given. Both are recorded when they happen, never inferred.',
+				actions: lastRelease === undefined
+					? azButton('Build the site', 'temcoDocs.buildSite', { mark: 'play' }) + azButton('Build Center', 'temcoDocs.builds', { mark: 'list' })
+					: azButton('Open', 'temcoDocs.openPublished', { mark: 'globe', args: [lastRelease.destination] }) + azButton('Serve', 'temcoDocs.servePublished', { mark: 'server', args: [lastRelease.destination] }) + azButton('Releases', 'temcoDocs.releases', { mark: 'upload' })
+			})}
+<div class="az-entries">
+	${lastBuild === undefined ? '' : entryRow({ mark: 'play', title: `build #${lastBuild.id}`, meta: `${lastBuild.status} · ${lastBuild.finishedAt ?? lastBuild.startedAt}`, command: 'temcoDocs.builds' })}
+	${lastRelease === undefined ? '' : entryRow({ mark: 'upload', title: lastRelease.version, meta: `published · ${lastRelease.files} ${lastRelease.files === 1 ? 'file' : 'files'} · ${lastRelease.destination}`, command: 'temcoDocs.releases' })}
+</div>`}
+${changed.length === 0 ? '' : `${section({ title: `Changed in ${version?.report.version ?? 'the new version'}`, desc: 'Named by the workflow that produced this version. Nothing here is inferred by this application.' })}
+<div class="az-entries">${changed.slice(0, 20).map((change) => {
 				const page = change.page === undefined ? undefined : pages.find((entry) => entry.id === change.page);
-				return {
+				return entryRow({
 					mark: 'branch',
 					title: change.title ?? page?.title ?? change.page ?? 'a page',
-					sub: (change.code ?? []).join(' · ') || 'the code moved',
+					meta: (change.code ?? []).join(' · ') || 'the code moved',
 					command: page === undefined ? undefined : 'temcoDocs.openFile',
-					args: page === undefined ? undefined : [page.uri.fsPath],
-				};
-			})),
-		})}</div>`}`;
+					args: page === undefined ? undefined : [page.uri.fsPath]
+				});
+			}).join('')}</div>`}`;
 
 		this.open('project', 'temcoDocs.projectPage', name === '' ? 'Project' : name, body, 'folders');
 	}

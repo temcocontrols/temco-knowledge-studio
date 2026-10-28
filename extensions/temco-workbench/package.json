@@ -29,12 +29,18 @@
   ],
   "activationEvents": [
     "onStartupFinished",
+    "onView:temcoWorkbench.overviewView",
     "onView:temcoWorkbench.settingsProfile",
     "onView:temcoWorkbench.settingsPlatform"
   ],
   "contributes": {
     "views": {
       "temcoDashboard": [
+        {
+          "id": "temcoWorkbench.overviewView",
+          "name": "Overview",
+          "initialSize": 5
+        },
         {
           "id": "temcoProjects.projects",
           "name": "Projects"
