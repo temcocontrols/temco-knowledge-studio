@@ -239,7 +239,8 @@ ${entryRow({
 			search: { label: t('Find a page, a file or a command'), command: 'workbench.action.quickOpen', hint: 'Ctrl P' },
 			actions: [
 				{ label: t('Create a project'), command: 'temcoProjects.newProject', kind: 'primary' },
-				{ label: t('Open the documentation'), command: 'temcoDocs.pages.focus' }
+				{ label: t('Open the documentation'), command: 'temcoDocs.pages.focus' },
+				{ label: t('Projects overview'), command: 'temcoProjects.projectsPage' }
 			]
 		})}
 ${optionCards([

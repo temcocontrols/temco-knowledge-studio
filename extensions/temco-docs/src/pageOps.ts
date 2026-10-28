@@ -98,6 +98,11 @@ export interface NewPageSeed {
   area?: string;
   chapter?: string;
   kind?: string;
+  /**
+   * The shape of the file: `document` (the template's headings), `markdown` (the title, and a body to write) or
+   * `empty` (the title and nothing else). Not a registry value — it only decides the text the file starts with.
+   */
+  pageType?: string;
   /** True when the act was *New chapter*: the page opens ready to make a folder and its first page. */
   chapterMode?: boolean;
   /** True when the page should ask the model what this source is missing as soon as it opens. */
@@ -1183,6 +1188,7 @@ async function startNewPage(deps: PageDeps, node: DocsNode | undefined, seed: Ne
     area,
     chapter: chapter === ROOT_CHAPTER ? undefined : chapter,
     kind: kind.label,
+    pageType: 'document',
   });
 }
 
@@ -1257,15 +1263,19 @@ export async function writePage(deps: PageDeps, spec: NewPageSpec): Promise<{ re
   }
 
   const drafted = spec.body !== undefined && spec.body.trim().length > 0;
+  const pageType = spec.pageType ?? 'document';
+  const starts = pageType === 'document'
+    ? `It starts as “# ${title}” and the ${kind.label.toLowerCase()} headings — no prose. `
+    : pageType === 'markdown'
+      ? `It starts as “# ${title}” with an empty body to write into. `
+      : `It starts as “# ${title}” and nothing else. `;
   if (spec.quick !== true) {
     const answer = await vscode.window.showWarningMessage(
       `Write the new page to ${relative}?`,
       {
         modal: true,
         detail:
-          (drafted
-            ? 'It carries the draft you read, with the kind’s headings as its structure. '
-            : `It starts as “# ${title}” and the ${kind.label.toLowerCase()} headings — no prose. `) +
+          (drafted ? 'It carries the draft you read. ' : starts) +
           'The repository’s own generator then gives it its registry entry: its area and chapter from that path, ' +
           'its title from that heading, and a place at the end of the chapter.',
       },
@@ -1276,7 +1286,7 @@ export async function writePage(deps: PageDeps, spec: NewPageSpec): Promise<{ re
     }
   }
 
-  const text = drafted ? withTitle(spec.body ?? '', title) : skeleton(title, kind);
+  const text = drafted ? withTitle(spec.body ?? '', title) : skeleton(title, kind, pageType);
   await ensureFolder(vscode.Uri.joinPath(uri, '..'));
   await vscode.workspace.fs.writeFile(uri, Buffer.from(text, 'utf8'));
   const document = await vscode.workspace.openTextDocument(uri);
@@ -1343,11 +1353,19 @@ export function withTitle(body: string, title: string): string {
   return /^#\s+\S/.test(trimmed) ? `${trimmed}\n` : `# ${title}\n\n${trimmed}\n`;
 }
 
-/** The skeleton: the first `#` because the generator reads a new page's title from it, then the kind's headings. */
-function skeleton(title: string, kind: Kind): string {
+/**
+ * The skeleton: the first `#` because the generator reads a new page's title from it, then whatever the type adds.
+ *
+ * A `document` continues with the template's headings; `markdown` leaves one empty paragraph to write into;
+ * `empty` stops at the title. Nothing is invented beyond that — the headings come from the template, and the rest
+ * of the file is the person's.
+ */
+function skeleton(title: string, kind: Kind, pageType = 'document'): string {
   const lines = [`# ${title}`, ''];
-  for (const heading of kind.headings) {
-    lines.push(`## ${heading}`, '');
+  if (pageType === 'document') {
+    for (const heading of kind.headings) {
+      lines.push(`## ${heading}`, '');
+    }
   }
   return lines.join('\n');
 }

@@ -81,6 +81,8 @@ interface UiApi {
 	section(options: { title: string; desc?: string; actions?: string }): string;
 	/** A row of cards that are ways in. */
 	cards(items: readonly FeatureCard[], options?: { dense?: boolean }): string;
+	/** The foot of a form: a summary line and its buttons. */
+	actionBar(options: { summary?: string; summaryId?: string; actions: string }): string;
 	/** One entry lying on its side: the mark, the thing itself, and the way in at its right-hand end. */
 	entryRow(options: { title: string; meta?: string; mark?: string; command?: string; args?: unknown; go?: string }): string;
 	/** A code card, with drawn line numbers and four tones of syntax. */
@@ -138,6 +140,9 @@ export const section = ui.section;
 
 /** A row of cards that are ways in. */
 export const cards = ui.cards;
+
+/** The foot of a form: a summary line and its buttons. */
+export const actionBar = ui.actionBar;
 
 /** One entry lying on its side: the mark, the thing itself, and the way in at its right-hand end. */
 export const entryRow = ui.entryRow;

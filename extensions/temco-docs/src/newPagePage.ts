@@ -29,7 +29,36 @@ import {
 import { codeFiles, readMaterials } from './repositories';
 import { Catalog, slugOf } from './store';
 import { NEW_PAGE_VIEW_TYPE, pageColumn } from './surface';
-import { icon, page } from './ui';
+import { actionBar, hero, icon, page, section } from './ui';
+
+/**
+ * The shapes a page can start as.
+ *
+ * Every page this product writes is a Markdown file in `docs/`, which the registry names — so the type is not a file
+ * format but a *starting shape*: a document carries the template's headings, Markdown leaves a body to write, and an
+ * empty page is the title alone.
+ */
+const PAGE_TYPES = [
+  { value: 'document', mark: 'document', label: 'Document', desc: 'The title and the template’s headings, ready to fill.' },
+  { value: 'markdown', mark: 'edit', label: 'Markdown', desc: 'The title only — you write the structure.' },
+  { value: 'empty', mark: 'plus', label: 'Empty page', desc: 'The title and nothing else.' },
+];
+
+/** The page's own shapes: the error line, the draft box, and the two small labels the sections carry. */
+const NEXT_CSS = `
+.np-count { color: var(--ink-3); font-size: 12px; }
+.np-hint { color: var(--ink-3); font-size: 12px; line-height: 16px; }
+#kind-headings { display: block; margin-top: var(--sp-3); }
+.np-error { margin: var(--sp-3) 0; padding: 8px 12px; border: 1px solid var(--err-ink); border-radius: var(--r-2);
+  background: var(--surface-card); color: var(--err-ink); font-size: 12px; }
+.np-draft { margin: 8px 0 0; max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+  padding: 12px 14px; border: 1px solid var(--hairline); border-radius: var(--r-2);
+  background: var(--surface-subtle); color: var(--ink-1);
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; }
+.np-file { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: var(--r-2);
+  font-size: 12px; color: var(--ink-2); cursor: pointer; }
+.np-file:hover { background: var(--az-blue-selected); }
+`;
 
 /** How much of another page may be given to the model, so one huge page cannot fill the window. */
 const MATERIAL_CHARS = 12_000;
@@ -602,47 +631,47 @@ function fileOf(roots: readonly DocsRoot[], spec: NewPageSpec): string {
 /* ------------------------------------------------------------------ the three steps */
 
 function html(): string {
-  const body = `<div class="page-head" style="margin-bottom:0;padding-bottom:0">
-	<div class="page-head__main">
-		<div class="eyebrow">Documentation</div>
-		<h1 class="page-head__title">${icon('document')}New Page</h1>
-		<p class="page-head__desc">A title, and the kind of page it is. Where it goes is already answered by the row you had selected.</p>
-	</div>
-	<div class="page-head__actions"><button type="button" class="btn btn--ghost" id="wizard-cancel">${icon('close')}<span>Cancel</span></button></div>
-</div>
+  const types = PAGE_TYPES.map((type) =>
+    `<button type="button" class="az-choice${type.value === 'document' ? ' is-on' : ''}" role="option" aria-selected="${type.value === 'document'}" data-type="${type.value}"><span class="az-choice__icon">${icon(type.mark)}</span><span class="az-choice__main"><span class="az-choice__title">${type.label}</span><span class="az-choice__desc">${type.desc}</span></span><span class="az-choice__check">${icon('check', 'icon--sm')}</span></button>`
+  ).join('');
+
+  const body = `${hero({
+		mark: 'plus',
+		title: 'New Page',
+		desc: 'A title, the shape of the file, and the template its headings come from. Where it goes is already answered by the row you had selected, and nothing is written until you press Create Page.',
+		descWide: true
+	})}
 
 <div id="nothing" hidden></div>
 
-<div class="wizard" style="margin-top:0;padding-top:0">
-	<div class="wizard__body" style="margin-top:0;padding-top:0">
-		<div data-step-body="0">
-			<div class="wizard__error" id="wizard-error" hidden></div>
+<div id="flow" data-step-body="0">
+	<div class="np-error" id="wizard-error" hidden></div>
 
-			<div class="wizard__title" style="margin-top:16px">What is it called?</div>
-			<p class="wizard__hint">The file name follows the title — nothing else is needed to make a page.</p>
-			<div class="settings-rows" id="name"></div>
+	${section({ title: 'What is it called?', desc: 'The file name follows the title — nothing else is needed to make a page.' })}
+	<div class="az-form" id="name"></div>
 
-			<div class="wizard__title mt-24">What kind of page?</div>
-			<p class="wizard__hint">A kind is a page outline, not a copy of someone else’s content.</p>
-			<div class="choice-grid" id="kinds" style="grid-template-columns:repeat(5,minmax(0,1fr))"></div>
-			<div class="mt-16" id="template" hidden></div>
+	${section({ title: 'Type', desc: 'What the file starts as. Every page is a Markdown file the registry names.' })}
+	<div class="az-choices" id="types" role="listbox">${types}</div>
 
-			<div class="mt-16" id="pickers"></div>
-			<div class="mt-16" id="address" style="width:100%;max-width:none"></div>
-			<div class="mt-16" id="tools"></div>
-			<div class="mt-16" id="note"></div>
-		</div>
+	<div id="template-block">
+		${section({ title: 'Template', desc: 'The headings a document starts with — an outline, not someone else’s text.' })}
+		<div class="az-choices" id="kinds"></div>
+		<div class="np-hint" id="kind-headings"></div>
+		<div id="template"></div>
 	</div>
-	<div class="wizard__foot">
-		<span class="cell-muted" id="wizard-count"></span>
-		<span class="wizard__spacer"></span>
-		<button type="button" class="btn" id="wizard-back" hidden></button>
-		<button type="button" class="btn btn--primary" id="wizard-next" hidden></button>
-		<button type="button" class="btn btn--primary" id="wizard-finish">${icon('check')}<span>Create Page</span></button>
-	</div>
+
+	<div id="pickers"></div>
+	<div id="address"></div>
+	<div id="tools"></div>
+	<div id="note"></div>
+
+	${actionBar({
+		summaryId: 'wizard-count',
+		actions: `<button type="button" class="az-btn" id="wizard-cancel">${icon('close')}<span>Cancel</span></button><button type="button" class="az-btn" id="wizard-back" hidden><span>Back</span></button><button type="button" class="az-btn" id="wizard-next" hidden><span>Next</span></button><button type="button" class="az-btn az-btn--primary" id="wizard-finish">${icon('check')}<span>Create Page</span></button>`
+	})}
 </div>`;
 
-  return page(body, { title: 'New page', script: CLIENT });
+  return page(body, { title: 'New page', script: CLIENT, extraCss: NEXT_CSS });
 }
 
 /**
@@ -675,7 +704,7 @@ const CLIENT = `
 	let ticked = new Set();
 	let suggestions = [];
 	let draft = '';
-	let values = { source: '', area: '', chapter: '', chapterName: '', kind: '', title: '', slug: '', from: 'empty', pageId: '' };
+	let values = { source: '', area: '', chapter: '', chapterName: '', kind: '', pageType: 'document', title: '', slug: '', from: 'empty', pageId: '' };
 
 	function esc(text) {
 		return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -687,26 +716,27 @@ const CLIENT = `
 
 	/* The page's own glyphs: the sprite is in the document, so a row can be drawn from here without
 	   asking the host for markup. */
-	function tone(name, tint) {
-		return '<span class="tone-mark' + (tint ? ' tone-mark--' + tint : '') + '"><svg viewBox="0 0 24 24" class="icon icon--sm" aria-hidden="true"><use href="#i-' + name + '"></use></svg></span>';
+	function tone(name) {
+		return '<svg viewBox="0 0 24 24" class="icon icon--sm" aria-hidden="true"><use href="#i-' + name + '"></use></svg>';
 	}
 
 	function group(label, countText, note, rows) {
-		return '<div class="group-head"><span class="group-head__label">' + esc(label) + '</span><span class="group-head__rule"></span><span class="group-head__count">' + esc(countText) + '</span></div>' +
-			(note ? '<p class="group-note">' + esc(note) + '</p>' : '') + rows;
+		return '<div class="az-section"><div class="az-section__text"><h2 class="az-section__title">' + esc(label) + '</h2>' +
+			(note ? '<p class="az-section__desc">' + esc(note) + '</p>' : '') + '</div>' +
+			'<div class="az-section__actions"><span class="np-count">' + esc(countText) + '</span></div></div>' +
+			'<div class="az-entries">' + rows + '</div>';
 	}
 
 	function row(glyph, tint, title, meta, state) {
-		return '<div class="record-row record-row--static">' + tone(glyph, tint) +
-			'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">' + esc(title) + '</span></div>' +
-			'<div class="record-row__meta"><span>' + esc(meta) + '</span></div></div>' +
-			'<div class="record-row__state">' + (state || '') + '</div><div class="record-row__state"></div></div>';
+		return '<div class="az-entry"><span class="az-entry__icon">' + tone(glyph, tint) + '</span>' +
+			'<div class="az-entry__main"><span class="az-entry__title">' + esc(title) + '</span>' +
+			'<span class="az-entry__meta">' + esc(meta) + '</span></div>' +
+			'<span class="az-entry__go">' + (state || '') + '</span></div>';
 	}
 
 	function formRow(label, desc, control) {
-		return '<div class="form-row"><div class="form-row__main"><div class="form-row__label">' + esc(label) + '</div>' +
-			'<div class="form-row__desc">' + esc(desc) + '</div></div>' +
-			'<div class="form-row__control">' + control + '</div></div>';
+		return '<div class="az-form__field"><span class="az-form__label">' + esc(label) + '</span>' + control +
+			'<span class="az-form__hint">' + esc(desc) + '</span></div>';
 	}
 
 	function chosenSource() {
@@ -810,12 +840,11 @@ const CLIENT = `
 			return row('document', undefined, 'Order ' + page.order + ' · ' + page.title,
 				(page.owner || 'no owner') + ' · ' + (page.chapter === areaChapter ? 'directly in the area' : page.chapter), '');
 		}).join('');
-		const created = '<div class="record-row record-row--current">' + tone('plus', 'accent') +
-			'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">' +
-			esc(values.title || 'untitled page') + '</span></div>' +
-			'<div class="record-row__meta"><span>the page this flow creates</span></div></div>' +
-			'<div class="record-row__state"><span class="badge badge--info">Draft</span></div>' +
-			'<div class="record-row__state"></div></div>';
+		const created = '<div class="az-entry"><span class="az-entry__icon">' + tone('plus') + '</span>' +
+			'<div class="az-entry__main"><span class="az-entry__title">' +
+			esc(values.title || 'untitled page') + '</span>' +
+			'<span class="az-entry__meta">the page this flow creates</span></div>' +
+			'<span class="az-entry__go">draft</span></div>';
 		const note = owners.length > 0
 			? 'Pages here are owned by ' + owners.join(', ') + ', who will be asked to review this one.'
 			: 'Nothing here has an owner yet, so nobody is asked to review this one.';
@@ -829,19 +858,28 @@ const CLIENT = `
 		return '<svg viewBox="0 0 24 24" class="icon icon--sm" aria-hidden="true"><use href="#i-' + name + '"></use></svg>';
 	}
 
+	/** The three types: what the file starts as. */
+	function drawTypes() {
+		const box = $('types');
+		if (!box) { return; }
+		Array.prototype.forEach.call(box.querySelectorAll('[data-type]'), function (button) {
+			const on = button.getAttribute('data-type') === values.pageType;
+			button.classList.toggle('is-on', on);
+			button.setAttribute('aria-selected', String(on));
+		});
+	}
+
 	function drawKinds() {
-		// One card per kind, five across: a glyph, the name, and what the page is for. The headings the kind writes
-		// are one line underneath, so the difference between "Task" and "Troubleshooting" is visible before the page
-		// exists. The border is inline because this page carries no stylesheet of its own beyond the kit's.
+		// One card per template: a glyph, the name and what it is for. The headings it writes are stated under the
+		// row, so the difference between "Task" and "Troubleshooting" is visible before the page exists.
 		$('kinds').innerHTML = kinds.map(function (kind) {
 			const on = kind.label === values.kind;
-			return '<label class="choice" style="border:1px solid ' + (on ? 'var(--accent)' : 'var(--border)') +
-				';border-radius:6px;padding:8px 10px;min-width:0;align-items:flex-start">' +
-				'<input type="radio" name="kind" data-field="kind" value="' + esc(kind.label) + '"' + (on ? ' checked' : '') + '>' +
-				'<span class="choice__text">' +
-				'<span class="choice__label">' + glyph(kindIcon(kind.label)) + esc(kind.label) + '</span>' +
-				'<span class="choice__desc">' + esc(kind.detail) + '</span></span></label>';
-		}).join('') + '<div class="mt-8 cell-muted" id="kind-headings"></div>';
+			return '<button type="button" class="az-choice' + (on ? ' is-on' : '') + '" role="option" aria-selected="' + on + '" data-kind="' + esc(kind.label) + '">' +
+				'<span class="az-choice__icon">' + glyph(kindIcon(kind.label)) + '</span>' +
+				'<span class="az-choice__main"><span class="az-choice__title">' + esc(kind.label) + '</span>' +
+				'<span class="az-choice__desc">' + esc(kind.detail) + '</span></span>' +
+				'<span class="az-choice__check">' + glyph('check') + '</span></button>';
+		}).join('');
 		drawTemplate();
 	}
 
@@ -854,14 +892,18 @@ const CLIENT = `
 		return 'document';
 	}
 
-	/** What the chosen kind produces: its headings, and nothing invented. */
+	/** What the chosen template produces: its headings, and nothing invented. Only a document has a template. */
 	function drawTemplate() {
+		const block = $('template-block');
+		const documentType = values.pageType === 'document';
+		if (block) { block.hidden = !documentType; }
+		if (!documentType) { return; }
 		const kind = kinds.filter(function (candidate) { return candidate.label === values.kind; })[0];
 		const headings = kind ? kind.headings : [];
 		const line = document.getElementById('kind-headings');
 		if (line) {
 			line.textContent = headings.length > 0
-				? 'Starts with   ' + headings.join(' · ')
+				? 'Starts with: ' + headings.join(' · ')
 				: 'No headings: a title and an empty body.';
 		}
 		const rows = headings.length > 0
@@ -871,8 +913,8 @@ const CLIENT = `
 			: row('document', undefined, 'Title only', 'the body is yours to write', '');
 		const note = headings.length > 0
 			? 'The page starts with these headings and no prose; anything you write later fills them.'
-			: 'A page with no kind has a title and an empty body; nothing is stubbed out for you.';
-		$('template').innerHTML = group('This Kind', headings.length > 0 ? headings.length + ' sections' : 'no sections', note, rows);
+			: 'A page with no template has a title and an empty body; nothing is stubbed out for you.';
+		$('template').innerHTML = group('What it starts with', headings.length > 0 ? headings.length + ' sections' : 'no sections', note, rows);
 	}
 
 	/* ------------------------------------------------------------------ step 3: draft */
@@ -880,12 +922,12 @@ const CLIENT = `
 	function drawName() {
 		values.slug = slugify(values.title);
 		// The file name is a consequence of the title, so it is a line rather than a field: nothing to fill in, and
-		// nothing that can disagree with what the title produces. Where the body starts is the right panel's business
-		// — the page is written with its kind's headings, and a draft is asked for when the page is in front.
+		// nothing that can disagree with what the title produces.
 		$('name').innerHTML =
 			formRow('Title', 'What a reader sees in the list and in the PDF.',
-				'<input class="input" data-field="title" value="' + esc(values.title) + '" placeholder="Point Scaling" aria-label="Page title">') +
-			'<div class="mt-8 cell-mono" id="will-write">→ ' + esc(landingPath()) + '</div>';
+				'<input class="az-input" data-field="title" value="' + esc(values.title) + '" placeholder="Point Scaling" aria-label="Page title">') +
+			formRow('File', 'What the title decides. The file is written beside the other pages of its chapter.',
+				'<span class="cell-mono" id="will-write">→ ' + esc(landingPath()) + '</span>');
 		drawAddress();
 		drawTools();
 	}
@@ -900,12 +942,12 @@ const CLIENT = `
 	function drawPickers() {
 		if (values.from === 'file') {
 			const list = files.length > 0
-				? '<div class="checklist">' + files.map(function (file) {
-					return '<label class="checklist__row"><input type="checkbox" data-file="' + esc(file.path) + '"' +
-						(ticked.has(file.path) ? ' checked' : '') + '><span class="checklist__text"><span class="checklist__title cell-mono">' +
-						esc(file.path) + '</span></span></label>';
-				}).join('') + '</div>'
-				: '<p class="group-note">Reading the file list…</p>';
+				? files.map(function (file) {
+					return '<label class="np-file"><input type="checkbox" data-file="' + esc(file.path) + '"' +
+						(ticked.has(file.path) ? ' checked' : '') + '><span class="cell-mono">' +
+						esc(file.path) + '</span></label>';
+				}).join('')
+				: '<p class="np-hint">Reading the file list…</p>';
 			$('pickers').innerHTML = group('The Files', files.length + (files.length === 1 ? ' file' : ' files'),
 				'A page about a file is written from that file alone.', list);
 			return;
@@ -916,7 +958,7 @@ const CLIENT = `
 			}).join('');
 			$('pickers').innerHTML = group('The Page', pagesOfArea().length + ' in this area',
 				'Adapting a page that already says something close is what a person does with a pen; here it is one choice.',
-				'<select class="select" data-field="page" aria-label="Page">' + options + '</select>');
+				'<select class="az-input" data-field="page" aria-label="Page">' + options + '</select>');
 			return;
 		}
 		$('pickers').innerHTML = '';
@@ -931,35 +973,30 @@ const CLIENT = `
 		const chapter = finalChapter() && finalChapter() !== areaChapter ? finalChapter() + '/' : '';
 		const where = 'docs/' + (area ? area.area : 'area') + '/' + chapter + (values.slug || '…') + '.md';
 		const lines = group('Address', 'draft', 'The file this page becomes, relative to ' + (source ? source.name : 'the source') + '.',
-			'<div class="record-row record-row--static" style="width:100%;max-width:none">' + tone('link') +
-			'<div class="record-row__main" style="min-width:0">' +
-			'<div class="record-row__title"><span class="record-row__name cell-mono" style="white-space:normal;word-break:break-all">' +
-			esc(where) + '</span></div>' +
-			'<div class="record-row__meta"><span>' + esc(values.kind || 'no kind yet') + ' · ' + esc(values.title || 'untitled page') + '</span></div></div>' +
-			'<div class="record-row__state"></div><div class="record-row__state"></div></div>');
-		const notes = '<div class="callout" style="width:100%;max-width:none;box-sizing:border-box">' +
-			'<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><use href="#i-info"></use></svg>' +
-			'<div>The page is created as a file. It reaches the site only through a build and a release.</div></div>';
-		// The whole block spans the form: a path is the one thing here that is wider than a card, and truncating it
-		// would hide exactly what the section exists to show.
-		$('address').innerHTML = '<div style="width:100%;max-width:none">' + lines + notes + '</div>';
+			'<div class="az-entry"><span class="az-entry__icon">' + glyph('link') + '</span>' +
+			'<div class="az-entry__main"><span class="az-entry__title cell-mono" style="word-break:break-all">' + esc(where) + '</span>' +
+			'<span class="az-entry__meta">' + esc(values.pageType) + ' · ' + esc(values.title || 'untitled page') + '</span></div>' +
+			'<span class="az-entry__go"></span></div>');
+		const notes = '<aside class="az-callout"><div class="az-callout__main"><span class="az-callout__icon">' + glyph('info') + '</span>' +
+			'<div><p class="az-callout__desc">The page is created as a file. It reaches the site only through a build and a release.</p></div></div></aside>';
+		$('address').innerHTML = lines + notes;
 	}
 
 	function drawTools() {
 		const analysis = suggestions.length > 0
 			? suggestions.map(function (item, index) {
-				return '<div class="record-row" data-suggestion="' + index + '">' + tone('sparkle', 'accent') +
-					'<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">' + esc(item.title) + '</span></div>' +
-					'<div class="record-row__meta"><span>' + esc(item.kind) + (item.files.length > 0 ? ' · ' + esc(item.files.join(', ')) : '') + '</span></div></div>' +
-					'<div class="record-row__state"></div><span class="record-row__go">›</span></div>';
+				return '<div class="az-entry az-entry--action" data-suggestion="' + index + '">' + '<span class="az-entry__icon">' + tone('sparkle') + '</span>' +
+					'<div class="az-entry__main"><span class="az-entry__title">' + esc(item.title) + '</span>' +
+					'<span class="az-entry__meta">' + esc(item.kind) + (item.files.length > 0 ? ' · ' + esc(item.files.join(', ')) : '') + '</span></div>' +
+					'<span class="az-entry__go">' + glyph('chevron-right') + '</span></div>';
 			}).join('')
 			: '';
-		$('tools').innerHTML = '<div class="row">' +
-			'<button type="button" class="btn" id="draft"' + (model ? '' : ' disabled') + '>' + '<span>Draft it with the AI</span></button>' +
-			'<button type="button" class="btn btn--ghost" id="analyse"><span>What is missing</span></button>' +
-			'<span class="cell-muted" id="model"></span></div>' +
-			'<div class="mt-16" id="draftBox"></div>' +
-			'<div class="mt-16" id="suggestions">' + analysis + '</div>';
+		$('tools').innerHTML = '<div class="az-row">' +
+			'<button type="button" class="az-btn az-btn--primary" id="draft"' + (model ? '' : ' disabled') + '><span>Draft it with the AI</span></button>' +
+			'<button type="button" class="az-btn" id="analyse"><span>What is missing</span></button>' +
+			'<span class="np-hint" id="model"></span></div>' +
+			'<div id="draftBox"></div>' +
+			'<div class="az-entries" id="suggestions">' + analysis + '</div>';
 		$('model').textContent = model ? 'Local model: ' + model : 'No local model is chosen — the AI drafts are off.';
 		redrawDraft();
 	}
@@ -971,8 +1008,8 @@ const CLIENT = `
 			box.innerHTML = '';
 			return;
 		}
-		box.innerHTML = '<pre class="code">' + esc(draft) + '</pre>' +
-			'<p class="group-note">Read it. Edit anything you like after it is written — or draft again.</p>';
+		box.innerHTML = '<pre class="np-draft">' + esc(draft) + '</pre>' +
+			'<p class="np-hint" style="margin-top:8px">Read it. Edit anything you like after it is written — or draft again.</p>';
 	}
 
 	/* ------------------------------------------------------------------ the steps */
@@ -987,6 +1024,7 @@ const CLIENT = `
 		next.hidden = true;
 		finish.hidden = false;
 		error.hidden = true;
+		drawTypes();
 		drawKinds();
 		drawName();
 	}
@@ -1076,19 +1114,19 @@ const CLIENT = `
 
 	function accept() {
 		if (sources.length === 0) {
-			document.querySelector('.wizard').hidden = true;
+			$('flow').hidden = true;
 			const box = $('nothing');
 			box.hidden = false;
 			// Two different dead ends, said differently: a project whose sources are only in the catalog is one download
 			// from working, and a project with no sources is one citation from having any.
 			box.innerHTML = missing.length > 0
-				? '<div class="callout callout--warn"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><use href="#i-alert"></use></svg>' +
-					'<div>This project’s sources are read over the API, so there is no folder on this machine to write a page into. Download a local copy of <b>' +
-					esc(missing[0]) + '</b> — the page is written there.</div></div>' +
-					'<div class="row mt-16"><button type="button" class="btn btn--primary" id="download-copy">Download a local copy</button></div>'
-				: '<div class="callout callout--warn"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><use href="#i-alert"></use></svg>' +
-					'<div>This project cites no source yet, so there is nowhere to write a page. Add a source folder (or a repository) and this form fills in.</div></div>' +
-					'<div class="row mt-16"><button type="button" class="btn btn--primary" id="cite-source">Add a Source</button></div>';
+				? '<aside class="az-callout"><div class="az-callout__main"><span class="az-callout__icon">' + glyph('alert') + '</span>' +
+					'<div><p class="az-callout__desc">This project’s sources are read over the API, so there is no folder on this machine to write a page into. Download a local copy of <b>' +
+					esc(missing[0]) + '</b> — the page is written there.</p></div></div></aside>' +
+					'<div class="az-row mt-16"><button type="button" class="az-btn az-btn--primary" id="download-copy"><span>Download a local copy</span></button></div>'
+				: '<aside class="az-callout"><div class="az-callout__main"><span class="az-callout__icon">' + glyph('alert') + '</span>' +
+					'<div><p class="az-callout__desc">This project cites no source yet, so there is nowhere to write a page. Add a source folder (or a repository) and this form fills in.</p></div></div></aside>' +
+					'<div class="az-row mt-16"><button type="button" class="az-btn az-btn--primary" id="cite-source"><span>Add a Source</span></button></div>';
 			const download = $('download-copy');
 			if (download) { download.addEventListener('click', function () { api.postMessage({ type: 'download', source: missing[0] }); }); }
 			const cite = $('cite-source');
@@ -1097,7 +1135,7 @@ const CLIENT = `
 		}
 
 		// A source arrived after the empty state was drawn (a download finished): the wizard comes back.
-		document.querySelector('.wizard').hidden = false;
+		$('flow').hidden = false;
 		$('nothing').hidden = true;
 
 		const source = sources.filter(function (candidate) { return candidate.name === seed.source; })[0] || sources[0];
@@ -1105,6 +1143,7 @@ const CLIENT = `
 		values.area = (seed.area && source.areas.some(function (area) { return area.area === seed.area; }) ? seed.area : (source.areas[0] ? source.areas[0].area : ''));
 		values.chapter = seed.chapter || areaChapter;
 		values.kind = (seed.kind && kinds.some(function (kind) { return kind.label === seed.kind; }) ? seed.kind : (kinds[0] ? kinds[0].label : ''));
+		values.pageType = seed.pageType === 'markdown' || seed.pageType === 'empty' ? seed.pageType : 'document';
 		values.title = '';
 		values.from = 'empty';
 
@@ -1132,6 +1171,7 @@ const CLIENT = `
 				area: values.area,
 				chapter: finalChapter(),
 				kind: values.kind,
+				pageType: values.pageType,
 				title: values.title,
 				slug: values.slug,
 				body: draft
@@ -1153,6 +1193,7 @@ const CLIENT = `
 				area: values.area,
 				chapter: finalChapter(),
 				kind: values.kind,
+				pageType: values.pageType,
 				title: values.title,
 				slug: values.slug,
 				body: draft
@@ -1236,6 +1277,21 @@ const CLIENT = `
 	});
 
 	document.addEventListener('click', function (event) {
+		const typeButton = event.target.closest ? event.target.closest('#types [data-type]') : null;
+		if (typeButton) {
+			values.pageType = typeButton.getAttribute('data-type');
+			drawTypes();
+			drawTemplate();
+			drawAddress();
+			return;
+		}
+		const kindButton = event.target.closest ? event.target.closest('#kinds [data-kind]') : null;
+		if (kindButton) {
+			values.kind = kindButton.getAttribute('data-kind');
+			drawKinds();
+			drawAddress();
+			return;
+		}
 		const suggestion = event.target.closest ? event.target.closest('[data-suggestion]') : null;
 		if (suggestion) {
 			const item = suggestions[Number(suggestion.dataset.suggestion)];
