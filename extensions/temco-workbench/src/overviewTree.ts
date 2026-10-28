@@ -13,11 +13,35 @@ import * as vscode from 'vscode';
 import { roots, totals } from './docs';
 import { Catalog, selection } from './store';
 
+const COUNT_SCHEME = 'temco-workbench-count';
+
+/** The row the facts hang under. */
+interface RootNode extends vscode.TreeItem {
+	isRoot?: boolean;
+}
+
+/** The number, as the badge a row pushes to its right edge — a tree item's description would sit beside the label. */
+function badge(text: string, key: string): vscode.Uri {
+	return vscode.Uri.parse(`${COUNT_SCHEME}:/${encodeURIComponent(text)}/${encodeURIComponent(key)}`);
+}
+
 export class OverviewTree implements vscode.TreeDataProvider<vscode.TreeItem> {
 	private readonly changed = new vscode.EventEmitter<void>();
 	readonly onDidChangeTreeData = this.changed.event;
 
-	constructor(private readonly context: vscode.ExtensionContext) { }
+	constructor(private readonly context: vscode.ExtensionContext) {
+		context.subscriptions.push(
+			vscode.window.registerFileDecorationProvider({
+				provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
+					if (uri.scheme !== COUNT_SCHEME) {
+						return undefined;
+					}
+					const text = decodeURIComponent(uri.path.split('/')[1] ?? '');
+					return text.length === 0 ? undefined : { badge: text, tooltip: text };
+				},
+			})
+		);
+	}
 
 	refresh(): void {
 		this.changed.fire();
@@ -29,10 +53,29 @@ export class OverviewTree implements vscode.TreeDataProvider<vscode.TreeItem> {
 
 	async getChildren(item?: vscode.TreeItem): Promise<vscode.TreeItem[]> {
 		if (item !== undefined) {
-			return [];
+			return (item as RootNode).isRoot === true ? this.facts() : [];
 		}
+		return [this.root()];
+	}
+
+	/**
+	 * The one row everything else hangs under.
+	 *
+	 * It exists for two reasons: the five numbers are facts about *this window*, and a list needs a subject; and a tree
+	 * indents a child by a level, which is the only left margin a native tree row has to give.
+	 */
+	private root(): RootNode {
+		const item: RootNode = new vscode.TreeItem('Temco Platform', vscode.TreeItemCollapsibleState.Expanded);
+		item.isRoot = true;
+		item.id = 'temcoWorkbench.overview.root';
+		item.iconPath = new vscode.ThemeIcon('folder-library');
+		item.tooltip = 'What this window holds';
+		item.command = { command: 'temcoWorkbench.overview', title: 'Overview' };
+		return item;
+	}
+
+	private async facts(): Promise<vscode.TreeItem[]> {
 		const counted = totals(roots());
-		const sources = roots().length;
 		let projects: number | undefined;
 		let waiting: number | undefined;
 		let published: string | undefined;
@@ -54,10 +97,12 @@ export class OverviewTree implements vscode.TreeDataProvider<vscode.TreeItem> {
 			catalog?.close();
 		}
 
-		const row = (label: string, description: string, icon: string, command?: vscode.Command): vscode.TreeItem => {
+		const row = (label: string, value: string, icon: string, command?: vscode.Command): vscode.TreeItem => {
 			const entry = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
-			entry.description = description;
 			entry.iconPath = new vscode.ThemeIcon(icon);
+			entry.tooltip = `${label} — ${value}`;
+			// The one slot a row pushes to its right edge: the number, at the end of the row and not beside the label.
+			entry.resourceUri = badge(value, label);
 			if (command !== undefined) {
 				entry.command = command;
 			}
@@ -67,7 +112,6 @@ export class OverviewTree implements vscode.TreeDataProvider<vscode.TreeItem> {
 		return [
 			row('Projects', projects === undefined ? '—' : String(projects), 'folder-library', { command: 'temcoProjects.projectsPage', title: 'Projects' }),
 			row('Pages', String(counted.pages), 'book', { command: 'temcoDocs.pages.focus', title: 'Show the Pages' }),
-			row('Sources', String(sources), 'library', { command: 'temcoRepositories.page', title: 'The Repositories' }),
 			row('Needs review', String(counted.neverReviewed + (waiting ?? 0)), 'check', { command: 'temcoDocs.review', title: 'Review Center' }),
 			row('Last release', published ?? 'never', 'cloud-upload', { command: 'temcoDocs.releases', title: 'Releases' })
 		];

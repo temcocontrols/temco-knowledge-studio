@@ -286,7 +286,31 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
         try {
           catalog = await Catalog.open(context);
           const row = catalog.documents().find(document => document.slug === current);
-          project = { name: row?.name ?? current, version: row?.version, sources: row?.sources ?? 0, builtAt: row?.builtAt };
+          // The newest release is what "where it last went" means; the detail carries the shape of the project.
+          const release = catalog.releases(current)[0];
+          const detail = catalog.document(current);
+          // Reading is per source, so the project's read time is the newest read of any of them.
+          const reads = catalog.documentSourceSlugs(current)
+            .map(slug => catalog?.scans(slug)[0]?.at)
+            .filter((at): at is string => typeof at === 'string')
+            .sort();
+          project = {
+            name: row?.name ?? current,
+            version: row?.version,
+            sources: row?.sources ?? 0,
+            audience: detail?.audience,
+            owner: detail?.owner,
+            engine: detail?.engine,
+            readAt: reads.length === 0 ? undefined : reads[reads.length - 1],
+            sourceName: detail?.sources?.[0]?.name,
+            outputs: detail?.outputs?.length ?? 0,
+            builtAt: row?.builtAt,
+            lastRelease: release === undefined ? undefined : {
+              version: release.version,
+              destination: release.destination,
+              publishedAt: release.publishedAt
+            }
+          };
         } catch {
           // A catalog that cannot be read still leaves the registry's own counts worth showing.
           project = { name: current, sources: 0 };

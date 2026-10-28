@@ -30,7 +30,7 @@
   ],
   "contributes": {
     "views": {
-      "temco": [
+      "temcoRepositories": [
         {
           "id": "temcoRepositories.list",
           "name": "Sources"
@@ -150,6 +150,11 @@
           "command": "temcoRepositories.readAllSources",
           "when": "view == temcoRepositories.list",
           "group": "navigation@1"
+        },
+        {
+          "command": "temcoProjects.addSource",
+          "when": "view == temcoRepositories.list",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [

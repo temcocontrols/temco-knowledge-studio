@@ -36,7 +36,6 @@ export class ProjectList implements vscode.TreeDataProvider<vscode.TreeItem> {
 		try {
 			catalog = await Catalog.open(this.context);
 			const rows = catalog.documents();
-			const current = selection.project();
 			if (rows.length === 0) {
 				const empty = new vscode.TreeItem('No project yet', vscode.TreeItemCollapsibleState.None);
 				empty.iconPath = new vscode.ThemeIcon('plus');
@@ -47,13 +46,18 @@ export class ProjectList implements vscode.TreeDataProvider<vscode.TreeItem> {
 			}
 			return rows.map((row) => {
 				// The row opens the project page; the chevron opens what the row cannot say in a 200px column —
-				// the facts about the project, and the three things that can be done to it.
-				const project: ProjectNode = new vscode.TreeItem(row.name, vscode.TreeItemCollapsibleState.Collapsed);
+				// the facts about the project, and the three things that can be done to it. The one being worked on is
+				// the one whose chevron is already open: the side bar should answer "where am I" before it is asked.
+				const current = row.slug === selection.project();
+				const project: ProjectNode = new vscode.TreeItem(row.name, current
+					? vscode.TreeItemCollapsibleState.Expanded
+					: vscode.TreeItemCollapsibleState.Collapsed);
+				project.id = row.slug;
 				project.row = row;
-				project.iconPath = new vscode.ThemeIcon(row.slug === current ? 'folder-active' : 'folder-library');
-				project.description = `${row.sources} source${row.sources === 1 ? '' : 's'}${row.slug === current ? ' · current' : ''}`;
+				project.iconPath = new vscode.ThemeIcon(current ? 'folder-active' : 'folder-library');
+				project.description = `${row.sources} source${row.sources === 1 ? '' : 's'}${current ? ' · current' : ''}`;
 				project.tooltip = `${row.name}\n${row.slug}${row.version === undefined ? '' : ` · ${row.version}`}${row.builtAt === undefined ? ' · never built' : ` · built ${row.builtAt}`}`;
-				project.contextValue = row.slug === current ? 'project.current' : 'project';
+				project.contextValue = current ? 'project.current' : 'project';
 				project.command = { command: 'temcoProjects.openProjectPage', title: 'Open the Project', arguments: [row.slug] };
 				return project;
 			});

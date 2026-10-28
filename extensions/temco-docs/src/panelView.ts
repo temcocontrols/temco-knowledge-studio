@@ -10,11 +10,26 @@
 
 import * as vscode from 'vscode';
 import { DocsRoot, collectPages } from './registry';
-import { count } from './statusLine';
 
 export interface DocsPanelState {
 	/** The project being worked on, as the catalog knows it. */
-	project?: { name: string; version?: string; sources: number; builtAt?: string };
+	project?: {
+		name: string;
+		version?: string;
+		sources: number;
+		/** Who the documentation is written for, who answers for it, and what builds it — the description line. */
+		audience?: string;
+		owner?: string;
+		engine?: string;
+		/** When the sources were last read, and the first one's name. */
+		readAt?: string;
+		sourceName?: string;
+		/** How many files the last build produced, if it produced any. */
+		outputs?: number;
+		builtAt?: string;
+		/** The newest release, if anything has ever been published. */
+		lastRelease?: { version: string; destination: string; publishedAt: string };
+	};
 	pages: number;
 	issues: number;
 	unshipped: number;
@@ -28,6 +43,16 @@ export interface DocsPanelDeps {
 }
 
 const TYPE = 'temcoDocs.panel';
+
+// The workbench's own icons, at the workbench's own weight: these are the codicon paths the side bar's section titles draw,
+// copied verbatim on the 16-unit grid, so the two icon rows above and below are the same family. Inline, because the
+// panel's policy loads nothing.
+const glyph = (paths: string, size = 20): string => `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">${paths}</svg>`;
+const FILE = glyph('<path fill-rule="evenodd" clip-rule="evenodd" d="M13.71 4.29l-3-3L10 1H4L3 2v12l1 1h9l1-1V5l-.29-.71zM13 14H4V2h5v4h4v8zm-3-9V2l3 3h-3z"/>');
+const NEW_FILE = glyph('<path fill-rule="evenodd" clip-rule="evenodd" d="M9.5 1.1l3.4 3.5.1.4v2h-1V6H8V2H3v11h4v1H2.5l-.5-.5v-12l.5-.5h6.7l.3.1zM9 2v3h2.9L9 2zm4 14h-1v-3H9v-1h3V9h1v3h3v1h-3v3z"/>');
+const CHECK = glyph('<path fill-rule="evenodd" clip-rule="evenodd" d="M14.431 3.323l-8.47 10-.79-.036-3.35-4.77.818-.574 2.978 4.24 8.051-9.506.764.646z"/>');
+const PLAY = glyph('<path d="M3.78 2L3 2.41v12l.78.42 9-6V8l-9-6zM4 13.48V3.35l7.6 5.07L4 13.48z"/>');
+const CLOUD_UPLOAD = glyph('<path fill-rule="evenodd" clip-rule="evenodd" d="M11.956 6h.05a2.99 2.99 0 0 1 2.117.879 3.003 3.003 0 0 1 0 4.242 2.99 2.99 0 0 1-2.117.879h-1.995v-1h1.995a2.002 2.002 0 0 0 0-4h-.914l-.123-.857a2.49 2.49 0 0 0-2.126-2.122A2.478 2.478 0 0 0 6.23 5.5l-.333.762-.809-.189A2.49 2.49 0 0 0 4.523 6c-.662 0-1.297.263-1.764.732A2.503 2.503 0 0 0 4.523 11h2.494v1H4.523a3.486 3.486 0 0 1-2.628-1.16 3.502 3.502 0 0 1-.4-4.137A3.497 3.497 0 0 1 3.853 5.06c.486-.09.987-.077 1.468.041a3.486 3.486 0 0 1 3.657-2.06A3.479 3.479 0 0 1 11.956 6zm-1.663 3.853L8.979 8.54v5.436h-.994v-5.4L6.707 9.854 6 9.146 8.146 7h.708L11 9.146l-.707.707z"/>');
 
 export class DocsPanel implements vscode.WebviewViewProvider {
 	private view: vscode.WebviewView | undefined;
@@ -102,9 +127,6 @@ export function panelHtml(state: DocsPanelState, nonceValue: string): string {
 	const project = state.project;
 	const name = project?.name ?? 'No project';
 	const version = project?.version === undefined ? '' : `<span class="tag">v${escapeHtml(project.version)}</span>`;
-	const body = project === undefined
-		? `<p class="note">Pick a project in <b>Home ▸ Projects</b> to give this tree something to be about.</p>`
-		: `<p class="facts">${escapeHtml(count(state.pages, 'page', 'pages'))} · ${escapeHtml(count(state.issues, 'issue', 'issues'))}${state.unshipped === 0 ? '' : ` · ${escapeHtml(`${state.unshipped} unshipped`)}`}</p>`;
 
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -114,94 +136,99 @@ export function panelHtml(state: DocsPanelState, nonceValue: string): string {
 <style>
 	body {
 		margin: 0;
-		padding: 10px 12px 8px;
-		font: 13px/1.5 var(--vscode-font-family);
+		/* The section keeps whatever height the side bar gives it, so the strip is a column that starts at its top and
+		   ends where its content ends — nothing is stretched to fill what it was handed. */
+		height: 100vh;
+		box-sizing: border-box;
+		display: flex;
+		flex-direction: column;
+		padding: 3px 10px 8px 12px;
+		font: 12px/1.35 var(--vscode-font-family);
 		color: var(--vscode-foreground);
+		overflow: hidden;
 	}
-	.head { display: flex; align-items: baseline; gap: 8px; }
+	/* The name row is the way to the project page, so the row itself is the button: one target, one hover. */
+	.open {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		flex: 1 1 auto;
+		min-width: 0;
+		margin: 0 0 0 -6px;
+		padding: 1px 6px;
+		border: 1px solid transparent;
+		border-radius: 4px;
+		background: transparent;
+		color: inherit;
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+	.open:hover { background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground)); }
+	.open:active { background: var(--vscode-toolbar-activeBackground, var(--vscode-list-activeSelectionBackground)); }
+	.open:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+	/* With no project there is no page to go to, so the row stops being a button and stops looking like one. */
+	.open--empty { cursor: default; }
+	.open--empty:hover { background: transparent; }
+	.glyph { display: flex; flex: 0 0 auto; margin-top: 1px; color: var(--vscode-descriptionForeground); }
 	.name {
-		font-size: 14px;
+		font-size: 13px;
+		line-height: 18px;
 		font-weight: 600;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 	.tag {
-		font-size: 11px;
+		flex: 0 0 auto;
+		font-size: 10px;
+		line-height: 14px;
 		color: var(--vscode-descriptionForeground);
 		border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.35));
-		border-radius: 4px;
+		border-radius: 3px;
 		padding: 0 4px;
 	}
-	.facts { margin: 4px 0 10px; color: var(--vscode-descriptionForeground); font-size: 12px; }
-	.note { margin: 4px 0 10px; color: var(--vscode-descriptionForeground); font-size: 12px; }
-	.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-	.chip {
+	.facts { margin: 0 0 4px; padding-left: 18px; color: var(--vscode-descriptionForeground); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	/* The name and the acts share one line: the name says what the project is, the icons say what to do about it. */
+	.head { display: flex; align-items: center; gap: 2px; }
+	.icon {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
-		border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.35));
-		background: var(--vscode-editorWidget-background, transparent);
-		color: inherit;
-		border-radius: 10px;
-		padding: 2px 10px;
-		font: inherit;
-		font-size: 12px;
+		justify-content: center;
+		flex: 0 0 auto;
+		width: 28px;
+		height: 28px;
+		border: 0;
+		border-radius: 4px;
+		background: transparent;
+		color: var(--vscode-icon-foreground, var(--vscode-foreground));
 		cursor: pointer;
 	}
-	.chip:hover { background: var(--vscode-list-hoverBackground); }
-	.chip:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
-	.badge { font-variant-numeric: tabular-nums; color: var(--vscode-descriptionForeground); }
-	.find {
-		display: block;
-		width: 100%;
-		text-align: left;
-		border: 1px solid var(--vscode-input-border, rgba(128, 128, 128, 0.35));
-		background: var(--vscode-input-background);
-		color: var(--vscode-input-foreground);
-		border-radius: 4px;
-		padding: 3px 8px;
-		font: inherit;
-		font-size: 12px;
-		cursor: text;
-	}
-	.foot {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		margin-top: 10px;
-		padding-top: 8px;
-		border-top: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.25));
-	}
-	.when { flex: 1; color: var(--vscode-descriptionForeground); font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
-	.act {
-		border: 1px solid var(--vscode-button-border, transparent);
-		background: var(--vscode-button-secondaryBackground, rgba(128, 128, 128, 0.2));
-		color: var(--vscode-button-secondaryForeground, inherit);
-		border-radius: 4px;
-		padding: 2px 8px;
-		font: inherit;
-		font-size: 12px;
-		cursor: pointer;
-	}
-	.act:hover { background: var(--vscode-button-secondaryHoverBackground, rgba(128, 128, 128, 0.3)); }
-	.act:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+	/* The hover the workbench gives an action in a section title, which is what these are. Every act is quiet until it is
+	   hovered: none of them is the selected one, so none of them is drawn as the selected one. */
+	.icon:hover { background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground)); }
+	.icon:active { background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground)); opacity: 0.8; }
+	.icon:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -2px; }
+	/* The project in prose: who it is for, what builds it, then where it is read from and where it goes. */
+	.desc { margin: 7px 0 0; padding-left: 18px; font-size: 11.5px; line-height: 17px; color: var(--vscode-descriptionForeground); }
+	/* What the project holds, as one plain paragraph: numbers in ink, what they count in grey. */
+	.info { margin: 4px 0 0; padding-left: 18px; font-size: 11.5px; line-height: 17px; color: var(--vscode-descriptionForeground); }
+	.info b { font-weight: 600; color: var(--vscode-foreground); font-variant-numeric: tabular-nums; }
+	.activity { margin: 3px 0 0; padding-left: 18px; font-size: 11px; line-height: 16px; color: var(--vscode-descriptionForeground); }
 </style>
 </head>
 <body>
-<div class="head"><span class="name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>${version}</div>
-${body}
-<div class="chips">
-	<button type="button" class="chip" data-command="temcoDocs.documents" title="Show the pages">Pages <span class="badge">${state.pages}</span></button>
-	<button type="button" class="chip" data-command="temcoDocs.review" title="Drafts and captures waiting for a person">Needs you <span class="badge">${state.owed}</span></button>
-	<button type="button" class="chip" data-command="temcoDocs.validate" title="Look for broken links and missing pages">Validate</button>
-</div>
-<button type="button" class="find" data-type="find">Find a page…</button>
-<div class="foot">
-	<span class="when" title="${escapeHtml(builtTitle(state))}">${escapeHtml(builtWhen(state))}</span>
-	<button type="button" class="act" data-command="temcoDocs.buildSite" title="Build the site">Build</button>
-	<button type="button" class="act" data-command="temcoDocs.publishSite" title="Publish to GitHub Pages">Publish</button>
-</div>
+${project === undefined
+	? `<div class="open open--empty"><span class="glyph" aria-hidden="true">${FILE}</span><span class="name">No project</span></div>
+<p class="facts">Pick a project in <b>Home ▸ Projects</b>.</p>`
+	: `<div class="head"><button type="button" class="open" data-command="temcoDocs.projectPage" title="Open the project page"><span class="glyph" aria-hidden="true">${FILE}</span><span class="name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>${version}</button>
+	<button type="button" class="icon" data-command="temcoDocs.newPage" title="New page" aria-label="New page">${NEW_FILE}</button>
+	<button type="button" class="icon" data-command="temcoDocs.review" title="Review the drafts" aria-label="Review the drafts">${CHECK}</button>
+	<button type="button" class="icon" data-command="temcoDocs.buildSite" title="Build the site" aria-label="Build the site">${PLAY}</button>
+	<button type="button" class="icon" data-command="temcoDocs.publishSite" title="Publish to GitHub Pages" aria-label="Publish to GitHub Pages">${CLOUD_UPLOAD}</button></div>
+${about(state)}
+<p class="info">${facts(state)}</p>
+${activity(state)}`}
 <script nonce="${nonceValue}">
 	const vscode = acquireVsCodeApi();
 	const post = (message) => vscode.postMessage(message);
@@ -210,45 +237,107 @@ ${body}
 		setTimeout(() => { button.disabled = false; }, 600);
 	};
 	document.addEventListener('click', (event) => {
-		const target = event.target.closest('[data-command], [data-type]');
+		const target = event.target.closest('[data-command]');
 		if (!target) {
 			return;
 		}
-		if (target.dataset.command) {
+		// The name row opens a page rather than starting work, so it is not held down the way the acts are.
+		if (!target.classList.contains('open')) {
 			feedback(target);
-			post({ command: target.dataset.command });
-		} else if (target.dataset.type === 'find') {
-			post({ type: 'find' });
 		}
+		post({ command: target.dataset.command });
 	});
 </script>
 </body>
 </html>`;
 }
 
+/** The project in one sentence: who it is written for, who answers for it, what builds it. Empty when none is recorded. */
+function about(state: DocsPanelState): string {
+	const project = state.project;
+	if (project === undefined) {
+		return '';
+	}
+	const who: string[] = [];
+	if (project.audience !== undefined && project.audience !== '') {
+		who.push(`for ${project.audience}`);
+	}
+	if (project.owner !== undefined && project.owner !== '') {
+		who.push(`owned by ${project.owner}`);
+	}
+	const sentences: string[] = [];
+	if (who.length > 0) {
+		sentences.push(`Written ${who.join(', ')}.`);
+	}
+	if (project.engine !== undefined && project.engine !== '') {
+		sentences.push(`Built with ${project.engine}.`);
+	}
+	return sentences.length === 0 ? '' : `<p class="desc">${escapeHtml(sentences.join(' '))}</p>`;
+}
+
+/** Where the words come from and where they go: the two facts a project's shape cannot show. */
+function activity(state: DocsPanelState): string {
+	const project = state.project;
+	if (project === undefined) {
+		return '';
+	}
+	const read = project.readAt === undefined
+		? 'never read from a source'
+		: `read ${since(project.readAt)}${project.sourceName === undefined ? '' : ` from ${project.sourceName}`}`;
+	const ships = project.lastRelease === undefined
+		? 'not published anywhere yet'
+		: `publishes to ${project.lastRelease.destination}`;
+	return `<p class="activity">${escapeHtml(`${read} · ${ships}`)}</p>`;
+}
+
+/** The facts, as one paragraph a person can read rather than a table they have to scan. */
+function facts(state: DocsPanelState): string {
+	const project = state.project;
+	if (project === undefined) {
+		return '';
+	}
+	const pair = (value: number, unit: string): string => `<b>${value}</b> ${unit}`;
+	const parts = [
+		pair(state.pages, 'pages'),
+		pair(state.issues, 'issues'),
+		pair(state.owed, 'drafts'),
+		pair(project.sources, 'sources'),
+		pair(project.outputs ?? 0, 'outputs'),
+		escapeHtml(builtWhen(state)),
+		escapeHtml(releasedWhen(state))
+	];
+	if (state.unshipped > 0) {
+		parts.splice(3, 0, pair(state.unshipped, 'unshipped'));
+	}
+	return parts.join(' · ');
+}
+
+/** The newest release, in the words a person would use: never, or the version and how long ago. */
+function releasedWhen(state: DocsPanelState): string {
+	const release = state.project?.lastRelease;
+	return release === undefined ? 'never published' : `${release.version} · ${since(release.publishedAt)}`;
+}
+
 function builtWhen(state: DocsPanelState): string {
 	const builtAt = state.project?.builtAt;
-	if (builtAt === undefined) {
-		return 'never built';
-	}
-	const then = Date.parse(builtAt);
+	return builtAt === undefined ? 'never built' : `built ${since(builtAt)}`;
+}
+
+/** How long ago a timestamp was, in the words a person would use — the raw value when it is not a date we can read. */
+function since(when: string): string {
+	const then = Date.parse(when);
 	if (Number.isNaN(then)) {
-		return `built ${builtAt}`;
+		return when;
 	}
 	const minutes = Math.round((Date.now() - then) / 60000);
 	if (minutes < 1) {
-		return 'built just now';
+		return 'just now';
 	}
 	if (minutes < 60) {
-		return `built ${minutes} min ago`;
+		return `${minutes} min ago`;
 	}
 	const hours = Math.round(minutes / 60);
-	return hours < 24 ? `built ${hours} h ago` : `built ${Math.round(hours / 24)} d ago`;
-}
-
-function builtTitle(state: DocsPanelState): string {
-	const builtAt = state.project?.builtAt;
-	return builtAt === undefined ? 'No build has been recorded for this project' : `Last build: ${builtAt}`;
+	return hours < 24 ? `${hours} h ago` : `${Math.round(hours / 24)} d ago`;
 }
 
 /** Text a reader sees as text. */

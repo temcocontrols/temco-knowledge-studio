@@ -1,4 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-	<path d="M6 3h7.5L19 8.5V21H6z" />
-	<path d="M13.5 3v5.5H19" />
+	<!-- A pencil: this is the surface things are written on. -->
+	<path d="M5 19.2h3.2L19.6 7.8a2.4 2.4 0 0 0-3.4-3.4L4.8 15.8z" />
+	<path d="M15 5.6 18.4 9" />
+	<!-- A pin: the page is pinned, not loose. -->
+	<circle cx="6.4" cy="6.2" r="1.9" />
+	<path d="M6.4 8.1v2.6" />
 </svg>

@@ -216,10 +216,12 @@ export class DocsPages {
 			actions: name === ''
 				? [{ label: 'Create a project', command: 'temcoProjects.newProject', kind: 'primary', mark: 'plus' }]
 				: [
-					{ label: 'Edit the pages', command: 'temcoDocs.pages.focus', kind: 'primary', mark: 'list' },
-					{ label: 'Edit the project', command: 'temcoProjects.editProject', args: [name], mark: 'gear' },
+					{ label: 'New page', command: 'temcoDocs.newPage', kind: 'primary', mark: 'plus' },
+					{ label: 'New chapter', command: 'temcoDocs.newChapter', mark: 'folder' },
+					{ label: 'Add a source', command: 'temcoProjects.addSource', mark: 'repo' },
 					{ label: 'Build the site', command: 'temcoDocs.buildSite', mark: 'play' },
-					{ label: 'Review center', command: 'temcoDocs.review', mark: 'check' }
+					{ label: 'Review center', command: 'temcoDocs.review', mark: 'check' },
+					{ label: 'Edit the project', command: 'temcoProjects.editProject', args: [name], mark: 'gear' }
 				]
 		})}
 ${drafts.length === 0
@@ -238,6 +240,15 @@ ${drafts.length === 0
 				command: 'temcoDocs.review',
 				go: 'Review'
 			})).join('')}</div>`}
+${pages.length === 0 ? '' : `<div class="detail-block">${section({ title: 'Pages', desc: `${pages.length} page${pages.length === 1 ? '' : 's'} in this project. The tree lists all of them, area by area.`, actions: azButton('Show the tree', 'temcoDocs.pages.focus', { mark: 'list' }) })}
+<div class="az-entries">${pages.slice(0, 10).map((page) => entryRow({
+				mark: 'document',
+				title: page.title,
+				meta: page.id,
+				command: 'temcoDocs.openFile',
+				args: [page.uri.fsPath],
+				go: 'Open'
+			})).join('')}</div></div>`}
 <div class="detail-grid">
 <div class="detail-block">
 ${section({ title: 'Sources', desc: 'What this project cites — a folder on this machine, or one read over the API.', actions: azButton('Add a source', 'temcoProjects.addSource', { mark: 'plus' }) })}

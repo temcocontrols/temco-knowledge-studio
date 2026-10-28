@@ -56,7 +56,13 @@ const test = (name: string, run: () => void) => cases.push({ name, run });
 test('every button names a command the manifest declares', () => {
 	const html = panelHtml(withProject, 'NONCE1234567890ABCDEFGH');
 	const commands = [...html.matchAll(/data-command="([^"]+)"/gu)].map(match => match[1]);
-	assert.ok(commands.length >= 5, `expected the panel's buttons, found ${commands.length}`);
+	assert.deepStrictEqual(commands, [
+		'temcoDocs.projectPage',
+		'temcoDocs.newPage',
+		'temcoDocs.review',
+		'temcoDocs.buildSite',
+		'temcoDocs.publishSite'
+	]);
 	for (const command of commands) {
 		assert.ok(declared.has(command), `${command} is not declared in contributes.commands`);
 	}
@@ -68,15 +74,9 @@ test('the project name is text, never markup', () => {
 	assert.ok(html.includes('&lt;script&gt;alert(1)&lt;/script&gt;'));
 });
 
-test('counts are phrased the way a person says them', () => {
-	const none = panelHtml({ ...withProject, pages: 0, issues: 0 }, 'NONCE1234567890ABCDEFGH');
-	assert.ok(none.includes('no pages'), 'zero pages should read as "no pages"');
-	assert.ok(none.includes('no issues'));
-	const one = panelHtml({ ...withProject, pages: 1, issues: 1 }, 'NONCE1234567890ABCDEFGH');
-	assert.match(one, /1 page(?!s)/u, 'one page should be singular');
-	assert.match(one, /1 issue(?!s)/u, 'one issue should be singular');
-	const many = panelHtml(withProject, 'NONCE1234567890ABCDEFGH');
-	assert.ok(many.includes('148 pages'));
+test('every count is a number, including the ones that are zero', () => {
+	const html = panelHtml({ ...withProject, pages: 0, issues: 0, owed: 0, unshipped: 0 }, 'NONCE1234567890ABCDEFGH');
+	assert.equal((html.match(/<b>0<\/b>/gu) ?? []).length, 4, 'every empty count should still read as zero');
 });
 
 test('no project says what to do, and still offers the way there', () => {
@@ -109,10 +109,74 @@ test('a build that never happened says so', () => {
 	assert.ok(recent.includes('built 3 h ago'), 'a three-hour-old build should read as hours');
 });
 
-test('the find button is the only element that does not run a command', () => {
+test('the facts are one plain paragraph of numbers and their nouns', () => {
 	const html = panelHtml(withProject, 'NONCE1234567890ABCDEFGH');
-	assert.equal((html.match(/data-type="find"/gu) ?? []).length, 1);
-	assert.ok(html.includes('Find a page'));
+	const info = /<p class="info">(.*?)<\/p>/u.exec(html)?.[1];
+	assert.equal(
+		info,
+		'<b>148</b> pages · <b>3</b> issues · <b>2</b> drafts · <b>2</b> sources · <b>0</b> outputs · built 3 h ago · never published'
+	);
+});
+
+test('the description line says who it is for, and is absent when nothing is recorded', () => {
+	const html = panelHtml({
+		...withProject,
+		project: { name: 'Temco', sources: 1, audience: 'operators', owner: 'Han', engine: 'mkdocs' }
+	}, 'NONCE1234567890ABCDEFGH');
+	assert.ok(html.includes('Written for operators, owned by Han. Built with mkdocs.'));
+	const bare = panelHtml(withProject, 'NONCE1234567890ABCDEFGH');
+	assert.ok(!bare.includes('class="desc"'), 'nothing recorded should draw no line');
+});
+
+test('the four acts are icon buttons, named for a screen reader', () => {
+	const html = panelHtml(withProject, 'NONCE1234567890ABCDEFGH');
+	assert.equal((html.match(/class="icon" data-command=/gu) ?? []).length, 4, 'four acts should be icons');
+	assert.ok(!html.includes('icon--primary'), 'no act should be drawn as the selected one');
+	assert.equal((html.match(/aria-label="[^"]+"/gu) ?? []).length, 4, 'an icon without a label is a mystery');
+});
+
+test('the second description line says where the words come from and where they go', () => {
+	const html = panelHtml(withProject, 'NONCE1234567890ABCDEFGH');
+	assert.ok(html.includes('never read from a source · not published anywhere yet'));
+	const known = panelHtml({
+		...withProject,
+		project: {
+			name: 'Temco',
+			sources: 1,
+			readAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
+			sourceName: 'handbook',
+			lastRelease: { version: '1.4.2', destination: 'GitHub Pages', publishedAt: new Date().toISOString() }
+		}
+	}, 'NONCE1234567890ABCDEFGH');
+	assert.ok(known.includes('read 2 h ago from handbook · publishes to GitHub Pages'));
+});
+
+test('unshipped is only mentioned when something is', () => {
+	const quiet = panelHtml(withProject, 'NONCE1234567890ABCDEFGH');
+	assert.ok(!quiet.includes('unshipped'), 'nothing is waiting, so nothing should be said');
+	const waiting = panelHtml({ ...withProject, unshipped: 4 }, 'NONCE1234567890ABCDEFGH');
+	assert.ok(waiting.includes('<b>4</b> unshipped'));
+});
+
+test('a release says which version left the building, and when', () => {
+	const released = panelHtml({
+		...withProject,
+		project: { name: 'Temco', sources: 1, lastRelease: { version: '1.4.2', destination: 'GitHub Pages', publishedAt: new Date().toISOString() } }
+	}, 'NONCE1234567890ABCDEFGH');
+	assert.ok(released.includes('1.4.2 · just now'), 'a fresh release should read as version and when');
+});
+
+test('the way to the project page is the name row, and it is the only non-act button', () => {
+	const html = panelHtml(withProject, 'NONCE1234567890ABCDEFGH');
+	assert.equal((html.match(/class="open"/gu) ?? []).length, 1, 'the name row should be the one way in');
+	assert.ok(html.includes('data-command="temcoDocs.projectPage"'), 'the name row does not open the project page');
+	assert.ok(html.includes('aria-hidden="true"><path'), 'the row should carry a glyph, not the icon font');
+});
+
+test('with no project the row is not a button, because there is nowhere to go', () => {
+	const html = panelHtml({ pages: 0, issues: 0, unshipped: 0, owed: 0 }, 'NONCE1234567890ABCDEFGH');
+	assert.ok(html.includes('open open--empty'), 'the empty row should not look clickable');
+	assert.ok(!html.includes('temcoDocs.projectPage'), 'an empty panel should not offer the project page');
 });
 
 test('the script acquires the editor API exactly once', () => {

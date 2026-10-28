@@ -274,6 +274,11 @@
           "icon": "media/document.svg"
         },
         {
+          "id": "temcoRepositories",
+          "title": "Repositories",
+          "icon": "media/repositories.svg"
+        },
+        {
           "id": "temcoAiHub",
           "title": "AI",
           "icon": "media/ai.svg"
