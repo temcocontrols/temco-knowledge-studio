@@ -93,11 +93,11 @@ export class HelpPages {
 	) { }
 
 	welcome(): void {
-		this.open('welcome', HELP_WELCOME_VIEW_TYPE, 'Welcome', this.welcomeBody());
+		void this.open('welcome', HELP_WELCOME_VIEW_TYPE, 'Welcome', this.welcomeBody());
 	}
 
 	home(): void {
-		this.open('home', HELP_HOME_VIEW_TYPE, 'Help', homeBody());
+		void this.open('home', HELP_HOME_VIEW_TYPE, 'Help', homeBody());
 	}
 
 	/** Reads the command list first: the page's one job is to say which of these keys reaches a command here. */
@@ -109,20 +109,20 @@ export class HelpPages {
 			// A host that will not list its commands leaves every row unknown rather than "missing".
 			registered = [];
 		}
-		this.open('keys', HELP_KEYS_VIEW_TYPE, 'Keyboard Shortcuts', keysBody(registered));
+		await this.open('keys', HELP_KEYS_VIEW_TYPE, 'Keyboard Shortcuts', keysBody(registered));
 	}
 
 	/** Reads this profile's log folder: the files, their sizes, and the tail of the largest. */
 	async logs(): Promise<void> {
-		this.open('logs', HELP_LOGS_VIEW_TYPE, 'Logs', await logsBodyFor(this.context));
+		await this.open('logs', HELP_LOGS_VIEW_TYPE, 'Logs', await logsBodyFor(this.context));
 	}
 
 	issue(): void {
-		this.open('issue', HELP_ISSUE_VIEW_TYPE, 'Report an Issue', issueBody(vscode.version));
+		void this.open('issue', HELP_ISSUE_VIEW_TYPE, 'Report an Issue', issueBody(vscode.version));
 	}
 
 	about(): void {
-		this.open('about', HELP_ABOUT_VIEW_TYPE, 'About', aboutBody());
+		void this.open('about', HELP_ABOUT_VIEW_TYPE, 'About', aboutBody());
 	}
 
 	/** Re-renders Welcome if it is open — its one checkbox is a setting, and the setting can change elsewhere. */
@@ -181,7 +181,7 @@ export class HelpPages {
 		this.panels.clear();
 	}
 
-	private open(key: string, viewType: string, title: string, body: string): void {
+	private async open(key: string, viewType: string, title: string, body: string): Promise<void> {
 		const html = page(body, {
 			title,
 			script: key === 'issue' ? commandScript + ISSUE_SCRIPT : commandScript
@@ -192,7 +192,14 @@ export class HelpPages {
 			existing.webview.html = html;
 			return;
 		}
-		const panel = vscode.window.createWebviewPanel(viewType, title, pageColumn(), {
+
+		const column = pageColumn();
+		// The tab that is in front now, so the welcome page can be put first without taking the window with it.
+		const group = vscode.window.tabGroups.all.find((candidate) => candidate.viewColumn === column);
+		const before = group?.activeTab;
+		const beforeIndex = before === undefined ? undefined : group?.tabs.indexOf(before);
+
+		const panel = vscode.window.createWebviewPanel(viewType, title, { viewColumn: column, preserveFocus: beforeIndex !== undefined }, {
 			enableScripts: true,
 			localResourceRoots: []
 		});
@@ -208,6 +215,27 @@ export class HelpPages {
 		});
 		this.panels.set(key, panel);
 		panel.onDidDispose(() => this.panels.delete(key));
+
+		if (key === 'welcome') {
+			await this.putFirst(beforeIndex);
+		}
+	}
+
+	/**
+	 * The welcome page is the first tab, not the newest one.
+	 *
+	 * A window starts on it, so it belongs at the left end of the strip where a person looks first — and a reload should
+	 * leave them on the page they were reading, not on the page that says hello. It is created last (a webview panel always
+	 * appends) and therefore has to be moved, which also means holding its place while the tab that was in front is put
+	 * back in front.
+	 */
+	private async putFirst(previousIndex: number | undefined): Promise<void> {
+		await vscode.commands.executeCommand('moveActiveEditor', { to: 'first' }).then(undefined, () => undefined);
+		if (previousIndex === undefined) {
+			return;
+		}
+		// The welcome page left the end of the strip for its start, so every other tab moved one place to the right.
+		await vscode.commands.executeCommand('workbench.action.openEditorAtIndex', previousIndex + 1).then(undefined, () => undefined);
 	}
 
 	/** *Welcome* — the mock's `help/welcome`, with the progress this window can actually attest to. */

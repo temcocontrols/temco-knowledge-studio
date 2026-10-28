@@ -44,7 +44,10 @@ export function activate(context: vscode.ExtensionContext): void {
 		vscode.commands.registerCommand('temcoEditor.pageProperties', delegating('temcoDocs.pageProperties')),
 		// *Draft with the AI* is the AI module's chat panel beside this page — the panel, not its page: the page is an
 		// editor tab that would cover the document being drafted into, which is the opposite of what the button is for.
-		vscode.commands.registerCommand('temcoEditor.assist', () => vscode.commands.executeCommand('temcoAi.openPanel'))
+		vscode.commands.registerCommand('temcoEditor.assist', () => vscode.commands.executeCommand('temcoAi.openPanel')),
+		// Save is the workbench's own save, reached from the bar: a custom editor has no `activeTextEditor`, but the
+		// workbench saves the editor that *is* active, and every keystroke already went into the document.
+		vscode.commands.registerCommand('temcoEditor.save', () => vscode.commands.executeCommand('workbench.action.files.save'))
 	);
 }
 

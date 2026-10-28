@@ -44,6 +44,26 @@ const azButton = (label: string, command: string, options: ActionOptions = {}): 
 	`<button type="button" class="az-btn${options.small === true ? ' az-btn--sm' : ''}${options.kind === 'primary' ? ' az-btn--primary' : ''}" data-command="${command}"${options.args === undefined ? '' : ` data-args="${esc(JSON.stringify(options.args))}"`}${options.title ? ` title="${esc(options.title)}"` : ''}>${options.mark ? icon(options.mark) : ''}<span>${esc(label)}</span></button>`;
 
 /**
+ * One line of the page language's own list: the mark, the thing, its facts, and the acts that settle it.
+ *
+ * The kit's `entryRow` carries one way in, and a queue row carries two (accept, discard), a build carries its state.
+ * So this is the same `.az-entry` markup with the right-hand cell written by the page, which is what keeps a list of
+ * rows on the same rhythm as the cards and headings above it without a second row style in the product.
+ */
+const azRow = (options: { mark?: string; tone?: 'ok' | 'warn' | 'err' | 'info' | 'accent'; title: string; mono?: boolean; tag?: string; meta?: string; actions?: string; command?: string; args?: unknown; go?: string }): string => {
+	const plain = options.command === undefined;
+	const attr = plain ? '' : ` data-command="${options.command}"${options.args === undefined ? '' : ` data-args="${esc(JSON.stringify(options.args))}"`}`;
+	const mark = options.mark === undefined ? '' : `<span class="az-entry__icon">${toneMark(options.mark, options.tone)}</span>`;
+	const tag = options.tag === undefined ? '' : `<span class="tag">${esc(options.tag)}</span>`;
+	const meta = options.meta === undefined ? '' : `<span class="az-entry__meta">${options.meta}</span>`;
+	const end = options.actions ?? (plain ? '' : `<span class="az-entry__go">${esc(options.go ?? 'Open')}${icon('chevron-right', 'icon--sm')}</span>`);
+	return `<div class="az-entry${plain ? '' : ' az-entry--action'}"${attr}>${mark}<div class="az-entry__main"><span class="az-entry__title${options.mono === true ? ' cell-mono' : ''}">${esc(options.title)}${tag}</span>${meta}</div>${end}</div>`;
+};
+
+/** The rows of one section, in the kit's spacing. */
+const azEntries = (rows: readonly string[]): string => `<div class="az-entries">${rows.join('')}</div>`;
+
+/**
  * The project page's own layout: two columns of blocks, which is what a wide tab is for.
  *
  * Sources beside Outputs, and what left the building beside what changed — the four things a person reads before a
@@ -275,7 +295,7 @@ ${lastBuild === undefined && lastRelease === undefined ? '' : `${section({
 				desc: 'A build is the attempt, with the files it left; a release is the copy a reader can be given. Both are recorded when they happen, never inferred.',
 				actions: lastRelease === undefined
 					? azButton('Build the site', 'temcoDocs.buildSite', { mark: 'play' }) + azButton('Build Center', 'temcoDocs.builds', { mark: 'list' })
-					: azButton('Open', 'temcoDocs.openPublished', { mark: 'globe', args: [lastRelease.destination] }) + azButton('Serve', 'temcoDocs.servePublished', { mark: 'server', args: [lastRelease.destination] }) + azButton('Releases', 'temcoDocs.releases', { mark: 'upload' })
+					: azButton('Open', 'temcoDocs.openPublished', { mark: 'globe', args: [lastRelease.destination] }) + azButton('Serve', 'temcoDocs.servePublished', { mark: 'server', args: [lastRelease.destination] }) + azButton('Publish & Releases', 'temcoDocs.releases', { mark: 'upload' })
 			})}
 <div class="az-entries">
 	${lastBuild === undefined ? '' : entryRow({ mark: 'play', title: `build #${lastBuild.id}`, meta: `${lastBuild.status} · ${lastBuild.finishedAt ?? lastBuild.startedAt}`, command: 'temcoDocs.builds' })}
@@ -485,7 +505,7 @@ ${never.length === 0 ? '' : `<div class="mt-24">${group({
 			title: 'Exports',
 			mark: 'download',
 			desc: 'What leaves this application, and in what shape. Nothing here is uploaded: every export is a file written to the project folder, and the only network step is Publish.',
-			actions: button('Export the Site', 'temcoDocs.exportSite', { kind: 'primary', mark: 'download' }) + button('Back to Releases', 'temcoDocs.releases', { mark: 'upload' })
+			actions: button('Export the Site', 'temcoDocs.exportSite', { kind: 'primary', mark: 'download' }) + button('Back to Publish & Releases', 'temcoDocs.releases', { mark: 'upload' })
 		})}
 ${tiles([
 			{ value: String(pages.length), label: pages.length === 1 ? 'page' : 'pages' },
@@ -528,7 +548,7 @@ ${tiles([
 			inside: 'every <code>.md</code>, each folder’s <code>media/</code>, and <code>registry.json</code>',
 			when: 'The documentation moves to another tool, or you want an archive of the sources as they are today.'
 		})}</div>
-<div class="mt-24">${callout(`<b>Every export lands in ${where}</b>, and the notification offers <b>Show in Folder</b>. Nothing is uploaded and nothing leaves this machine; publishing to GitHub Pages is the separate step on the Releases page.`)}</div>`;
+<div class="mt-24">${callout(`<b>Every export lands in ${where}</b>, and the notification offers <b>Show in Folder</b>. Nothing is uploaded and nothing leaves this machine; publishing to GitHub Pages is the separate step on the Publish & Releases page.`)}</div>`;
 
 		this.open('exports', EXPORTS_VIEW_TYPE, 'Exports', body, 'download');
 	}
@@ -614,7 +634,7 @@ ${roots.length === 0
 		} finally {
 			catalog?.close();
 		}
-		this.open('review', REVIEW_VIEW_TYPE, 'Review Center', reviewBody(drafts, project));
+		this.open('review', REVIEW_VIEW_TYPE, 'Review Center', reviewBody(drafts, project), 'check', PIPE_CSS);
 	}
 
 	builds(): void {
@@ -660,11 +680,11 @@ ${roots.length === 0
 	}
 
 	private async openBuilds(): Promise<void> {
-		this.open('builds', BUILDS_VIEW_TYPE, 'Build Center', buildsBody(await this.buildFacts()));
+		this.open('builds', BUILDS_VIEW_TYPE, 'Build Center', buildsBody(await this.buildFacts()), 'play', PIPE_CSS);
 	}
 
 	private async openReleases(): Promise<void> {
-		this.open('releases', RELEASES_VIEW_TYPE, 'Releases', releasesBody(await this.buildFacts()));
+		this.open('releases', RELEASES_VIEW_TYPE, 'Publish & Releases', releasesBody(await this.buildFacts()), 'upload', PIPE_CSS);
 	}
 
 	dispose(): void {
@@ -1254,65 +1274,106 @@ ${files.length === 0
 }
 
 /** *Review Center* — the drafts the platform is holding. The mock's queue, with the sample rows swapped for real ones. */
+/**
+ * The three publish pages' own layout.
+ *
+ * Each of them answers one question with a list and has one thing to say *beside* that list — the draft being weighed
+ * next to the queue, the files next to the builds, where a release goes next to the versions. Two columns say that;
+ * a column of full-width blocks makes the reader scroll past one to reach the other.
+ */
+const PIPE_CSS = `
+.az-split { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: start;
+  gap: var(--sp-6) var(--sp-8); margin-top: var(--sp-2); }
+.az-split > * { min-width: 0; }
+.az-split .az-section { margin-top: 0; }
+@media (max-width: 1180px) { .az-split { grid-template-columns: minmax(0, 1fr); } }
+.az-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-3); }
+`;
+
 function reviewBody(drafts: readonly DraftRow[], project: string | undefined): string {
 	const waiting = drafts.length;
 	const fromSources = drafts.filter((draft) => draft.source !== undefined).length;
 	const proposed = new Set(drafts.map((draft) => draft.pageId)).size;
 	const newest = drafts[0];
 
-	const row = (draft: DraftRow): string => {
-		const isOpen = draft === newest;
-		const items = [
-			draft.pageId,
-			`written ${waitingSince(draft.createdAt)}`,
-			draft.source === undefined ? 'no source' : `read from ${draft.source}`
-		];
-		return `<div class="record-row${isOpen ? ' record-row--current' : ''}">${toneMark('sparkle', 'accent')}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name">${esc(draft.title)}</span>${isOpen ? '<span class="cell-muted" style="font-size:12px">open below</span>' : ''}</div><div class="record-row__meta">${facts(items)}</div></div><div class="record-row__state">${badge(draft.kind || 'Draft', 'info')}</div><div style="display:flex;gap:6px;align-items:center">${button('Accept', 'temcoDocs.acceptDraft', { small: true, kind: isOpen ? 'primary' : 'ghost', args: [draft.id] })}${button('Discard', 'temcoDocs.discardDraft', { small: true, kind: 'ghost', args: [draft.id] })}</div></div>`;
-	};
+	const row = (draft: DraftRow): string =>
+		azRow({
+			mark: 'sparkle',
+			tone: draft === newest ? 'accent' : undefined,
+			title: draft.title,
+			tag: draft.kind || 'Draft',
+			meta: facts([
+				draft.pageId,
+				`written ${waitingSince(draft.createdAt)}`,
+				draft.source === undefined ? 'no source' : `read from ${draft.source}`
+			]),
+			actions: azButton('Accept', 'temcoDocs.acceptDraft', { small: true, kind: draft === newest ? 'primary' : undefined, args: [draft.id] })
+				+ azButton('Discard', 'temcoDocs.discardDraft', { small: true, args: [draft.id] })
+		});
 
-	return `${pageHead({
+	const step = (mark: string, title: string, note: string): string => azRow({ mark, title, meta: esc(note) });
+
+	// The figures as one sentence rather than a row of numbers: a queue is read, not measured, and four large figures
+	// over a list of drafts made the page look like a dashboard that had lost its chart.
+	const summary = waiting === 0
+		? 'Nothing is waiting to be reviewed.'
+		: facts([
+			`${waiting} ${waiting === 1 ? 'draft' : 'drafts'} waiting`,
+			`${proposed} ${proposed === 1 ? 'page' : 'pages'} proposed`,
+			`${fromSources} written from a source`,
+			`newest ${waitingSince(newest.createdAt)}`
+		]);
+
+	return `${hero({
 		title: 'Review Center',
 		mark: 'check',
-		desc: `${project === undefined ? 'No project is selected' : `Every draft <b>${esc(project)}</b> is holding`}, newest first. Accepting one writes the page exactly as it reads; discarding one throws the text away. Either way nothing reaches a reader until a build and a release carry it.`,
-		actions: button('New Page', 'temcoDocs.newPage', { kind: 'primary', mark: 'plus' }) + button('Refresh', 'temcoDocs.review', { mark: 'refresh' })
+		descWide: true,
+		desc: project === undefined
+			? 'No project is selected, so there is no queue to show. Pick one in Projects and its drafts appear here.'
+			: `Every draft ${project} is holding, newest first. Accepting one writes the page exactly as it reads; discarding throws the text away. Neither reaches a reader until a build and a publish carry it.`,
+		actions: [
+			{ label: 'New Page', command: 'temcoDocs.newPage', mark: 'plus', kind: 'primary' },
+			{ label: 'Refresh', command: 'temcoDocs.review', mark: 'refresh' }
+		]
 	})}
-${tiles([
-		{ value: String(waiting), label: waiting === 1 ? 'Draft waiting' : 'Drafts waiting' },
-		{ value: String(proposed), label: proposed === 1 ? 'Page proposed' : 'Pages proposed' },
-		{ value: String(fromSources), label: 'Read from a source' },
-		{ value: newest === undefined ? '—' : waitingSince(newest.createdAt), label: 'Newest' }
-	])}
+<p class="az-note">${summary}</p>
 ${waiting === 0
-			? `<div class="mt-16">${callout('<b>Nothing is waiting.</b> A draft is written by <b>New Page</b> → <b>Draft</b>; it lands here until somebody accepts or discards it, and a draft that is never settled never becomes a page.')}</div>`
-			: `<div class="mt-24">
-${card({
-				title: 'Queue',
+			? `<div class="mt-24">${azCallout({
+				title: 'Nothing is waiting',
+				desc: 'A draft is written by New Page → Draft. It lands here until somebody accepts or discards it, and a draft nobody settles never becomes a page.',
 				mark: 'check',
-				plain: true,
-				desc: `${waiting} ${waiting === 1 ? 'draft' : 'drafts'} waiting${fromSources > 0 ? `, ${fromSources} of them written from a source` : ''}. Newest first; the one open below carries its age on the line.`,
-				body: `<div class="record-list">${drafts.map(row).join('')}</div>`
+				actions: azButton('New Page', 'temcoDocs.newPage', { mark: 'plus' })
+			})}</div>`
+			: `<div class="az-split">
+<div>
+${section({
+				title: 'The queue',
+				desc: `${waiting} ${waiting === 1 ? 'draft' : 'drafts'} waiting${fromSources > 0 ? `, ${fromSources} of them written from a source` : ''}. Newest first; the one beside this list is open in full.`,
+				actions: azButton('Refresh', 'temcoDocs.review', { small: true })
 			})}
-</div>`}
-${newest === undefined ? '' : `<div class="mt-24">
-${card({
-				title: `Open draft · ${newest.title}`,
-				mark: 'sparkle',
-				plain: true,
-				actions: badge(newest.kind || 'Draft', 'info') + badge(`${newest.body.split('\n').length} lines`, 'neutral'),
-				desc: `Proposed for <code>${esc(newest.pageId)}</code>${newest.source === undefined ? '' : `, written from <code>${esc(newest.source)}</code>`}, ${waitingSince(newest.createdAt)}. Accepting writes the page exactly as it reads here; discarding keeps the page as it was and settles the draft.`,
-				body: `<div style="padding-top:10px"><pre class="code" style="max-height:420px">${esc(newest.body)}</pre></div>`,
-				foot: button('Accept', 'temcoDocs.acceptDraft', { small: true, kind: 'primary', mark: 'check', args: [newest.id] }) + button('Discard', 'temcoDocs.discardDraft', { small: true, mark: 'close', args: [newest.id] }) + '<span>accepting writes the page · discarding settles the draft</span>'
+${azEntries(drafts.map(row))}
+</div>
+<div>
+${section({
+				title: `Open · ${newest.title}`,
+				desc: `Proposed for ${newest.pageId}${newest.source === undefined ? '' : `, written from ${newest.source}`}, ${waitingSince(newest.createdAt)}.`,
+				actions: badge(newest.kind || 'Draft', 'info') + ' ' + badge(`${newest.body.split('\n').length} lines`, 'neutral')
 			})}
+<pre class="code" style="max-height:360px;margin:0">${esc(newest.body)}</pre>
+<div class="az-actions">${azButton('Accept', 'temcoDocs.acceptDraft', { mark: 'check', kind: 'primary', args: [newest.id] })}${azButton('Discard', 'temcoDocs.discardDraft', { mark: 'close', args: [newest.id] })}</div>
+<p class="az-note">Accepting writes the page exactly as it reads above · discarding keeps the page as it was and settles the draft.</p>
+</div>
 </div>`}
-<div class="mt-24">${group({
-				label: 'What Settling a Draft Does',
-				count: '3 steps',
-				body: factRow('check', 'Accepting writes the page', 'the draft becomes the file at the id it proposed, and the row is settled as accepted')
-					+ factRow('document', 'The text stays as evidence', 'it remains in the database as an accepted draft, so what a page was written from survives the write')
-					+ factRow('upload', 'Only a release reaches a reader', 'a build and a publish, in that order')
-			})}</div>
-<div class="mt-16">${callout('A draft is a proposal, not a page. It belongs to the project it was written for and remembers the source it read, and it leaves this queue the moment a person settles it.')}</div>`;
+${section({ title: 'What settling a draft does', desc: 'Three things happen, in this order — and only the last one reaches anybody.' })}
+${azEntries([
+				step('check', 'Accepting writes the page', 'the draft becomes the file at the id it proposed, and the row is settled as accepted'),
+				step('document', 'The text stays as evidence', 'it remains in the database as an accepted draft, so what a page was written from survives the write'),
+				step('upload', 'Only a release reaches a reader', 'a build and a publish, in that order')
+			])}
+<p class="az-note">A draft is a proposal, not a page. It belongs to the project it was written for and remembers the source it read, and it leaves this queue the moment a person settles it.</p>`;
 }
+
+
 
 /** How long a draft has been waiting, in words a reviewer reads at a glance. */
 function waitingSince(iso: string): string {
@@ -1337,120 +1398,186 @@ function waitingSince(iso: string): string {
 
 /** *Build Center* — what the catalog recorded, which is every build a person started from here. */
 function buildsBody(facts1: BuildFacts): string {
-	const { project, builds, artifacts } = facts1;
+	const { builds, artifacts } = facts1;
 	const succeeded = builds.filter((build) => build.status === 'succeeded').length;
 	const running = builds.filter((build) => build.status === 'running').length;
 
 	const buildRow = (build: BuildRow): string =>
-		`<div class="record-row record-row--static">${toneMark('play', build.status === 'succeeded' ? 'ok' : undefined)}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name cell-mono">#${build.id}</span>${build.revision === undefined ? '' : `<span class="tag">${esc(build.revision)}</span>`}</div><div class="record-row__meta">${facts([`started ${waitingSince(build.startedAt)}`, build.finishedAt === undefined ? 'no finish recorded' : `finished ${waitingSince(build.finishedAt)}`, `${artifacts.length === 0 ? 'no artifacts' : 'see artifacts below'}`])}</div></div><div class="record-row__state">${badge(build.status, build.status === 'succeeded' ? 'ok' : build.status === 'running' ? 'info' : 'warn')}</div><div></div></div>`;
+		azRow({
+			mark: 'play',
+			tone: build.status === 'succeeded' ? 'ok' : build.status === 'running' ? 'info' : undefined,
+			title: `#${build.id}`,
+			mono: true,
+			tag: build.revision,
+			meta: facts([
+				`started ${waitingSince(build.startedAt)}`,
+				build.finishedAt === undefined ? 'no finish recorded' : `finished ${waitingSince(build.finishedAt)}`,
+				artifacts.length === 0 ? 'no artifacts' : 'see artifacts below'
+			]),
+			actions: badge(build.status, build.status === 'succeeded' ? 'ok' : build.status === 'running' ? 'info' : 'warn')
+		});
 
 	const artifactRow = (artifact: ArtifactFact): string =>
-		`<div class="record-row">${toneMark(artifact.kind === 'chm' ? 'package' : artifact.kind === 'pdf' ? 'document' : 'globe')}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name cell-mono">${esc(artifact.path.split(/[\\/]/).pop() ?? artifact.path)}</span><span class="tag">${esc(artifactLabel(artifact.kind))}</span></div><div class="record-row__meta"><span class="cell-mono">${esc(artifact.path)}</span><span>built ${waitingSince(artifact.builtAt)}</span></div></div><div class="record-row__state"></div>${button('Open', 'temcoDocs.openArtifact', { small: true, kind: 'ghost', args: [artifact.path] })}</div>`;
+		azRow({
+			mark: artifact.kind === 'chm' ? 'package' : artifact.kind === 'pdf' ? 'document' : 'globe',
+			title: artifact.path.split(/[\\/]/).pop() ?? artifact.path,
+			mono: true,
+			tag: artifactLabel(artifact.kind),
+			meta: `<span class="cell-mono">${esc(artifact.path)}</span><span>built ${waitingSince(artifact.builtAt)}</span>`,
+			command: 'temcoDocs.openArtifact',
+			args: [artifact.path]
+		});
 
-	return `${pageHead({
-		eyebrow: project === undefined ? 'No project selected' : `${esc(project)} · builds`,
+	return `${hero({
 		title: 'Build Center',
 		mark: 'play',
-		desc: 'A build is the repository&#39;s own script, run as a task and then judged by what it left: the attempt, its exit code and every file that appeared are recorded here.',
-		actions: button('Build Site', 'temcoDocs.buildSite', { kind: 'primary', mark: 'play' }) + button('Build Offline Help', 'temcoDocs.buildHelp', { mark: 'package' }) + button('Refresh', 'temcoDocs.builds', { mark: 'refresh' }) + button('Releases', 'temcoDocs.releases', { mark: 'upload' })
+		descWide: true,
+		desc: 'A build runs the repository’s own script as a task and is then judged by what it left: the attempt, its exit code and every file that appeared are recorded here, in the platform database.',
+		actions: [
+			{ label: 'Build Site', command: 'temcoDocs.buildSite', mark: 'play', kind: 'primary' },
+			{ label: 'Build Offline Help', command: 'temcoDocs.buildHelp', mark: 'package' },
+			{ label: 'Refresh', command: 'temcoDocs.builds', mark: 'refresh' },
+			{ label: 'Publish & Releases', command: 'temcoDocs.releases', mark: 'upload' }
+		]
 	})}
-${tiles([
-		{ value: String(builds.length), label: builds.length === 1 ? 'Build recorded' : 'Builds recorded' },
-		{ value: String(succeeded), label: 'Left an artifact' },
-		{ value: String(artifacts.length), label: artifacts.length === 1 ? 'Artifact' : 'Artifacts' },
-		{ value: running > 0 ? String(running) : '—', label: 'Running now' }
-	])}
+<p class="az-note">${facts([
+		`${builds.length} ${builds.length === 1 ? 'build' : 'builds'} recorded`,
+		`${succeeded} left an artifact`,
+		`${artifacts.length} ${artifacts.length === 1 ? 'artifact' : 'artifacts'}`,
+		running > 0 ? `${running} running now` : 'nothing running now'
+	])}</p>
 ${builds.length === 0
-			? `<div class="mt-16">${callout('<b>No build has run here yet.</b> Building runs the repository&#39;s own script (<code>docs:site</code>, <code>build:help:dry</code>) as a task and then looks for the file it should have written. The exit code is printed, never believed.')}</div>`
-			: `<div class="mt-24">
-${card({
-				title: 'Builds',
+			? `<div class="mt-24">${azCallout({
+				title: 'No build has run here yet',
+				desc: 'Building runs the folder’s own script (docs:site, build:help:dry) as a task and then looks for the file it should have written. The exit code is printed, never believed.',
 				mark: 'play',
-				plain: true,
-				desc: 'Newest first. A row is opened before the script runs, so a build that crashed the editor is still here.',
-				body: `<div class="record-list">${builds.map(buildRow).join('')}</div>`
+				actions: azButton('Build Site', 'temcoDocs.buildSite', { mark: 'play' })
+			})}</div>`
+			: `<div class="az-split">
+<div>
+${section({
+				title: 'Builds',
+				desc: 'Newest first. A row is written before the script runs, so a build that crashed the editor is still here.',
+				actions: azButton('Build Site', 'temcoDocs.buildSite', { small: true, mark: 'play' })
 			})}
-</div>`}
-${artifacts.length === 0
-			? ''
-			: `<div class="mt-24">
-${card({
-				title: 'Artifacts',
-				mark: 'download',
-				plain: true,
-				desc: 'Every file a build left behind, newest first. A file that is here is a file a reader can be given.',
-				body: `<div class="record-list">${artifacts.map(artifactRow).join('')}</div>`,
-				foot: '<span>recorded in the platform database · the files stay where the build wrote them</span>'
+${azEntries(builds.map(buildRow))}
+</div>
+<div>
+${section({
+				title: 'What they left',
+				desc: artifacts.length === 0
+					? 'No build has written a file yet. A build that fails leaves none, and that is what the row above says.'
+					: 'Every file the builds above left behind, newest first. A file that is here is a file a reader can be given.',
+				actions: artifacts.length === 0 ? '' : azButton('Publish & Releases', 'temcoDocs.releases', { small: true, mark: 'upload' })
 			})}
+${azEntries(artifacts.map(artifactRow))}
+<p class="az-note">Recorded in the platform database · the files stay where the build wrote them.</p>
+</div>
 </div>`}`;
 }
 
-/** *Releases* — what a build left behind, grouped by what it is. The files are the release. */
+/** *Publish & Releases* — what a build left behind, and what a reader can be given. The files are the release. */
 function releasesBody(facts1: BuildFacts): string {
-	const { project, artifacts, releases, publish } = facts1;
+	const { artifacts, releases, publish } = facts1;
 	const kinds = [...new Set(artifacts.map((artifact) => artifact.kind))];
 
 	const releaseRow = (release: ReleaseRow): string =>
-		`<div class="record-row record-row--static">${toneMark('upload', 'ok')}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name cell-mono">${esc(release.version)}</span>${release.buildId === undefined ? '' : `<span class="tag">build #${release.buildId}</span>`}</div><div class="record-row__meta">${facts([`published ${waitingSince(release.publishedAt)}`, `${release.files} ${release.files === 1 ? 'file' : 'files'}`, release.destination])}</div></div><div class="record-row__state">${badge('Published', 'ok')}</div><div style="display:flex;gap:6px;align-items:center">${button('Serve', 'temcoDocs.servePublished', { small: true, kind: 'ghost', args: [release.destination] })}${button('Open', 'temcoDocs.openPublished', { small: true, kind: 'ghost', args: [release.destination] })}</div></div>`;
+		azRow({
+			mark: 'upload',
+			tone: 'ok',
+			title: release.version,
+			mono: true,
+			tag: release.buildId === undefined ? undefined : `build #${release.buildId}`,
+			meta: facts([`published ${waitingSince(release.publishedAt)}`, `${release.files} ${release.files === 1 ? 'file' : 'files'}`, release.destination]),
+			actions: azButton('Serve', 'temcoDocs.servePublished', { small: true, args: [release.destination] })
+				+ azButton('Open', 'temcoDocs.openPublished', { small: true, args: [release.destination] })
+		});
 
 	const fileRow = (file: ArtifactFact): string =>
-		`<div class="record-row">${toneMark(file.kind === 'chm' ? 'package' : file.kind === 'pdf' ? 'document' : 'globe')}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name cell-mono">${esc(file.path.split(/[\\/]/).pop() ?? file.path)}</span></div><div class="record-row__meta"><span class="cell-mono">${esc(file.path)}</span><span>built ${waitingSince(file.builtAt)}</span></div></div><div class="record-row__state"></div>${button('Open', 'temcoDocs.openArtifact', { small: true, kind: 'ghost', args: [file.path] })}</div>`;
+		azRow({
+			mark: file.kind === 'chm' ? 'package' : file.kind === 'pdf' ? 'document' : 'globe',
+			title: file.path.split(/[\\/]/).pop() ?? file.path,
+			mono: true,
+			meta: `<span class="cell-mono">${esc(file.path)}</span><span>built ${waitingSince(file.builtAt)}</span>`,
+			command: 'temcoDocs.openArtifact',
+			args: [file.path]
+		});
 
-	const section = (kind: string): string => {
+	const filesOf = (kind: string): string => {
 		const files = artifacts.filter((artifact) => artifact.kind === kind);
-		return `<div class="mt-24">
-${card({
+		return `${section({
 			title: artifactLabel(kind),
-			mark: kind === 'chm' ? 'package' : kind === 'pdf' ? 'document' : 'globe',
-			plain: true,
-			desc: `${files.length} file${files.length === 1 ? '' : 's'}, newest first. This is what a reader downloads: nothing is copied, the path is the release.`,
-			body: `<div class="record-list">${files.map(fileRow).join('')}</div>`
+			desc: `${files.length} file${files.length === 1 ? '' : 's'}, newest first. This is what a reader gets: nothing is copied, the path is the release.`
 		})}
-</div>`;
+${azEntries(files.map(fileRow))}`;
 	};
 
-	return `${pageHead({
-		title: 'Releases',
+	const fact = (mark: string, title: string, note: string): string => azRow({ mark, title, meta: note });
+
+	return `${hero({
+		title: 'Publish & Releases',
 		mark: 'upload',
-		desc: 'A release is what a build left that a reader can be given: the website, the offline help, the PDF, the search index. Publishing copies the site where it can be opened; serving it puts it on loopback so its own links resolve.',
-		actions: button('Publish', 'temcoDocs.publishRelease', { kind: 'primary', mark: 'upload' }) + button('Publish to GitHub Pages', 'temcoDocs.publishSite', { mark: 'upload' }) + button('Export…', 'temcoDocs.export', { mark: 'download' }) + button('Serve the Newest', 'temcoDocs.servePublished', { mark: 'server' }) + button('Build Site', 'temcoDocs.buildSite', { mark: 'play' }) + button('Build Center', 'temcoDocs.builds', { mark: 'list' })
+		descWide: true,
+		desc: 'A release is what a build left that a reader can be given: the website, the offline help, the PDF, the search index. Publishing copies the site where it can be opened; serving puts it on loopback so its own links resolve.',
+		actions: [
+			{ label: 'Publish', command: 'temcoDocs.publishRelease', mark: 'upload', kind: 'primary' },
+			{ label: 'Publish to GitHub Pages', command: 'temcoDocs.publishSite', mark: 'globe' },
+			{ label: 'Export…', command: 'temcoDocs.export', mark: 'download' },
+			{ label: 'Serve the Newest', command: 'temcoDocs.servePublished', mark: 'server' },
+			{ label: 'Build Site', command: 'temcoDocs.buildSite', mark: 'play' },
+			{ label: 'Build Center', command: 'temcoDocs.builds', mark: 'list' }
+		]
 	})}
-${tiles([
-		{ value: project ?? '—', label: 'Project' },
-		{ value: String(releases.length), label: releases.length === 1 ? 'Version published' : 'Versions published' },
-		{ value: String(artifacts.length), label: artifacts.length === 1 ? 'Artifact' : 'Artifacts' },
-		{ value: String(kinds.length), label: kinds.length === 1 ? 'Kind of file' : 'Kinds of file' }
-	])}
+<p class="az-note">${facts([
+		`${releases.length} ${releases.length === 1 ? 'version' : 'versions'} published`,
+		`${artifacts.length} ${artifacts.length === 1 ? 'file' : 'files'} built`,
+		publish === undefined ? 'no GitHub remote to publish to' : `publishes to ${publish.owner}/${publish.repo}`
+	])}</p>
+<div class="az-split">
+<div>
 ${releases.length === 0
-			? ''
-			: `<div class="mt-24">${group({
-				label: 'Published Versions',
-				count: `${releases.length} ${releases.length === 1 ? 'version' : 'versions'}`,
-				note: 'Each one is a copy of a build, in a folder the platform owns. A new version is a new row; an old one is never rewritten.',
-				body: releases.map(releaseRow).join('')
-			})}</div>`}
+			? azCallout({
+				title: 'Nothing published yet',
+				desc: 'A version appears here the moment Publish copies a build into a folder this application owns. Until then the files below are built but not released.',
+				mark: 'upload',
+				actions: azButton('Publish', 'temcoDocs.publishRelease', { mark: 'upload' })
+			})
+			: `${section({
+				title: 'Published versions',
+				desc: 'Each one is a copy of a build, in a folder the platform owns. A new version is a new row; an old one is never rewritten.',
+				actions: azButton('Publish', 'temcoDocs.publishRelease', { small: true, mark: 'upload' })
+			})}
+${azEntries(releases.map(releaseRow))}`}
+</div>
+<div>
+${section({
+				title: 'Where it publishes',
+				desc: 'The address is read from the documentation folder’s own git remote, so it can be named before anything is pushed.',
+				actions: azButton('Publish to GitHub Pages', 'temcoDocs.publishSite', { small: true, mark: 'globe' })
+			})}
+${azEntries(publish === undefined
+				? [fact('alert', 'No GitHub remote', 'This folder is not a git repository with a GitHub <code>origin</code>, so there is nowhere to publish to. Add one, then publish again.')]
+				: [
+					fact('globe', publish.base, `pushed to the <code>${esc(publish.branch)}</code> branch of <code>${esc(`${publish.owner}/${publish.repo}`)}</code>, which is what Pages serves`),
+					fact('gear', 'One time only', 'GitHub → Settings → Pages → Source: deploy from a branch, <code>gh-pages</code>, folder <code>/</code>. The command tries this through the <code>gh</code> CLI when it is installed, and prints the two clicks when it is not.'),
+					fact('warning', 'Never forced', 'If the branch carries commits this build does not know about, that is reported and nothing is overwritten. The project’s own working tree is never touched.')
+				])}
+<p class="az-note">A downloadable CHM or PDF needs no publishing at all — it is a file the build wrote. Publishing is for the site: the same pages in one folder with an entry point.</p>
+</div>
+</div>
 ${artifacts.length === 0
-			? `<div class="mt-16">${callout('<b>Nothing to release yet.</b> A release is not a state the platform sets: it is the files a build wrote. Build the site or the offline help, and everything that appeared is listed here — a Learn site to publish, a CHM or a PDF to download.')}</div>`
-			: kinds.map(section).join('')}
-<div class="mt-24">${group({
-				label: 'What Publishing Does',
-				count: '3 facts',
-				body: factRow('upload', 'Copies the site', 'the files a build wrote, into a folder the platform owns — nothing is uploaded anywhere')
-					+ factRow('document', 'Records the release', 'version, build, destination and date, so "when did 13.0 go out" is a query rather than a memory')
-					+ factRow('check', 'Leaves the old one alone', 'a new version is a new row beside the last one; no published file is ever rewritten in place')
-			})}</div>
-<div class="mt-24">${group({
-				label: 'Where It Publishes',
-				count: publish === undefined ? 'nowhere yet' : `${publish.owner}/${publish.repo}`,
-				note: 'The address is read from the documentation folder’s own git remote, so it can be named before anything is pushed.',
-				actions: button('Publish to GitHub Pages', 'temcoDocs.publishSite', { mark: 'upload' }),
-				body: publish === undefined
-					? factRow('alert', 'No GitHub remote', 'This folder is not a git repository with a GitHub <code>origin</code>, so there is nowhere to publish to. Add one, then publish again.')
-					: factRow('globe', esc(publish.base), `pushed to the <code>${esc(publish.branch)}</code> branch of <code>${esc(`${publish.owner}/${publish.repo}`)}</code>, which is what Pages serves`)
-						+ factRow('gear', 'One time only', 'GitHub → Settings → Pages → Source: deploy from a branch, <code>gh-pages</code>, folder <code>/</code>. The command tries this through the <code>gh</code> CLI when it is installed, and prints the two clicks when it is not.')
-						+ factRow('warning', 'Never forced', 'If the branch carries commits this build does not know about, that is reported and nothing is overwritten. The project’s own working tree is never touched.')
-			})}</div>
-<div class="mt-16">${callout('A downloadable CHM or PDF needs no publishing at all — it is a file the build wrote. Publishing is for the site: it puts the same pages in one folder with an entry point, which is what a Learn site is here.')}</div>`;
+			? ''
+			: `${section({
+				title: 'The files a reader can be given',
+				desc: 'Everything the builds left, grouped by what it is. A downloadable file is the release; the site is the only one that has to be published.'
+			})}
+${kinds.map(filesOf).join('')}`}
+${section({ title: 'What publishing does', desc: 'Three facts, in the order they happen.' })}
+${azEntries([
+				fact('upload', 'Copies the site', 'the files a build wrote, into a folder the platform owns — nothing is uploaded anywhere'),
+				fact('document', 'Records the release', 'version, build, destination and date, so “when did 13.0 go out” is a query rather than a memory'),
+				fact('check', 'Leaves the old one alone', 'a new version is a new row beside the last one; no published file is ever rewritten in place')
+			])}`;
 }
 
 /** The words for an artifact's kind, in the order a build produces them. */

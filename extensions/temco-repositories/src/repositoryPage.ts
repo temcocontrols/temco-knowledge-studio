@@ -304,80 +304,80 @@ export class RepositoryDetailPage {
 
 function html(name: string): string {
   const style = `
-    /* The same vocabulary as the dashboard: fills and spacing, a hairline between rows, no boxes. */
-    .toolbar { display: flex; gap: .5em; align-items: center; flex-wrap: wrap; margin: 1.1em 0 .2em; }
-    .toolbar .input { flex: 1 1 18em; min-width: 10em; }
+    /* The same vocabulary as the dashboard: fills, spacing, one hairline between rows, and no boxes. */
+    .toolbar { display: flex; gap: .5em; align-items: center; flex-wrap: wrap; }
+    .toolbar .input { flex: 1 1 16em; min-width: 9em; }
+    .toolbar[hidden] { display: none; }
 
-    .strip { display: flex; gap: .4em; flex-wrap: wrap; align-items: center; margin: .9em 0 0; }
-    .fact { display: inline-flex; align-items: baseline; gap: .35em; padding: .28em .6em; border-radius: var(--radius);
-            background: var(--bg-inset); color: var(--fg); font-size: var(--fs-sm); }
-    .fact b { color: var(--fg-strong); font-weight: 600; }
-    .fact--ok { background: color-mix(in srgb, var(--ok) 16%, transparent); }
-    .fact--warn { background: color-mix(in srgb, var(--warn) 18%, transparent); }
-
-    .rows { margin: .6em 0 0; }
-    .row { display: grid; grid-template-columns: 1.4em minmax(0, 1fr) auto; gap: 0 .7em; align-items: start;
-           padding: .55em .4em; border-bottom: 1px solid var(--border); }
-    .row:last-child { border-bottom: 0; }
-    .row:hover { background: var(--bg-hover); }
-    .row .name { color: var(--fg); font-size: var(--fs-sm); overflow-wrap: anywhere; }
-    .row .facts { color: var(--fg-muted); font-size: var(--fs-xs); white-space: nowrap; }
+    /* A file is a line: what it is, where it is, how big. The tick decides whether it starts the project. */
+    .files { margin: .4em 0 0; }
+    .file { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 0 .6em; align-items: center;
+            padding: .45em .4em; border-bottom: 1px solid var(--border); }
+    .file:last-child { border-bottom: 0; }
+    .file:hover { background: var(--bg-hover); }
+    .file__glyph { color: var(--fg-subtle); display: inline-flex; }
+    .file__path { color: var(--fg); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+    .file__meta { color: var(--fg-subtle); font-size: var(--fs-xs); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
     /* The warning is a tinted surface, not a bordered box: it has to be recognisable across the room. */
-    .warn { border-radius: var(--radius); padding: .8em 1em; margin: 1em 0;
+    .warn { border-radius: var(--r-8); padding: .8em 1em; margin: 1em 0;
             background: color-mix(in srgb, var(--warn) 22%, var(--bg-inset)); color: var(--fg); }
     .warn p { margin: 0; }
     .warn .do { display: flex; gap: .5em; margin: .7em 0 0; }
     .empty { color: var(--fg-muted); padding: .9em 0; }
 
-    .acts { display: flex; gap: .5em; flex-wrap: wrap; align-items: center; margin: 1.2em 0 0; }
-    .foot { display: flex; gap: .6em; flex-wrap: wrap; align-items: center; margin: 1.4em 0 0;
+    /* The foot is the one decision the page exists for, so it stays in reach of the list it is about. */
+    .foot { display: flex; gap: .8em; flex-wrap: wrap; align-items: center; margin: 1.2em 0 0;
             padding-top: 1em; border-top: 1px solid var(--border); }
-    .foot__summary { color: var(--fg-muted); font-size: var(--fs-sm); }
+    .foot__summary { color: var(--fg-muted); font-size: var(--fs-sm); flex: 1 1 16em; }
   `;
 
   const body = `
-  <div class="page-head">
-    <div class="page-head__main">
-      <div class="eyebrow">Repository</div>
-      <h1 class="page-head__title" id="title">${name}</h1>
-      <p class="page-head__desc" id="lede">Reading what the platform holds of it…</p>
+  <div class="az-wash"><header class="az-lead">
+    <h1 class="az-title" id="title">${name}</h1>
+    <p class="az-intro az-intro--wide" id="lede">Reading what the platform holds of it…</p>
+    <div class="az-row">
+      <button type="button" class="az-btn az-btn--primary" id="fetch">${glyph('download')}<span>Download the code</span></button>
+      <button type="button" class="az-btn az-btn--primary" id="pull" hidden>${glyph('upload')}<span>Pull the latest</span></button>
+      <button type="button" class="az-btn az-btn--primary" id="start" hidden>${glyph('plus')}<span>Start — add it to the project</span></button>
+      <button type="button" class="az-btn" id="open-github">${glyph('globe')}<span>Open on GitHub</span></button>
+      <button type="button" class="az-btn" id="copy-url">${glyph('link')}<span>Copy the clone URL</span></button>
+      <button type="button" class="az-btn" id="reload">${glyph('refresh')}<span>Refresh</span></button>
+      <button type="button" class="az-btn" id="remove-copy" hidden>${glyph('close')}<span>Remove the local copy</span></button>
     </div>
-    <div class="page-head__actions">
-      <button type="button" class="btn btn--ghost" id="copy-url">Copy the clone URL</button>
-      <button type="button" class="btn btn--ghost" id="open-github">Open on GitHub</button>
-      <button type="button" class="btn" id="reload">Refresh</button>
-    </div>
-  </div>
+  </header></div>
 
-  <div class="strip" id="facts"></div>
+  <p class="az-note" id="facts"></p>
   <div id="error"></div>
 
-  <div class="acts">
-    <button type="button" class="btn" id="fetch">Download</button>
-    <button type="button" class="btn btn--ghost" id="pull" hidden>Pull</button>
-    <button type="button" class="btn btn--ghost" id="remove-copy" hidden>Remove the local copy</button>
-    <button type="button" class="btn btn--ghost" id="start" hidden>Start — add it to the project</button>
-  </div>
-
-  <div class="split__section-title mt-16">What is inside it</div>
-  <p class="split__section-note" id="files-note">Reading the file list…</p>
-  <div class="toolbar" id="bar" hidden>
-    <input class="input" type="search" id="filter" placeholder="Filter by path" aria-label="Filter files">
-    <button type="button" class="btn btn--sm" id="all">Select all</button>
-    <button type="button" class="btn btn--sm" id="none">Clear</button>
-  </div>
+  <section class="az-section">
+    <div class="az-section__text">
+      <h2 class="az-section__title">What is inside it</h2>
+      <p class="az-section__desc" id="files-note">Reading the file list…</p>
+    </div>
+    <div class="az-section__actions" id="bar" hidden>
+      <div class="toolbar">
+        <input class="input" type="search" id="filter" placeholder="Filter by path" aria-label="Filter files">
+        <button type="button" class="az-btn az-btn--sm" id="all">Select all</button>
+        <button type="button" class="az-btn az-btn--sm" id="none">Clear</button>
+      </div>
+    </div>
+  </section>
   <div id="files-error"></div>
-  <div class="rows" id="files"></div>
+  <div class="files" id="files"></div>
 
   <div class="foot">
     <span class="foot__summary" id="summary">No file selected.</span>
-    <span class="page-head__spacer" style="flex:1"></span>
-    <button type="button" class="btn btn--primary" id="project">Create a project from these files</button>
+    <button type="button" class="az-btn az-btn--primary" id="project">${glyph('plus')}<span id="project-label">Create a project from this repository</span></button>
   </div>
   `;
 
   return page(body, { title: name, extraCss: style, script: CLIENT });
+}
+
+/** One glyph from the page sprite, at the size the surrounding control asks for. */
+function glyph(name: string): string {
+  return `<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
 }
 
 const CLIENT = `
@@ -436,23 +436,21 @@ window.addEventListener('message', (event) => {
   draw();
 });
 
-/** What the platform holds of this repository, in one tinted line each. */
+/** What the platform holds of this repository, as one sentence under the header. */
 function drawFacts() {
   const parts = [];
   if (state.row) {
-    if (state.row.language) { parts.push(fact(state.row.language)); }
-    if (state.row.pushedAt) { parts.push(fact('pushed ' + shortDate(state.row.pushedAt))); }
-    parts.push(fact(state.row.isPrivate ? 'private' : 'public'));
+    if (state.row.language) { parts.push(state.row.language); }
+    if (state.row.pushedAt) { parts.push('pushed ' + shortDate(state.row.pushedAt)); }
+    parts.push(state.row.isPrivate ? 'private' : 'public');
   }
-  if (state.cited) { parts.push(fact('source of this project', 'fact--ok')); }
-  else if (state.isSource) { parts.push(fact('recorded, not cited by this project')); }
-  else { parts.push(fact('not started', 'fact--warn')); }
-  if (state.localCopy) {
-    parts.push(fact('local copy' + (state.copySize ? ' · ' + state.copySize : ''), 'fact--ok'));
-  } else {
-    parts.push(fact('no local copy', 'fact--warn'));
-  }
-  $('facts').replaceChildren(...parts);
+  if (state.cited) { parts.push('source of this project'); }
+  else if (state.isSource) { parts.push('recorded, not cited by this project'); }
+  else { parts.push('not started'); }
+  parts.push(state.localCopy
+    ? 'local copy' + (state.copySize ? ' · ' + state.copySize : ' ready')
+    : 'no local copy — Download reads it into the working area');
+  $('facts').textContent = parts.join(' · ');
   $('lede').textContent = (state.organisation ? state.organisation + ' · ' : '')
     + (state.row && state.row.description ? state.row.description : 'No description.')
     + (state.project ? ' · project ' + state.project : ' · no project is being worked on');
@@ -479,19 +477,24 @@ function draw() {
   }
   $('files').replaceChildren(...shown.map((file) => {
     const line = document.createElement('div');
-    line.className = 'row';
+    line.className = 'file';
     const tick = document.createElement('input');
     tick.type = 'checkbox';
     tick.checked = Boolean(file.ticked);
     tick.setAttribute('aria-label', 'Select ' + file.path);
     tick.addEventListener('change', () => { file.ticked = tick.checked; drawSummary(); });
+    // The glyph says what kind of file it is before the path is read: a page, or code.
+    const mark = document.createElement('span');
+    mark.className = 'file__glyph';
+    mark.innerHTML = '<svg viewBox="0 0 24 24" class="icon icon--sm" aria-hidden="true"><use href="#i-'
+      + (file.category === 'docs' ? 'document' : 'code') + '"></use></svg>';
     const path = document.createElement('span');
-    path.className = 'name';
+    path.className = 'file__path';
     path.textContent = file.path;
     const size = document.createElement('span');
-    size.className = 'facts';
+    size.className = 'file__meta';
     size.textContent = (file.category === 'docs' ? 'doc · ' : '') + kilo(file.size);
-    line.append(tick, path, size);
+    line.append(tick, mark, path, size);
     return line;
   }));
   drawSummary();
@@ -515,16 +518,9 @@ function drawSummary() {
   $('summary').textContent = chosen.length === 0
     ? 'No file selected — a project can start with none, and its files are picked again there.'
     : chosen.length + (chosen.length === 1 ? ' file · ' : ' files · ') + kilo(bytes);
-  $('project').textContent = chosen.length === 0
+  $('project-label').textContent = chosen.length === 0
     ? 'Create a project from this repository'
     : 'Create a project from these ' + chosen.length + (chosen.length === 1 ? ' file' : ' files');
-}
-
-function fact(text, className) {
-  const node = document.createElement('span');
-  node.className = 'fact' + (className ? ' ' + className : '');
-  node.textContent = text;
-  return node;
 }
 
 function banner(text) {
@@ -536,12 +532,12 @@ function banner(text) {
   do_.className = 'do';
   const token = document.createElement('button');
   token.type = 'button';
-  token.className = 'btn btn--sm';
+  token.className = 'az-btn az-btn--sm';
   token.textContent = 'Set a GitHub token';
   token.addEventListener('click', () => vscode.postMessage({ type: 'command', command: 'temcoRepositories.setToken' }));
   const again = document.createElement('button');
   again.type = 'button';
-  again.className = 'btn btn--sm';
+  again.className = 'az-btn az-btn--sm';
   again.textContent = 'Try again';
   again.addEventListener('click', () => vscode.postMessage({ type: 'files', files: [] }));
   do_.append(token, again);

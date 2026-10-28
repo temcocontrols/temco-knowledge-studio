@@ -88,8 +88,11 @@ body {
 	flex: 0 0 auto;
 }
 
+/* Groups are told apart by the space between them, not by a rule: a bar of small icon groups drew six vertical lines,
+   which read as a table of seven columns instead of one row of controls. The one line that stays is the one before the
+   end group, because there the separation means something — writing ends, reading begins. */
 .page-surface .ribbon__group + .ribbon__group {
-	border-left: 1px solid var(--border);
+	border-left: 0;
 }
 
 /* The rail toggle sits at the far right: it changes the view of the page, it is not part of the sentence. */

@@ -16,7 +16,7 @@ import { screenshotPng } from './capture';
 import { docsApi, LinkablePage } from './docs';
 
 /** What a bar button may ask the extension to do. */
-type PageAction = 'preview' | 'diff' | 'source' | 'properties' | 'assist';
+type PageAction = 'preview' | 'diff' | 'source' | 'properties' | 'assist' | 'save';
 
 /** One message from a webview: the editor's own protocol, in either direction. */
 interface HostMessage {
@@ -35,10 +35,12 @@ const COMMANDS: Record<PageAction, string> = {
 	source: 'temcoEditor.openSource',
 	properties: 'temcoEditor.pageProperties',
 	assist: 'temcoEditor.assist',
+	save: 'temcoEditor.save',
 };
 
 function actionOf(value: unknown): PageAction | undefined {
-	return value === 'preview' || value === 'diff' || value === 'source' || value === 'properties' || value === 'assist'
+	return value === 'preview' || value === 'diff' || value === 'source' || value === 'properties'
+		|| value === 'assist' || value === 'save'
 		? value
 		: undefined;
 }

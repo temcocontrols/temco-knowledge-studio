@@ -4033,6 +4033,19 @@ body.vscode-high-contrast {
 	line-height: 16px;
 }
 
+/*
+ * A footnote under a section's rows: where the facts came from, or what the numbers leave out.
+ *
+ * It is quieter than the description — the description says what a section is, the note says what to know about it —
+ * and it sits one step in from the row's own edge so it reads as belonging to the rows rather than to the heading.
+ */
+.az-note {
+	margin: var(--sp-2) 0 0;
+	color: var(--ink-3);
+	font-size: 11.5px;
+	line-height: 16px;
+}
+
 .az-section__actions {
 	margin-left: auto;
 	display: flex;

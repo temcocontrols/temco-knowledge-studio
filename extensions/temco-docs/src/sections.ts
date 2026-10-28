@@ -104,7 +104,7 @@ export function registerSectionViews(context: vscode.ExtensionContext, model: Si
 			count: model.counts().review,
 		},
 		{ label: 'Build Center', note: 'the targets and the errors that block them', command: 'temcoDocs.builds', icon: 'play' },
-		{ label: 'Releases', note: 'published versions, and the one in flight', command: 'temcoDocs.releases', icon: 'cloud-upload' },
+		{ label: 'Publish & Releases', note: 'published versions, and the one in flight', command: 'temcoDocs.releases', icon: 'cloud-upload' },
 	];
 
 	const flatPipeline = new Flat('pipeline', pipeline);

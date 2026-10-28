@@ -15,15 +15,20 @@ import {
 	BranchCompare16Regular,
 	Camera16Regular,
 	Code16Regular,
+	// A block of code, a page of source, and a list of headings: three controls that were all drawn as `</>` or as a
+	// bullet list, which is three glyphs meaning one thing in a bar where every other glyph means itself.
+	CodeBlock16Regular,
+	DocumentCode16Regular,
+	TextBulletListSquare16Regular,
 	// Fluent draws these two at 20 and above only; they are rendered at 16 like the rest, so the bar stays one size.
 	ColorBackground20Regular,
 	DocumentLink16Regular,
 	DrawShape20Regular,
 	Eye16Regular,
 	Image16Regular,
-	List16Regular,
 	LineHorizontal116Regular,
 	MoreHorizontal16Regular,
+	Save16Regular,
 	Search16Regular,
 	Settings16Regular,
 	Table16Regular,
@@ -83,7 +88,7 @@ export interface RibbonProps {
 	onFind: () => void;
 	onOutline: () => void;
 	/** The host's own actions: preview, diff, source, properties, a picture, a capture, a link to another page. */
-	onHostAction: (action: 'preview' | 'diff' | 'source' | 'properties' | 'image' | 'capture' | 'linkPage') => void;
+	onHostAction: (action: 'preview' | 'diff' | 'source' | 'properties' | 'image' | 'capture' | 'linkPage' | 'save') => void;
 	/** Enabled only when a picture is selected: annotating replaces it rather than adding a second one. */
 	onAnnotate: () => void;
 }
@@ -99,7 +104,7 @@ export interface RibbonProps {
 const FOLD_ORDER: readonly string[] = [
 	'rule', 'table', 'screenshot', 'annotate', 'linkPage', 'picture', 'diff', 'preview', 'source', 'properties',
 	'codeBlock', 'quote', 'highlight', 'code', 'strike', 'underline', 'italic', 'bold', 'redo', 'undo',
-	'assist', 'find', 'outline', 'read',
+	'assist', 'find', 'outline', 'read', 'save',
 ];
 
 /**
@@ -258,6 +263,12 @@ export function PageRibbon(props: RibbonProps): React.ReactElement {
 	// the blocks, and what is inserted rather than typed. One row, the way the engine's own demos draw it.
 	const writing: GroupSpec[] = [
 		{
+			id: 'save',
+			items: [
+				{ key: 'save', label: 'Save the page', glyph: <Save16Regular />, shortcut: 'Ctrl+S', run: () => props.onHostAction('save') },
+			],
+		},
+		{
 			id: 'history',
 			items: [
 				{ key: 'undo', label: 'Undo', glyph: <ArrowUndo16Regular />, shortcut: 'Ctrl+Z', disabled: !state.canUndo, run: actions.undo },
@@ -281,7 +292,7 @@ export function PageRibbon(props: RibbonProps): React.ReactElement {
 			id: 'blocks',
 			items: [
 				{ key: 'quote', label: 'Block quote', glyph: <TextQuote16Regular />, shortcut: 'Ctrl+Shift+B', run: actions.toggleQuote },
-				{ key: 'codeBlock', label: 'Code block', glyph: <Code16Regular />, shortcut: 'Ctrl+Alt+C', run: actions.toggleCodeBlock },
+				{ key: 'codeBlock', label: 'Code block', glyph: <CodeBlock16Regular />, shortcut: 'Ctrl+Alt+C', run: actions.toggleCodeBlock },
 				{ key: 'rule', label: 'Horizontal rule', glyph: <LineHorizontal116Regular />, run: actions.horizontalRule },
 				{ key: 'table', label: 'Table', glyph: <Table16Regular />, run: actions.insertTable },
 			],
@@ -304,12 +315,12 @@ export function PageRibbon(props: RibbonProps): React.ReactElement {
 		align: 'end',
 		items: [
 			{ key: 'find', label: 'Find', glyph: <Search16Regular />, shortcut: 'Ctrl+F', active: props.finding, run: props.onFind },
-			{ key: 'outline', label: 'Outline', glyph: <List16Regular />, shortcut: 'Ctrl+Alt+O', active: props.outlining, run: props.onOutline },
+			{ key: 'outline', label: 'Outline', glyph: <TextBulletListSquare16Regular />, shortcut: 'Ctrl+Alt+O', active: props.outlining, run: props.onOutline },
 			// Reading a page is not editing one: the same surface, no caret, and the writing groups are not drawn.
 			{ key: 'read', label: reading ? 'Edit the page' : 'Read the page', glyph: <BookOpen16Regular />, active: reading, run: props.onReading },
 			{ key: 'preview', label: 'Preview the page', glyph: <Eye16Regular />, shortcut: 'Ctrl+Alt+P', run: () => props.onHostAction('preview') },
 			{ key: 'diff', label: 'Diff with HEAD', glyph: <BranchCompare16Regular />, shortcut: 'Ctrl+Alt+D', run: () => props.onHostAction('diff') },
-			{ key: 'source', label: 'Open the source', glyph: <Code16Regular />, run: () => props.onHostAction('source') },
+			{ key: 'source', label: 'Open the source', glyph: <DocumentCode16Regular />, run: () => props.onHostAction('source') },
 			{ key: 'properties', label: 'Page properties', glyph: <Settings16Regular />, run: () => props.onHostAction('properties') },
 			// The assistant is a view of the page, not a writing tool: it opens the AI panel beside what is on screen.
 			{ key: 'assist', label: 'Draft with the AI', glyph: <Sparkle16Regular />, shortcut: 'Ctrl+Alt+A', run: () => props.onHostAction('assist') },

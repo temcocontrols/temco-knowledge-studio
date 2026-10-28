@@ -209,15 +209,59 @@
 	border-color: var(--border);
 }
 
+/* Focus is a hairline and a wash, not a frame: a 2px azure ring round a 26px control read as the selected control, which
+   is what the bar's own toggles are for. The ring is still there for a keyboard, one pixel thick and in the theme's own
+   focus colour. */
 .menu__trigger:focus-visible {
-	outline: 2px solid var(--azure, var(--vscode-focusBorder, var(--accent)));
-	outline-offset: -2px;
+	background: var(--neutral-hover);
+	outline: 1px solid var(--focus-border, var(--vscode-focusBorder, var(--border-strong)));
+	outline-offset: -1px;
 }
 
 .menu__value {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+/* An icon trigger: no words, so no 92px floor — it is the width of the glyph it shows, like every other control in the
+   row, and the name it carries lives in the tooltip and the accessible name. */
+.menu__trigger--icon {
+	min-width: 0;
+	padding: 0 4px 0 5px;
+	gap: 2px;
+}
+
+/* The heading mark: a drawn H with its level beside it, or three lines for body text. */
+.menu__mark {
+	display: inline-flex;
+	align-items: center;
+	gap: 1px;
+	line-height: 1;
+	color: inherit;
+}
+
+.menu__mark__level {
+	font-size: 9px;
+	font-weight: 700;
+	transform: translateY(1px);
+}
+
+.menu__item__icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	width: 20px;
+	color: var(--fg-muted);
+	font-size: 10.5px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+/* These two menus are short lists of short labels: the 216 px floor is for a menu of actions, not for five block styles. */
+.menu--tight {
+	min-width: 0;
 }
 
 .menu__caret {
@@ -251,8 +295,8 @@
 .menu__item {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
+	justify-content: flex-start;
+	gap: 8px;
 	padding: 6px 8px;
 	border-radius: var(--radius-sm);
 	color: var(--fg);
@@ -261,9 +305,17 @@
 	user-select: none;
 }
 
+/* The tick stays at the right edge whatever the label is long, without pushing the labels out of line. */
+.menu__item > svg:last-child {
+	margin-left: auto;
+	flex: none;
+}
+
+/* The row under the pointer or the arrow keys is a wash of the menu's own ink, not a filled blue bar: a solid
+   selection colour in a five-row list is the loudest thing on the page, and the tick already says which style is on. */
 .menu__item[data-highlighted] {
-	background: var(--vscode-menu-selectionBackground, var(--bg-hover));
-	color: var(--vscode-menu-selectionForeground, var(--vscode-menu-foreground, var(--fg)));
+	background: color-mix(in srgb, var(--vscode-menu-foreground, var(--fg)) 9%, transparent);
+	color: var(--vscode-menu-foreground, var(--fg));
 }
 
 .menu__sample {

@@ -80,6 +80,12 @@
         "title": "Draft with the AI",
         "category": "Temco Editor",
         "icon": "$(sparkle)"
+      },
+      {
+        "command": "temcoEditor.save",
+        "title": "Save the Page",
+        "category": "Temco Editor",
+        "icon": "$(save)"
       }
     ],
     "keybindings": [
@@ -96,6 +102,12 @@
       {
         "command": "temcoEditor.assist",
         "key": "ctrl+alt+a",
+        "when": "activeCustomEditorId == 'temcoEditor.markdown' && resourceScheme == file"
+      },
+      {
+        "command": "temcoEditor.save",
+        "key": "ctrl+s",
+        "mac": "cmd+s",
         "when": "activeCustomEditorId == 'temcoEditor.markdown' && resourceScheme == file"
       }
     ],

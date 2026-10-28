@@ -562,8 +562,10 @@ function html(citing = false): string {
        foot. No boxes anywhere — a fill, a hairline and spacing carry the hierarchy. */
     /* The description carries what used to be a second bar above the list: where copies land, and the one link that
        changes it. The path is mono because it is a path; the link is the kit's link, not a button beside it. */
-    .page-head__desc code { color: var(--fg-strong); font-family: ui-monospace, monospace; font-size: 12.5px;
-                             overflow-wrap: anywhere; }
+    .az-intro code { color: var(--fg-strong); font-family: ui-monospace, monospace; font-size: 12.5px;
+                     overflow-wrap: anywhere; }
+    /* The summary under the strip is the kit's note, one step up in spacing because it introduces the list. */
+    .az-note#stats { margin: .9em 0 0; }
 
     .strip { display: flex; gap: .4em; flex-wrap: wrap; align-items: center; margin: 1em 0 0; }
 
@@ -583,9 +585,6 @@ function html(citing = false): string {
     .adder .input { flex: 1 1 22em; max-width: 46em; }
     .adder__note { flex-basis: 100%; margin: 0; color: var(--fg-subtle); font-size: var(--fs-xs); }
 
-    .stats { display: flex; gap: .45em; flex-wrap: wrap; margin: .9em 0 0; color: var(--fg-muted); font-size: var(--fs-sm); }
-    .stats b { color: var(--fg-strong); font-weight: 600; }
-
     .toolbar { display: flex; gap: .6em; align-items: center; flex-wrap: wrap; margin: 1em 0 .2em; }
     .toolbar input { flex: 1 1 18em; min-width: 10em; }
 
@@ -596,21 +595,32 @@ function html(citing = false): string {
 
     .rows { margin: .6em 0 0; }
 
-    /* A row, not a card: no border, no radius, no fill until it is hovered or selected. */
-    .row { display: grid; grid-template-columns: 1.4em minmax(0, 1fr) auto; gap: 0 .7em;
-           align-items: start; padding: .65em .4em; border-bottom: 1px solid var(--border); }
-    .row:last-child { border-bottom: 0; }
-    .row:hover { background: var(--bg-hover); }
-    .row.is-selected { background: color-mix(in srgb, var(--accent) 8%, transparent); }
-    .row input[type=checkbox] { margin: .3em 0 0; }
-    .row .top { display: flex; gap: .7em; align-items: baseline; flex-wrap: wrap; }
-    .row .name { font-weight: 600; color: var(--fg-strong); border: 0; background: none; padding: 0;
-                 font-family: inherit; font-size: inherit; cursor: pointer; text-align: left; }
-    .row .name:hover { text-decoration: underline; }
-    .row .cited { color: var(--ok); font-size: var(--fs-sm); white-space: nowrap; }
-    .row .facts { color: var(--fg-muted); font-size: var(--fs-sm); }
-    .row .desc { margin: .1em 0 0; color: var(--fg-muted); font-size: var(--fs-sm); overflow-wrap: anywhere; }
-    .row .do { display: flex; gap: .35em; flex-wrap: wrap; justify-content: flex-end; }
+    /* A repository is a line in a list, not a card: the name leads, what it is follows, and the acts sit at the end
+       of the line. The only fill is the hover and the selection — a list of twenty-two boxes is a list nobody scans. */
+    .repo { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 0 .75em;
+            align-items: start; padding: .75em .5em; border-bottom: 1px solid var(--border); }
+    .repo:last-child { border-bottom: 0; }
+    .repo:hover { background: var(--bg-hover); }
+    .repo.is-selected { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+    .repo input[type=checkbox] { margin: .35em 0 0; }
+    .repo__mark { margin: .12em 0 0; color: var(--fg-subtle); }
+    .repo__main { min-width: 0; }
+    .repo__head { display: flex; gap: .55em; align-items: baseline; flex-wrap: wrap; }
+    .repo__name { font-weight: 600; color: var(--fg-strong); border: 0; background: none; padding: 0;
+                  font-family: inherit; font-size: inherit; cursor: pointer; text-align: left; }
+    .repo__name:hover { text-decoration: underline; }
+    .repo__badge { font-size: var(--fs-xs); line-height: 15px; padding: 0 .4em; border-radius: var(--r-8);
+                   background: var(--bg-inset); color: var(--fg-muted); white-space: nowrap; }
+    .repo__badge--cited { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
+    .repo__badge--local { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--fg-strong); }
+    .repo__desc { margin: .2em 0 0; color: var(--fg-muted); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+    .repo__meta { margin: .25em 0 0; color: var(--fg-subtle); font-size: var(--fs-xs); display: flex; gap: .5em;
+                  flex-wrap: wrap; }
+    .repo__meta span + span::before { content: '·'; margin-right: .5em; color: var(--fg-subtle); }
+    .repo__do { display: flex; gap: .35em; align-items: center; flex-wrap: nowrap; justify-content: flex-end;
+                flex: none; }
+    /* The acts get room of their own: the name and the description can wrap, a row of buttons cannot. */
+    .repo__do .az-btn { white-space: nowrap; }
 
     .warn { border-radius: var(--radius); padding: .8em 1em; margin: 1em 0;
             background: color-mix(in srgb, var(--warn) 22%, var(--bg-inset)); color: var(--fg); }
@@ -618,41 +628,37 @@ function html(citing = false): string {
     .warn .do { display: flex; gap: .5em; margin: .7em 0 0; }
     .empty { color: var(--fg-muted); padding: 1em 0; }
 
-    /* How the page works, numbered: five acts, in the order a person performs them. */
-    .how { margin: 2em 0 0; max-width: none; }
-    .how h2 { font-size: var(--fs-ui); font-weight: 600; color: var(--fg-strong); margin: 0 0 .5em; }
-    .how ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: .5em;
-              color: var(--fg-muted); font-size: var(--fs-sm); line-height: 1.55; }
-    .how li::marker { color: var(--accent); font-weight: 600; }
-    .how b { color: var(--fg); font-weight: 600; }
-    .how .settings { margin: .9em 0 0; font-size: var(--fs-xs); color: var(--fg-subtle); }
+    /* How the page works, numbered: six acts, in the order a person performs them. The heading is the kit's section;
+       only the list itself is this page's. */
+    .how__list { margin: .8em 0 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: .5em;
+                 color: var(--fg-muted); font-size: var(--fs-sm); line-height: 1.55; }
+    .how__list li::marker { color: var(--accent); font-weight: 600; }
+    .how__list b { color: var(--fg-strong); font-weight: 600; }
   `;
 
   const body = `
-  <div class="page-head">
-    <div class="page-head__main">
-      <h1 class="page-head__title" id="title">Repositories</h1>
-      <p class="page-head__desc" id="lede">Reading the organisation from GitHub…</p>
+  <div class="az-wash"><header class="az-lead">
+    <h1 class="az-title" id="title">Repositories</h1>
+    <p class="az-intro az-intro--wide" id="lede">Reading the organisation from GitHub…</p>
+    <div class="az-row">
+      <button type="button" class="az-btn az-btn--primary" id="reload">Read GitHub again</button>
+      <button type="button" class="az-btn" id="add-toggle">Add an enterprise</button>
+      <button type="button" class="az-btn" id="new-project">New project</button>
+      <button type="button" class="az-btn az-btn--link" id="back-to-form">Back to the New Project form</button>
     </div>
-    <div class="page-head__actions">
-      <button type="button" class="btn btn--ghost" id="back-to-form">Back to the New Project form</button>
-      <button type="button" class="btn btn--ghost" id="new-project">New project</button>
-      <button type="button" class="btn" id="add-toggle">Add an enterprise</button>
-      <button type="button" class="btn btn--primary" id="reload">Read GitHub again</button>
-    </div>
-  </div>
+  </header></div>
 
   <form class="adder" hidden id="adder">
     <input class="input" id="adder-text" aria-label="Enterprise or repository"
       placeholder="temcocontrols — or one repository: github.com/temcocontrols/t3000webview">
-    <button type="submit" class="btn btn--primary" id="adder-add">Add</button>
-    <button type="button" class="btn btn--ghost" id="adder-cancel">Cancel</button>
+    <button type="submit" class="az-btn az-btn--primary" id="adder-add">Add</button>
+    <button type="button" class="az-btn" id="adder-cancel">Cancel</button>
     <p class="adder__note">An enterprise or an account is listed with everything it publishes. A repository address is
       listed on its own — no list to read, so it works without GitHub answering.</p>
   </form>
 
   <div class="strip" id="strip"></div>
-  <div class="stats" id="stats"></div>
+  <p class="az-note" id="stats"></p>
   <div id="error"></div>
 
   <div class="toolbar" hidden id="bar">
@@ -662,19 +668,21 @@ function html(citing = false): string {
 
   <div class="selection" hidden id="selection">
     <span class="count" id="selection-count">0 selected</span>
-    <button type="button" class="btn btn--sm btn--primary" id="bulk-start">Start</button>
-    <button type="button" class="btn btn--sm" id="bulk-cite">${citing ? 'Cite in this project' : 'Cite in the new project'}</button>
-    <button type="button" class="btn btn--sm" id="bulk-fetch">Download</button>
-    <button type="button" class="btn btn--sm" id="bulk-pull">Pull</button>
-    <button type="button" class="btn btn--sm" id="bulk-remove">Remove the local copy</button>
-    <button type="button" class="btn btn--sm btn--ghost" id="bulk-clear">Clear</button>
+    <button type="button" class="az-btn az-btn--sm az-btn--primary" id="bulk-start">Start</button>
+    <button type="button" class="az-btn az-btn--sm" id="bulk-cite">${citing ? 'Cite in this project' : 'Cite in the new project'}</button>
+    <button type="button" class="az-btn az-btn--sm" id="bulk-fetch">Download</button>
+    <button type="button" class="az-btn az-btn--sm" id="bulk-pull">Pull</button>
+    <button type="button" class="az-btn az-btn--sm" id="bulk-remove">Remove the local copy</button>
+    <button type="button" class="az-btn az-btn--sm" id="bulk-clear">Clear</button>
   </div>
 
   <div class="rows" id="list"></div>
 
-  <section class="how">
-    <h2>How this page works</h2>
-    <ol>
+  <section class="az-section">
+    <div class="az-section__text"><h2 class="az-section__title">How this page works</h2>
+      <p class="az-section__desc">Six steps, in the order a project is built from a repository.</p></div>
+  </section>
+  <ol class="how__list">
       <li><b>Add an enterprise</b> — <code>temcocontrols</code> is already here — or one repository's address. What an
         enterprise holds is kept in the platform database, so this page still lists it when GitHub will not answer.</li>
       <li><b>Start</b> adds the repository as a source of the project being worked on, then reads what documentation
@@ -689,9 +697,8 @@ function html(citing = false): string {
         copy only — the repository is never written to and never pushed to.</li>
       <li>A private repository needs a token: <b>Set a GitHub Token</b>, from the warning above or the palette.</li>
     </ol>
-    <p class="settings">Default enterprise <code>temcoRepositories.organisation</code> · working area
+    <p class="az-note">Default enterprise <code>temcoRepositories.organisation</code> · working area
       <code>temcoRepositories.workspaceFolder</code></p>
-  </section>
   `;
 
   return page(body, { title: 'Temco Repositories', extraCss: style, script: CLIENT });
@@ -860,27 +867,28 @@ function drawStrip() {
   $('strip').replaceChildren(...nodes);
 }
 
-/** What is here, in numbers, so the strip does not have to be read to be understood. */
+/** What is here, as one sentence: a strip of chips says where the list came from, this says what is in it. */
 function drawStats() {
   const started = repositories.filter((repo) => cited.includes(repo.name)).length;
   const clones = Object.keys(copies).length;
   const parts = [
-    pair(String(repositories.length), repositories.length === 1 ? 'repository' : 'repositories'),
-    pair(String(started), 'started'),
-    pair(String(clones), clones === 1 ? 'local copy' : 'local copies')
+    repositories.length + (repositories.length === 1 ? ' repository' : ' repositories'),
+    started === 0 ? 'none cited by this project' : started + ' cited by this project',
+    clones === 0 ? 'no local copies' : clones + (clones === 1 ? ' local copy' : ' local copies')
   ];
   if (state === 'refused') {
-    parts.push(text('span', '', 'held from ' + (takenAt ? readAt(takenAt) : 'an earlier read')));
+    parts.push('held from ' + (takenAt ? readAt(takenAt) : 'an earlier read'));
   } else if (state === 'named') {
-    parts.push(text('span', '', 'from the address'));
+    parts.push('named by its address');
   }
-  $('stats').replaceChildren(...join(parts));
+  const line = $('stats');
+  line.textContent = parts.join(' · ');
   // Which project a Start would add to, and the one link that changes it: the decision is the platform's, not a
   // hidden state of this page.
   if (!project) {
-    $('stats').append(
-      document.createTextNode(' · '),
-      button('link', 'Choose a project', () => vscode.postMessage({ type: 'command', command: 'temcoDocs.projects' }))
+    line.append(
+      document.createTextNode(' · Start has nowhere to add a source — '),
+      button('link', 'choose a project', () => vscode.postMessage({ type: 'command', command: 'temcoDocs.projects' }))
     );
   }
 }
@@ -914,7 +922,7 @@ function row(repo) {
   const cloned = Object.prototype.hasOwnProperty.call(copies, repo.name);
 
   const line = document.createElement('div');
-  line.className = 'row' + (selected.has(repo.name) ? ' is-selected' : '');
+  line.className = 'repo' + (selected.has(repo.name) ? ' is-selected' : '');
 
   const tick = document.createElement('input');
   tick.type = 'checkbox';
@@ -925,42 +933,64 @@ function row(repo) {
     draw();
   });
 
-  const main = document.createElement('div');
-  const top = document.createElement('div');
-  top.className = 'top';
+  const mark = document.createElement('span');
+  mark.className = 'repo__mark';
+  mark.innerHTML = '<svg viewBox="0 0 24 24" class="icon icon--sm" aria-hidden="true"><use href="#i-repo"></use></svg>';
+
   // The name is the way into the row's own page: the one place its files and its local copy are described.
-  const name = button('name', repo.name, () => vscode.postMessage({ type: 'detail', name: repo.name }));
+  const head = document.createElement('div');
+  head.className = 'repo__head';
+  const name = button('repo__name', repo.name, () => vscode.postMessage({ type: 'detail', name: repo.name }));
   name.title = 'Open this repository — its files, its local copy, and creating a project from it';
-  top.append(name);
-  if (isCited) { top.append(text('span', 'cited', 'source of this project')); }
-  const facts = [repo.language || '', repo.pushedAt ? 'pushed ' + shortDate(repo.pushedAt) : '', repo.isPrivate ? 'private' : '']
-    .filter(Boolean).join(' · ');
-  if (facts.length > 0) { top.append(text('span', 'facts', facts)); }
-  main.append(top, text('p', 'desc', repo.description || 'No description.'));
+  head.append(name);
+  if (isCited) { head.append(text('span', 'repo__badge repo__badge--cited', 'cited')); }
+  if (cloned) { head.append(text('span', 'repo__badge repo__badge--local', 'local copy')); }
+
+  const main = document.createElement('div');
+  main.className = 'repo__main';
+  main.append(head, text('p', 'repo__desc', repo.description || 'No description.'));
+
+  const facts = [
+    repo.language || '',
+    repo.pushedAt ? 'pushed ' + shortDate(repo.pushedAt) : '',
+    repo.pushedAt ? '' : 'not read yet',
+    repo.isPrivate ? 'private' : ''
+  ].filter(Boolean);
+  if (facts.length > 0) {
+    const meta = document.createElement('div');
+    meta.className = 'repo__meta';
+    facts.forEach((fact) => meta.append(text('span', '', fact)));
+    main.append(meta);
+  }
 
   const do_ = document.createElement('div');
-  do_.className = 'do';
-  const start = button('btn btn--sm btn--primary', isCited ? 'Start again' : 'Start', () =>
+  do_.className = 'repo__do';
+  const start = button('az-btn az-btn--sm az-btn--primary', isCited ? 'Start again' : 'Start', () =>
     vscode.postMessage({ type: 'start', name: repo.name }));
-  const project = button('btn btn--sm', 'Project', () =>
+  start.title = 'Add this repository as a source of the project being worked on, and read what it publishes';
+
+  const project = button('az-btn az-btn--sm', 'New project', () =>
     vscode.postMessage({ type: 'project', name: repo.name }));
-  project.title = 'Open this repository — pick its files, then create a project from them';
-  const open = button('btn btn--sm btn--ghost', 'Open', () => {
+  project.title = 'Pick this repository’s files, then create a project from them';
+
+  const open = button('az-btn az-btn--sm', 'Open', () => {
     if (repo.webUrl) { vscode.postMessage({ type: 'open', url: repo.webUrl }); }
   });
   open.title = 'Open the repository on GitHub';
-  const local = button('btn btn--sm', cloned ? 'Pull' : 'Download', () =>
+
+  const local = button('az-btn az-btn--sm', cloned ? 'Pull' : 'Download', () =>
     vscode.postMessage({ type: cloned ? 'pull' : 'fetch', name: repo.name }));
-  local.title = cloned ? 'Download the latest changes into the local copy' : 'Download this repository into the working area';
+  local.title = cloned ? 'Pull the latest changes into the local copy' : 'Download a copy into the working area';
+
   do_.append(start, project, open, local);
   if (cloned) {
-    const drop = button('btn btn--sm btn--ghost', 'Remove copy', () =>
+    const drop = button('az-btn az-btn--sm', 'Remove copy', () =>
       vscode.postMessage({ type: 'removeClone', name: repo.name }));
     drop.title = 'Remove the local copy — the repository is left untouched';
     do_.append(drop);
   }
 
-  line.append(tick, main, do_);
+  line.append(tick, mark, main, do_);
   return line;
 }
 
@@ -972,9 +1002,9 @@ function banner(message) {
   const do_ = document.createElement('div');
   do_.className = 'do';
   do_.append(
-    button('btn btn--sm', 'Set a GitHub token', () =>
+    button('az-btn az-btn--sm', 'Set a GitHub token', () =>
       vscode.postMessage({ type: 'command', command: 'temcoRepositories.setToken' })),
-    button('btn btn--sm', 'Read GitHub again', () => vscode.postMessage({ type: 'reload' })));
+    button('az-btn az-btn--sm', 'Read GitHub again', () => vscode.postMessage({ type: 'reload' })));
   box.append(do_);
   return box;
 }

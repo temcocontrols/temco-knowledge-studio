@@ -171,12 +171,12 @@
       },
       {
         "command": "temcoDocs.builds",
-        "title": "Show Publish",
+        "title": "Show Build Center",
         "icon": "$(play)"
       },
       {
         "command": "temcoDocs.releases",
-        "title": "Releases",
+        "title": "Publish & Releases",
         "icon": "$(cloud-upload)"
       },
       {
@@ -808,24 +808,9 @@
           "group": "navigation@1"
         },
         {
-          "command": "temcoProjects.addSource",
-          "when": "view == temcoDocs.pages",
-          "group": "navigation@2"
-        },
-        {
-          "command": "temcoDocs.captureImage",
-          "when": "view == temcoDocs.pages",
-          "group": "navigation@3"
-        },
-        {
-          "command": "temcoDocs.pasteImage",
-          "when": "view == temcoDocs.pages",
-          "group": "navigation@4"
-        },
-        {
           "command": "temcoDocs.refresh",
           "when": "view == temcoDocs.pages",
-          "group": "navigation@5"
+          "group": "navigation@2"
         },
         {
           "command": "temcoDocs.refresh",
@@ -930,7 +915,7 @@
         {
           "command": "temcoDocs.importDocx",
           "when": "view == temcoDocs.pages",
-          "group": "navigation@9"
+          "group": "1_import@1"
         }
       ],
       "view/item/context": [
@@ -947,7 +932,7 @@
         {
           "command": "temcoDocs.rename",
           "when": "view == temcoDocs.pages && viewItem =~ /^(page|loosePage|chapter|looseChapter)$/",
-          "group": "inline@1"
+          "group": "inline@9"
         },
         {
           "command": "temcoDocs.attachCapture",
