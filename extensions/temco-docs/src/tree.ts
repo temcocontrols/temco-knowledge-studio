@@ -583,10 +583,8 @@ function pageItem(node: PageNode): vscode.TreeItem {
   const file = `${page.id.split('/').pop() ?? page.id}.md`;
   const item = new vscode.TreeItem(file, vscode.TreeItemCollapsibleState.None);
   item.id = `docs|page|${node.root.folder.uri.toString()}|${page.id}`;
-  // The curated title is still there, once it says something the name does not.
-  if (page.title !== file && page.title !== file.replace(/\.md$/, '')) {
-    item.description = page.title;
-  }
+  // The name is the row. The curated title is not repeated beside it: it is in the tooltip and on the page itself, and a
+  // row that says `test11.md TEST11` spends half the side bar's width saying the same thing twice.
 
   if (recorded) {
     // Nothing was checked and nothing was reviewed, so the row says what it is: a page a read told us about.

@@ -1307,14 +1307,16 @@ export async function writePage(deps: PageDeps, spec: NewPageSpec): Promise<{ re
     );
     if (run === 'Run the generator') {
       await runScript(deps.roots(), deps.output, 'docs:registry');
-      deps.redraw();
+      // The registry just changed, so the list is told to read it again rather than left to notice: the write and the
+      // entry land in one turn, and a coalescing watcher would show the new row a moment after the person who made it.
+      await vscode.commands.executeCommand('temcoDocs.refresh');
     }
     return { relative };
   }
 
   const id = chapter === ROOT_CHAPTER ? `${area}/${slug}` : `${area}/${chapter}/${slug}`;
   const added = await addEntry(root, id, title, area, chapter);
-  deps.redraw();
+  await vscode.commands.executeCommand('temcoDocs.refresh');
   void vscode.window.showInformationMessage(
     added
       ? `Temco Docs: ${relative} is written, and the registry now names it — this project has no ` +

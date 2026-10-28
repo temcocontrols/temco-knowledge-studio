@@ -236,9 +236,9 @@ export const EDITOR_FONT_DEFAULTS = {
 		platform.isMacintosh ? DEFAULT_MAC_FONT_FAMILY : (platform.isWindows ? DEFAULT_WINDOWS_FONT_FAMILY : DEFAULT_LINUX_FONT_FAMILY)
 	),
 	fontWeight: 'normal',
-	fontSize: (
-		platform.isMacintosh ? 12 : 14
-	),
+	// 12 px on every platform, not upstream's 14 on Windows and Linux: this window is a working surface for documentation,
+	// and the page it writes is set at 12. A person who wants a larger editor still sets `editor.fontSize`.
+	fontSize: 12,
 	lineHeight: 0,
 	letterSpacing: 0,
 };
