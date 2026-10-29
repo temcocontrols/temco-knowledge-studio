@@ -7,7 +7,7 @@
 
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { Artifact, ArtifactKind, isDownloadable, isPreviewable } from './artifacts';
+import { Artifact, ArtifactKind, formatSize, isDownloadable, isPreviewable, nameOf } from './artifacts';
 import { SiteProject } from './site';
 import { Snapshot } from './snapshot';
 import { ago } from './state';
@@ -269,15 +269,14 @@ export class ArtifactsTree implements vscode.TreeDataProvider<Row> {
 
 	/** One file the build wrote: its name, and for a download how big it is. */
 	private artifact(artifact: Artifact): Row {
-		const name = artifact.kind === 'site' ? 'Website' : path.basename(artifact.file);
-		const entry: Row = new vscode.TreeItem(name, vscode.TreeItemCollapsibleState.None);
+		const entry: Row = new vscode.TreeItem(nameOf(artifact), vscode.TreeItemCollapsibleState.None);
 		entry.id = `temcoLearn.${this.intent}.artifact.${artifact.file}`;
 		entry.iconPath = new vscode.ThemeIcon(ICON[artifact.kind]);
 		entry.contextValue = 'temcoLearn.artifact';
 		entry.file = artifact.file;
 		entry.tooltip = artifact.file;
 		if (this.intent === 'download' && artifact.size !== undefined) {
-			entry.resourceUri = badge(size(artifact.size), artifact.file);
+			entry.resourceUri = badge(formatSize(artifact.size), artifact.file);
 		}
 		entry.command = {
 			command: this.intent === 'preview' ? 'temcoLearn.previewArtifact' : 'temcoLearn.downloadArtifact',
@@ -286,17 +285,6 @@ export class ArtifactsTree implements vscode.TreeDataProvider<Row> {
 		};
 		return entry;
 	}
-}
-
-/** `4.2 MB` — the number a person compares. */
-function size(bytes: number): string {
-	if (bytes < 1024) {
-		return `${String(bytes)} B`;
-	}
-	if (bytes < 1024 * 1024) {
-		return `${(bytes / 1024).toFixed(0)} KB`;
-	}
-	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /* ---- What needs doing: the acts, with how many things each one clears ------------------------------------------ */

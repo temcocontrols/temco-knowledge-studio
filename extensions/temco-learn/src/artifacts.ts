@@ -63,6 +63,24 @@ export function isDownloadable(artifact: Artifact): boolean {
 	return TAKING.includes(artifact.kind);
 }
 
+/** `4.2 MB` — the number a person compares, wherever a file's size is shown. */export function formatSize(bytes: number | undefined): string {
+	if (bytes === undefined) {
+		return '';
+	}
+	if (bytes < 1024) {
+		return `${String(bytes)} B`;
+	}
+	if (bytes < 1024 * 1024) {
+		return `${(bytes / 1024).toFixed(0)} KB`;
+	}
+	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** What a row, a page or a tree calls the artifact: `Website` for the site folder, the file's name otherwise. */
+export function nameOf(artifact: Artifact): string {
+	return artifact.kind === 'site' ? 'Website' : path.basename(artifact.file);
+}
+
 /** The projects a build could have run in: the working area and every workspace folder, plus their subfolders. */
 export async function findArtifacts(): Promise<ProjectArtifacts[]> {
 	const roots = new Set<string>([

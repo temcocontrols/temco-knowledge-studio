@@ -238,9 +238,12 @@ publishes the documentation website* — continued by the counts it reads from t
 versions and 42 pages between them*) so no project name is ever written into the prose. Then, in this order: one callout for what
 needs doing (or that nothing does, or that nothing has been built yet); **Publishing workflow**, four cards — *Build · Add ·
 Publish · Download* — one line each, each ending in the link that performs it (`Open Temco Docs`, `Choose a build · 1 waiting`,
-`Publish · 3 changes`, `Show in the folder`); and three sections that **describe rather than list** — *Published projects*,
-*Build outputs*, *Publication* — a title with a 3 px brand bar, a sentence with the live counts, and one link. The list itself is
-the panel's job: a page that repeated it would go stale, grow without bound, and say the same thing twice.
+`Publish · 3 changes`, `Show in the folder`); and the three parts the work lands in — **Published projects**, **Build outputs**,
+**Publication**. Each part is a heading with a 2 px brand bar, a sentence with the live counts, the rows it is about, and its
+acts along the **bottom edge**, never at the right of the heading. A project row opens that project's page on the website; a
+build-output row is the **project** and opens that project's build folder — the files themselves are the panel's Download view,
+so the page never names a `.chm` or an `.html`. Publication puts the address, the branch GitHub Pages serves and the last publish
+on **one line**, keeps what is waiting beneath it, and says how publishing works.
 **Add a build** never opens a picker: it brings the *What Needs Doing* view forward with the waiting group open, because the
 builds to choose are already rows there. A link on this page is text with a glyph (`temcoLearn.*` command), never an `href` into
 the website — that boundary was crossed once already. The module therefore depends on `temcocontrols.temco-ui`, exactly as

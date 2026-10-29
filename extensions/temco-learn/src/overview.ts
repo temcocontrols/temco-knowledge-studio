@@ -1,24 +1,34 @@
 // Overview — the module's own page, and never a page of the website.
 //
 // The website is what a reader opens; it carries nothing about running it. This page is ours, drawn with the application's
-// page vocabulary (`temco-ui`: the Fluent kit seeded from Azure blue), and it has one rule the earlier drafts broke: **it
-// describes, and the panel lists**. A list of projects or files on a page goes stale, grows without bound, and repeats the
-// panel — so each section here is a sentence with the live counts and one link to the place that does hold the list.
+// page vocabulary (`temco-ui`: the Fluent kit seeded from Azure blue). It opens by saying what the module is and what to do
+// next, then shows the three places the work lands — the projects on the website, what the builds wrote, and where it is
+// published — as rows, with the acts along the bottom edge of each part rather than floating at the right of its heading.
 
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { ProjectArtifacts } from './artifacts';
-import { latestOf, sectionTitle, siteFolder } from './site';
+import { formatSize, ProjectArtifacts } from './artifacts';
+import { latestOf, sectionTitle, siteFolder, workRoot } from './site';
 import { Snapshot } from './snapshot';
 import { ago } from './state';
-import { callout, commandScript, escapeHtml, hero, icon, page, pageColumn, runCommand, section } from './ui';
+import { callout, commandScript, entryRow, escapeHtml, hero, icon, page, pageColumn, runCommand, section } from './ui';
 
 export const OVERVIEW_VIEW_TYPE = 'temcoLearn.overview';
 
-/** The page's own rules, on top of the vocabulary: the brand bar before a section title, and four cards in a row. */
+/** The page's own rules, on top of the vocabulary: a short brand bar before a section title, four cards in a row, and
+ *  the acts of a section along its bottom edge instead of at the right of its heading. */
 export const PAGE_STYLE = `
-.az-section__title { border-left: 3px solid var(--az-blue, #0078d4); padding-left: 8px; }
+.az-section__title { border-left: 2px solid var(--az-blue, #0078d4); padding-left: 8px; }
 .az-options { grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); }
+.az-block__note { margin: var(--sp-2) 0 0; color: var(--ink-3); font-size: 11.5px; line-height: 16px; }
+.az-block__foot { display: flex; flex-wrap: wrap; gap: var(--sp-5); margin: var(--sp-3) 0 0; padding-top: var(--sp-2); border-top: 1px solid var(--border); }
+.az-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--sp-4); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--hairline); border-radius: var(--r-2); background: var(--surface-card); }
+.az-fact { min-width: 0; }
+.az-fact__title { display: flex; align-items: center; gap: var(--sp-1); color: var(--ink-2); font-size: 12px; line-height: 16px; }
+.az-fact__title .icon { width: 14px; height: 14px; color: var(--az-blue); }
+.az-fact__value { display: block; margin-top: 2px; color: var(--ink-1); font-size: 12.5px; line-height: 17px; overflow-wrap: break-word; }
+.az-fact__value--mono { font-family: var(--font-mono); }
+.az-facts + .az-entries { margin-top: var(--sp-2); }
 `;
 
 export class OverviewPage implements vscode.Disposable {
@@ -70,6 +80,8 @@ const plural = (count: number, one: string, many?: string): string =>
 /** The commands a page of this module may draw: a typo is a compile error, not a dead button. */
 type PageCommand =
 	| 'temcoLearn.preview'
+	| 'temcoLearn.previewArtifact'
+	| 'temcoLearn.downloadArtifact'
 	| 'temcoLearn.addBuilds'
 	| 'temcoLearn.publish'
 	| 'temcoLearn.openPublished'
@@ -90,24 +102,10 @@ function link(label: string, command: PageCommand, options: { args?: unknown; ma
 	return `<button type="button" class="az-btn az-btn--link" data-command="${command}"${data}>${mark}<span>${escapeHtml(label)}</span>${icon('chevron-right', 'icon--sm')}</button>`;
 }
 
-/** The most recently published project, when there is one — a page describes, so it may name a date but never a list. */
-function newest(state: Snapshot): ProjectArtifacts | undefined {
-	return state.artifacts[0];
-}
-
-/** The folder a person opens when they want the files themselves: the newest build's `dist`, or the site folder. */
-function filesFolder(state: Snapshot): string {
-	const project = newest(state);
-	if (project === undefined) {
-		return siteFolder();
-	}
+/** Where one project's build wrote: its `dist` when there is a site there, and the project's own folder otherwise. */
+function folderOf(project: ProjectArtifacts): string {
 	const site = project.artifacts.find((artifact) => artifact.kind === 'site');
 	return site === undefined ? project.folder : path.dirname(site.file);
-}
-
-/** `temcocontrols.github.io/docs` — the address without the scheme and the trailing slash. */
-function hostOf(base: string): string {
-	return base.replace(/^https?:\/\//u, '').replace(/\/$/u, '');
 }
 
 /** How many pages the website holds, over every project and version. */
@@ -235,7 +233,7 @@ function workflow(state: Snapshot): string {
 			'Take the build away: the offline help, the pdf, the zip.',
 			files
 				? link('Build a project', 'temcoDocs.builds', { mark: 'play' })
-				: link('Show in the folder', 'temcoLearn.revealArtifact', { args: filesFolder(state), mark: 'folder' })
+				: link('Show in the folder', 'temcoLearn.revealArtifact', { args: workRoot(), mark: 'folder' })
 		)
 	];
 	return [
@@ -244,64 +242,142 @@ function workflow(state: Snapshot): string {
 	].join('\n');
 }
 
-/** What is published today, in a sentence — the list of projects is the panel's job. */
-function published(state: Snapshot): string {
-	const projects = state.site.projects.length;
-	if (projects === 0) {
-		return section({
-			title: 'Published projects',
-			desc: 'Nothing is published yet. Build a project in Temco Docs, add the build here, then publish the website.',
-			actions: link('Open Temco Docs', 'temcoDocs.builds')
-		});
-	}
-	const newestVersion = state.site.projects
-		.map((project) => ({ version: latestOf(project), at: project.builtAt }))
-		.filter((entry) => entry.version !== undefined)
-		.sort((one, other) => String(other.at ?? '').localeCompare(String(one.at ?? '')))[0];
-	const built = newestVersion?.at === undefined ? '' : ` The newest version is ${newestVersion.version}, built ${ago(newestVersion.at)}.`;
-	const desc = `${plural(projects, 'project')} ${projects === 1 ? 'is' : 'are'} published in ${heldSections(state)}, ${plural(
-		state.site.projects.reduce((total, project) => total + project.versions.length, 0),
-		'version'
-	)} and ${plural(pagesOf(state), 'page')} between them.${built} Every version a project has stays readable.`;
-	return section({ title: 'Published projects', desc, actions: link('Open the website', 'temcoLearn.preview') });
+/** A band of facts on one line: the three things a person compares at a glance, each a title over its value. */
+function factsBand(cells: readonly { title: string; value: string; mark: string; mono?: boolean }[]): string {
+	return `<div class="az-facts">${cells
+		.map(
+			(cell) =>
+				`<div class="az-fact"><span class="az-fact__title">${icon(cell.mark, 'icon--sm')}${escapeHtml(cell.title)}</span><span class="az-fact__value${
+					cell.mono === true ? ' az-fact__value--mono' : ''
+				}">${escapeHtml(cell.value)}</span></div>`
+		)
+		.join('')}</div>`;
 }
 
-/** What a build writes, in a sentence — the files themselves are the panel's Download view. */
-function outputs(state: Snapshot): string {
-	const newestBuild = newest(state);
-	const count = newestBuild === undefined ? 0 : newestBuild.artifacts.length;
-	const desc =
-		newestBuild === undefined
-			? 'No build output was found. Build a project in Temco Docs, and what it writes stays in that project\'s dist folder.'
-			: `A build writes a site, an offline help file, a pdf, a zip of the site and often a Word document — the newest build wrote ${plural(count, 'file')}. They stay in the project\'s dist folder.`;
-	return section({
-		title: 'Build outputs',
+/**
+ * One part of the page: its heading, the facts it states on one line, the rows it lists, and its acts along the bottom
+ * edge — never at the right of the heading.
+ */
+function block(options: { title: string; desc: string; facts?: string; rows?: readonly string[]; acts: string; note?: string }): string {
+	const rows = options.rows ?? [];
+	return [
+		section({ title: options.title, desc: options.desc }),
+		options.facts ?? '',
+		rows.length === 0 ? '' : `<div class="az-entries">${rows.join('')}</div>`,
+		options.note === undefined ? '' : `<p class="az-block__note">${escapeHtml(options.note)}</p>`,
+		`<div class="az-block__foot">${options.acts}</div>`
+	]
+		.filter((part) => part !== '')
+		.join('\n');
+}
+
+/** A fact a section states about itself: it carries no act, because the section's acts are along its bottom edge. */
+function fact(title: string, meta: string, mark: string): string {
+	return entryRow({ title, meta, mark });
+}
+
+/** What is on the website: one row per project, opening that project's page on the website. */
+function published(state: Snapshot): string {
+	const projects = state.site.projects;
+	if (projects.length === 0) {
+		return block({
+			title: 'Published projects',
+			desc: 'Nothing is published yet. A project appears here as soon as one of its builds is added to the website.',
+			acts: link('Open Temco Docs', 'temcoDocs.builds', { mark: 'external' })
+		});
+	}
+	const versions = projects.reduce((total, project) => total + project.versions.length, 0);
+	const desc = `${plural(projects.length, 'project')} ${projects.length === 1 ? 'is' : 'are'} published in ${heldSections(
+		state
+	)}, ${plural(versions, 'version')} and ${plural(pagesOf(state), 'page')} between them. Every version a project keeps stays readable.`;
+	const rows = projects.map((project) => {
+		const pages = project.versions.reduce((total, version) => total + version.pages.length, 0);
+		const newest = latestOf(project);
+		return entryRow({
+			title: project.title,
+			meta: [plural(project.versions.length, 'version'), plural(pages, 'page'), newest === undefined ? 'not built yet' : `newest ${newest}`].join(' · '),
+			mark: 'book',
+			command: 'temcoLearn.preview',
+			args: { page: `project.html?id=${project.id}` },
+			go: ''
+		});
+	});
+	return block({
+		title: 'Published projects',
 		desc,
-		actions:
-			newestBuild === undefined
-				? link('Build a project', 'temcoDocs.builds')
-				: link('Show in the folder', 'temcoLearn.revealArtifact', { args: filesFolder(state) })
+		rows,
+		acts: link('Open the website', 'temcoLearn.preview', { mark: 'globe' }),
+		note: 'A row opens that project on the website.'
 	});
 }
 
-/** Where the website is published, in a sentence, with the way to open it. */
+/** What the builds wrote: one row per project, jumping to the folder that build wrote into. */
+function outputs(state: Snapshot): string {
+	const projects = state.artifacts;
+	const files = projects.reduce((total, project) => total + project.artifacts.length, 0);
+	if (files === 0) {
+		return block({
+			title: 'Build outputs',
+			desc: "No build output was found. Build a project in Temco Docs, and what it writes stays in that project's dist folder.",
+			acts: link('Build a project', 'temcoDocs.builds', { mark: 'play' })
+		});
+	}
+	const desc = `A build writes a site, an offline help file, a pdf, a zip of the site and often a Word document — ${plural(
+		files,
+		'file'
+	)} across ${plural(projects.length, 'project')}, each in that project's own dist folder.`;
+	const rows = projects.map((project) => {
+		const bytes = project.artifacts.reduce((total, artifact) => total + (artifact.size ?? 0), 0);
+		const folder = folderOf(project);
+		return entryRow({
+			title: project.title,
+			meta: [plural(project.artifacts.length, 'file'), bytes === 0 ? '' : formatSize(bytes), folder].filter((part) => part !== '').join(' · '),
+			mark: 'folder',
+			command: 'temcoLearn.revealArtifact',
+			args: folder,
+			go: ''
+		});
+	});
+	return block({
+		title: 'Build outputs',
+		desc,
+		rows,
+		acts: link('Show in the folder', 'temcoLearn.revealArtifact', { args: workRoot(), mark: 'folder' }),
+		note: "A row opens that project's build folder."
+	});
+}
+
+/** Where the website is published: the address, the branch and the last publish on one line, then what is waiting. */
 function publication(state: Snapshot): string {
 	const published = state.published;
 	if (published.base === undefined) {
-		return section({
+		return block({
 			title: 'Publication',
-			desc: `The site folder (${siteFolder()}) points at no GitHub repository, so there is nowhere to publish to yet.`,
-			actions: link('Publish', 'temcoLearn.publish')
+			desc: `The site folder (${siteFolder()}) points at no GitHub repository, so there is nowhere to publish to yet. Publishing makes the repository and pushes the site to its gh-pages branch.`,
+			facts: factsBand([
+				{ title: 'Address', value: 'none yet', mark: 'globe' },
+				{ title: 'Branch', value: 'gh-pages', mark: 'repo' },
+				{ title: 'Last publish', value: 'never', mark: 'clock' }
+			]),
+			acts: link('Publish', 'temcoLearn.publish', { mark: 'upload' })
 		});
 	}
-	const at = published.commit === undefined ? 'never published' : `last publish ${published.commit}, ${ago(published.at)}`;
-	return section({
+	const at = published.commit === undefined ? 'never' : `${published.commit}, ${ago(published.at)}`;
+	const waiting =
+		published.pending === 0 ? 'nothing — the website matches the last publish' : `${plural(published.pending, 'change')} waiting to be published`;
+	return block({
 		title: 'Publication',
-		desc: `${hostOf(published.base)} · branch gh-pages · ${at}.`,
-		actions: link('Open in browser', 'temcoLearn.openPublished')
+		desc: `Publishing copies the site folder to the gh-pages branch of ${published.where}, and GitHub Pages serves that branch from its root — so the address never changes. Nothing is forced: every publish is one commit on top of the last, and an earlier one can be restored.`,
+		facts: factsBand([
+			{ title: 'Address', value: published.base, mark: 'globe', mono: true },
+			{ title: 'Branch', value: 'gh-pages · served from / by GitHub Pages', mark: 'repo' },
+			{ title: 'Last publish', value: at, mark: 'clock' }
+		]),
+		rows: [fact('Waiting', waiting, 'sync')],
+		acts: [link('Open in browser', 'temcoLearn.openPublished', { mark: 'external' }), link('Publish', 'temcoLearn.publish', { mark: 'upload' })].join(''),
+		note: `The site folder is ${siteFolder()}. The preview serves that same folder, so what reads here is what gets published.`
 	});
 }
-
 /** The page: what it is, what to do, the workflow, what is published, what a build writes, and where it goes. */
 export function html(state: Snapshot): string {
 	return [head(state), needsYou(state), workflow(state), published(state), outputs(state), publication(state)].join('\n');
