@@ -16,7 +16,7 @@ import { registerBuildCommands, registerScriptCommands, scriptsIn } from './buil
 import { registerExportCommands } from './export';
 import { publishDiagnostics } from './diagnostics';
 import { registerFeedbackCommands } from './feedback';
-import { FORUM_VIEW_ID, ForumPanel, TopicListPage, TopicPage, openForum, suggestForTopic, syncForum } from './forum';
+import { FORUM_VIEW_ID, ForumTree, TopicListPage, TopicPage, openForum, suggestForTopic, syncForum } from './forum';
 import { registerDiffCommand } from './diffPage';
 import { registerDocxCommand } from './docx';
 import { GridEditor, openGrid } from './gridEditor';
@@ -333,27 +333,35 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   // in a tab beside it. Every surface reads the catalog, which `temcoDocs.forumSync` fills from the site.
   const topics = new TopicPage(context, () => roots);
   const topicList = new TopicListPage(context);
-  const forum = new ForumPanel(context, topicList);
+  const forum = new ForumTree(context);
   const readForum = async (args?: unknown): Promise<void> => {
     const choice = (args ?? {}) as { id?: unknown; slug?: unknown };
     const category = typeof choice.id === 'number' && typeof choice.slug === 'string' ? { id: choice.id, slug: choice.slug } : undefined;
     const note = await syncForum(context, category);
-    forum.refresh();
+    await forum.refresh();
     await topicList.refresh();
     if (note !== undefined) {
       void vscode.window.showWarningMessage(`Temco Docs: ${note}.`);
     }
   };
+  /** A category row opens its page and marks itself as the open one — the page's own empty state offers the read. */
+  const openCategory = async (args?: unknown): Promise<void> => {
+    const choice = (args ?? {}) as { id?: unknown };
+    const id = typeof choice.id === 'number' ? choice.id : undefined;
+    await topicList.open(id);
+    await forum.select(id);
+  };
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(FORUM_VIEW_ID, forum),
+    forum.register(),
     { dispose: () => topics.dispose() },
     { dispose: () => topicList.dispose() },
     // Going to the list is one act from the palette: the panel is where the categories are, so the command goes there.
     vscode.commands.registerCommand('temcoDocs.forum', () => {
-      forum.refresh();
+      void forum.refresh();
       void vscode.commands.executeCommand(`${FORUM_VIEW_ID}.focus`);
     }),
     vscode.commands.registerCommand('temcoDocs.forumPage', () => topicList.open()),
+    vscode.commands.registerCommand('temcoDocs.forumCategory', (args?: unknown) => openCategory(args)),
     vscode.commands.registerCommand('temcoDocs.forumTopic', (payload?: unknown) => {
       const request = (payload ?? {}) as { id?: unknown; slug?: unknown; title?: unknown };
       if (typeof request.id !== 'number' || typeof request.slug !== 'string') {
@@ -489,7 +497,7 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     properties.refresh();
     // The forum panel reads the catalog, so it repaints on a change; its sync is what touches the network, and that is
     // a command a person runs, not something a save triggers.
-    forum.refresh();
+    void forum.refresh();
     // The view says which project it is showing: it answers about a project, never about the window, and a view
     // that silently answers a different question is worse than an empty one. The name and the page count are the
     // project row's own; the title carries the count only when there is no such row to carry it.

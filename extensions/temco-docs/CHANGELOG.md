@@ -3,14 +3,16 @@
 ## Unreleased
 
 - **The forum, redesigned around the forum itself.** `forums.temcocontrols.com` is Discourse, and the platform now reads
-  it the way a reader uses it: the **categories** in the panel (the site's order and colours, with how many topics each
-  holds), one category's **topics** in a page with the forum's own five columns — title, participants, replies, views,
-  and activity like `Sep 2026` or `1.1k` reads — and one **topic** in a tab beside it: the discussion history, the page
-  it names, and a suggestion. All of it is stored in SQLite (`forum_categories`, `forum_topics`, `forum_posts`,
-  `forum_suggestions`) and filled by **Read the Forum** from the site's own JSON (`site.json`, a category's `.json`, a
-  topic's `.json`), so no surface touches the network and no view parses JSON. The site is a setting
-  (`temcoDocs.forumUrl`). Nothing is posted, replied to or liked from here, and a post's HTML is read as text rather
-  than trusted as markup.
+  it the way a reader uses it. The panel is a **native tree** — VS Code draws the rows, the selection, the keyboard and
+  the screen reader — shaped like the site's navigation: *Topics*, a *Categories* group with each category in its own
+  colour (written as a 16px square, since a theme icon cannot carry a hex) and its topic count, then *All categories*.
+  The page is the site's **latest topics** across every category, or one category's table, with the forum's own five
+  columns (title, participants, replies, views, and activity like `Sep 2026` or `1.1k` reads). A **topic** opens in a
+  tab beside it: the discussion history, the page it names, and a suggestion. All of it is stored in SQLite
+  (`forum_categories`, `forum_topics`, `forum_posts`, `forum_suggestions`) and filled by **Read the Forum** from the
+  site's own JSON (`site.json`, `latest.json`, a category's `.json`, a topic's `.json`), so no surface touches the
+  network and no view parses JSON. The site is a setting (`temcoDocs.forumUrl`). Nothing is posted, replied to or liked
+  from here, and a post's HTML is read as text rather than trusted as markup.
 - **A suggestion for every topic, and the AI's when you ask.** The platform matches a topic to the page whose id or
   title it names and records that match the first time the topic is read; *Suggest with the AI* (`temcoAi.suggestTopic`,
   prompt `topic.md`, `ai-v5`) asks the local model what that page should add, and the answer replaces the match in the

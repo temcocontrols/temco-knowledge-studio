@@ -17,7 +17,7 @@
 // or liked from here: the community site owns the conversation, and this is the reading side of it.
 
 import * as vscode from 'vscode';
-import { categoryUrl, forumBase, readCategories, readCategoryTopics, readTopic, topicUrl } from './forumSource';
+import { categoryUrl, forumBase, readCategories, readCategoryTopics, readLatestTopics, readTopic, topicUrl } from './forumSource';
 import { DocsRoot, PageEntry, collectPages } from './registry';
 import { Catalog, ForumCategoryRow, ForumPostRow, ForumTopicRow, selection } from './store';
 import { commandScript, escapeHtml as esc, hero, icon, numbers, page, pageColumn, runCommand, section } from './ui';
@@ -29,18 +29,19 @@ const TOPIC_TYPE = 'temcoDocs.forumTopic';
 /** A topic that has sat unanswered this long is called out rather than left in the table. */
 const AGING_DAYS = 30;
 
-/** The three glyphs the panel draws. Inline, on the same 24-unit grid as the sprite, because the panel loads nothing. */
-const glyph = (paths: string): string =>
-	`<svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
-const USERS = glyph('<circle cx="9.5" cy="8" r="3.2"/><path d="M3.5 19c0-3 2.7-4.8 6-4.8s6 1.8 6 4.8"/><path d="M16.5 5.6a3.2 3.2 0 0 1 0 5"/><path d="M17.5 14.6c2 .6 3.2 2.1 3.2 4.4"/>');
-const REFRESH = glyph('<path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v4.8h-4.8"/>');
-const LIST = glyph('<path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/>');
-
 /** What the panel paints: the categories, and when they were last read. */
 interface ForumFacts {
 	categories: ForumCategoryRow[];
 	syncedAt?: string;
 }
+
+/** What the tree draws. A node is what it is, rather than a label the module has to parse back. */
+type ForumNode =
+	| { kind: 'topics' }
+	| { kind: 'categories' }
+	| { kind: 'category'; category: ForumCategoryRow }
+	| { kind: 'all' }
+	| { kind: 'empty' };
 
 /** Reads the categories out of the catalog — the only thing the panel needs. */
 async function facts(context: vscode.ExtensionContext): Promise<ForumFacts> {
@@ -73,10 +74,9 @@ export async function syncForum(
 			return categories.note;
 		}
 		catalog.saveForumCategories(categories.body);
-		if (category === undefined) {
-			return undefined;
-		}
-		const topics = await readCategoryTopics(category);
+		// *All topics* is the site's own Topics list — one answer across every category — and a category is that
+		// category's own table. Either way the topics land in the same rows the page reads.
+		const topics = category === undefined ? await readLatestTopics() : await readCategoryTopics(category);
 		if (!topics.ok) {
 			return topics.note;
 		}
@@ -114,65 +114,148 @@ async function syncTopic(context: vscode.ExtensionContext, topic: { id: number; 
 }
 
 /**
- * The panel: the forum's categories, as the site's own left column has them.
+ * The panel: a native tree, so VS Code draws it.
  *
- * A row opens that category's topics in the page. *All topics* comes first because that is the question a reader
- * arrives with, and the category names are the forum's own, not a translation of them.
+ * This is the same control the Pages, Publish and AI views use — row height, selection, keyboard navigation, the
+ * twistie, high contrast and screen-reader support all come from the workbench rather than from markup this module
+ * writes. The shape is the forum's own navigation: *Topics* first, then **Categories**, each category with the forum's
+ * colour and how many topics it holds, and *All categories* at the end.
+ *
+ * The colours are the site's, which a `ThemeIcon` cannot carry, so each category gets a 16px square written once into
+ * the extension's storage and handed to the tree as an icon path.
  */
-export class ForumPanel implements vscode.WebviewViewProvider {
-	private view: vscode.WebviewView | undefined;
+export class ForumTree implements vscode.TreeDataProvider<ForumNode> {
+	private readonly changed = new vscode.EventEmitter<ForumNode | undefined | void>();
+	readonly onDidChangeTreeData = this.changed.event;
+	private view: vscode.TreeView<ForumNode> | undefined;
 	private state: ForumFacts = { categories: [] };
-	private reads = 0;
+	/** One file per category colour, written once. */
+	private readonly squares = new Map<string, vscode.Uri>();
+	/** One node per category, kept between paints: `reveal` finds an element by identity. */
+	private readonly nodes = new Map<number, ForumNode>();
+	/** The three fixed rows, also kept: a group rebuilt per call would not be the group the tree knows. */
+	private readonly topicsNode: ForumNode = { kind: 'topics' };
+	private readonly groupNode: ForumNode = { kind: 'categories' };
+	private readonly allNode: ForumNode = { kind: 'all' };
+	private readonly emptyNode: ForumNode = { kind: 'empty' };
 
-	constructor(private readonly context: vscode.ExtensionContext, private readonly list: TopicListPage) { }
+	constructor(private readonly context: vscode.ExtensionContext) { }
 
-	resolveWebviewView(view: vscode.WebviewView): void {
-		this.view = view;
-		view.webview.options = { enableScripts: true };
-		view.webview.onDidReceiveMessage((message: { type?: unknown; id?: unknown; command?: unknown; args?: unknown }) => {
-			void this.receive(message);
+	/** Puts the view in the side bar. Called once, from `activate`. */
+	register(): vscode.Disposable {
+		this.view = vscode.window.createTreeView(FORUM_VIEW_ID, {
+			treeDataProvider: this,
+			showCollapseAll: false
 		});
-		view.onDidDispose(() => {
-			this.view = undefined;
-		});
-		this.refresh();
+		void this.refresh();
+		return this.view;
 	}
 
-	refresh(): void {
-		// A refresh can start while another is still reading: only the newest answer may paint.
-		const run = ++this.reads;
-		void (async () => {
-			const next = await facts(this.context);
-			if (run !== this.reads) {
-				return;
+	/** Reads the catalog again and repaints. The only thing that changes the list. */
+	async refresh(): Promise<void> {
+		this.state = await facts(this.context);
+		// One node object per category, reused until the next read: the tree finds an element by identity, so a node
+		// rebuilt on every `getChildren` could never be revealed or selected.
+		this.nodes.clear();
+		for (const category of this.state.categories) {
+			this.nodes.set(category.id, { kind: 'category', category });
+		}
+		this.changed.fire();
+	}
+
+	/** Marks the category that is open, with the tree's own selection rather than a colour of our own. */
+	async select(categoryId: number | undefined): Promise<void> {
+		const node = categoryId === undefined ? undefined : this.nodes.get(categoryId);
+		if (this.view === undefined || node === undefined) {
+			return;
+		}
+		await this.view.reveal(node, { select: true, focus: false, expand: true });
+	}
+
+	getParent(node: ForumNode): ForumNode | undefined {
+		return node.kind === 'category' || node.kind === 'all' ? this.groupNode : undefined;
+	}
+
+	async getChildren(node?: ForumNode): Promise<ForumNode[]> {
+		if (node === undefined) {
+			return this.state.categories.length === 0 ? [this.emptyNode] : [this.topicsNode, this.groupNode];
+		}
+		if (node.kind === 'categories') {
+			const rows = this.state.categories.map((category) => this.nodes.get(category.id) ?? { kind: 'category' as const, category });
+			return [...rows, this.allNode];
+		}
+		return [];
+	}
+
+	async getTreeItem(node: ForumNode): Promise<vscode.TreeItem> {
+		switch (node.kind) {
+			case 'topics': {
+				const item = new vscode.TreeItem('Topics', vscode.TreeItemCollapsibleState.None);
+				item.id = 'topics';
+				item.iconPath = new vscode.ThemeIcon('layers');
+				item.tooltip = this.state.syncedAt === undefined ? 'The forum has not been read yet' : `Read ${this.state.syncedAt.slice(0, 10)}`;
+				item.command = { command: 'temcoDocs.forumPage', title: 'Topics' };
+				return item;
 			}
-			this.state = next;
-			this.paint();
-		})();
-	}
-
-	private paint(): void {
-		const view = this.view;
-		if (view !== undefined) {
-			view.webview.html = forumPanelHtml(this.state, nonce());
+			case 'categories': {
+				const item = new vscode.TreeItem('Categories', vscode.TreeItemCollapsibleState.Expanded);
+				item.id = 'categories';
+				item.contextValue = 'categories';
+				return item;
+			}
+			case 'category': {
+				const item = new vscode.TreeItem(node.category.name, vscode.TreeItemCollapsibleState.None);
+				item.id = `category:${node.category.id}`;
+				item.description = String(node.category.topics);
+				item.tooltip = `${node.category.name} — ${node.category.topics} topics`;
+				item.iconPath = await this.square(node.category.color);
+				item.command = {
+					command: 'temcoDocs.forumCategory',
+					title: node.category.name,
+					arguments: [{ id: node.category.id, slug: node.category.slug }]
+				};
+				return item;
+			}
+			case 'all': {
+				const item = new vscode.TreeItem('All categories', vscode.TreeItemCollapsibleState.None);
+				item.id = 'all';
+				item.iconPath = new vscode.ThemeIcon('list-flat');
+				item.tooltip = 'Every topic, in every category';
+				item.command = { command: 'temcoDocs.forumPage', title: 'All categories' };
+				return item;
+			}
+			case 'empty': {
+				const item = new vscode.TreeItem('Nothing read yet', vscode.TreeItemCollapsibleState.None);
+				item.id = 'empty';
+				item.description = 'Read the forum';
+				item.iconPath = new vscode.ThemeIcon('sync');
+				item.tooltip = 'Ask the forum for its categories. Nothing is posted.';
+				item.command = { command: 'temcoDocs.forumSync', title: 'Read the forum' };
+				return item;
+			}
 		}
 	}
 
-	private async receive(message: { type?: unknown; id?: unknown; command?: unknown; args?: unknown }): Promise<void> {
-		if (message.type === 'command') {
-			runCommand({ type: 'command', command: typeof message.command === 'string' ? message.command : undefined, args: message.args });
-			return;
+	/** A 16px square in the category's own colour, written once per colour into this extension's storage. */
+	private async square(color: string | undefined): Promise<vscode.Uri | vscode.ThemeIcon> {
+		if (color === undefined) {
+			return new vscode.ThemeIcon('circle-filled');
 		}
-		if (message.type === 'refresh') {
-			this.refresh();
-			return;
+		const cached = this.squares.get(color);
+		if (cached !== undefined) {
+			return cached;
 		}
-		if (message.type === 'category') {
-			const id = typeof message.id === 'number' ? message.id : undefined;
-			// The page is where topics are listed, so a category row opens it — the panel stays the navigation.
-			this.list.syncCategories(this.state.categories);
-			await this.list.open(id);
+		const folder = vscode.Uri.joinPath(this.context.globalStorageUri, 'forum');
+		await vscode.workspace.fs.createDirectory(folder);
+		const file = vscode.Uri.joinPath(folder, `square-${color.replace(/[^0-9a-f]/gi, '').toLowerCase()}.svg`);
+		try {
+			await vscode.workspace.fs.stat(file);
+		} catch {
+			const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="13" height="13" rx="3" fill="${color}"/></svg>`;
+			await vscode.workspace.fs.writeFile(file, Buffer.from(svg, 'utf8'));
 		}
+		this.squares.set(color, file);
+		return file;
 	}
 }
 
@@ -233,10 +316,11 @@ export class TopicPage {
 			}
 			const title = row?.title ?? topic.title;
 			panel.title = title;
-			panel.webview.html = page(
-				topicBody({ topic: row ?? virtualTopic(topic), posts, named, suggestion, categoryName }),
-				{ title, script: commandScript }
-			);
+			panel.webview.html = page(topicBody({ topic: row ?? virtualTopic(topic), posts, named, suggestion, categoryName }), {
+				title,
+				script: commandScript,
+				extraCss: FORUM_CSS
+			});
 		} finally {
 			catalog?.close();
 		}
@@ -269,6 +353,11 @@ export class TopicListPage {
 		if (this.panel !== undefined) {
 			void this.render();
 		}
+	}
+
+	/** Which category is open, so the panel can mark it the way the forum's own column does. */
+	current(): number | undefined {
+		return this.categoryId;
 	}
 
 	async open(categoryId?: number): Promise<void> {
@@ -316,7 +405,7 @@ export class TopicListPage {
 			panel.title = title;
 			panel.webview.html = page(
 				topicListBody({ topics, category, categories: this.categories, syncedAt, project: selection.project() }),
-				{ title, script: commandScript }
+				{ title, script: commandScript, extraCss: FORUM_CSS }
 			);
 		} finally {
 			catalog?.close();
@@ -460,80 +549,27 @@ function ageDays(value: string | undefined): number {
 	return Number.isNaN(parsed) ? 0 : Math.max(0, Math.round((Date.now() - parsed) / 86_400_000));
 }
 
-/** The panel, as HTML: the categories, and the two ways to read again. */
-export function forumPanelHtml(state: ForumFacts, nonceValue: string): string {
-	const total = state.categories.reduce((sum, category) => sum + category.topics, 0);
-	const rows = state.categories
-		.map(
-			(category) => `<li><button type="button" class="cat" data-type="category" data-id="${category.id}">
-<span class="cat__dot" style="background:${category.color === undefined ? 'var(--vscode-descriptionForeground)' : esc(category.color)}"></span>
-<span class="cat__name">${esc(category.name)}</span>
-<span class="cat__count">${category.topics}</span>
-</button></li>`
-		)
-		.join('');
+/** The page's own rules, in the page kit's tokens — the columns the forum's table has, and the shape of a post. */
+const FORUM_CSS = `
+tbody tr[data-command] { cursor: pointer; }
+tbody tr[data-command]:hover td { background: var(--bg-hover); }
+.topic__title { line-height: 1.4; }
+.topic__title .badge { margin-right: 6px; }
+.topic__meta { color: var(--fg-subtle); font-size: var(--fs-xs); margin-top: 2px; }
+.people { display: inline-flex; gap: 3px; flex-wrap: wrap; }
+.person { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--bg-inset); color: var(--fg-muted); font-size: 10px; font-weight: 600; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.when { white-space: nowrap; color: var(--fg-muted); }
+.post { border-top: 1px solid var(--border); padding: 12px 0; }
+.post:first-of-type { border-top: 0; padding-top: 0; }
+.post__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.post__who { font-weight: 600; }
+.post__when { color: var(--fg-subtle); font-size: var(--fs-xs); white-space: nowrap; }
+.post__text { margin-top: 6px; line-height: 1.55; white-space: pre-wrap; }
+`;
 
-	const body = state.categories.length === 0
-		? `<p class="note">Nothing has been read from the forum yet.</p>
-<button type="button" class="more" data-command="temcoDocs.forumSync">Read the forum</button>`
-		: `<ul class="cats">
-<li><button type="button" class="cat" data-type="category"><span class="cat__dot cat__dot--all">${LIST}</span><span class="cat__name">All topics</span><span class="cat__count">${total}</span></button></li>
-${rows}
-</ul>`;
-
-	return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonceValue}';">
-<style>
-	body { margin: 0; padding: 6px 8px 10px; font: 12px/1.35 var(--vscode-font-family); color: var(--vscode-foreground); }
-	.head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-	.head__title { display: flex; align-items: center; gap: 5px; font-weight: 600; }
-	.head__acts { display: flex; align-items: center; gap: 2px; }
-	.head__meta { margin: 2px 0 6px 0; color: var(--vscode-descriptionForeground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.icon { background: none; border: 0; padding: 2px; color: inherit; cursor: pointer; opacity: .75; }
-	.icon:hover { opacity: 1; }
-	.cats { list-style: none; margin: 0; padding: 0; }
-	.cats li + li { border-top: 1px solid var(--vscode-panel-border); }
-	.cat { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; background: none; border: 0; padding: 5px 4px; color: inherit; font: inherit; cursor: pointer; }
-	.cat:hover { background: var(--vscode-list-hoverBackground); }
-	.cat:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
-	.cat__dot { width: 10px; height: 10px; border-radius: 2px; flex: none; }
-	.cat__dot--all { width: 12px; height: 12px; opacity: .8; }
-	.cat__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.cat__count { color: var(--vscode-descriptionForeground); font-variant-numeric: tabular-nums; }
-	.note { margin: 8px 2px 0; color: var(--vscode-descriptionForeground); }
-	.more { margin-top: 8px; width: 100%; padding: 4px 6px; background: none; border: 1px solid var(--vscode-panel-border); border-radius: 4px; color: inherit; font: inherit; cursor: pointer; }
-	.more:hover { background: var(--vscode-list-hoverBackground); }
-	.glyph { width: 12px; height: 12px; }
-</style>
-</head>
-<body>
-<div class="head"><div class="head__title">${USERS}<span>Forum</span></div><span class="head__acts"><button type="button" class="icon" data-command="temcoDocs.forumPage" title="Every category's topics, in one page" aria-label="Open the forum page">${LIST}</button><button type="button" class="icon" data-command="temcoDocs.forumSync" title="Read the categories again" aria-label="Read the categories again">${REFRESH}</button></span></div>
-<div class="head__meta">${esc(forumBase().replace(/^https?:\/\//, ''))}${state.syncedAt === undefined ? '' : ` · read ${esc(state.syncedAt.slice(0, 10))}`}</div>
-${body}
-<script nonce="${nonceValue}">
-(function () {
-	const api = acquireVsCodeApi();
-	document.addEventListener('click', (event) => {
-		const target = event.target.closest('[data-type], [data-command]');
-		if (target === null) { return; }
-		if (target.dataset.command !== undefined) {
-			const args = target.dataset.args;
-			api.postMessage({ type: 'command', command: target.dataset.command, args: args === undefined ? undefined : JSON.parse(args) });
-			return;
-		}
-		api.postMessage(target.dataset.id === undefined ? { type: 'category' } : { type: 'category', id: Number(target.dataset.id) });
-	});
-})();
-</script>
-</body>
-</html>`;
-}
-
-/** One row of the topics table, as the forum's own table draws it. */
-function topicRow(topic: ForumTopicRow, categories: readonly ForumCategoryRow[]): string {
+/** One row of the topics table, as the forum's own table draws it. */function topicRow(topic: ForumTopicRow, categories: readonly ForumCategoryRow[]): string {
 	const category = categories.find((candidate) => candidate.id === topic.categoryId);
 	const waiting = topic.replies === 0 && !topic.closed && ageDays(topic.lastPostedAt ?? topic.createdAt) >= AGING_DAYS;
 	const people = topic.posters.length === 0
@@ -576,7 +612,7 @@ export function topicListBody(state: {
 		title,
 		mark: 'users',
 		desc: state.category === undefined
-			? 'The community forum, read into this window: every category the site lists, and the topics in the one you opened. Nothing is posted from here.'
+			? 'The community forum, read into this window: the site\'s own Topics list across every category, and one category\'s table when you pick one. Nothing is posted from here.'
 			: `The topics of ${state.category.name}, newest activity first. A row opens the conversation beside this page.`,
 		actions: [
 			{
@@ -598,7 +634,7 @@ ${numbers([
 		{ value: String(views), label: 'reads' }
 	])}
 ${section({
-		title: state.category === undefined ? 'Every topic' : 'Topics',
+		title: state.category === undefined ? 'Latest topics' : 'Topics',
 		desc: state.syncedAt === undefined ? undefined : `read ${state.syncedAt.slice(0, 10)}${state.project === undefined ? '' : ` · project ${state.project}`}`
 	})}
 ${table}`;
@@ -713,9 +749,4 @@ function escapeRegExp(text: string): string {
 
 function messageOf(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
-}
-
-function nonce(): string {
-	const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-	return Array.from({ length: 32 }, () => alphabet.charAt(Math.floor(Math.random() * alphabet.length))).join('');
 }

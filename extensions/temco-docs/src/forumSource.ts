@@ -128,13 +128,22 @@ interface TopicJson {
 
 /** The topics of one category, newest activity first — the same order the site's own table shows. */
 export async function readCategoryTopics(category: { id: number; slug: string }): Promise<SiteAnswer<ForumTopicInput[]>> {
-	const answer = await readJson<CategoryJson>(`${forumBase()}/c/${category.slug}/${category.id}.json`);
+	return readTopics(`${forumBase()}/c/${category.slug}/${category.id}.json`, category.id, category.slug);
+}
+
+/** The site's own *Topics* list: everything, newest activity first, across every category. */
+export async function readLatestTopics(): Promise<SiteAnswer<ForumTopicInput[]>> {
+	return readTopics(`${forumBase()}/latest.json`, undefined, 'the latest topics');
+}
+
+async function readTopics(url: string, categoryId: number | undefined, where: string): Promise<SiteAnswer<ForumTopicInput[]>> {
+	const answer = await readJson<CategoryJson>(url);
 	if (!answer.ok) {
 		return answer;
 	}
 	const listed = answer.body.topic_list?.topics;
 	if (!Array.isArray(listed)) {
-		return { ok: false, note: `the forum returned no topics for ${category.slug}` };
+		return { ok: false, note: `the forum returned no topics for ${where}` };
 	}
 	const people = new Map<number, ForumPoster>();
 	for (const user of answer.body.users ?? []) {
@@ -146,7 +155,7 @@ export async function readCategoryTopics(category: { id: number; slug: string })
 		.filter((topic) => typeof topic.id === 'number' && typeof topic.title === 'string')
 		.map((topic) => ({
 			id: Number(topic.id),
-			categoryId: typeof topic.category_id === 'number' ? topic.category_id : category.id,
+			categoryId: typeof topic.category_id === 'number' ? topic.category_id : categoryId ?? 0,
 			slug: String(topic.slug ?? String(topic.id)),
 			title: String(topic.title),
 			excerpt: typeof topic.excerpt === 'string' ? topic.excerpt : undefined,
@@ -162,6 +171,9 @@ export async function readCategoryTopics(category: { id: number; slug: string })
 				.map((poster) => (typeof poster.user_id === 'number' ? people.get(poster.user_id) : undefined))
 				.filter((poster): poster is ForumPoster => poster !== undefined)
 		}));
+	if (topics.length === 0) {
+		return { ok: false, note: `the forum returned an empty topic list for ${where}` };
+	}
 	return { ok: true, body: topics };
 }
 
