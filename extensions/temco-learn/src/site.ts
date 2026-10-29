@@ -31,6 +31,26 @@ const PROJECTS_FILE = 'projects.json';
 /** The section a project is listed under until somebody says otherwise. */
 const DEFAULT_SECTION = 'documentation';
 
+/**
+ * The six sections, in the order the site draws its tabs.
+ *
+ * The site's own script carries the same list, because a published page cannot ask this module anything; this copy is
+ * what the panel and the Overview page name a project's section with.
+ */
+export const SECTIONS: readonly { id: string; title: string }[] = [
+	{ id: 'documentation', title: 'Documentation' },
+	{ id: 'training', title: 'Training & Labs' },
+	{ id: 'tests', title: 'Tests' },
+	{ id: 'products', title: 'Products' },
+	{ id: 'qa', title: 'Q&A' },
+	{ id: 'topics', title: 'Topics' }
+];
+
+/** The title a reader sees for a section id, or Documentation when the id is missing or unknown. */
+export function sectionTitle(id: string | undefined): string {
+	return SECTIONS.find((section) => section.id === id)?.title ?? SECTIONS[0].title;
+}
+
 /** One page of one version, as the reader lists it: relative to the version's folder. */
 export interface SitePage {
 	href: string;

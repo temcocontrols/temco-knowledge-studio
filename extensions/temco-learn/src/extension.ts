@@ -4,25 +4,130 @@
 // the site folder in the working area, the app copied into it, the data that says what is on it, the preview inside the
 // editor, and the commit that publishes it. One direction only — this module calls `temcoDocs.buildSite` when it needs
 // a build; `temco-docs` never calls back.
+//
+// Every answer this module gives lands in the preview's own strip, next to the site it is about. Nothing is announced in
+// a notification: a person who pressed Add or Publish is already looking at the preview, and a corner message that
+// disappears is not where a version number belongs.
 
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { findArtifacts } from './artifacts';
+import { Build, findBuilds } from './builds';
+import { OverviewPage } from './overview';
 import { Preview } from './preview';
 import { publishSite } from './publish';
 import { Server } from './server';
-import { addVersion, appFolder, installSite, projectNameOf, readSite, siteFolder, slugOf, workRoot } from './site';
-import { SiteTree, VIEW_ID } from './tree';
+import { addVersion, appFolder, installSite, readSite, siteFolder } from './site';
+import { Snapshot } from './snapshot';
+import { readPublishedState } from './state';
+import { ArtifactsTree, OverviewTree, ProjectsTree, Reads, registerCounts, TodoTree, VIEWS } from './tree';
+
+const plural = (count: number, one: string, many?: string): string =>
+	`${count} ${count === 1 ? one : many === undefined ? `${one}s` : many}`;
+
+const reason = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 export function activate(context: vscode.ExtensionContext): void {
 	const server = new Server();
 	const preview = new Preview();
-	const tree = new SiteTree(() => readSite(siteFolder()));
-	const view = vscode.window.createTreeView(VIEW_ID, { treeDataProvider: tree, showCollapseAll: false });
 	const output = vscode.window.createOutputChannel('Temco Learn');
+	const readSnapshot = async (): Promise<Snapshot> => {
+		const root = siteFolder();
+		return {
+			site: await readSite(root),
+			builds: await findBuilds(),
+			artifacts: await findArtifacts(),
+			published: await readPublishedState(root)
+		};
+	};
+	registerCounts(context);
+	const reads = new Reads(readSnapshot);
+	const overview = new OverviewPage(readSnapshot);
+	const overviewTree = new OverviewTree(reads);
+	const projectsTree = new ProjectsTree(reads);
+	const previewTree = new ArtifactsTree(reads, 'preview');
+	const downloadTree = new ArtifactsTree(reads, 'download');
+	const todoTree = new TodoTree(reads);
+	// One view per group: VS Code draws the header, the separator and the collapse state, which is the grouping a
+	// person already knows from the Explorer.
+	const views = [
+		vscode.window.createTreeView(VIEWS.overview, { treeDataProvider: overviewTree }),
+		vscode.window.createTreeView(VIEWS.projects, { treeDataProvider: projectsTree }),
+		vscode.window.createTreeView(VIEWS.preview, { treeDataProvider: previewTree }),
+		vscode.window.createTreeView(VIEWS.download, { treeDataProvider: downloadTree }),
+		vscode.window.createTreeView(VIEWS.todo, { treeDataProvider: todoTree })
+	];
+
+	/** Both surfaces read the same facts, so both are re-read together: a panel and a page that disagree is a bug. */
+	const refresh = (): void => {
+		reads.forget();
+		overviewTree.refresh();
+		projectsTree.refresh();
+		previewTree.refresh();
+		downloadTree.refresh();
+		todoTree.refresh();
+		overview.refresh();
+	};
 
 	/** The site folder with the app in it, ready to serve. Made on first use — it is a folder, not a question. */
 	const prepare = async (): Promise<string> => installSite(siteFolder(), appFolder(context));
+
+	const showLog = { label: 'Show the log', run: () => output.show(true) };
+
+	/** The file a row names, whether it arrived as a path or as the row itself. */
+	const fileOf = (target: unknown): string | undefined => {
+		if (typeof target === 'string') {
+			return target;
+		}
+		const file = (target as { file?: unknown } | undefined)?.file;
+		return typeof file === 'string' ? file : undefined;
+	};
+
+	/** Look at what a build wrote: a folder is the website itself, served here; a file opens in whatever reads it. */
+	const previewArtifact = async (file: string | undefined): Promise<void> => {
+		if (file === undefined) {
+			return;
+		}
+		try {
+			const stats = await fs.promises.stat(file);
+			if (stats.isDirectory()) {
+				const base = await server.serve(file);
+				preview.show(`${base}index.html`, `Temco Learn — ${path.basename(file)}`, { onClose: () => server.stop() });
+				return;
+			}
+			await vscode.env.openExternal(vscode.Uri.file(file));
+		} catch (error) {
+			output.appendLine(`[preview] ${reason(error)}`);
+			preview.note('error', `That file could not be opened — ${reason(error)}`, showLog);
+		}
+	};
+
+	/** Take a copy of what a build wrote, where the person asks for it. */
+	const saveCopy = async (file: string | undefined): Promise<void> => {
+		if (file === undefined) {
+			return;
+		}
+		const name = path.basename(file);
+		const chosen = await vscode.window.showSaveDialog({ saveLabel: 'Save a Copy', defaultUri: vscode.Uri.file(path.join(process.env.USERPROFILE ?? '', name)) });
+		if (chosen === undefined) {
+			return;
+		}
+		try {
+			await fs.promises.copyFile(file, chosen.fsPath);
+			preview.note('info', `Saved ${name} to ${chosen.fsPath}.`);
+		} catch (error) {
+			output.appendLine(`[save] ${reason(error)}`);
+			preview.note('error', `${name} could not be saved — ${reason(error)}`, showLog);
+		}
+	};
+
+	/** Show the file where it lives, which is what "download" means in a desktop application. */
+	const reveal = async (file: string | undefined): Promise<void> => {
+		if (file !== undefined) {
+			await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(file));
+		}
+	};
 
 	/** Serve the site and show it here: the one loop this module exists for. */
 	const open = async (page = 'index.html'): Promise<void> => {
@@ -30,11 +135,10 @@ export function activate(context: vscode.ExtensionContext): void {
 			const root = await prepare();
 			const base = await server.serve(root);
 			preview.show(`${base}${page}`, 'Temco Learn', { onClose: () => server.stop() });
-			tree.refresh();
+			refresh();
 		} catch (error) {
-			void vscode.window.showErrorMessage(
-				`Temco Learn: the site could not be served — ${error instanceof Error ? error.message : String(error)}`
-			);
+			output.appendLine(`[serve] ${reason(error)}`);
+			preview.note('error', `The site could not be served — ${reason(error)}`, showLog);
 		}
 	};
 
@@ -45,36 +149,33 @@ export function activate(context: vscode.ExtensionContext): void {
 	 * and the section it is already listed under. The version is the one thing a person knows and the folder cannot, so
 	 * it is the only question asked.
 	 */
-	const add = async (): Promise<void> => {
-		const builds = await buildFolders();
+	const add = async (folder?: string): Promise<void> => {
+		const builds = await findBuilds();
 		if (builds.length === 0) {
-			void vscode.window.showWarningMessage(
-				'Temco Learn: there is no build to add. Run Build first — a site project is a folder with an index.html in it.'
+			preview.note(
+				'warn',
+				'Nothing to add: no build was found. Build a project first — a build is a folder with an index.html in it.',
+				{ label: 'Build', run: () => vscode.commands.executeCommand('temcoDocs.buildSite') }
 			);
 			return;
 		}
 		const chosen =
-			builds.length === 1
-				? builds[0]
-				: await vscode.window.showQuickPick(
-						builds.map((folder) => ({
-							label: path.basename(path.dirname(path.dirname(folder))),
-							description: folder,
-							folder
-						})),
-						{ title: 'Add a build to the site', placeHolder: 'Which build?' }
-					).then((picked) => picked?.folder);
+			folder === undefined
+				? builds.length === 1
+					? builds[0]
+					: await pickBuild(builds)
+				: builds.find((build) => build.folder === folder);
 		if (chosen === undefined) {
+			if (folder !== undefined) {
+				preview.note('warn', 'That build is no longer on disk. Refresh the panel and pick another one.');
+			}
 			return;
 		}
 
-		const folderName = path.basename(path.dirname(path.dirname(chosen)));
-		const title = (await projectNameOf(chosen)) ?? folderName;
-		const id = slugOf(title);
 		const site = await readSite(siteFolder());
-		const existing = site.projects.find((project) => project.id === id);
+		const existing = site.projects.find((project) => project.id === chosen.id);
 		const version = await vscode.window.showInputBox({
-			title: `Add ${title} to the site`,
+			title: `Add ${chosen.title} to the site`,
 			prompt: 'The version this build is',
 			value: existing?.versions[0]?.version ?? '1.0',
 			validateInput: (value) =>
@@ -86,56 +187,96 @@ export function activate(context: vscode.ExtensionContext): void {
 			return;
 		}
 
-		const root = await prepare();
 		try {
+			const root = await prepare();
 			const added = await addVersion({
 				root,
 				app: appFolder(context),
-				id,
-				title,
+				id: chosen.id,
+				title: chosen.title,
 				section: existing?.section,
 				version: version.trim(),
-				built: chosen
+				built: chosen.folder
 			});
-			tree.refresh();
-			const answer = await vscode.window.showInformationMessage(
-				`Temco Learn: ${title} ${added.version} is on the site — ${String(added.pages)} page(s).`,
-				'Preview'
+			refresh();
+			preview.note(
+				'info',
+				`${chosen.title} ${added.version} is on the site — ${plural(added.pages, 'page')}. Nothing is published until you publish.`
 			);
-			if (answer === 'Preview') {
-				await open(
-					`reader.html?id=${encodeURIComponent(id)}&version=${encodeURIComponent(added.version)}`
-				);
-			}
+			await open(`reader.html?id=${encodeURIComponent(chosen.id)}&version=${encodeURIComponent(added.version)}`);
 		} catch (error) {
-			void vscode.window.showErrorMessage(
-				`Temco Learn: the build could not be added — ${error instanceof Error ? error.message : String(error)}`
+			output.appendLine(`[add] ${reason(error)}`);
+			preview.note('error', `The build could not be added — ${reason(error)}`, showLog);
+		}
+	};
+
+	/** Commit the folder and push it at `gh-pages`, saying how it went in the strip. */
+	const publish = async (): Promise<void> => {
+		preview.note('progress', 'Publishing the site…');
+		try {
+			const root = await prepare();
+			const published = await publishSite(root, output);
+			refresh();
+			const openSite = { label: 'Open the Site', run: () => vscode.env.openExternal(vscode.Uri.parse(published.base)) };
+			preview.note(
+				'info',
+				published.unchanged
+					? `Nothing had changed — ${published.commit ?? 'the last commit'} is already on ${published.base}.`
+					: `Published ${plural(published.files, 'path')} as ${published.commit} · ${published.base} (a minute to appear).`,
+				openSite
 			);
+		} catch (error) {
+			output.appendLine(`[publish] ${reason(error)}`);
+			preview.note('error', `Nothing was published — ${reason(error)}`, showLog);
 		}
 	};
 
 	context.subscriptions.push(
 		server,
 		preview,
-		tree,
-		view,
+		overview,
+		...views,
 		output,
+
+		// The module's own page: what it is for, the three steps, and where the website goes. Never the website itself.
+		vscode.commands.registerCommand('temcoLearn.overview', () => {
+			overview.open();
+		}),
 
 		vscode.commands.registerCommand('temcoLearn.preview', async (args?: { page?: string }) => {
 			await open(args?.page ?? 'index.html');
 		}),
 
-		// A build belongs to the authoring module: the site never builds anything itself.
+		// A build belongs to the authoring module, so this opens the Build Center rather than inventing a second one.
 		vscode.commands.registerCommand('temcoLearn.build', async () => {
-			await vscode.commands.executeCommand('temcoDocs.buildSite');
-			tree.refresh();
+			await vscode.commands.executeCommand('temcoDocs.builds');
 		}),
 
-		vscode.commands.registerCommand('temcoLearn.assemble', add),
+		vscode.commands.registerCommand('temcoLearn.addBuild', async (folder?: unknown) => {
+			await add(typeof folder === 'string' ? folder : undefined);
+		}),
+
+		vscode.commands.registerCommand('temcoLearn.assemble', async () => {
+			await add();
+		}),
+
+		vscode.commands.registerCommand('temcoLearn.publish', publish),
+
+		vscode.commands.registerCommand('temcoLearn.openPublished', async () => {
+			const published = await readPublishedState(siteFolder());
+			if (published.base === undefined) {
+				preview.note('warn', 'There is no published address yet: the site folder points at no GitHub repository.', {
+					label: 'Publish',
+					run: publish
+				});
+				return;
+			}
+			await vscode.env.openExternal(vscode.Uri.parse(published.base));
+		}),
 
 		vscode.commands.registerCommand('temcoLearn.refresh', async () => {
 			await prepare().catch(() => undefined);
-			tree.refresh();
+			refresh();
 		}),
 
 		vscode.commands.registerCommand('temcoLearn.open', async () => {
@@ -145,29 +286,14 @@ export function activate(context: vscode.ExtensionContext): void {
 			}
 		}),
 
-		// The whole site, published: the folder is the repository, and the push is all there is to it.
-		vscode.commands.registerCommand('temcoLearn.publish', async () => {
-			try {
-				const root = await prepare();
-				const published = await vscode.window.withProgress(
-					{ location: vscode.ProgressLocation.Notification, title: 'Publishing the Temco Learn site' },
-					async () => publishSite(root, output)
-				);
-				output.show(true);
-				const answer = await vscode.window.showInformationMessage(
-					published.unchanged
-						? `Temco Learn: nothing had changed — ${published.commit} is already on gh-pages. The site is at ${published.base}`
-						: `Temco Learn: published ${String(published.files)} path(s) as ${published.commit}. ${published.base} can take a minute to update.`,
-					'Open the Site'
-				);
-				if (answer === 'Open the Site') {
-					await vscode.env.openExternal(vscode.Uri.parse(published.base));
-				}
-			} catch (error) {
-				void vscode.window.showErrorMessage(
-					`Temco Learn: nothing was published — ${error instanceof Error ? error.message : String(error)}`
-				);
-			}
+		vscode.commands.registerCommand('temcoLearn.previewArtifact', (target?: unknown) => previewArtifact(fileOf(target))),
+
+		vscode.commands.registerCommand('temcoLearn.downloadArtifact', async (target?: unknown) => {
+			await saveCopy(fileOf(target));
+		}),
+
+		vscode.commands.registerCommand('temcoLearn.revealArtifact', async (target?: unknown) => {
+			await reveal(fileOf(target));
 		}),
 
 		vscode.commands.registerCommand('temcoLearn.stop', () => {
@@ -176,35 +302,13 @@ export function activate(context: vscode.ExtensionContext): void {
 	);
 }
 
-/** Every folder a build could have written: `<project>/dist/site` beside a workspace folder and in the working area. */
-async function buildFolders(): Promise<string[]> {
-	const roots = new Set<string>([
-		...(vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
-		workRoot()
-	]);
-	const found: { folder: string; at: number }[] = [];
-	for (const root of roots) {
-		for (const candidate of [
-			path.join(root, 'dist', 'site'),
-			...(await subfolders(root)).map((name) => path.join(root, name, 'dist', 'site'))
-		]) {
-			if (!fs.existsSync(path.join(candidate, 'index.html'))) {
-				continue;
-			}
-			found.push({ folder: candidate, at: fs.statSync(candidate).mtimeMs });
-		}
-	}
-	return found.sort((one, other) => other.at - one.at).map((entry) => entry.folder);
-}
-
-async function subfolders(root: string): Promise<string[]> {
-	try {
-		return (await fs.promises.readdir(root, { withFileTypes: true }))
-			.filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
-			.map((entry) => entry.name);
-	} catch {
-		return [];
-	}
+/** Which build, when the panel's own rows did not say: the same two facts the rows show, in a picker. */
+async function pickBuild(builds: readonly Build[]): Promise<Build | undefined> {
+	const picked = await vscode.window.showQuickPick(
+		builds.map((build) => ({ label: build.title, description: build.folder, build })),
+		{ title: 'Add a build to the site', placeHolder: 'Which build?' }
+	);
+	return picked?.build;
 }
 
 export function deactivate(): void {

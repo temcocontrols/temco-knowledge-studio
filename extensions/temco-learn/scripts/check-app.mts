@@ -79,6 +79,13 @@ test('the built script is a classic script a page can load, and it parses', () =
 	assert.match(code, /^'use strict';/mu, 'the built script is not strict');
 });
 
+test('the brand on every page goes back to the first section, and the site carries nothing about managing it', () => {
+	for (const page of pages) {
+		assert.match(read(page), /(?:bar__brand|r-brand)" href="index\.html"/u, `${page} has no way back to Documentation`);
+		assert.doesNotMatch(read(page), /overview\.html/u, `${page} sends a reader to an application page`);
+	}
+});
+
 test('nothing in the app is addressed from the root, because the site lives in a subfolder', () => {
 	for (const file of [...pages, join('assets', 'reader.css')]) {
 		const text = read(file);

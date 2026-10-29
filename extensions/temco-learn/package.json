@@ -38,12 +38,36 @@
     "views": {
       "temcoLearn": [
         {
-          "id": "temcoLearn.panel",
-          "name": "Site"
+          "id": "temcoLearn.overviewView",
+          "name": "Overview",
+          "initialSize": 6
+        },
+        {
+          "id": "temcoLearn.projects",
+          "name": "Projects"
+        },
+        {
+          "id": "temcoLearn.preview",
+          "name": "Preview"
+        },
+        {
+          "id": "temcoLearn.download",
+          "name": "Download"
+        },
+        {
+          "id": "temcoLearn.todo",
+          "name": "What Needs Doing",
+          "initialSize": 2
         }
       ]
     },
     "commands": [
+      {
+        "command": "temcoLearn.overview",
+        "title": "Overview",
+        "icon": "$(home)",
+        "category": "Temco Learn"
+      },
       {
         "command": "temcoLearn.preview",
         "title": "Preview",
@@ -52,8 +76,14 @@
       },
       {
         "command": "temcoLearn.build",
-        "title": "Build",
+        "title": "Build a Project…",
         "icon": "$(tools)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.addBuild",
+        "title": "Add This Build to the Site",
+        "icon": "$(add)",
         "category": "Temco Learn"
       },
       {
@@ -66,6 +96,12 @@
         "command": "temcoLearn.publish",
         "title": "Publish",
         "icon": "$(cloud-upload)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.openPublished",
+        "title": "Open the Published Site",
+        "icon": "$(globe)",
         "category": "Temco Learn"
       },
       {
@@ -85,29 +121,89 @@
         "title": "Stop the Preview",
         "icon": "$(debug-stop)",
         "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.previewArtifact",
+        "title": "Look at This Build Output",
+        "icon": "$(eye)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.downloadArtifact",
+        "title": "Save a Copy of This Build Output",
+        "icon": "$(cloud-download)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.revealArtifact",
+        "title": "Show This Build Output in the Folder",
+        "icon": "$(folder-opened)",
+        "category": "Temco Learn"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "temcoLearn.preview",
-          "when": "view == temcoLearn.panel",
+          "command": "temcoLearn.refresh",
+          "when": "view == temcoLearn.overviewView",
+          "group": "navigation@9"
+        },
+        {
+          "command": "temcoLearn.refresh",
+          "when": "view == temcoLearn.projects",
+          "group": "navigation@9"
+        },
+        {
+          "command": "temcoLearn.refresh",
+          "when": "view == temcoLearn.preview",
+          "group": "navigation@9"
+        },
+        {
+          "command": "temcoLearn.refresh",
+          "when": "view == temcoLearn.download",
+          "group": "navigation@9"
+        },
+        {
+          "command": "temcoLearn.refresh",
+          "when": "view == temcoLearn.todo",
+          "group": "navigation@9"
+        },
+        {
+          "command": "temcoLearn.overview",
+          "when": "view == temcoLearn.overviewView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "temcoLearn.build",
+          "when": "view == temcoLearn.projects",
           "group": "navigation@1"
         },
         {
           "command": "temcoLearn.assemble",
-          "when": "view == temcoLearn.panel",
+          "when": "view == temcoLearn.projects",
           "group": "navigation@2"
         },
         {
           "command": "temcoLearn.publish",
-          "when": "view == temcoLearn.panel",
+          "when": "view == temcoLearn.projects",
           "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "temcoLearn.downloadArtifact",
+          "when": "view == temcoLearn.panel && viewItem == temcoLearn.artifact",
+          "group": "inline@1"
         },
         {
-          "command": "temcoLearn.refresh",
-          "when": "view == temcoLearn.panel",
-          "group": "navigation@4"
+          "command": "temcoLearn.revealArtifact",
+          "when": "view == temcoLearn.panel && viewItem == temcoLearn.artifact",
+          "group": "inline@2"
+        },
+        {
+          "command": "temcoLearn.downloadArtifact",
+          "when": "view == temcoLearn.preview && viewItem == temcoLearn.artifact",
+          "group": "inline@1"
         }
       ]
     },
@@ -127,6 +223,13 @@
     "check-commands": "node --experimental-strip-types scripts/check-commands.mts",
     "check-site": "node --experimental-strip-types scripts/check-site.mts",
     "check-app": "node --experimental-strip-types scripts/check-app.mts",
-    "check-publish": "node --experimental-strip-types scripts/check-publish.mts"
-  }
+    "check-state": "node --experimental-strip-types scripts/check-state.mts",
+    "check-publish": "node --experimental-strip-types scripts/check-publish.mts",
+    "check-overview": "node --experimental-strip-types scripts/check-overview.mts",
+    "check-artifacts": "node --experimental-strip-types scripts/check-artifacts.mts",
+    "check-panel": "node --experimental-strip-types scripts/check-panel.mts"
+  },
+  "extensionDependencies": [
+    "temcocontrols.temco-ui"
+  ]
 }

@@ -11,30 +11,14 @@
 // Never a forced push. If the branch carries work this clone does not know about, that is a fact to report — the
 // commit is in the repository either way, and the next publish will be a fast-forward.
 
-import { execFile } from 'child_process';
 import * as vscode from 'vscode';
+import { git } from './git';
 
 /** The branch GitHub Pages serves for a project repository. */
 const BRANCH = 'gh-pages';
 
 /** Where the site belongs when the folder is not a repository yet: the account Pages serves it from. */
 const REMOTE = 'https://github.com/temcocontrols/docs.git';
-
-/** The largest output a git command may produce before it is treated as a failure rather than a message. */
-const LIMIT = 32 * 1024 * 1024;
-
-function git(cwd: string, args: readonly string[]): Promise<string> {
-	return new Promise<string>((resolve, reject) => {
-		execFile('git', ['-C', cwd, ...args], { maxBuffer: LIMIT, windowsHide: true }, (error, stdout, stderr) => {
-			if (error !== null) {
-				const detail = stderr.trim();
-				reject(new Error(detail.length > 0 ? detail : error.message));
-				return;
-			}
-			resolve(stdout);
-		});
-	});
-}
 
 /** Where the folder publishes to, and what to call it. */
 export interface PublishingTarget {

@@ -122,23 +122,67 @@ create project ─▶ add source ─▶ registry ─▶ write ─▶ validate �
 
 ## Temco Learn
 
-The site is its own module (`extensions/temco-learn`, the tenth), because a reader-facing site is not the same job as
-keeping a page in step with the code. One working area — `temcoRepositories.workspaceFolder`, `~/Temco` when unset — holds
-a `site/` folder, and that folder is the whole site:
+Temco Learn is its own module (`extensions/temco-learn`, the tenth), because a reader-facing website is not the same job as
+keeping a page in step with the code. One working area — `temcoRepositories.workspaceFolder`, `~/Temco` when unset — holds a
+`site/` folder, and that folder is the whole website a reader opens:
 
-- the app: `index.html` (one section), `project.html` (one project and its versions), `reader.html` (one version), plus
-  `assets/site.css`, `assets/reader.css` and `assets/site.js`. The page shell and styles are copied in from the module on
-  every refresh, so the app can be updated without losing data; the script is `src/siteApp.ts` — TypeScript, because the
-  repository keeps no JavaScript of its own — compiled to `out/siteApp.js` and written in as `assets/site.js`, which is
-  why `site/assets/` holds no script in the repository;
+- the site: `index.html` (one section), `project.html` (one project and its versions), `reader.html` (one version), plus
+  `assets/site.css`, `assets/reader.css` and `assets/site.js`. The shell and styles are copied in from the module on every
+  refresh, so the site can be updated without losing data; the script is `src/siteApp.ts` — TypeScript, because the repository
+  keeps no JavaScript of its own — compiled to `out/siteApp.js` and written in as `assets/site.js`, which is why
+  `site/assets/` holds no script in the repository;
 - `projects.json`: every project with its section, its versions and each version's pages in reading order;
 - one folder per project and version holding a build exactly as it came out (`dist/site`).
 
-`Add to Site` copies a build in, takes the project name from the build's own `<title>`, and records its pages in the order
-the build's `index.html` links them; only the version is asked. `Preview` serves that folder on loopback and shows it as a
-page — the site a reader would see, with the same URLs the published site will have. `Publish` commits the folder and
-pushes `gh-pages`. The panel is a plain list — preview, then each project with its versions, then build · add · publish —
-and never asks for a folder: the folder is the convention, not a question.
+**The website carries nothing about running it.** No overview, no management page, no status: a reader sees the six sections,
+a project and its versions, and the pages. Everything about operating the module is an application page or the panel, and the
+brand on every page of the website goes back to Documentation.
+
+`Add to Site` copies a build in, takes the project name from the build's own `<title>`, and records its pages in the order the
+build's `index.html` links them; only the version is asked. `Preview` serves that folder on loopback and shows it as a page —
+the website a reader would see, with the same URLs the published site will have. `Publish` commits the folder and pushes
+`gh-pages`.
+
+**Overview is an application page** (`src/overview.ts`, view type `temcoLearn.overview`), drawn with `temco-ui` the way
+every other page of ours is, and it is never published. It opens by saying what the module is, in three sentences — the
+website, the projects that feed it, and what a reader opens — with one note line for the publish state and the two ways in.
+There is deliberately **no figures row**: a number without a sentence around it was the thing nobody could read. Then, in
+this order: the page's single callout (what needs doing, or that nothing does, or that nothing has been built yet); the flow
+as three numbered option cards — *Build a project · Add it to the website · Publish the website* — each with what it writes,
+its live count on the button, and the recommended step drawn on the brand tint; **Projects on the website**, one row per
+project ending in *All versions*; **What each build wrote**, one row per project listing every output with its size and the two
+acts (*Look at it · Save a copy*); and **Where it goes**, the address, the branch and the last publish. The module therefore
+depends on `temcocontrols.temco-ui`, exactly as `temco-docs` does.
+
+A build is not one thing. `temco-docs` writes the site (`dist/docs` or `dist/site`), an offline help file (`.chm`, inside the
+repository or in a `HelpDocs` folder beside it), often a `.pdf`, and the exports it keeps in `dist/` — a zip of the site, a Word
+document, single pages. `src/artifacts.ts` reads those three places per project and reports what is there: nothing is invented, so
+a project with no `.chm` simply has no `.chm` row, and a file in a shared `HelpDocs` folder belongs to the project it is named
+after. Each artifact is either something to look at (`site`, `chm`, `pdf`, a single page) or something to take away (`zip`, `docx`),
+which is the divide the panel draws.
+
+The panel is **five views in the container**, the way Home is three — VS Code draws the header, the separator and the
+collapse state, so the grouping is the one a person already knows from the Explorer, and each section carries its own
+title-bar actions. A row is a name and a glyph; the one thing a row shows besides its name is a **number, at the row's right
+edge, as a badge** (`FileDecoration` through a `temco-learn-count` scheme, the same device `temco-workbench` uses). Sentences
+live on the Overview page and in tooltips, never in a row.
+
+| view | rows | the number |
+|---|---|---|
+| **Overview** | `Temco Learn` (opens the page), then Projects · Versions · Pages · Waiting to be added · Not published · Last publish | the count, or `never` |
+| **Projects** | a project, then its versions — the project-name-as-category the website itself uses | versions per project, pages per version |
+| **Preview** | a project, then what a build wrote that can be looked at: the website, the offline help, a pdf, a single page | outputs per project |
+| **Download** | the same projects, the files a build wrote | files per project, then their size |
+| **What Needs Doing** | Waiting to be added (each build under it), Not published (with *Publish the website*), Build a project | how many things each act clears |
+
+Nothing is invented: a project with no `.chm` has no `.chm` row, an empty view says so in one row, and "Nothing to do"
+appears only when every build is on the website and everything is published. Publishing state is read from git
+(`src/state.ts`), so two machines never disagree about what is out, and the panel never asks for a folder: the folder is
+the convention, not a question.
+
+Answers appear in the **preview's own strip**, under its address bar, and never in a notification: adding a build, building,
+publishing, and every failure say what happened there, with at most one thing to do next. Only the *inputs* stay native — the
+version box, and the build picker when a row did not name its build.
 
 ## Design system
 
@@ -188,3 +232,25 @@ and never asks for a folder: the folder is the convention, not a question.
    The status line deliberately carries the window's facts (project · pages · issues) and not the version or the last build:
    those need the catalog, and a catalog read on every file save is too high a price for a status bar. The strip in the side
    bar shows them instead, from a render that already had a reason to read the catalog.
+**Overview is an application page** (`src/overview.ts`, view type `temcoLearn.overview`), drawn with `temco-ui` the way every
+other page of ours is, and it is never published. It opens with the sentence that says what the module is for — *Temco Learn
+turns each project's built documentation into one website readers can open* — then, in this order: the three steps that are the
+whole flow (*Build a project · Add the build · Publish*) with their live counts on the buttons; **Where everything is**, the three
+places named — the site folder this module owns, `<project>/dist` where a build writes, and the address readers use; one callout
+for what is waiting; every project on the website; and **What the build produced**, one row per project listing what its last
+build wrote. The module therefore depends on `temcocontrols.temco-ui`, exactly as `temco-docs` does.
+
+A build is not one thing. `temco-docs` writes the site (`dist/docs` or `dist/site`), an offline help file (`.chm`, inside the
+repository or in a `HelpDocs` folder beside it), often a `.pdf`, and the exports it keeps in `dist/` — a zip of the site, a Word
+document, single pages. `src/artifacts.ts` reads those three places per project and reports what is there: nothing is invented, so
+a project with no `.chm` simply has no `.chm` row, and a file in a shared `HelpDocs` folder belongs to the project it is named
+after. Each artifact is either something to look at (`site`, `chm`, `pdf`, a single page) or something to take away (`zip`, `docx`,
+and the files that are both), which is the divide the panel draws.
+
+The panel (`src/tree.ts`) has five groups in the order the questions are asked: **How Temco Learn works** (the page above), **On
+the website** (`3 projects`, a row per project with its versions), **Preview** (`2 projects` — what you can look at now, with the
+project name as the category inside it), **Download** (`5 files` — the same projects, the files a build wrote, with their sizes),
+**To do** (`3 things` — the builds newer than what the website holds, the unpublished changes, and where building happens: in
+Temco Docs) and **Where it goes** (the address, the last commit, and the two acts). A row has no sentence under it: what a group is
+*for* is its tooltip and, written out, the Overview page.
+
