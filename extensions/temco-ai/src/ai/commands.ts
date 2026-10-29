@@ -27,9 +27,10 @@ export function registerAiCommands(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('temcoAi.page', (section?: string) =>
       page.open(section === 'downloads' ? 'downloads' : undefined)
     ),
-    vscode.commands.registerCommand('temcoAi.openPanel', () =>
-      vscode.commands.executeCommand(`${AI_VIEW}.focus`)
-    ),
+    // Focusing the panel, and optionally bringing a page with it: a triage tab or the stale list knows which page it
+    // means, and the panel answers about the page that is open — so the hand-off is an open, not a second way of
+    // naming a page.
+    vscode.commands.registerCommand('temcoAi.openPanel', (target?: unknown) => openPanel(target)),
     vscode.commands.registerCommand('temcoAi.models', () => chooseModel(context)),
     vscode.commands.registerCommand('temcoAi.removeModel', () => removeModel(context)),
     vscode.commands.registerCommand('temcoAi.openModelFolder', async () => {
@@ -42,6 +43,33 @@ export function registerAiCommands(context: vscode.ExtensionContext): void {
 
 /** The view id the AI is contributed under — the argument VS Code's own move-view command wants. */
 const AI_VIEW = 'temcoAi.panel';
+
+/** The file a caller handed over: a path, or an object carrying one. Anything else names no page. */
+function fileOf(target: unknown): string | undefined {
+	if (typeof target === 'string') {
+		return target.length > 0 ? target : undefined;
+	}
+	if (target !== null && typeof target === 'object') {
+		const value = (target as { path?: unknown; fsPath?: unknown }).path ?? (target as { fsPath?: unknown }).fsPath;
+		return typeof value === 'string' && value.length > 0 ? value : undefined;
+	}
+	return undefined;
+}
+
+/**
+ * Focuses the AI panel, opening the page a caller named first.
+ *
+ * The panel answers about the page that is open, and the documentation module owns how a page opens (one group, never
+ * a split) — so this asks it rather than choosing a column here. A module that is not installed leaves the page
+ * unopened, and the panel still gets the focus.
+ */
+async function openPanel(target?: unknown): Promise<void> {
+	const file = fileOf(target);
+	if (file !== undefined) {
+		await vscode.commands.executeCommand('temcoDocs.openFile', file).then(undefined, () => undefined);
+	}
+	await vscode.commands.executeCommand(`${AI_VIEW}.focus`);
+}
 /** The contributed container, as VS Code names it: every contributed container is prefixed this way. */
 const AI_CONTAINER = 'workbench.view.extension.temcoAi';
 

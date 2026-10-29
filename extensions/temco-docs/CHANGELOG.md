@@ -3,11 +3,11 @@
 ## Unreleased
 
 - **The forum.** The issues carrying the `docs-feedback` label in the repository the project cites, read through the
-  repositories module, as a panel in a container of its own (`temcoForum`, meant for the secondary side bar), with a
-  **Triage** tab per thread opened *beside* the conversation: the thread, the page it names (longest id first, then by
-  title), whether that page's code moved since its last review, and the acts that follow — open the page, draft the
-  fix, decide on the thread. Read only: nothing is labelled, commented or closed from here, and a thread's link is
-  checked for `http(s)` before it is handed to the browser.
+  repositories module, as a panel declared in the secondary side bar (`temcoForum`), with a **Triage** tab per thread
+  opened *beside* the conversation: the thread, the page it names (longest id first, then by title), whether that
+  page's code moved since its last review, and the acts that follow — open the page, draft the fix (the page opens and
+  the AI panel takes it), decide on the thread. Read only: nothing is labelled, commented or closed from here, and a
+  thread's link is checked for `http(s)` before it is handed to the browser.
 - **Applying a draft says where it goes.** *Apply* now lands through `temcoRepositories.applyToSource`: a modal
   question naming the clone and the file, a `git apply` in that clone's working tree, the words *not committed*, and
   an Undo that reverses the same patch. A page in the window's own tree still takes the editor's edit and its

@@ -7,10 +7,10 @@
 //
 // Two surfaces, because they answer two different questions:
 //
-//   **the panel**   what is being said. It is contributed as a view of its own, so it can sit in the secondary side
-//                   bar next to the page a reader is reading instead of taking a tab away from it.
-//   **Triage**      one thread, opened as its own tab *beside* the thread rather than on top of it: a triager keeps
-//                   the conversation in view while deciding what the page should say.
+//   **the panel**   what is being said. The container is contributed under `viewsContainers.secondarySidebar`, so the
+//                   secondary side bar is where it opens — beside the page a reader is reading, not on top of it.
+//   **Triage**      one thread, opened as its own tab *beside* the conversation: a triager keeps the thread in view
+//                   while deciding what the page should say.
 //
 // The threads are the issues carrying the `docs-feedback` label in the repository the project cites — the shape
 // `docs/temco-learn/design/09-feedback-subscriptions-notifications.md` settled on for a feedback row. They are read
@@ -249,7 +249,7 @@ ${body}
 ${pageSection}
 <div class="mt-24">${section({ title: 'What a triage decides' })}</div>
 <div class="card card--plain"><p class="card__desc">A decision is recorded on the thread, because the person who wrote it is owed an answer where they wrote it. The two acts that follow from a page are here so the decision can be made with the page in view — open it read-only, or draft the change; no draft is applied to a file without Review Center and a person.</p>
-<div class="az-row" style="margin-top:10px">${named === undefined ? '' : `<button type="button" class="az-btn" data-command="temcoDocs.openFile" data-args="${esc(JSON.stringify(named.uri.fsPath))}">${icon('document')}<span>Open the page</span></button>`}<button type="button" class="az-btn" data-command="temcoAi.openPanel"><span>Draft the fix</span></button>${thread.url.length === 0 ? '' : `<button type="button" class="az-btn" data-command="temcoDocs.openThread" data-args="${esc(JSON.stringify(thread.url))}"><span>Decide on GitHub</span></button>`}</div></div>`,
+<div class="az-row" style="margin-top:10px">${named === undefined ? '' : `<button type="button" class="az-btn" data-command="temcoDocs.openFile" data-args="${esc(JSON.stringify(named.uri.fsPath))}">${icon('document')}<span>Open the page</span></button>`}${named === undefined ? '<button type="button" class="az-btn" data-command="temcoAi.openPanel"><span>Open the AI panel</span></button>' : `<button type="button" class="az-btn" data-command="temcoAi.openPanel" data-args="${esc(JSON.stringify(named.uri.fsPath))}"><span>Draft the fix</span></button>`}${thread.url.length === 0 ? '' : `<button type="button" class="az-btn" data-command="temcoDocs.openThread" data-args="${esc(JSON.stringify(thread.url))}"><span>Decide on GitHub</span></button>`}</div></div>`,
 		{ title: `Triage · #${thread.number}`, script: commandScript }
 	);
 }
