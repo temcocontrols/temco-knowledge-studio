@@ -178,8 +178,16 @@ async function clones(context: vscode.ExtensionContext, project: string | undefi
 /** The dashboard, as a page. */
 export class DashboardPage {
 	private panel: vscode.WebviewPanel | undefined;
+	/** The catalog's own signal, listened to only while the panel exists. */
+	private changes: vscode.Disposable | undefined;
+	/** A read finishing fires several times; the page is rebuilt once. */
+	private timer: ReturnType<typeof setTimeout> | undefined;
 
-	constructor(private readonly context: vscode.ExtensionContext, private readonly selection: Selection) { }
+	constructor(
+		private readonly context: vscode.ExtensionContext,
+		private readonly selection: Selection,
+		private readonly onDidChange: (listener: () => void) => vscode.Disposable
+	) { }
 
 	open(): void {
 		if (this.panel !== undefined) {
@@ -194,6 +202,12 @@ export class DashboardPage {
 		this.panel.iconPath = new vscode.ThemeIcon('history');
 		this.panel.onDidDispose(() => {
 			this.panel = undefined;
+			this.changes?.dispose();
+			this.changes = undefined;
+			if (this.timer !== undefined) {
+				clearTimeout(this.timer);
+				this.timer = undefined;
+			}
 		});
 		this.panel.webview.onDidReceiveMessage((message: { type?: string; command?: string; args?: unknown }) => {
 			if (message.type === 'command' && typeof message.command === 'string') {
@@ -202,6 +216,20 @@ export class DashboardPage {
 			if (message.type === 'refresh') {
 				void this.render();
 			}
+		});
+		// A read that finishes, a clone that lands, a source that is forgotten: the page is about exactly those facts.
+		// Only while it is the panel on screen — a page nobody is looking at costs a `git log` per clone for nothing.
+		this.changes = this.onDidChange(() => {
+			if (this.panel?.visible !== true) {
+				return;
+			}
+			if (this.timer !== undefined) {
+				clearTimeout(this.timer);
+			}
+			this.timer = setTimeout(() => {
+				this.timer = undefined;
+				void this.render();
+			}, 400);
 		});
 		void this.render();
 	}
@@ -212,6 +240,10 @@ export class DashboardPage {
 			return;
 		}
 		const { groups, total } = await clones(this.context, this.selection.project());
+		// Reading the clones is slow enough that the panel can be closed, or replaced, while it runs.
+		if (this.panel !== panel) {
+			return;
+		}
 		panel.webview.html = page(body(groups, total, this.selection.project()), {
 			title: 'Repositories — dashboard',
 			script,
@@ -220,6 +252,12 @@ export class DashboardPage {
 	}
 
 	dispose(): void {
+		this.changes?.dispose();
+		this.changes = undefined;
+		if (this.timer !== undefined) {
+			clearTimeout(this.timer);
+			this.timer = undefined;
+		}
 		this.panel?.dispose();
 	}
 }

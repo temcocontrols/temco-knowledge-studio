@@ -91,6 +91,8 @@ export class ForumPanel implements vscode.WebviewViewProvider {
 	private view: vscode.WebviewView | undefined;
 	/** The last list read, so a triage tab opened from a row does not have to ask GitHub again. */
 	private state: ForumState = { threads: [] };
+	/** How many reads have started: the newest alone may paint. */
+	private reads = 0;
 
 	constructor(private readonly context: vscode.ExtensionContext, private readonly triage: TriagePage) { }
 
@@ -108,13 +110,33 @@ export class ForumPanel implements vscode.WebviewViewProvider {
 
 	/** Reads the threads again and repaints. The only way the panel's numbers change. */
 	refresh(): void {
+		// A refresh can start while another is still waiting on GitHub — the button, the command, a project change. Only
+		// the newest answer may paint; an older one landing late would put back the list the newer one replaced.
+		const run = ++this.reads;
 		void (async () => {
-			this.state = await read(this.context);
+			const next = await read(this.context);
+			if (run !== this.reads) {
+				return;
+			}
+			this.state = next;
 			const view = this.view;
 			if (view !== undefined) {
 				view.webview.html = forumHtml(this.state, nonce());
 			}
 		})();
+	}
+
+	/**
+	 * A different project is a different forum.
+	 *
+	 * Called on every read of the documentation, so it only re-reads when the project actually changed: a save or a
+	 * rebased file changes no thread, and asking GitHub on each of those would be a rate limit for nothing.
+	 */
+	projectChanged(): void {
+		if (this.view === undefined || this.state.project === selection.project()) {
+			return;
+		}
+		this.refresh();
 	}
 
 	private async receive(message: { type?: unknown; number?: unknown }): Promise<void> {

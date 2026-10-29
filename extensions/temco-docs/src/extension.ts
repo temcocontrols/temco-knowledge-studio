@@ -461,6 +461,9 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     sidebar.refresh();
     queue.refresh();
     properties.refresh();
+    // The forum answers about a project, so a different project is a different list. It asks GitHub again only when the
+    // project changed — never on the save that just triggered this read.
+    forum.projectChanged();
     // The view says which project it is showing: it answers about a project, never about the window, and a view
     // that silently answers a different question is worse than an empty one. The name and the page count are the
     // project row's own; the title carries the count only when there is no such row to carry it.

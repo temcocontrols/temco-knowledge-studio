@@ -68,8 +68,9 @@ export function activate(context: vscode.ExtensionContext): TemcoRepositoriesApi
 	const detail = new RepositoryDetailPage(context, selection, refresh);
 	// What decides both: the enterprise the page opens on, where a download lands, and the token.
 	const settings = new RepositorySettingsPage(context, refresh);
-	// Every clone at once, grouped by project: what moved since the last read, and the pages that name it.
-	const dashboard = new DashboardPage(context, selection);
+	// Every clone at once, grouped by project: what moved since the last read, and the pages that name it. It repaints
+	// itself when a read lands, so a person reading it sees the row they just caused change.
+	const dashboard = new DashboardPage(context, selection, listener => changed.event(listener));
 	context.subscriptions.push(
 		{ dispose: () => repositories.dispose() },
 		{ dispose: () => detail.dispose() },

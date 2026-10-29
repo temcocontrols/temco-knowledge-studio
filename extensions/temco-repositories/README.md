@@ -20,21 +20,31 @@ src/ui.ts               what it reads of the UI module — where a page opens, w
 src/surface.ts          the page's own view type
 src/repository.ts       the organisation's list as an API read, and the code files of a source
 src/read.ts             reading a source: the registry it declares, from a folder or over the API
+src/threads.ts          a source's forum: the issues carrying one label, read and never written
+src/dashboard.ts        every clone at once: what moved since the last read, and the pages that name it
+src/apply.ts            a drafted change reaching a clone: the question, `git apply`, and the reverse
 src/workarea.ts         the working area: clone, pull, remove, and where a copy lives
 src/repositoriesPage.ts the page that lists what is there and what has been read
 ```
 
 ## The one act that writes
 
-Reading a source writes to the **store**, never to a source: the pages it found, the branch it read, the state it concluded. Nothing is ever written to a repository, nothing is ever pushed, and the working area is a folder of its own (`~/Temco` by default) — outside every repository on purpose.
+Reading a source writes to the **store**, never to a source: the pages it found, the branch it read, the state it concluded. Nothing is ever pushed, and the working area is a folder of its own (`~/Temco` by default) — outside every repository on purpose.
+
+The one exception is `temcoRepositories.applyToSource`, and it is not a write anybody gets by accident. It takes a file and the text a draft produced, finds the innermost clone the catalog holds around that file, **asks first** in a modal question that names the clone, the file and the fact that the result is uncommitted, then lands the change as a `git apply` of a whole-file patch. The notification that follows carries **Undo**, which applies the same patch in reverse; if the file is in no clone the command refuses, because that tree belongs to the window a person is looking at and its editor undo is the right handle. Commits, pushes and branch changes are not this module's business, and no command here does them.
 
 A clone is **never automatic**. A first read says a local copy would help and offers one; from then on it is a command or a page button, and both name the folder they will write to first. One branch with full history, not `--depth 1`: the history is what a draft reads and what a staleness check needs, and a shallow clone would break both.
+
+## The dashboard
+
+`temcoRepositories.dashboard` is a page over every clone on this machine, grouped by the project that cites it. The watermark is the **last read** the catalog recorded for a source: what came after it is what nobody has been told yet, and the commits before it are still listed — dimmed and marked *seen* — because a column that hides its history cannot be checked. Each row ends with the documentation pages whose registry entry names the changed files, asked of the docs module (`temcoDocs.pagesForPaths`) with the same glob rules the generator uses. It repaints itself when a read lands, and only while it is the panel on screen.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
 | `temcoRepositories.page` | opens the page listing the organisation |
+| `temcoRepositories.dashboard` | every clone, what moved since the last read, and the pages that name it |
 | `temcoRepositories.readSource` | reads one source's registry into the catalog |
 | `temcoRepositories.readAllSources` | reads every source of the project being worked on |
 | `temcoRepositories.removeSource` | forgets a source — its rows go, the repository does not |
@@ -48,16 +58,18 @@ A clone is **never automatic**. A first read says a local copy would help and of
 | `temcoRepositories.removeClone` | removes the local copy, after naming it |
 | `temcoRepositories.changeWorkspaceFolder` | where the working area is |
 | `temcoRepositories.openWorkFolder` | opens the working area |
+| `temcoRepositories.applyToSource` | lands a draft in a clone's working tree, after asking: uncommitted, with Undo |
 
 ## What it offers other modules
 
-`onDidChange` (the catalog changed in a way a surface shows), `codeFiles(source)` and `readMaterials(source, files)` — the material a new page is drafted from, which is what `temco-docs`' new-page form asks for. Declared in `extensionDependencies`, so the exports are ready before a consumer's `activate()` runs.
+`onDidChange` (the catalog changed in a way a surface shows), `codeFiles(source)`, `tree(source)`, `readMaterials(source, files)` — the material a new page is drafted from, which is what `temco-docs`' new-page form asks for — and `threads(source, label)`, the issues carrying one label, which is what its forum panel lists. Declared in `extensionDependencies`, so the exports are ready before a consumer's `activate()` runs.
 
 ## What it deliberately does not own
 
 - **What a registry means.** A read records what a source's `registry.json` declares; the registry's shape, its checks, its areas, chapters and pages are `temco-docs`'. This module needs nothing from that module.
 - **The surfaces that show sources.** The Library's rows belong to the workbench; this module publishes facts and opens its own page.
 - **Where a page opens.** That rule is `temco-ui`'s, read here through `src/ui.ts`.
+- **What a thread means.** Reading the issues carrying a label and shaping them as threads is this module's; the label, the triage ritual and what a decision on a thread looks like are `temco-docs`'.
 
 ## Checks
 

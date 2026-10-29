@@ -15,7 +15,9 @@ missing.
 
 The runtime and the models downloaded on request into the user's own folder, the prompts, the AI panel, the AI
 page, drafts and their diffs, and the citations that open the page they name. It reads the documentation through
-`temco-docs` and never writes a page: a draft goes to the page that asked for it, and a person accepts it.
+`temco-docs` and never writes a page itself: *Apply* hands the text to `temco-repositories`, which asks where the
+page lives — an uncommitted `git apply` in the clone that holds it, with Undo, or the editor's edit and its `Ctrl+Z`
+in the tree this window has open — and a person answers that question before anything is written.
 
 ```
 src/extension.ts      the module's entry point, its panel, and the API the rest of the platform calls
