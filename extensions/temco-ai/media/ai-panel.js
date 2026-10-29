@@ -4,10 +4,7 @@
   const byId = (id) => document.getElementById(id);
 
   const transcript = byId('transcript');
-  const empty = byId('empty');
-  const where = byId('where');
-  const model = byId('model');
-  const dot = byId('dot');
+  const emptyTemplate = byId('emptyTemplate');
   const input = byId('text');
   const form = byId('form');
   const send = byId('send');
@@ -15,13 +12,47 @@
   const area = byId('area');
   const apply = byId('apply');
   const models = byId('models');
+  const newChat = byId('newChat');
   const box = byId('box');
-  const note = byId('modelNote');
-  const chooseModel = byId('chooseModel');
+  const where = byId('where');
+  const model = byId('model');
+  const dot = byId('dot');
 
   let busy = false;
   let streaming = null;
   let said = false;
+  /** The page-said-nothing block: rebuilt from its template, so a new chat can put it back. */
+  let empty = null;
+  /** The "no model yet" line inside that block — replaced every time the block is rebuilt. */
+  let note = null;
+
+  /**
+   * Puts the pre-conversation block back and binds what lives inside it.
+   *
+   * A new chat is the same panel as the first time it was opened, so the block is a template rather than markup that
+   * is thrown away: dropping it would leave a cleared panel with nothing to say.
+   */
+  function mount() {
+    transcript.textContent = '';
+    said = false;
+    streaming = null;
+    transcript.appendChild(emptyTemplate.content.cloneNode(true));
+    empty = transcript.querySelector('.empty');
+    note = byId('modelNote');
+
+    const choose = byId('chooseModel');
+    if (choose) {
+      choose.addEventListener('click', () => vscode.postMessage({ type: 'models' }));
+    }
+    // An example prompt puts its words in the box rather than sending them: they are a start, not a question.
+    for (const example of transcript.querySelectorAll('.ask')) {
+      example.addEventListener('click', () => {
+        input.value = example.dataset.text || '';
+        sync();
+        input.focus();
+      });
+    }
+  }
 
   /** The send button is the one control that reflects the box: nothing to ask, nothing to send. */
   function sync() {
@@ -45,6 +76,7 @@
   function turn(kind, text) {
     if (!said && empty) {
       empty.remove();
+      empty = null;
       said = true;
     }
     const element = document.createElement('div');
@@ -78,8 +110,8 @@
       const chip = document.createElement('button');
       chip.type = 'button';
       chip.className = 'chip' + (item.stale ? ' stale' : '');
-      chip.textContent = item.id.split('/').pop() + (item.stale ? ' · stale' : '');
-      chip.title = (item.stale ? 'stale · ' : '') + item.id + ' — ' + item.title;
+      chip.textContent = item.id.split('/').pop() + (item.stale ? ' \u00b7 stale' : '');
+      chip.title = (item.stale ? 'stale \u00b7 ' : '') + item.id + ' \u2014 ' + item.title;
       chip.addEventListener('click', () => vscode.postMessage({ type: 'open', id: item.id }));
       row.appendChild(chip);
     }
@@ -89,18 +121,20 @@
 
   function state(next) {
     const page = next.page
-      ? next.page.title + (next.page.stale ? ' · stale' : '')
+      ? next.page.title + (next.page.stale ? ' \u00b7 stale' : '')
       : 'no page open';
-    where.textContent = next.project ? next.project + ' — ' + page : page;
+    where.textContent = next.project ? next.project + ' \u2014 ' + page : page;
     where.title = next.page ? next.page.id : 'Open a page from the Workspace view';
     model.textContent = next.model
-      ? next.model + ' · offline' + (next.version ? ' · ' + next.version : '')
+      ? next.model + ' \u00b7 offline' + (next.version ? ' \u00b7 ' + next.version : '')
       : next.runtimeReady
         ? 'no model chosen'
         : 'nothing installed';
     dot.classList.toggle('live', Boolean(next.model));
     // The one thing worth saying before anything else: without a model, none of the rest of this can happen.
-    note.classList.toggle('hidden', Boolean(next.model));
+    if (note) {
+      note.classList.toggle('hidden', Boolean(next.model));
+    }
     apply.classList.toggle('hidden', !next.canApply);
     if (typeof next.busy === 'boolean') {
       setBusy(next.busy);
@@ -132,16 +166,7 @@
 
   apply.addEventListener('click', () => vscode.postMessage({ type: 'apply' }));
   models.addEventListener('click', () => vscode.postMessage({ type: 'models' }));
-  chooseModel.addEventListener('click', () => vscode.postMessage({ type: 'models' }));
-
-  // An example prompt puts its words in the box rather than sending them: they are a start, not a question.
-  for (const example of document.querySelectorAll('#empty .ask')) {
-    example.addEventListener('click', () => {
-      input.value = example.dataset.text || '';
-      sync();
-      input.focus();
-    });
-  }
+  newChat.addEventListener('click', () => vscode.postMessage({ type: 'newChat' }));
 
   input.addEventListener('keydown', (event) => {
     // Enter sends; Shift+Enter starts a new line, as in every chat box.
@@ -152,13 +177,16 @@
   });
 
   input.addEventListener('input', sync);
-  sync();
 
   window.addEventListener('message', (event) => {
     const message = event.data || {};
     switch (message.type) {
       case 'state':
         state(message);
+        return;
+      case 'reset':
+        mount();
+        setBusy(false);
         return;
       case 'user':
         turn('user', message.text || '');
@@ -195,4 +223,7 @@
         return;
     }
   });
+
+  mount();
+  sync();
 })();

@@ -97,11 +97,32 @@ export class AiPanel implements vscode.WebviewViewProvider {
     });
   }
 
+  /**
+   * A new chat: the transcript is cleared on both sides.
+   *
+   * The turns are what a follow-up is answered from, so they are dropped here rather than only hidden — a new chat
+   * that still sent the old conversation would be a lie. What the panel is *about* (the page, the model) is not
+   * forgotten: the same page stays in front.
+   */
+  private newChat(): void {
+    if (this.busy) {
+      this.post({ type: 'note', text: 'Stop the answer in flight first, then start a new chat.' });
+      return;
+    }
+    this.turns = [];
+    this.draft = undefined;
+    this.post({ type: 'reset' });
+    this.refresh();
+  }
+
   private async receive(message: unknown): Promise<void> {
     const data = message as { type?: string; text?: string; id?: string };
     switch (data.type) {
       case 'ask':
         await this.run('ask', data.text?.trim() ?? '');
+        return;
+      case 'newChat':
+        this.newChat();
         return;
       case 'draft':
         await this.run('draft', data.text?.trim() ?? '');
@@ -651,8 +672,9 @@ export class AiPanel implements vscode.WebviewViewProvider {
 <title>Temco AI</title>
 </head>
 <body>
-<div id="transcript">
-  <div id="empty" class="empty">
+<div id="transcript"></div>
+<template id="emptyTemplate">
+  <div class="empty">
     <p class="lede">The AI works from the page you have open. It runs on this machine, and nothing it writes is
     applied until you accept the diff.</p>
 
@@ -690,15 +712,14 @@ export class AiPanel implements vscode.WebviewViewProvider {
     <p id="modelNote" class="hidden">No model is installed yet.
       <button type="button" id="chooseModel" class="choose">Choose a model&hellip;</button></p>
   </div>
-</div>
-<div id="tip">
-  <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.5h5.2L12.5 4.8v9.7h-8.5z"/><path d="M9.2 1.5v3.3h3.3"/></svg>
-  <span id="where">no page open</span>
-</div>
+</template>
 <form id="form">
   <div class="box" id="box">
-    <textarea id="text" rows="1" placeholder="Ask about the open page&hellip;"></textarea>
+    <textarea id="text" rows="1" placeholder="Chat about the open page&hellip;" aria-label="Message"></textarea>
     <div class="row">
+      <button id="newChat" type="button" class="action action--icon" title="Start a new chat">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.2v9.6M3.2 8h9.6"/></svg>
+      </button>
       <div class="left">
         <button id="draft" type="button" class="action" title="Draft an update to this page — it opens as a diff you accept">
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.4 2.1l2.5 2.5M3 13l.9-3.6 7.1-7.1 2.5 2.5-7.1 7.1z"/></svg><span class="label">Draft update</span>
@@ -710,6 +731,9 @@ export class AiPanel implements vscode.WebviewViewProvider {
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.4l3.2 3.2L13 4.8"/></svg><span class="label">Apply draft</span>
         </button>
       </div>
+      <button id="models" type="button" class="model" title="Which local model answers, and what is installed">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx="2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2"/></svg><span id="model">nothing installed</span>
+      </button>
       <button id="send" type="submit" class="send" title="Ask about this page (Enter)">
         <svg class="icon-send" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3.4"/><path d="M3.8 7.6L8 3.4l4.2 4.2"/></svg>
         <svg class="icon-stop hidden" viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="6" height="6" rx="1.2"/></svg>
@@ -721,10 +745,11 @@ export class AiPanel implements vscode.WebviewViewProvider {
   <span class="dot" id="dot"></span>
   <span>Local</span>
   <span class="sep">&middot;</span>
-  <button id="models" type="button" class="model" title="Which local model answers, and what is installed">
-    <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx="2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2"/></svg>
-    <span id="model">nothing installed</span>
-  </button>
+  <span>nothing leaves this machine</span>
+  <span class="where">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.5h5.2L12.5 4.8v9.7h-8.5z"/><path d="M9.2 1.5v3.3h3.3"/></svg>
+    <span id="where">no page open</span>
+  </span>
 </div>
 <script src="${script}"></script>
 </body>

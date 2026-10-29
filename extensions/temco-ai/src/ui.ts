@@ -15,12 +15,45 @@ export interface PageMessage {
 	args?: unknown;
 }
 
+/** One way in the title block offers. */
+export interface HeroAction {
+	label: string;
+	command: string;
+	args?: unknown;
+	mark?: string;
+	kind?: 'primary' | 'link';
+}
+
+/** The title block's arguments: what it says, and the ways in it offers. */
+export interface HeroOptions {
+	crumbs?: string;
+	eyebrow?: string;
+	title: string;
+	mark?: string;
+	desc?: string;
+	/** The description takes the full width instead of a 78-character reading measure. */
+	descWide?: boolean;
+	actions?: readonly HeroAction[];
+}
+
+/** A section heading, and the line under it. */
+export interface SectionOptions {
+	title: string;
+	desc?: string;
+	/** Module-built HTML for the right-hand end of the heading. */
+	actions?: string;
+}
+
 /** The UI module's exports. */
 interface UiApi {
 	pageColumn(): vscode.ViewColumn;
 	page(body: string, options?: { title?: string; script?: string; extraCss?: string }): string;
 	escapeHtml(text: string): string;
 	icon(name: string, cls?: string): string;
+	/** The title block: wash, the page's only h1, the line of why, and the ways in. */
+	hero(options: HeroOptions): string;
+	/** A section heading, which is what the page's parts are told apart by. */
+	section(options: SectionOptions): string;
 	commandScript: string;
 	runCommand(message: PageMessage): void;
 }
@@ -43,6 +76,12 @@ export const escapeHtml = ui.escapeHtml;
 
 /** One glyph from the page's sprite. */
 export const icon = ui.icon;
+
+/** The title block at the top of a page. */
+export const hero = ui.hero;
+
+/** A section heading, with the page's parts told apart by it. */
+export const section = ui.section;
 
 /** The script that turns a `data-command` button into a message to the module. */
 export const commandScript = ui.commandScript;

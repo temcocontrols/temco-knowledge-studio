@@ -14,17 +14,20 @@ import { bestModel, describeMachine, fitsModel, machine } from './ai/machine';
 import { PROMPT_VERSION } from './ai/prompts';
 import { aiStatus, showAiLog, startAiServer, stopAiServer } from './ai/runtime';
 import { pageColumn } from './docs';
-import { page } from './ui';
+import { hero, page, runCommand, section } from './ui';
 import { AI_PAGE_VIEW_TYPE } from './surface';
 
 /** Somewhere on the page a caller can ask to be put: the list of what can be downloaded. */
 export type AiSection = 'downloads';
 
 interface AiPageMessage {
-  type: 'ready' | 'download' | 'remove' | 'start' | 'stop' | 'folder' | 'log' | 'models' | 'apply' | 'panel' | 'dock';
+  type: 'ready' | 'download' | 'remove' | 'start' | 'stop' | 'folder' | 'log' | 'models' | 'apply' | 'command';
   id?: string;
   model?: string;
   runtime?: string;
+  /** The command a `data-command` button on the page names. */
+  command?: string;
+  args?: unknown;
 }
 
 export class AiPage {
@@ -100,11 +103,9 @@ export class AiPage {
       case 'log':
         showAiLog();
         return;
-      case 'panel':
-        await vscode.commands.executeCommand('temcoAi.panel.focus');
-        return;
-      case 'dock':
-        await vscode.commands.executeCommand('temcoAi.dockRight');
+      case 'command':
+        // The page's own two ways out are commands, not messages: the kit's bridge names them, and this runs them.
+        runCommand(message);
         return;
       case 'models':
         await vscode.commands.executeCommand('temcoAi.models');
@@ -237,106 +238,57 @@ export class AiPage {
 }
 
 function html(): string {
+  // Three blocks, in the order a person needs them: what the server is, what it can run, what it can think with.
+  // Everything is drawn in the application's page vocabulary; the only rules here are the three shapes the kit has
+  // no component for — the figures of the server card, the two selects inside it, and a flat list row.
   const style = `
-    :root { color-scheme: light dark; }
-    /* The type scale and the controls are the page kit's; this block is this page's own layout. */
-    .meta { color: var(--vscode-descriptionForeground); }
-    .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(16em, 100%), 1fr)); gap: .8em 2em;
-             max-width: 70em; }
-    .facts div { border-left: 2px solid var(--vscode-panel-border); padding-left: .7em; min-width: 0; }
-    .facts dt { color: var(--vscode-descriptionForeground); }
-    .facts dd { margin: .1em 0 0; overflow-wrap: anywhere; }
-    /* A folder path is one line wide or it is unreadable: it takes the whole row and scrolls instead of wrapping. */
-    .facts .wide { grid-column: 1 / -1; }
-    .facts .wide dd { font-family: var(--vscode-editor-font-family); font-size: .95em;
-                      white-space: nowrap; overflow-x: auto; overflow-wrap: normal; }
-    .suggested { color: var(--vscode-charts-green, var(--vscode-descriptionForeground)); font-size: .9em; }
-    /* The machine, in the shape VS Code uses for an informational message: quieter than a card, louder than
-       the description text around it. */
-    .info { display: flex; gap: .7em; align-items: flex-start; max-width: 70em; margin: 0 0 .9em;
-            padding: .7em .9em; border-radius: 4px;
-            background: var(--vscode-inputValidation-infoBackground, var(--vscode-editorInfo-background, transparent));
-            border: 1px solid var(--vscode-inputValidation-infoBorder, var(--vscode-editorInfo-border, var(--vscode-panel-border))); }
-    .info svg { flex: 0 0 auto; width: 16px; height: 16px; margin-top: .15em; fill: none;
-                stroke: var(--vscode-editorInfo-foreground, var(--vscode-foreground)); stroke-width: 1.3;
-                stroke-linecap: round; }
-    .info h3 { margin: 0 0 .15em; }
-    .info p { margin: 0; color: var(--vscode-descriptionForeground); }
-    .info em { color: var(--vscode-charts-green, var(--vscode-descriptionForeground)); font-style: normal; }
-    .actions { display: flex; gap: .6em; flex-wrap: wrap; margin: .8em 0 0; }
-    .place { display: flex; gap: .6em; flex-wrap: wrap; margin: .8em 0 0; align-items: center; }
-    .place p { margin: 0; color: var(--vscode-descriptionForeground); flex: 1 1 20em; min-width: 0; }
-    .card { border: 1px solid var(--vscode-panel-border); border-radius: 3px; padding: .8em 1em;
-            margin: 0 0 .7em; max-width: 70em; display: flex; gap: 1em; align-items: flex-start; }
-    .card .body { flex: 1 1 auto; min-width: 0; }
-    .card .side { flex: 0 0 auto; display: flex; gap: .4em; align-items: center; }
-    .card p { color: var(--vscode-descriptionForeground); margin: .2em 0 0; }
-    .card code { overflow-wrap: anywhere; }
-    .badge { color: var(--vscode-descriptionForeground); font-size: .9em; }
-    .empty { color: var(--vscode-descriptionForeground); border: 1px dashed var(--vscode-panel-border);
-             border-radius: 3px; padding: 1em 1.2em; max-width: 70em; }
-    code { font-family: var(--vscode-editor-font-family); font-size: .95em; overflow-wrap: anywhere; }
-    .pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(18em, 100%), 1fr)); gap: 1em 2em;
-            max-width: 70em; }
-    .pick label { display: block; color: var(--vscode-descriptionForeground); margin-bottom: .2em; }
-    .pick select { width: 100%; min-width: 0; }
-    .foot { color: var(--vscode-descriptionForeground); margin-top: 2.4em; max-width: 70em;
-            border-top: 1px solid var(--vscode-panel-border); padding-top: 1em; }
+    .ai-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(15em, 100%), 1fr));
+                gap: .6em 2em; margin: .9em 0 0; max-width: 60em; }
+    .ai-facts > div { min-width: 0; }
+    .ai-facts dt { color: var(--vscode-descriptionForeground); font-size: .85em; }
+    .ai-facts dd { margin: .15em 0 0; overflow-wrap: anywhere; }
+    .ai-facts .wide { grid-column: 1 / -1; }
+    .ai-facts .wide dd { font-family: var(--vscode-editor-font-family); font-size: .9em;
+                         white-space: nowrap; overflow-x: auto; overflow-wrap: normal; }
+    .ai-pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(18em, 100%), 1fr));
+               gap: .8em 2em; max-width: 60em; margin: .9em 0 0; }
+    .ai-pick label { display: block; color: var(--vscode-descriptionForeground); margin-bottom: .25em; }
+    .ai-pick select { width: 100%; min-width: 0; }
+    /* A list row, not a card: the same entry the kit draws, with its border and its fill taken away. */
+    .ai-row { display: flex; align-items: center; gap: .5em; margin-top: .35em; }
+    .ai-row .az-entry { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; padding-left: 0; }
+    .ai-row > .badge, .ai-row > button { flex: 0 0 auto; }
+    .ai-row:first-of-type { margin-top: .25em; }
+    /* The other platforms: out of the way until they are asked for. */
+    .ai-more { margin-top: .5em; }
+    .ai-more > summary { color: var(--vscode-descriptionForeground); font-size: .9em; cursor: pointer; padding: .2em 0; }
+    .ai-hidden { display: none !important; }
+    .ai-foot { color: var(--vscode-descriptionForeground); margin: 2.4em 0 0; max-width: 60em;
+               border-top: 1px solid var(--vscode-panel-border); padding-top: 1em; }
   `;
 
-  const body = `
-  <h1 class="page-head__title">The AI</h1>
-  <p class="meta">A model on this machine, answering about your own pages. Nothing is sent anywhere: the runtime
-    is a program run as a child process, on loopback only, started when it is needed and stopped when it is
-    not. Nothing is downloaded until you ask for it.</p>
-
-  <dl class="facts" id="facts"></dl>
-  <div class="actions" id="controls"></div>
-
-  <h2>Where the AI sits</h2>
-  <div class="place">
-    <p>The panel belongs in the right side bar, beside the page you are reading — and that is where it is
-      <em>declared</em> (<code>contributes.viewsContainers.secondarySidebar</code>), so it opens there without
-      anything to set up. Drag it anywhere you like; this puts it back where it belongs.</p>
-    <button class="primary" id="dock">Put it back in the right side bar</button>
-    <button id="panel">Show the panel</button>
-  </div>
-
-  <h2>Which runtime and model</h2>
-  <p class="meta">Installing something and choosing it are two separate acts — the choice below is what the
-    server actually starts with.</p>
-  <div class="pick" id="pick"></div>
-
-  <h2>Installed on this machine</h2>
-  <div id="installed"></div>
-
-  <section id="downloads">
-    <h2>Runtimes</h2>
-    <p class="meta">A compiled inference engine is per-OS, which is why it is fetched rather than bundled.</p>
-    <div class="info">
-      <svg viewBox="0 0 16 16" aria-hidden="true">
-        <circle cx="8" cy="8" r="6.4"/><path d="M8 7.3v3.9"/><path d="M8 4.7v.1"/>
-      </svg>
-      <div>
-        <h3>This machine</h3>
-        <p><span id="machineText">it could not be read</span> — the runtime built for it, and the largest model
-          its memory can hold, are the ones marked <em>suggested for this machine</em>.</p>
-      </div>
-    </div>
-    <div id="runtimes"></div>
-
-    <h2>Models</h2>
-    <p class="meta">Permissive licences only, and the licence is shown before anything is downloaded. Every
-      model is listed, with what it needs and what this machine offers — the one marked as suggested is the
-      largest it can hold.</p>
-    <div id="models"></div>
-  </section>
-
-  <p class="foot" id="foot"></p>
-
+  const body = `${hero({
+    title: 'The AI',
+    mark: 'sparkle',
+    desc: 'A model on this machine, answering about your own pages. It runs on loopback, starts when it is needed, and nothing is sent anywhere.',
+    descWide: true,
+    actions: [
+      { label: 'Show the panel', command: 'temcoAi.openPanel', mark: 'panel', kind: 'primary' as const },
+      { label: 'Put it back in the right side bar', command: 'temcoAi.dockRight', mark: 'sidebar', kind: 'link' as const }
+    ]
+  })}
+<div class="mt-24" id="status"></div>
+<div id="downloads">
+  <div class="mt-24">${section({ title: 'Runtimes', desc: 'The engine that does the work, compiled per platform — the build marked suggested is the one for this machine.' })}</div>
+  <div id="runtimes"></div>
+  <div class="mt-24">${section({ title: 'Models', desc: 'What the engine reads. Permissive licences only; each shows its licence and what it needs before it is downloaded.' })}</div>
+  <div id="models"></div>
+  <div class="mt-24 ai-hidden" id="alsoWrap">${section({ title: 'Also in the folder', desc: 'Files in the model folder that this list does not know about — installed elsewhere, or left by an older version.' })}<div id="also"></div></div>
+</div>
+<p class="ai-foot" id="foot"></p>
 `;
 
-  return page(body, { title: 'Temco AI', extraCss: style, script: CLIENT });
+  return page(body, { title: 'The AI', extraCss: style, script: CLIENT });
 }
 
 const CLIENT = `
@@ -344,202 +296,259 @@ const vscode = acquireVsCodeApi();
 const $ = (id) => document.getElementById(id);
 let selection = { runtime: '', model: '' };
 
-// The two static buttons above the lists: the panel itself, and the one-time move to the right side bar.
-$('dock').addEventListener('click', () => vscode.postMessage({ type: 'dock' }));
-$('panel').addEventListener('click', () => vscode.postMessage({ type: 'panel' }));
+// A button carrying data-command names a real command — the kit's bridge, which every page of ours uses. The rest of
+// the page speaks the small message protocol below, because a download is not a command.
+document.addEventListener('click', (event) => {
+  const target = event.target.closest('[data-command]');
+  if (!target) { return; }
+  event.preventDefault();
+  const args = target.dataset.args;
+  vscode.postMessage({
+    type: 'command',
+    command: target.dataset.command,
+    args: args === undefined ? undefined : JSON.parse(args),
+  });
+});
 
-function fact(label, value, wide) {
-  const div = document.createElement('div');
-  if (wide) { div.className = 'wide'; }
-  const dt = document.createElement('dt');
-  dt.textContent = label;
-  const dd = document.createElement('dd');
-  dd.textContent = value;
-  div.append(dt, dd);
-  return div;
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) { node.className = cls; }
+  if (text !== undefined) { node.textContent = text; }
+  return node;
+}
+
+/** One glyph from the page's sprite, so this page draws the same marks as every other. */
+function mark(name) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'icon');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', '#i-' + name);
+  svg.append(use);
+  return svg;
 }
 
 function button(text, kind, onClick, disabled) {
-  const b = document.createElement('button');
-  b.textContent = text;
-  if (kind) { b.className = kind; }
-  b.disabled = Boolean(disabled);
-  b.addEventListener('click', onClick);
-  return b;
+  const cls = kind === 'primary' ? 'az-btn az-btn--sm az-btn--primary'
+    : kind === 'link' ? 'az-btn az-btn--sm az-btn--link'
+      : 'az-btn az-btn--sm';
+  const node = el('button', cls);
+  node.type = 'button';
+  node.append(el('span', null, text));
+  node.disabled = Boolean(disabled);
+  node.addEventListener('click', onClick);
+  return node;
 }
 
-function empty(text) {
-  const div = document.createElement('div');
-  div.className = 'empty';
-  div.textContent = text;
+function badge(text, tone, title) {
+  const node = el('span', 'badge' + (tone ? ' badge--' + tone : ''), text);
+  if (title) { node.title = title; }
+  return node;
+}
+
+/** One entry lying on its side, as the kit draws it: the mark, the name, and the lines about it. */
+function entry(markName, title, lines) {
+  const row = el('div', 'az-entry');
+  const icon = el('span', 'az-entry__icon');
+  icon.append(mark(markName));
+  const main = el('div', 'az-entry__main');
+  main.append(el('span', 'az-entry__title', title));
+  for (const line of lines.filter(Boolean)) { main.append(el('span', 'az-entry__meta', line)); }
+  row.append(icon, main);
+  return row;
+}
+
+/** The entry, then whatever belongs at its right-hand end. */
+function rowOf(parts) {
+  const row = el('div', 'ai-row');
+  row.append(...parts);
+  return row;
+}
+
+function fact(label, value, wide) {
+  const div = el('div', wide ? 'wide' : null);
+  div.append(el('dt', null, label), el('dd', null, value));
   return div;
 }
 
-function entryCard(entry, allowRemove) {
-  const card = document.createElement('div');
-  card.className = 'card';
-  const body = document.createElement('div');
-  body.className = 'body';
-  const h = document.createElement('h3');
-  h.textContent = entry.label;
-  const p = document.createElement('p');
-  const parts = [entry.licence, entry.size];
-  if (entry.platform) { parts.push(entry.platform); }
-  if (entry.needs) { parts.push(entry.needs); }
-  if (entry.fit && entry.suggested) { parts.push(entry.fit); }
-  if (!entry.pinned) { parts.push('checksum not pinned'); }
-  p.textContent = parts.join(' · ');
-  body.append(h, p);
-  if (entry.fit && !entry.suggested) {
-    const why = document.createElement('p');
-    why.className = 'meta';
-    why.textContent = entry.fit;
-    body.append(why);
+/** Which of the installed things the server starts with — asked here, because it is what the server is. */
+function pick(labelText, entries, key) {
+  const wrap = el('div');
+  const label = el('label', null, labelText);
+  label.setAttribute('for', 'pick-' + key);
+  const select = el('select');
+  select.id = 'pick-' + key;
+  const none = el('option', null, '— not chosen —');
+  none.value = '';
+  select.append(none);
+  for (const item of entries) {
+    if (!item.installed) { continue; }
+    const option = el('option', null, item.label);
+    option.value = item.id;
+    option.selected = item.id === selection[key];
+    select.append(option);
   }
-  if (entry.path) {
-    const where = document.createElement('p');
-    where.append(document.createTextNode('Installed: '));
-    const code = document.createElement('code');
-    code.textContent = entry.path;
-    where.append(code);
-    body.append(where);
+  if (select.options.length === 1) {
+    const option = el('option', null, 'nothing installed yet');
+    option.disabled = true;
+    select.append(option);
   }
-  const side = document.createElement('div');
-  side.className = 'side';
-  if (entry.suggested && !entry.installed) {
-    const pick = document.createElement('span');
-    pick.className = 'suggested';
-    pick.textContent = 'suggested for this machine';
-    side.append(pick);
-  }
-  if (entry.installed) {
-    const badge = document.createElement('span');
-    badge.className = 'badge';
-    badge.textContent = 'installed';
-    side.append(badge);
-    if (allowRemove) {
-      side.append(button('Remove', null, () => vscode.postMessage({ type: 'remove', id: entry.id })));
-    }
-  } else {
-    side.append(
-      button(
-        entry.busy ? 'Downloading…' : 'Download',
-        'primary',
-        () => vscode.postMessage({ type: 'download', id: entry.id }),
-        entry.busy
-      )
-    );
-  }
-  card.append(body, side);
-  return card;
+  // Both are always sent: the settings are two keys, and the server needs both to start.
+  select.addEventListener('change', () => {
+    selection[key] = select.value;
+    vscode.postMessage({ type: 'apply', runtime: selection.runtime, model: selection.model });
+  });
+  wrap.append(label, select);
+  return wrap;
 }
 
-function render(data) {
+/** The server, in one card: what it would start with, what it is doing, and the four things to do about it. */
+function renderServer(data) {
   const facts = data.facts;
-  $('facts').replaceChildren(
-    fact('Runtime', facts.runtime || (facts.busy ? 'none selected' : 'none installed')),
-    fact('Model', facts.model || 'none installed'),
-    fact('Server', facts.busy || facts.running || 'not running'),
+  selection = { runtime: data.chosen.runtime, model: data.chosen.model };
+
+  const card = el('div', 'card card--plain');
+  const head = el('div', 'card__head');
+  const icon = el('span', 'card__icon');
+  icon.append(mark('server'));
+  head.append(icon, el('div', 'card__title', 'The server'));
+  const actions = el('div', 'card__actions');
+  actions.append(
+    facts.busy
+      ? badge('starting…', 'warn')
+      : facts.running ? badge('running', 'ok') : badge('not running')
+  );
+  head.append(actions);
+  card.append(head);
+
+  const picks = el('div', 'ai-pick');
+  picks.append(pick('Runtime', data.runtimes, 'runtime'), pick('Model', data.models, 'model'));
+  card.append(picks);
+
+  const list = el('dl', 'ai-facts');
+  list.append(
     fact('Instructions', facts.promptVersion),
+    fact('Listening on', facts.running || 'nothing yet'),
+    fact('This machine', facts.machine || 'it could not be read'),
     fact('Where they live', facts.root, true)
   );
-  $('machineText').textContent = facts.machine || 'it could not be read';
+  card.append(list);
 
-  const controls = $('controls');
-  if (data.facts.running) {
-    controls.replaceChildren(
-      button('Stop the server', null, () => vscode.postMessage({ type: 'stop' })),
-      button('Show the log', null, () => vscode.postMessage({ type: 'log' })),
-      button('Open the model folder', null, () => vscode.postMessage({ type: 'folder' }))
-    );
-  } else {
-    controls.replaceChildren(
-      button(
+  const row = el('div', 'az-row');
+  const controls = [
+    facts.running
+      ? button('Stop the server', null, () => vscode.postMessage({ type: 'stop' }))
+      : button(
         facts.busy ? 'Starting…' : 'Start the server',
         'primary',
         () => vscode.postMessage({ type: 'start' }),
         Boolean(facts.busy) || !facts.model || !facts.runtime
       ),
-      button('Show the log', null, () => vscode.postMessage({ type: 'log' })),
-      button('Open the model folder', null, () => vscode.postMessage({ type: 'folder' })),
-      button('The list a keyboard user gets', null, () => vscode.postMessage({ type: 'models' }))
-    );
+    button('Show the log', null, () => vscode.postMessage({ type: 'log' })),
+    button('Open the model folder', null, () => vscode.postMessage({ type: 'folder' }))
+  ];
+  if (!facts.running) {
+    controls.push(button('Pick from a list…', 'link', () => vscode.postMessage({ type: 'models' })));
   }
+  row.append(...controls);
+  card.append(row);
 
-  const pick = $('pick');
-  pick.replaceChildren();
-  selection = { runtime: data.chosen.runtime, model: data.chosen.model };
-  for (const [key, entries] of [
-    ['runtime', data.runtimes],
-    ['model', data.models],
-  ]) {
-    const wrap = document.createElement('div');
-    const label = document.createElement('label');
-    label.textContent = key === 'runtime' ? 'Runtime' : 'Model';
-    const select = document.createElement('select');
-    const none = document.createElement('option');
-    none.value = '';
-    none.textContent = '— not chosen —';
-    select.append(none);
-    for (const entry of entries) {
-      if (!entry.installed) { continue; }
-      const option = document.createElement('option');
-      option.value = entry.id;
-      option.textContent = entry.label;
-      option.selected = entry.id === selection[key];
-      select.append(option);
-    }
-    if (select.options.length === 1) {
-      const option = document.createElement('option');
-      option.disabled = true;
-      option.textContent = 'nothing installed yet';
-      select.append(option);
-    }
-    // Both are always sent: the settings are two keys, and the server needs both to start.
-    select.addEventListener('change', () => {
-      selection[key] = select.value;
-      vscode.postMessage({ type: 'apply', runtime: selection.runtime, model: selection.model });
-    });
-    wrap.append(label, select);
-    pick.append(wrap);
-  }
-
-  const installed = $('installed');
-  if (data.installed.length === 0) {
-    installed.replaceChildren(empty('Nothing installed. The extension ships no model and no engine — pick one below and it is fetched into the folder above.'));
-  } else {
-    installed.replaceChildren(
-      ...data.installed.map((artifact) => {
-        const card = document.createElement('div');
-        card.className = 'card';
-        const body = document.createElement('div');
-        body.className = 'body';
-        const h = document.createElement('h3');
-        h.textContent = artifact.label;
-        const p = document.createElement('p');
-        p.textContent = [artifact.kind, artifact.bytes, 'added ' + artifact.at].join(' · ');
-        const where = document.createElement('p');
-        const code = document.createElement('code');
-        code.textContent = artifact.path;
-        where.append(code);
-        body.append(h, p, where);
-        const side = document.createElement('div');
-        side.className = 'side';
-        side.append(button('Remove', null, () => vscode.postMessage({ type: 'remove', id: artifact.id })));
-        card.append(body, side);
-        return card;
-      })
-    );
-  }
-
-  $('runtimes').replaceChildren(...data.runtimes.map((entry) => entryCard(entry, false)));
-  $('models').replaceChildren(...data.models.map((entry) => entryCard(entry, false)));
-  $('foot').textContent =
-    'A download is a file in the folder above — never in a repository, never part of the extension. Removing ' +
-    'one deletes that file and nothing else.';
+  $('status').replaceChildren(card);
 }
 
-// A change on one select sends both, so both values are kept together between round trips.
+/** One thing that can be downloaded, or one that is already here: what it is, what it needs, and the one control. */
+function renderEntry(item) {
+  const parts = [item.licence, item.size];
+  if (item.platform) { parts.push(item.platform); }
+  if (item.needs) { parts.push(item.needs); }
+  if (item.fit && item.suggested) { parts.push(item.fit); }
+
+  const lines = [parts.join(' · ')];
+  if (item.fit && !item.suggested) { lines.push(item.fit); }
+  if (item.path) { lines.push('Installed: ' + item.path); }
+
+  const trailing = [];
+  if (item.suggested && !item.installed) {
+    trailing.push(badge('suggested', 'ok', 'the build for this machine'));
+  }
+  if (!item.pinned) {
+    trailing.push(badge('checksum not pinned', 'warn', 'the download is checked against the recorded size and hash when there is one'));
+  }
+  if (item.installed) {
+    trailing.push(badge('installed', 'info'));
+    trailing.push(button('Remove', null, () => vscode.postMessage({ type: 'remove', id: item.id })));
+  } else {
+    trailing.push(
+      button(
+        item.busy ? 'Downloading…' : 'Download',
+        item.suggested ? 'primary' : null,
+        () => vscode.postMessage({ type: 'download', id: item.id }),
+        item.busy
+      )
+    );
+  }
+
+  return rowOf([entry(item.kind === 'runtime' ? 'server' : 'package', item.label, lines), ...trailing]);
+}
+
+/** The runtimes: this machine's build first, the other platforms folded away. */
+function renderRuntimes(data) {
+  const mine = data.runtimes.filter((item) => item.suggested || item.installed);
+  const others = data.runtimes.filter((item) => !item.suggested && !item.installed);
+  const host = $('runtimes');
+  host.replaceChildren();
+
+  if (mine.length === 0) {
+    // Nothing matched this machine: the list is then just the list, rather than an empty first line.
+    host.append(...data.runtimes.map(renderEntry));
+    return;
+  }
+  host.append(...mine.map(renderEntry));
+  if (others.length > 0) {
+    const more = el('details', 'ai-more');
+    const summary = el('summary', null, others.length === 1 ? 'Another platform' : 'Other platforms (' + others.length + ')');
+    more.append(summary);
+    const body = el('div');
+    body.append(...others.map(renderEntry));
+    more.append(body);
+    host.append(more);
+  }
+}
+
+/** The models: the one for this machine first, then the rest of the ladder. */
+function renderModels(data) {
+  const ordered = data.models.slice().sort((a, b) => Number(b.suggested) - Number(a.suggested));
+  $('models').replaceChildren(...ordered.map(renderEntry));
+}
+
+/** Anything on disk this list cannot name — kept visible, because a file that is there is a fact. */
+function renderAlso(data) {
+  const known = new Set([...data.runtimes, ...data.models].map((item) => item.id));
+  const unknown = data.installed.filter((artifact) => !known.has(artifact.id));
+  $('alsoWrap').classList.toggle('ai-hidden', unknown.length === 0);
+  $('also').replaceChildren(
+    ...unknown.map((artifact) =>
+      rowOf([
+        entry(
+          artifact.kind === 'runtime' ? 'server' : 'package',
+          artifact.label,
+          [artifact.kind + ' · ' + artifact.bytes + ' · added ' + artifact.at, artifact.path]
+        ),
+        button('Remove', null, () => vscode.postMessage({ type: 'remove', id: artifact.id }))
+      ])
+    )
+  );
+}
+
+function render(data) {
+  renderServer(data);
+  renderRuntimes(data);
+  renderModels(data);
+  renderAlso(data);
+  $('foot').textContent =
+    'Removing one deletes that file and nothing else: the settings keep the choice, and the server says it is ' +
+    'missing until another is installed.';
+}
 
 window.addEventListener('message', (event) => {
   if (event.data.type === 'ai') {

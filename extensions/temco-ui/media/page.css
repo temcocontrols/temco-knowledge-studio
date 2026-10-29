@@ -3402,8 +3402,9 @@ white-space: nowrap;
 	--az-blue-selected: #e1f3ff;
 	--az-wash: #f0f6fc;
 	/* The page language paints exactly one gradient. It is named here so the band and the inset panel share it
-	   instead of being two gradients that drift apart. */
-	--az-wash-gradient: linear-gradient(180deg, var(--az-wash) 0%, transparent 100%);
+	   instead of being two gradients that drift apart — and it is *declared on `body`* (see the rule below), because
+	   a custom property's `var()` is substituted where it is declared: named on `:root`, it would be baked with the
+	   light wash colour and paint a pale band under a dark page. */
 
 	--ink-1: #1f2327;
 	--ink-2: #63707e;
@@ -3470,6 +3471,13 @@ body.vscode-high-contrast {
 }
 
 /* ---- the wash: the title band, and nothing else ---- */
+
+/* The one gradient, named on `body` rather than on `:root`: a custom property's `var()` is substituted where it is
+   declared, so a copy in the palette would be baked with the light wash colour and paint a pale band under a dark
+   page. Declared here — after the theme blocks — `var(--az-wash)` resolves against the theme this body is in. */
+body {
+	--az-wash-gradient: linear-gradient(180deg, var(--az-wash) 0%, transparent 100%);
+}
 
 /* The band runs to both edges of the tab and keeps its own text on the content's line: the negative margin cancels
    the shell's side padding, the padding puts it back. */
