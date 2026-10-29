@@ -1,9 +1,10 @@
 // The Overview page's own contract: what it says, in what order, and what it refuses to be.
 //
 // The page is the one place a newcomer is told what this module is, so its words are checked rather than left to drift:
-// the three sentences first, no figures row, three numbered steps with their counts, projects under their own heading,
-// what each build wrote, and the address. The last case is the boundary that was crossed once already — this is our page,
-// not a page of the website.
+// the sentences first (counted from the data, naming no project), the one callout, four workflow steps each ending in a
+// link, and three sections that describe — a title with the brand bar, a sentence, one link — instead of listing what the
+// panel already lists. The last case is the boundary that was crossed once already: this is our page, not a page of the
+// website.
 
 import assert from 'node:assert/strict';
 import { createRequire, Module } from 'node:module';
@@ -11,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 interface OverviewModule {
 	html(state: unknown): string;
+	PAGE_STYLE: string;
 	OVERVIEW_VIEW_TYPE: string;
 }
 
@@ -114,74 +116,63 @@ function state(overrides: { projects?: unknown[]; builds?: unknown[]; artifacts?
 	};
 }
 
-const empty = { projects: [], builds: [], artifacts: [], published: { where: undefined, base: undefined, commit: undefined, at: undefined, pending: 0 } };
+/** Nothing at all: no project, no build, no file, no repository. */
+const empty = { projects: [], builds: [], artifacts: [], pending: 0, published: { where: undefined, base: undefined, commit: undefined, at: undefined, pending: 0 } };
 
-test('the page opens by saying what this module is, in three sentences, and shows no figures row', () => {
+test('the page opens by saying what this module is, counting from the data and naming no project', () => {
 	const html = overview.html(state());
 	assert.match(html, /Temco Learn publishes the documentation website\./u);
-	assert.match(html, /Every project that writes a documentation build — T3000, BACnet, the SDK — can be put on that website as one of its versions/u);
-	assert.match(html, /This page says what is on it now, what has been built and not added, and where it is live\./u);
-	assert.equal(html.includes('az-lead__stats'), false, 'the page still opens on a row of figures');
-	assert.equal(html.includes('az-numbers'), false, 'the page still draws a row of numbers');
-	assert.ok(html.indexOf('az-intro') < html.indexOf('az-callout'), 'the sentence comes after the callout');
+	assert.match(html, /2 projects are published today, 3 versions and 4 pages between them\./u);
+	assert.doesNotMatch(html, /T3000|BACnet/u, 'the page writes project names into its prose');
+	assert.equal(html.includes('az-lead__stats'), false, 'the page opens on a row of figures');
+	assert.equal(html.includes('az-numbers'), false, 'the page draws a row of numbers');
 });
 
-test('the flow is three numbered steps, in order, each with the command that runs it', () => {
+test('the workflow is four steps, in order, each ending in a link with a glyph', () => {
 	const html = overview.html(state());
+	assert.match(html, /Publishing workflow/u);
 	const steps = [...html.matchAll(/az-option__tag">(\d)<\/span><h2 class="az-option__title">([^<]+)</gu)].map((match) => `${match[1]}:${match[2]}`);
-	assert.deepEqual(steps, ['1:Build a project', '2:Add it to the website', '3:Publish the website']);
+	assert.deepEqual(steps, ['1:Build', '2:Add', '3:Publish', '4:Download']);
 	assert.match(html, /data-command="temcoDocs\.builds"/u);
-	assert.match(html, /data-command="temcoLearn\.assemble"/u);
+	assert.match(html, /data-command="temcoLearn\.addBuilds"/u);
 	assert.match(html, /data-command="temcoLearn\.publish"/u);
+	assert.match(html, /data-command="temcoLearn\.revealArtifact"/u);
+	assert.match(html, /Open Temco Docs/u);
+	assert.match(html, /Choose a build · 1 waiting/u);
+	assert.match(html, /Publish · 3 changes/u);
+	assert.match(html, /Show in the folder/u);
 });
 
-test('the steps carry how much is waiting for them', () => {
+test('the three sections describe rather than list: a title, a sentence and one link each', () => {
 	const html = overview.html(state());
-	assert.match(html, /Add · 1 build waiting/u);
-	assert.match(html, /Publish · 3 changes/u);
-	assert.match(html, /1 build on disk is not on the website · 3 changes are not published\./u);
+	for (const title of ['Published projects', 'Build outputs', 'Publication']) {
+		assert.ok(html.includes(title), `${title} is missing`);
+	}
+	assert.equal(html.includes('az-entry'), false, 'the page still draws a list of rows');
+	assert.equal(html.includes('az-record'), false, 'the page still draws a list of records');
+	assert.match(html, /2 projects are published in Documentation, 3 versions and 4 pages between them\./u);
+	assert.match(html, /the newest build wrote 3 files/u);
+	assert.match(html, /temcocontrols\.github\.io\/docs · branch gh-pages · last publish 6f2c1ab, 12 min ago\./u);
+	assert.match(html, /Open the website/u);
+	assert.match(html, /Open in browser/u);
 });
 
 test('the callout says what needs doing, or that nothing does, or that nothing exists yet', () => {
 	const busy = overview.html(state());
 	assert.match(busy, /What needs doing/u);
-	assert.match(busy, /Add the builds/u);
-
+	assert.match(busy, /1 build on disk is not on the website · 3 changes are not published\./u);
 	const idle = overview.html(state({ builds: [], pending: 0 }));
 	assert.match(idle, /Nothing needs doing/u);
-	assert.match(idle, /Every build on disk is on the website, and the website is published\./u);
-
 	const nothing = overview.html(state(empty));
 	assert.match(nothing, /Nothing has been built yet/u);
-	assert.match(nothing, /data-command="temcoDocs\.builds"/u);
+	assert.match(nothing, /Nothing is published yet\./u);
+	assert.match(nothing, /No build output was found\./u);
+	assert.match(nothing, /there is nowhere to publish to yet/u);
 });
 
-test('projects are listed under their own heading, with their newest version and a way to all of them', () => {
-	const html = overview.html(state());
-	assert.match(html, /Projects on the website/u);
-	assert.match(html, /Documentation · 2 versions · newest 13\.0 · 3 pages · built just now/u);
-	assert.match(html, /az-entry__go">All versions</u);
-	assert.match(html, /data-command="temcoLearn\.preview"/u);
-});
-
-test('what each build wrote is one row per project, with the files and both acts', () => {
-	const html = overview.html(state());
-	assert.match(html, /What each build wrote/u);
-	assert.match(html, /Website · offline help 1\.1 MB · site zip 4\.2 MB/u);
-	assert.match(html, /Look at it/u);
-	assert.match(html, /Save a copy/u);
-	assert.match(html, /data-command="temcoLearn\.previewArtifact"/u);
-	assert.match(html, /data-command="temcoLearn\.downloadArtifact"/u);
-});
-
-test('where it goes names the address, the branch and the last publish', () => {
-	const html = overview.html(state());
-	assert.match(html, /Where it goes/u);
-	assert.match(html, /https:\/\/temcocontrols\.github\.io\/docs\//u);
-	assert.match(html, /branch gh-pages · last publish 6f2c1ab · 12 min ago/u);
-	const unpublished = overview.html(state(empty));
-	assert.match(unpublished, /No address yet/u);
-	assert.match(unpublished, /C:\\Temco\\site/u);
+test('every section title carries the brand bar, and the cards sit four in a row', () => {
+	assert.match(overview.PAGE_STYLE, /\.az-section__title \{ border-left: 3px solid var\(--az-blue/u);
+	assert.match(overview.PAGE_STYLE, /\.az-options \{ grid-template-columns: repeat\(auto-fit, minmax\(215px, 1fr\)\)/u);
 });
 
 test('the page is the application’s, not the website’s', () => {

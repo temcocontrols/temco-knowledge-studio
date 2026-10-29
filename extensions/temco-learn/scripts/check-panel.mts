@@ -189,6 +189,34 @@ test('the five views are declared, and none of them is the old single panel', ()
 	]);
 });
 
+test('every menu names a view that exists and a command the manifest declares', () => {
+	const manifest = createRequire(import.meta.url)('../package.json') as {
+		contributes: {
+			commands: { command: string }[];
+			menus: Record<string, { command: string; when?: string; group?: string }[]>;
+		};
+	};
+	const declared = new Set(Object.values(views.VIEWS));
+	const commands = new Set(manifest.contributes.commands.map((entry) => entry.command));
+	for (const [where, entries] of Object.entries(manifest.contributes.menus)) {
+		for (const entry of entries) {
+			assert.ok(commands.has(entry.command), `${where} cites ${entry.command}, which the manifest does not declare`);
+			const cited = /view == ([^ &]+)/u.exec(entry.when ?? '')?.[1];
+			if (cited !== undefined) {
+				assert.ok(declared.has(cited), `${where} cites the view ${cited}, which does not exist`);
+			}
+		}
+	}
+	// A row action is only reachable where the view offers it: both artifact views carry the same two.
+	const artifactActions = (id: string): string[] =>
+		manifest.contributes.menus['view/item/context']
+			.filter((entry) => entry.when === `view == ${id} && viewItem == temcoLearn.artifact`)
+			.map((entry) => entry.command)
+			.sort();
+	assert.deepEqual(artifactActions('temcoLearn.download'), ['temcoLearn.downloadArtifact', 'temcoLearn.revealArtifact']);
+	assert.deepEqual(artifactActions('temcoLearn.preview'), ['temcoLearn.downloadArtifact']);
+});
+
 let failed = 0;
 for (const { name, run } of cases) {
 	try {

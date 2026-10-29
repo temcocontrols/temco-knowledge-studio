@@ -169,7 +169,7 @@ live on the Overview page and in tooltips, never in a row.
 
 | view | rows | the number |
 |---|---|---|
-| **Overview** | `Temco Learn` (opens the page), then Projects · Versions · Pages · Waiting to be added · Not published · Last publish | the count, or `never` |
+| **Overview** | one row, `Temco Learn` (opens the page), expanded onto the six facts that are numbers: Projects · Versions · Pages · Waiting to be added · Not published · Last publish | the fact itself |
 | **Projects** | a project, then its versions — the project-name-as-category the website itself uses | versions per project, pages per version |
 | **Preview** | a project, then what a build wrote that can be looked at: the website, the offline help, a pdf, a single page | outputs per project |
 | **Download** | the same projects, the files a build wrote | files per project, then their size |
@@ -234,11 +234,17 @@ version box, and the build picker when a row did not name its build.
    bar shows them instead, from a render that already had a reason to read the catalog.
 **Overview is an application page** (`src/overview.ts`, view type `temcoLearn.overview`), drawn with `temco-ui` the way every
 other page of ours is, and it is never published. It opens with the sentence that says what the module is for — *Temco Learn
-turns each project's built documentation into one website readers can open* — then, in this order: the three steps that are the
-whole flow (*Build a project · Add the build · Publish*) with their live counts on the buttons; **Where everything is**, the three
-places named — the site folder this module owns, `<project>/dist` where a build writes, and the address readers use; one callout
-for what is waiting; every project on the website; and **What the build produced**, one row per project listing what its last
-build wrote. The module therefore depends on `temcocontrols.temco-ui`, exactly as `temco-docs` does.
+publishes the documentation website* — continued by the counts it reads from the snapshot (*3 projects are published today, 7
+versions and 42 pages between them*) so no project name is ever written into the prose. Then, in this order: one callout for what
+needs doing (or that nothing does, or that nothing has been built yet); **Publishing workflow**, four cards — *Build · Add ·
+Publish · Download* — one line each, each ending in the link that performs it (`Open Temco Docs`, `Choose a build · 1 waiting`,
+`Publish · 3 changes`, `Show in the folder`); and three sections that **describe rather than list** — *Published projects*,
+*Build outputs*, *Publication* — a title with a 3 px brand bar, a sentence with the live counts, and one link. The list itself is
+the panel's job: a page that repeated it would go stale, grow without bound, and say the same thing twice.
+**Add a build** never opens a picker: it brings the *What Needs Doing* view forward with the waiting group open, because the
+builds to choose are already rows there. A link on this page is text with a glyph (`temcoLearn.*` command), never an `href` into
+the website — that boundary was crossed once already. The module therefore depends on `temcocontrols.temco-ui`, exactly as
+`temco-docs` does.
 
 A build is not one thing. `temco-docs` writes the site (`dist/docs` or `dist/site`), an offline help file (`.chm`, inside the
 repository or in a `HelpDocs` folder beside it), often a `.pdf`, and the exports it keeps in `dist/` — a zip of the site, a Word
@@ -247,10 +253,11 @@ a project with no `.chm` simply has no `.chm` row, and a file in a shared `HelpD
 after. Each artifact is either something to look at (`site`, `chm`, `pdf`, a single page) or something to take away (`zip`, `docx`,
 and the files that are both), which is the divide the panel draws.
 
-The panel (`src/tree.ts`) has five groups in the order the questions are asked: **How Temco Learn works** (the page above), **On
-the website** (`3 projects`, a row per project with its versions), **Preview** (`2 projects` — what you can look at now, with the
-project name as the category inside it), **Download** (`5 files` — the same projects, the files a build wrote, with their sizes),
-**To do** (`3 things` — the builds newer than what the website holds, the unpublished changes, and where building happens: in
-Temco Docs) and **Where it goes** (the address, the last commit, and the two acts). A row has no sentence under it: what a group is
-*for* is its tooltip and, written out, the Overview page.
+The panel (`src/tree.ts`) is five views in the order the questions are asked — **Overview** (one row: the page above),
+**Projects** (`3 projects` — a row per project, its versions under it), **Preview** (`2 projects` — what can be looked at now,
+the project name as the category inside it), **Download** (`5 files` — the same projects, the files a build wrote, with their
+sizes; a row saves a copy and offers *Show in the Folder* inline), and **What Needs Doing** (`3 things` — the builds newer than
+what the website holds, opening onto the build to add, the unpublished changes, and where building happens: in Temco Docs). The
+number a view earns is a `FileDecoration` badge at the row's right edge, never a second column. A row has no sentence under it:
+what a view is *for* is its tooltip and, written out, the Overview page.
 

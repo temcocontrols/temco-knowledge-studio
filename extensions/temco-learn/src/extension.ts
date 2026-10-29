@@ -51,12 +51,13 @@ export function activate(context: vscode.ExtensionContext): void {
 	const todoTree = new TodoTree(reads);
 	// One view per group: VS Code draws the header, the separator and the collapse state, which is the grouping a
 	// person already knows from the Explorer.
+	const todoView = vscode.window.createTreeView(VIEWS.todo, { treeDataProvider: todoTree });
 	const views = [
 		vscode.window.createTreeView(VIEWS.overview, { treeDataProvider: overviewTree }),
 		vscode.window.createTreeView(VIEWS.projects, { treeDataProvider: projectsTree }),
 		vscode.window.createTreeView(VIEWS.preview, { treeDataProvider: previewTree }),
 		vscode.window.createTreeView(VIEWS.download, { treeDataProvider: downloadTree }),
-		vscode.window.createTreeView(VIEWS.todo, { treeDataProvider: todoTree })
+		todoView
 	];
 
 	/** Both surfaces read the same facts, so both are re-read together: a panel and a page that disagree is a bug. */
@@ -254,6 +255,16 @@ export function activate(context: vscode.ExtensionContext): void {
 
 		vscode.commands.registerCommand('temcoLearn.addBuild', async (folder?: unknown) => {
 			await add(typeof folder === 'string' ? folder : undefined);
+		}),
+
+		// Adding a build never asks which one in a picker: the panel lists them, and a row there adds it. The view is
+		// brought forward with the waiting group open, so the act the page promised is one click away.
+		vscode.commands.registerCommand('temcoLearn.addBuilds', async () => {
+			await vscode.commands.executeCommand(`${VIEWS.todo}.focus`);
+			const waiting = (await todoTree.getChildren()).find((entry) => entry.id === 'temcoLearn.todo.builds');
+			if (waiting !== undefined) {
+				await todoView.reveal(waiting, { expand: true, select: false, focus: false });
+			}
 		}),
 
 		vscode.commands.registerCommand('temcoLearn.assemble', async () => {
