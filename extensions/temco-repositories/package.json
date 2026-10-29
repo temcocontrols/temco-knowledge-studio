@@ -64,6 +64,11 @@
         "icon": "$(gear)"
       },
       {
+        "command": "temcoRepositories.dashboard",
+        "title": "Repositories — Dashboard",
+        "icon": "$(history)"
+      },
+      {
         "command": "temcoRepositories.rowReadOrg",
         "title": "Read This Enterprise Again",
         "icon": "$(refresh)"

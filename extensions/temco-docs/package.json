@@ -180,6 +180,11 @@
         "icon": "$(cloud-upload)"
       },
       {
+        "command": "temcoDocs.pagesForPaths",
+        "title": "Pages That Name These Paths",
+        "category": "Temco Docs"
+      },
+      {
         "command": "temcoDocs.showStatus",
         "title": "Temco Docs: Show Status"
       },

@@ -31,7 +31,8 @@
     "onStartupFinished",
     "onView:temcoWorkbench.overviewView",
     "onView:temcoWorkbench.settingsProfile",
-    "onView:temcoWorkbench.settingsPlatform"
+    "onView:temcoWorkbench.settingsPlatform",
+    "onView:temcoLearn.panel"
   ],
   "contributes": {
     "views": {
@@ -60,9 +61,22 @@
           "id": "temcoWorkbench.settingsPlatform",
           "name": "Platform"
         }
+      ],
+      "temcoLearn": [
+        {
+          "id": "temcoLearn.panel",
+          "type": "webview",
+          "name": "Temco Learn"
+        }
       ]
     },
     "commands": [
+      {
+        "command": "temcoLearn.page",
+        "title": "Temco Learn — Preview",
+        "icon": "$(eye)",
+        "category": "Temco Learn"
+      },
       {
         "command": "temcoWorkbench.learn.home",
         "title": "Temco Learn",
@@ -282,6 +296,11 @@
           "id": "temcoAiHub",
           "title": "AI",
           "icon": "media/ai.svg"
+        },
+        {
+          "id": "temcoLearn",
+          "title": "Temco Learn",
+          "icon": "media/help.svg"
         },
         {
           "id": "temcoSql",

@@ -17,6 +17,7 @@ import { roots, onDidChange, refresh as reread, totals } from './docs';
 import { DashboardPages } from './dashboard';
 import { HelpPages } from './helpPages';
 import { LearnPages } from './learnPages';
+import { LEARN_VIEW_ID, LearnPage, LearnPanel } from './learnPanel';
 import { NeedsPage } from './needsPage';
 import { registerSettings } from './settingsPages';
 import { registerSidebarViews } from './sidebar';
@@ -70,6 +71,10 @@ export function activate(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(dashboard);
 	// Temco Learn: the published site as a reader sees it — Home, T3000, an article, Downloads, Learning Paths.
 	const learn = new LearnPages(context);
+	// Temco Learn's own container: the strip that says what was built, and the page that previews it.
+	const learnPanel = new LearnPanel(context);
+	const learnSurface = new LearnPage(context);
+	context.subscriptions.push(vscode.window.registerWebviewViewProvider(LEARN_VIEW_ID, learnPanel));
 
 	context.subscriptions.push(
 		help,
@@ -78,6 +83,8 @@ export function activate(context: vscode.ExtensionContext): void {
 		learn,
 		vscode.commands.registerCommand('temcoWorkbench.home', () => dashboard.open('overview')),
 		vscode.commands.registerCommand('temcoWorkbench.openNeeds', () => needs.open()),
+		vscode.commands.registerCommand('temcoLearn.page', () => void learnSurface.open()),
+		{ dispose: () => learnSurface.dispose() },
 		vscode.commands.registerCommand('temcoWorkbench.welcome', () => help.welcome()),
 		vscode.commands.registerCommand('temcoWorkbench.help', () => help.home()),
 		vscode.commands.registerCommand('temcoWorkbench.help.welcome', () => help.welcome()),

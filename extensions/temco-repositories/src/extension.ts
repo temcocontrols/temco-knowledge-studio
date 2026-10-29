@@ -22,6 +22,7 @@ import { tokenOf } from './read';
 import { CodeFile, Material, RepositorySource, codeFiles, readMaterials, sourceTree } from './repository';
 import { RepositoryDetailPage } from './repositoryPage';
 import { RepositoriesPage } from './repositoriesPage';
+import { DashboardPage } from './dashboard';
 import { RepositorySettingsPage } from './settingsPage';
 import { OFFERED_SCRIPTS, OfferedScript } from './scripts';
 import { registerSourcesView } from './sourcesView';
@@ -63,14 +64,18 @@ export function activate(context: vscode.ExtensionContext): TemcoRepositoriesApi
 	const detail = new RepositoryDetailPage(context, selection, refresh);
 	// What decides both: the enterprise the page opens on, where a download lands, and the token.
 	const settings = new RepositorySettingsPage(context, refresh);
+	// Every clone at once, grouped by project: what moved since the last read, and the pages that name it.
+	const dashboard = new DashboardPage(context, selection);
 	context.subscriptions.push(
 		{ dispose: () => repositories.dispose() },
 		{ dispose: () => detail.dispose() },
 		{ dispose: () => settings.dispose() },
+		{ dispose: () => dashboard.dispose() },
 		vscode.commands.registerCommand('temcoRepositories.page', (project?: unknown) =>
 			repositories.open(undefined, typeof project === 'string' && project.length > 0 ? project : undefined)
 		),
 		vscode.commands.registerCommand('temcoRepositories.settings', () => settings.open()),
+		vscode.commands.registerCommand('temcoRepositories.dashboard', () => dashboard.open()),
 		// The panel's enterprise rows: read that list again, or forget it. A row is one click away from its list,
 		// which is what the page is for.
 		vscode.commands.registerCommand('temcoRepositories.rowReadOrg', (target?: unknown) => {

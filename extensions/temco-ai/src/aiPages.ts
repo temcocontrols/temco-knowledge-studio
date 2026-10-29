@@ -8,13 +8,14 @@
 
 import * as vscode from 'vscode';
 import { ACTIONS, AiModel, CITATIONS, MODELS } from './aiSample';
+import { DocsRoot, collectPages, docs } from './docs';
 import { commandScript, escapeHtml as esc, icon, page, pageColumn, runCommand } from './ui';
 
 export const CHAT_VIEW_TYPE = 'temcoAi.chat';
 export const ACTIONS_VIEW_TYPE = 'temcoAi.actions';
 export const CITATIONS_VIEW_TYPE = 'temcoAi.citations';
 export const MODELS_VIEW_TYPE = 'temcoAi.localModels';
-export const KNOWLEDGE_VIEW_TYPE = 'temcoAi.knowledge';
+export const STALE_VIEW_TYPE = 'temcoAi.stale';
 
 interface ActionOptions {
 	kind?: 'primary' | 'ghost';
@@ -47,9 +48,6 @@ const table = (head: string[], rows: string[][]): string =>
 const barRow = (pct: number, value: string, kind?: string): string =>
 	`<div class="bar-row"><div class="bar"><span class="bar__fill${kind ? ` bar__fill--${kind}` : ''}" style="width:${pct}%"></span></div><span class="bar-row__value">${esc(value)}</span></div>`;
 
-const kv = (pairs: [string, string][]): string =>
-	`<dl class="kv">${pairs.map(([term, definition]) => `<dt>${esc(term)}</dt><dd>${definition}</dd>`).join('')}</dl>`;
-
 /** The five surfaces, one panel each. */
 export class AiPages {
 	private readonly panels = new Map<string, vscode.WebviewPanel>();
@@ -72,8 +70,16 @@ export class AiPages {
 		this.open('models', MODELS_VIEW_TYPE, 'Local Models', modelsBody());
 	}
 
-	knowledge(): void {
-		this.open('knowledge', KNOWLEDGE_VIEW_TYPE, 'Knowledge Base', knowledgeBody());
+	/** Pages the generator says are stale: the code they document moved after their last review. */
+	stale(): void {
+		let roots: readonly DocsRoot[] = [];
+		try {
+			roots = docs().roots();
+		} catch {
+			// No documentation module: the page still opens and says there is nothing to compare against.
+			roots = [];
+		}
+		this.open('stale', STALE_VIEW_TYPE, 'Update a Page the Code Moved', staleBody(roots));
 	}
 
 	dispose(): void {
@@ -240,52 +246,68 @@ ${card({ title: 'Privacy', mark: 'check', desc: 'No network calls once a model i
 </div>`;
 }
 
-/** *Knowledge Base* — the mock's `ai/knowledge`. */
-function knowledgeBody(): string {
-	const areas = 8;
-	const pages = 1254;
+/**
+ * *Update a page the code moved* — the one page about drafting that needs no model call to be useful.
+ *
+ * The generator records, per page, the code paths it documents and whether they moved after the last human review.
+ * That is the list: a page, where it sits, and the files that moved under it, with the two acts a person actually has —
+ * open the page, or take it to the panel to draft the update.
+ */
+function staleBody(roots: readonly DocsRoot[]): string {
+	const pages = roots.flatMap((root) => collectPages(root));
+	const stale = pages.filter((page) => page.exists && page.provenance?.stale === true);
+	const never = pages.filter((page) => page.reviewed === null).length;
+
+	const rows = stale.map((page) => ({
+		mark: 'sync',
+		title: page.title,
+		sub: `<span class="cell-muted">${esc(page.area)}${page.chapter === '' ? '' : ` › ${esc(page.chapter)}`} · ${esc((page.provenance?.code ?? []).join(' · ') || 'no code path recorded')}</span>`,
+		meta: button('Open', 'temcoDocs.openFile', { small: true, kind: 'ghost', args: [page.uri.fsPath] })
+			+ button('Draft it', 'temcoAi.openPanel', { small: true })
+	}));
 
 	return `${pageHead({
-		title: 'Knowledge Base',
-		mark: 'book',
-		desc: 'What the model was given, and when it was last rebuilt. The index follows the documentation; it is not a second copy of it.',
-		actions: button('Rebuild Index', 'temcoDocs.refresh', { kind: 'primary', mark: 'refresh' })
+		title: 'Update a Page the Code Moved',
+		mark: 'sync',
+		desc: 'The generator judges each page against the code it names. These moved after the last review — the page is not wrong yet, it is unverified. A draft is written beside the page and settled in Review Center; nothing here overwrites a file.',
+		actions: button('Open the AI panel', 'temcoAi.openPanel', { kind: 'primary', mark: 'sparkle' })
 	})}
 ${tiles([
-		{ value: pages.toLocaleString('en-US'), label: 'Chunks' },
-		{ value: String(areas), label: 'Areas' },
-		{ value: '768', label: 'Dimensions' },
-		{ value: '3 hours', label: 'Index age' }
+		{ value: String(stale.length), label: stale.length === 1 ? 'Page whose code moved' : 'Pages whose code moved' },
+		{ value: String(pages.length), label: pages.length === 1 ? 'Page read' : 'Pages read' },
+		{ value: String(never), label: 'Never reviewed' }
 	])}
-<div class="mt-24 grid grid--2">
+<div class="mt-24">
+${stale.length === 0
+			? card({
+				title: 'Nothing has moved',
+				mark: 'check',
+				desc: roots.length === 0
+					? 'No documentation set is being read, so there is nothing to compare against. Open a project in Documentation and this list fills itself.'
+					: 'Every page still matches the code it names, as far as the last read could tell.'
+			})
+			: card({
+				title: 'Stale pages',
+				mark: 'sync',
+				desc: `${stale.length} ${stale.length === 1 ? 'page' : 'pages'}, most recently changed code first. The paths under each one are what the registry says it documents.`,
+				body: list(rows)
+			})}
+</div>
+<div class="mt-24">
 ${card({
-		title: 'Sources in the Index',
-		mark: 'book',
-		desc: 'One chunk per heading, so an answer can point at a section and not just a page.',
-		body: list([
-			{ mark: 'book', title: 'Documentation pages', sub: `<span class="cell-muted">${pages.toLocaleString('en-US')} pages</span>`, meta: badge('Indexed', 'ok') },
-			{ mark: 'repo', title: 't3000webview', sub: '<span class="cell-muted">412 files · code comments</span>', meta: badge('Indexed', 'ok') },
-			{ mark: 'repo', title: 'bacnet-stack', sub: '<span class="cell-muted">1,204 files</span>', meta: badge('Indexed', 'ok') },
-			{ mark: 'document', title: 'T3000 User Manual.docx', sub: '<span class="cell-muted">changed 4 days ago</span>', meta: badge('Stale', 'warn') }
-		])
-	})}
-${card({
-		title: 'Retrieval',
-		mark: 'search',
-		actions: button('Test Retrieval', 'temcoAi.knowledge', { small: true, kind: 'ghost' }),
-		desc: 'How a question is turned into chunks. Reranking is off, so top-k is what you get.',
-		body: kv([
-			['Chunking', 'heading-aware · 800 tokens'],
-			['Overlap', '<span class="cell-mono">120 tokens</span>'],
-			['Top k', '<span class="cell-mono">8</span>'],
-			['Rerank', 'off'],
-			['Min score', '<span class="cell-mono">0.62</span>']
-		])
-	})}
+				title: 'What happens to a draft',
+				mark: 'document',
+				desc: 'The same three steps as any other draft, so an update cannot reach a reader without a person and a build.',
+				body: list([
+					{ mark: 'sparkle', title: 'The model drafts beside the page', sub: '<span class="cell-muted">it reads the page, the registry entry and the files that moved — nothing else</span>' },
+					{ mark: 'check', title: 'Review Center settles it', sub: '<span class="cell-muted">accept writes the page exactly as the draft reads; discard leaves it alone</span>' },
+					{ mark: 'upload', title: 'A build and a publish carry it', sub: '<span class="cell-muted">see Build Center and Publish &amp; Releases</span>' }
+				])
+			})}
 </div>`;
 }
 
-/** The AI Hub's side-bar group: the mock's *Runtime*. The chat is the panel, not a row that opens a page. */
+/** The AI Hub's side-bar groups. The chat is the panel, not a row that opens a page. */
 interface Row {
 	label: string;
 	note: string;
@@ -293,12 +315,25 @@ interface Row {
 	command: string;
 }
 
+/**
+ * Three groups, because there are three questions: what am I drafting, what is drafting it, and what has it produced.
+ *
+ * The old single *Runtime* group held the model and a Knowledge Base that nothing read; the base is gone, and what is
+ * left is arranged around the work — a draft, the model behind it, and the drafts waiting for a person.
+ */
 const GROUPS: { id: string; rows: Row[] }[] = [
 	{
-		id: 'runtime',
+		id: 'draft',
+		rows: [
+			{ label: 'Update a page the code moved', note: 'the pages the generator flagged stale, and the files under them', mark: 'sync', command: 'temcoAi.stale' },
+			{ label: 'Drafts waiting', note: 'what the model produced, before anybody settles it', mark: 'check', command: 'temcoDocs.review' }
+		]
+	},
+	{
+		id: 'model',
 		rows: [
 			{ label: 'Local Models', note: 'what is downloaded, and what is loaded', mark: 'chip', command: 'temcoAi.localModels' },
-			{ label: 'Knowledge Base', note: 'what the model was given', mark: 'book', command: 'temcoAi.knowledge' }
+			{ label: 'Server & Prompts', note: 'what a draft is told, and what answers it', mark: 'gear', command: 'temcoAi.page' }
 		]
 	}
 ];

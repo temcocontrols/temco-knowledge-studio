@@ -88,7 +88,7 @@ export function activate(context: vscode.ExtensionContext): TemcoAiApi {
 		vscode.commands.registerCommand('temcoAi.actions', () => pages.actions()),
 		vscode.commands.registerCommand('temcoAi.citations', () => pages.citations()),
 		vscode.commands.registerCommand('temcoAi.localModels', () => pages.models()),
-		vscode.commands.registerCommand('temcoAi.knowledge', () => pages.knowledge())
+		vscode.commands.registerCommand('temcoAi.stale', () => pages.stale())
 	);
 
 	return {

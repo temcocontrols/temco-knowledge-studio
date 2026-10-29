@@ -1011,8 +1011,26 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     }),
     // The Build Center page: the same command its own Refresh button runs, so opening and refreshing are one thing.
     vscode.commands.registerCommand('temcoDocs.builds', () => docsPages.builds()),
-    vscode.commands.registerCommand('temcoDocs.releases', () => docsPages.releases()),
-    // Exports has a page of its own: what each shape leaves behind, and the button that writes it. The three shapes are
+    /**
+     * Which pages name any of these paths.
+     *
+     * Asked by the repositories dashboard, which reads git rather than the registry: a changed file is only interesting
+     * when a page is about it, and the registry is the only thing that knows. A glob from the registry (`src/gfx/*.ts`)
+     * is matched the way the generator matches it, so the answer agrees with what the page was judged against.
+     */
+    vscode.commands.registerCommand('temcoDocs.pagesForPaths', (paths?: unknown) => {
+      const wanted = Array.isArray(paths) ? paths.filter((path): path is string => typeof path === 'string') : [];
+      if (wanted.length === 0) {
+        return [];
+      }
+      const pattern = (glob: string): RegExp => new RegExp(`^${glob.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*\//g, '(?:.*/)?').replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*')}$`);
+      const pages = roots.flatMap((root) => collectPages(root));
+      const found = pages.filter((page) => (page.provenance?.code ?? []).some((glob) => {
+        const ruled = pattern(glob.trim());
+        return wanted.some((path) => ruled.test(path.replace(/\\/g, '/')));
+      }));
+      return [...new Map(found.map((page) => [page.id, { id: page.id, title: page.title, path: page.uri.fsPath }])).values()];
+    }),    // Exports has a page of its own: what each shape leaves behind, and the button that writes it. The three shapes are
     // still separate commands, so a key binding or a script can ask for one without going through the page.
     vscode.commands.registerCommand('temcoDocs.export', () => docsPages.exports()),
     // Publishing hands files to a reader: copied into a folder the platform owns, recorded, then opened.

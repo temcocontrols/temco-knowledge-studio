@@ -643,6 +643,7 @@ function html(citing = false): string {
     <div class="az-row">
       <button type="button" class="az-btn az-btn--primary" id="reload">Read GitHub again</button>
       <button type="button" class="az-btn" id="add-toggle">Add an enterprise</button>
+      <button type="button" class="az-btn" id="dashboard">Dashboard</button>
       <button type="button" class="az-btn" id="new-project">New project</button>
       <button type="button" class="az-btn az-btn--link" id="back-to-form">Back to the New Project form</button>
     </div>
@@ -719,6 +720,7 @@ const selected = new Set();
 
 $('reload').addEventListener('click', () => vscode.postMessage({ type: 'reload' }));
 $('new-project').addEventListener('click', () => vscode.postMessage({ type: 'command', command: 'temcoProjects.newProject' }));
+$('dashboard').addEventListener('click', () => vscode.postMessage({ type: 'command', command: 'temcoRepositories.dashboard' }));
 $('back-to-form').addEventListener('click', () => vscode.postMessage({ type: 'command', command: 'temcoProjects.returnToNewProject' }));
 $('bulk-cite').addEventListener('click', () => {
   if (selected.size === 0) { return; }

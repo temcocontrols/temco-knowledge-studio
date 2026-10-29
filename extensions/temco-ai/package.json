@@ -27,7 +27,8 @@
   ],
   "activationEvents": [
     "onView:temcoAi.panel",
-    "onView:temcoAi.runtime"
+    "onView:temcoAi.draft",
+    "onView:temcoAi.model"
   ],
   "contributes": {
     "viewsContainers": {
@@ -49,8 +50,12 @@
       ],
       "temcoAiHub": [
         {
-          "id": "temcoAi.runtime",
-          "name": "Runtime"
+          "id": "temcoAi.draft",
+          "name": "Draft"
+        },
+        {
+          "id": "temcoAi.model",
+          "name": "Model"
         }
       ]
     },
@@ -80,9 +85,9 @@
         "category": "Temco AI"
       },
       {
-        "command": "temcoAi.knowledge",
-        "title": "Knowledge Base",
-        "icon": "$(book)",
+        "command": "temcoAi.stale",
+        "title": "Update a Page the Code Moved",
+        "icon": "$(sync)",
         "category": "Temco AI"
       },
       {
