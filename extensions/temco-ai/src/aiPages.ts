@@ -262,7 +262,7 @@ function staleBody(roots: readonly DocsRoot[]): string {
 		mark: 'sync',
 		title: page.title,
 		sub: `<span class="cell-muted">${esc(page.area)}${page.chapter === '' ? '' : ` › ${esc(page.chapter)}`} · ${esc((page.provenance?.code ?? []).join(' · ') || 'no code path recorded')}</span>`,
-		meta: button('Open', 'temcoDocs.openFile', { small: true, kind: 'ghost', args: [page.uri.fsPath] })
+		meta: button('Open', 'temcoDocs.openFile', { small: true, kind: 'ghost', args: page.uri.fsPath })
 			+ button('Draft it', 'temcoAi.openPanel', { small: true })
 	}));
 

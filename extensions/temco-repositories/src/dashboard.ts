@@ -44,6 +44,8 @@ interface Clone {
 	cloned: boolean;
 	last?: Commit;
 	commits: Commit[];
+	/** When the source was last read — the watermark the commits are judged against, if any. */
+	read?: string;
 	/** The paths that changed after the last read — what a reader has not been told about yet. */
 	fresh: string[];
 	/** Pages the documentation module says name those paths. */
@@ -137,9 +139,11 @@ async function clones(context: vscode.ExtensionContext, project: string | undefi
 				const clone = detail?.path;
 				const exists = clone !== undefined && existsSync(clone);
 				// The source's own last read, when the catalog recorded one: everything after it is new to the reader.
-				const read = (source as { lastRead?: string }).lastRead;
-				const commits = exists ? await history(clone as string, read) : [];
+				// The watermark is a date, because that is what `git log --date=short` answers with; comparing a date
+				// against a timestamp would mark every commit on the read's own day as already seen.
+				const read = source.lastRead ?? detail?.lastRead;
 				const waterline = read === undefined ? undefined : read.slice(0, 10);
+				const commits = exists ? await history(clone as string, waterline) : [];
 				const fresh = commits.filter((commit) => waterline === undefined || commit.date >= waterline).flatMap((commit) => commit.files);
 				clones.push({
 					slug: source.slug,
@@ -149,6 +153,7 @@ async function clones(context: vscode.ExtensionContext, project: string | undefi
 					cloned: exists,
 					last: commits[0],
 					commits,
+					read: waterline,
 					fresh,
 					docs: await pagesFor(fresh)
 				});
@@ -209,7 +214,8 @@ export class DashboardPage {
 		const { groups, total } = await clones(this.context, this.selection.project());
 		panel.webview.html = page(body(groups, total, this.selection.project()), {
 			title: 'Repositories — dashboard',
-			script
+			script,
+			extraCss: COMMITS_CSS
 		});
 	}
 
@@ -217,6 +223,23 @@ export class DashboardPage {
 		this.panel?.dispose();
 	}
 }
+
+/**
+ * The page's own styles: a commit list folded under the last commit, and the ones before the last read dimmed.
+ *
+ * The list is a `<details>` so the table stays one row per clone; opening it costs no script, and what is inside
+ * carries the only distinction the page makes — new since the read, or already seen.
+ */
+const COMMITS_CSS = `
+.commits > summary { cursor: pointer; list-style: none; }
+.commits > summary::-webkit-details-marker { display: none; }
+.commits > summary::before { content: '▸'; display: inline-block; width: 10px; color: var(--vscode-descriptionForeground); }
+.commits[open] > summary::before { content: '▾'; }
+.commits__list { margin: 6px 0 0 10px; padding: 0; list-style: none; font-size: 11.5px; }
+.commits__item { padding: 2px 0; display: flex; gap: 6px; align-items: baseline; }
+.commits__item--seen { opacity: .55; }
+.commits__subject { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+`;
 
 /** One clone, as a row: what moved, whether it is new to the reader, and the pages that name it. */
 function cloneRow(clone: Clone): string {
@@ -231,17 +254,30 @@ function cloneRow(clone: Clone): string {
 		: fresh === 0
 			? '<span class="badge badge--ok">nothing new</span>'
 			: `<span class="badge badge--info">${fresh} ${fresh === 1 ? 'file' : 'files'} since the last read</span>`;
+	// Every commit the page read is listed, and the ones before the watermark are dimmed rather than dropped: a column
+	// that only ever shows what is new cannot be checked against the history it came from.
+	const history = last === undefined
+		? '<span class="cell-muted">nothing read yet</span>'
+		: `<details class="commits"><summary><span class="cell-strong">${escapeHtml(last.subject)}</span><div class="cell-muted">${escapeHtml(last.short)} · ${escapeHtml(last.author)} · ${escapeHtml(last.date)}${clone.read === undefined ? '' : ` · last read ${escapeHtml(clone.read)}`}</div></summary>
+<ul class="commits__list">${clone.commits.map(commitItem).join('')}</ul></details>`;
 	return `<tr>
 <td><div class="cell-strong">${escapeHtml(clone.name)}</div><div class="cell-muted" style="font-size:11.5px">${clone.branch === undefined ? '' : escapeHtml(clone.branch)}${clone.path === undefined ? '' : ` · ${escapeHtml(clone.path)}`}</div></td>
-<td>${last === undefined ? '<span class="cell-muted">nothing read yet</span>' : `${escapeHtml(last.subject)}<div class="cell-muted" style="font-size:11.5px">${escapeHtml(last.short)} · ${escapeHtml(last.author)} · ${escapeHtml(last.date)}</div>`}</td>
+<td>${history}</td>
 <td>${state}</td>
 <td>${docs}</td>
-<td class="cell-nowrap">${action('Read', 'temcoRepositories.readSource', [clone.slug])}${action('Suggest docs', 'temcoAi.stale', [])}</td>
+<td class="cell-nowrap">${action('Read', 'temcoRepositories.readSource', clone.slug)}${action('Suggest docs', 'temcoAi.stale')}</td>
 </tr>`;
 }
 
-function action(label: string, command: string, args: unknown[]): string {
-	return `<button type="button" class="az-btn az-btn--sm" data-command="${command}" data-args="${escapeHtml(JSON.stringify(args))}">${escapeHtml(label)}</button>`;
+/** One commit in the list: the ones the reader has already been told about say so, in the same words as the badge. */
+function commitItem(commit: Commit): string {
+	const tone = commit.seen ? ' commits__item--seen' : '';
+	const mark = commit.seen ? 'seen' : 'new';
+	return `<li class="commits__item${tone}"><span class="cell-mono">${escapeHtml(commit.short)}</span><span class="commits__subject">${escapeHtml(commit.subject)}</span><span class="cell-muted">${escapeHtml(commit.date)}</span><span class="cell-muted">${mark}</span></li>`;
+}
+
+function action(label: string, command: string, args?: unknown): string {
+	return `<button type="button" class="az-btn az-btn--sm" data-command="${command}"${args === undefined ? '' : ` data-args="${escapeHtml(JSON.stringify(args))}"`}>${escapeHtml(label)}</button>`;
 }
 
 function escapeHtml(text: string): string {
@@ -257,8 +293,8 @@ function body(groups: readonly Group[], total: number, project: string | undefin
 interesting when a page is about the thing it touched, so each row ends with the pages that name the files it changed.
 The watermark is the last read: what came after it is what nobody has been told yet.</p>
 <div class="az-row"><button type="button" class="az-btn az-btn--primary" data-type="refresh">Read it again</button>
-${action('Read the repositories', 'temcoRepositories.page', [])}
-${action('Draft the affected pages', 'temcoAi.stale', [])}</div>
+${action('Read the repositories', 'temcoRepositories.page')}
+${action('Draft the affected pages', 'temcoAi.stale')}</div>
 </header></div>
 <p class="az-note">${total} ${total === 1 ? 'clone' : 'clones'} · ${newFiles} ${newFiles === 1 ? 'file' : 'files'} changed since the last read · ${affected} ${affected === 1 ? 'page' : 'pages'} affected${project === undefined ? '' : ` · project ${escapeHtml(project)}`}</p>`;
 

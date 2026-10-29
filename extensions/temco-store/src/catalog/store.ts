@@ -241,7 +241,7 @@ export class Catalog {
   sources(): SourceRow[] {
     const rows = this.db
       .prepare(
-        `SELECT id, slug, name, kind, branch, pages, state, last_read_mode AS lastReadMode
+        `SELECT id, slug, name, kind, branch, pages, state, last_read AS lastRead, last_read_mode AS lastReadMode
            FROM sources
           ORDER BY name`
       )
@@ -255,6 +255,7 @@ export class Catalog {
       branch: row.branch === null || row.branch === undefined ? undefined : String(row.branch),
       pages: row.pages === null || row.pages === undefined ? undefined : Number(row.pages),
       state: row.state === null || row.state === undefined ? undefined : String(row.state),
+      lastRead: row.lastRead === null || row.lastRead === undefined ? undefined : String(row.lastRead),
       lastReadMode:
         row.lastReadMode === null || row.lastReadMode === undefined ? undefined : String(row.lastReadMode),
     }));
@@ -799,7 +800,7 @@ export class Catalog {
   source(slug: string): SourceDetail | undefined {
     const row = this.db
       .prepare(
-        `SELECT id, kind, name, remote_url, path, branch, default_branch, docs_root, registry_path
+        `SELECT id, kind, name, remote_url, path, branch, default_branch, docs_root, registry_path, last_read
            FROM sources WHERE slug = ?`
       )
       .get(slug) as Record<string, unknown> | undefined;
@@ -818,6 +819,7 @@ export class Catalog {
       defaultBranch: text(row.default_branch),
       docsRoot: text(row.docs_root),
       registryPath: text(row.registry_path),
+      lastRead: text(row.last_read),
     };
   }
 
@@ -1106,6 +1108,8 @@ export interface SourceDetail {
   defaultBranch?: string;
   docsRoot?: string;
   registryPath?: string;
+  /** When this source was last read: what the dashboard measures "since" against. */
+  lastRead?: string;
 }
 
 /** A page as a read found it — enough for a tree, and nothing invented. */
@@ -1158,6 +1162,8 @@ export interface SourceRow {
   pages?: number;
   /** What the last read concluded, in one line. */
   state?: string;
+  /** When the last read happened — the watermark anything newer is measured against. */
+  lastRead?: string;
   lastReadMode?: string;
 }
 

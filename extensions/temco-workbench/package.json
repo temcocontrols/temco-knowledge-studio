@@ -300,7 +300,12 @@
         {
           "id": "temcoLearn",
           "title": "Temco Learn",
-          "icon": "media/help.svg"
+          "icon": "media/docs.svg"
+        },
+        {
+          "id": "temcoForum",
+          "title": "Forum",
+          "icon": "media/forum.svg"
         },
         {
           "id": "temcoSql",

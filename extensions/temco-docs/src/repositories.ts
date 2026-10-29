@@ -44,11 +44,35 @@ export interface OfferedScript {
 	detail: string;
 }
 
+/** One thread of a repository's forum, as its issues carry it. */
+export interface Thread {
+	number: number;
+	title: string;
+	body: string;
+	author: string;
+	createdAt: string;
+	updatedAt: string;
+	state: string;
+	labels: string[];
+	comments: number;
+	url: string;
+	/** Days since it was opened. */
+	days: number;
+}
+
+/** A repository's threads, and why the list might be short or empty. */
+export interface ThreadsAnswer {
+	repository?: string;
+	threads: Thread[];
+	note?: string;
+}
+
 /** The repositories module's exports — the copy of `extensions/temco-repositories/src/extension.ts`. */
 interface TemcoRepositoriesApi {
 	onDidChange(listener: () => void): vscode.Disposable;
 	codeFiles(source: RepositorySource): Promise<{ files: CodeFile[]; note?: string }>;
 	readMaterials(source: RepositorySource, files: readonly string[], limit?: number): Promise<Material>;
+	threads(source: RepositorySource, label: string): Promise<ThreadsAnswer>;
 	readonly offeredScripts: readonly OfferedScript[];
 }
 
@@ -76,4 +100,9 @@ export function readMaterials(
 	limit?: number
 ): Promise<Material> {
 	return repositories().readMaterials(source, files, limit);
+}
+
+/** The labeled issues of a source's repository — the forum's threads. Read only: nothing is labelled or commented. */
+export function threads(source: RepositorySource, label: string): Promise<ThreadsAnswer> {
+	return repositories().threads(source, label);
 }

@@ -248,7 +248,8 @@ export class AiPanel implements vscode.WebviewViewProvider {
       type: 'note',
       text:
         `Draft from ${PROMPT_VERSION}${range ? ` · ${range.label}` : ''}. ` +
-        'Read the diff: Apply replaces the whole page, and one Ctrl+Z takes it back.',
+        'Read the diff: Apply replaces the whole page. In a clone it lands as an uncommitted patch with Undo; ' +
+        'in this window\'s own tree, one Ctrl+Z takes it back.',
     });
     // Kept in the catalog as well as on screen: a diff tab is closed by accident, and the Review Center is where
     // a draft is meant to wait until somebody settles it.
@@ -265,9 +266,25 @@ export class AiPanel implements vscode.WebviewViewProvider {
     if (!draft) {
       return;
     }
+    const text = draft.text.endsWith('\n') ? draft.text : `${draft.text}\n`;
+    // A page inside a clone the catalog knows is written as an uncommitted patch in that clone's working tree: `git
+    // apply` is what makes it visible to `git status` and reversible by the very patch that carried it. That path asks
+    // its own question and offers its own Undo, so a file that comes back `applied` needs nothing more from here.
+    const outcome = await this.writeToSource(draft.page.uri.fsPath, text);
+    if (outcome === 'applied') {
+      this.post({ type: 'note', text: 'The draft was applied to the clone. It is in the working tree, not committed.' });
+      this.settle(draft);
+      return;
+    }
+    // Cancelled or refused already said so, in the dialog and in its own notification.
+    if (outcome !== 'outside') {
+      return;
+    }
+    // The page is in no clone, so it is a file of the tree this window has open. Writing it is the editor's edit — and
+    // the editor's undo — behind the same question, which is what keeps a project's own tree out of a silent write.
     const answer = await vscode.window.showWarningMessage(
       `Replace the whole of "${draft.page.title}" with the draft?`,
-      { modal: true, detail: `The draft came from ${PROMPT_VERSION}. The edit is a normal, undoable change.` },
+      { modal: true, detail: `The draft came from ${PROMPT_VERSION}. The edit is a normal, undoable change, and nothing is committed.` },
       'Replace'
     );
     if (answer !== 'Replace') {
@@ -278,16 +295,39 @@ export class AiPanel implements vscode.WebviewViewProvider {
     await vscode.window.showTextDocument(document, { preview: false });
     const edit = new vscode.WorkspaceEdit();
     const last = document.lineAt(document.lineCount - 1).range.end;
-    const text = draft.text.endsWith('\n') ? draft.text : `${draft.text}\n`;
     edit.replace(draft.page.uri, new vscode.Range(new vscode.Position(0, 0), last), text);
     if (await vscode.workspace.applyEdit(edit)) {
-      this.draft = undefined;
-      // The page is written, so the copy of this draft in the queue is settled: one decision, one row.
-      void vscode.commands.executeCommand('temcoDocs.settlePage', draft.page.id);
       this.post({ type: 'note', text: 'The draft was applied. Ctrl+Z takes it back.' });
-      this.refresh();
+      this.settle(draft);
     } else {
       this.post({ type: 'error', text: 'The editor refused the edit; nothing was changed.' });
+    }
+  }
+
+  /** One decision, one row: the draft is spent, so the copy of it waiting in the queue is settled too. */
+  private settle(draft: { page: { id: string } }): void {
+    this.draft = undefined;
+    void vscode.commands.executeCommand('temcoDocs.settlePage', draft.page.id);
+    this.refresh();
+  }
+
+  /**
+   * Asks the repositories module to land this text in the clone that holds `file`.
+   *
+   * `outside` is not a failure: it is the answer "this file is in no clone", and the caller then owns the edit. A
+   * module that is not installed answers the same way, because losing a draft to a missing dependency would be worse
+   * than writing it where the person can see it.
+   */
+  private async writeToSource(file: string, text: string): Promise<'applied' | 'cancelled' | 'failed' | 'outside'> {
+    try {
+      const answer = await vscode.commands.executeCommand<{ state?: string } | undefined>(
+        'temcoRepositories.applyToSource',
+        { path: file, text }
+      );
+      const state = answer?.state;
+      return state === 'applied' || state === 'cancelled' || state === 'failed' ? state : 'outside';
+    } catch {
+      return 'outside';
     }
   }
 

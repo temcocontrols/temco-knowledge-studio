@@ -16,6 +16,7 @@ import { registerBuildCommands, registerScriptCommands, scriptsIn } from './buil
 import { registerExportCommands } from './export';
 import { publishDiagnostics } from './diagnostics';
 import { registerFeedbackCommands } from './feedback';
+import { FORUM_VIEW_ID, ForumPanel, TriagePage, openThread } from './forum';
 import { registerDiffCommand } from './diffPage';
 import { registerDocxCommand } from './docx';
 import { GridEditor, openGrid } from './gridEditor';
@@ -327,6 +328,21 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     }
   });
   context.subscriptions.push(vscode.window.registerWebviewViewProvider(PANEL_VIEW_TYPE, panel));
+
+  // The forum: what is being said about this documentation set, in a panel, and one thread opened for triage *beside*
+  // whatever the person was reading — never on top of it. The list is read from the repository the project cites.
+  const triage = new TriagePage(() => roots);
+  const forum = new ForumPanel(context, triage);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(FORUM_VIEW_ID, forum),
+    { dispose: () => triage.dispose() },
+    // Reading again and going to the list are one act from the palette: the panel is where the answer appears.
+    vscode.commands.registerCommand('temcoDocs.forum', () => {
+      forum.refresh();
+      void vscode.commands.executeCommand(`${FORUM_VIEW_ID}.focus`);
+    }),
+    vscode.commands.registerCommand('temcoDocs.openThread', (url?: unknown) => openThread(url))
+  );
 
   // Two reads can be in flight at once — a file event while the window is still coming up, one save firing two
   // watchers, the workspace folders changing under a read that has already started. Each read builds its own answer

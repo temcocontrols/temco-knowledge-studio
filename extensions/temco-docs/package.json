@@ -37,6 +37,7 @@
     "onView:temcoDocs.panel",
     "onView:temcoDocs.pages",
     "onView:temcoDocs.queue",
+    "onView:temcoDocs.forum",
     "onCustomEditor:temcoDocs.grid",
     "onView:temcoDocs.section.pipeline"
   ],
@@ -65,8 +66,7 @@
         },
         {
           "id": "temcoDocs.pages",
-          "name": "Pages"
-,
+          "name": "Pages",
           "initialSize": 3
         },
         {
@@ -74,6 +74,13 @@
           "name": "Publish",
           "initialSize": 1,
           "visibility": "collapsed"
+        }
+      ],
+      "temcoForum": [
+        {
+          "id": "temcoDocs.forum",
+          "name": "Threads",
+          "type": "webview"
         }
       ]
     },
@@ -183,6 +190,18 @@
         "command": "temcoDocs.pagesForPaths",
         "title": "Pages That Name These Paths",
         "category": "Temco Docs"
+      },
+      {
+        "command": "temcoDocs.forum",
+        "title": "Forum — Threads",
+        "category": "Temco Docs",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "temcoDocs.openThread",
+        "title": "Open a Thread on GitHub",
+        "category": "Temco Docs",
+        "icon": "$(link-external)"
       },
       {
         "command": "temcoDocs.showStatus",

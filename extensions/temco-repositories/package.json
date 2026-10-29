@@ -69,6 +69,12 @@
         "icon": "$(history)"
       },
       {
+        "command": "temcoRepositories.applyToSource",
+        "title": "Apply a Change to a Clone",
+        "category": "Temco Repositories",
+        "icon": "$(git-commit)"
+      },
+      {
         "command": "temcoRepositories.rowReadOrg",
         "title": "Read This Enterprise Again",
         "icon": "$(refresh)"

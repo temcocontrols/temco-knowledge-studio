@@ -19,6 +19,7 @@ import * as path from 'node:path';
 import { REPOSITORY_FILE_SCHEME, RepositoryFileProvider, languageOf, repositoryFileUri } from './fileView';
 import { registerReadCommands } from './read';
 import { tokenOf } from './read';
+import { applyToSource } from './apply';
 import { CodeFile, Material, RepositorySource, codeFiles, readMaterials, sourceTree } from './repository';
 import { RepositoryDetailPage } from './repositoryPage';
 import { RepositoriesPage } from './repositoriesPage';
@@ -27,6 +28,7 @@ import { RepositorySettingsPage } from './settingsPage';
 import { OFFERED_SCRIPTS, OfferedScript } from './scripts';
 import { registerSourcesView } from './sourcesView';
 import { Catalog, selection, slugOf } from './store';
+import { ThreadsAnswer, threads as readThreads } from './threads';
 import { registerWorkareaCommands } from './workarea';
 import { cloneFolder, hasClone } from './workarea';
 
@@ -40,6 +42,8 @@ export interface TemcoRepositoriesApi {
 	tree(source: RepositorySource): Promise<{ files: CodeFile[]; note?: string } | { error: string }>;
 	/** The text of the files a person ticked, within one budget. */
 	readMaterials(source: RepositorySource, files: readonly string[], limit?: number): Promise<Material>;
+	/** The labeled issues of a source's repository — the forum's threads. Read only: no label, no comment, no state. */
+	threads(source: RepositorySource, label: string): Promise<ThreadsAnswer>;
 	/** The repository's own documentation scripts: a vocabulary, not a runner. */
 	readonly offeredScripts: readonly OfferedScript[];
 }
@@ -141,7 +145,17 @@ export function activate(context: vscode.ExtensionContext): TemcoRepositoriesApi
 		),
 		// Where a rate limit comes from, answered before it is hit: the allowance GitHub reports for this machine's
 		// address, with the token attached if there is one.
-		vscode.commands.registerCommand('temcoRepositories.testToken', () => void testToken(context))
+		vscode.commands.registerCommand('temcoRepositories.testToken', () => void testToken(context)),
+		// A drafted change reaching a clone: a modal question, `git apply`, and the Undo that reverses the same patch.
+		// A file outside every clone is refused here — that tree belongs to the window a person is looking at, and its
+		// own editor undo is the right handle.
+		vscode.commands.registerCommand('temcoRepositories.applyToSource', (payload?: unknown) => {
+			const request = (payload ?? {}) as { path?: unknown; text?: unknown };
+			if (typeof request.path !== 'string' || request.path.length === 0 || typeof request.text !== 'string') {
+				return { state: 'failed', note: 'a file path and the text to write are both required' };
+			}
+			return applyToSource(context, request.path, request.text);
+		})
 	);
 
 	return {
@@ -149,6 +163,7 @@ export function activate(context: vscode.ExtensionContext): TemcoRepositoriesApi
 		codeFiles: (source) => codeFiles(context, source),
 		tree: (source) => sourceTree(context, source),
 		readMaterials: (source, files, limit) => readMaterials(context, source, files, limit),
+		threads: (source, label) => readThreads(context, source, label),
 		offeredScripts: OFFERED_SCRIPTS,
 	};
 }

@@ -86,6 +86,8 @@ export interface SourceDetail {
 	defaultBranch?: string;
 	docsRoot?: string;
 	registryPath?: string;
+	/** When this source was last read: what the dashboard measures "since" against. */
+	lastRead?: string;
 }
 
 /** A source as a list reads it back. */
@@ -97,6 +99,8 @@ export interface SourceRow {
 	branch?: string;
 	pages?: number;
 	state?: string;
+	/** When the last read happened — the watermark "since the last read" is measured against. */
+	lastRead?: string;
 	lastReadMode?: string;
 }
 
