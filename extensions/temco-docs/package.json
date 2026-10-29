@@ -198,8 +198,32 @@
         "icon": "$(comment-discussion)"
       },
       {
-        "command": "temcoDocs.openThread",
-        "title": "Open a Thread on GitHub",
+        "command": "temcoDocs.forumPage",
+        "title": "Forum — All Topics",
+        "category": "Temco Docs",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "temcoDocs.forumSync",
+        "title": "Read the Forum",
+        "category": "Temco Docs",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "temcoDocs.forumTopic",
+        "title": "Open a Forum Topic",
+        "category": "Temco Docs",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "temcoDocs.forumSuggest",
+        "title": "Suggest What the Docs Should Do",
+        "category": "Temco Docs",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "temcoDocs.openForum",
+        "title": "Open on the Forum",
         "category": "Temco Docs",
         "icon": "$(link-external)"
       },
@@ -653,6 +677,14 @@
         {
           "command": "temcoDocs.knowledge",
           "when": "false"
+        },
+        {
+          "command": "temcoDocs.forumTopic",
+          "when": "false"
+        },
+        {
+          "command": "temcoDocs.forumSuggest",
+          "when": "false"
         }
       ],
       "editor/title": [
@@ -821,6 +853,16 @@
         }
       ],
       "view/title": [
+      {
+        "command": "temcoDocs.forumPage",
+        "when": "view == temcoDocs.forum",
+        "group": "navigation@0"
+      },
+      {
+        "command": "temcoDocs.forum",
+        "when": "view == temcoDocs.forum",
+        "group": "navigation@1"
+      },
         {
           "command": "temcoDocs.newPage",
           "when": "view == temcoDocs.pages",
@@ -1078,6 +1120,11 @@
           "type": "string",
           "default": "",
           "markdownDescription": "The resource's region, for a regional Translator resource (for example `westeurope`). Leave empty for a global one, or when the key was made for a single region and the service accepts it without."
+        },
+        "temcoDocs.forumUrl": {
+          "type": "string",
+          "default": "https://forums.temcocontrols.com",
+          "markdownDescription": "The community forum the **Forum** panel reads: a Discourse site. Its `site.json` lists the categories, each category's address lists its topics, and a topic's address carries the posts. Nothing is ever posted there from this window."
         }
       }
     },

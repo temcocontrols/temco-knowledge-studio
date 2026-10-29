@@ -91,6 +91,12 @@
         "category": "Temco AI"
       },
       {
+        "command": "temcoAi.suggestTopic",
+        "title": "Suggest What the Docs Should Do About a Topic",
+        "icon": "$(sparkle)",
+        "category": "Temco AI"
+      },
+      {
         "command": "temcoAi.page",
         "title": "The AI Page",
         "icon": "$(settings-gear)",
@@ -134,6 +140,12 @@
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "temcoAi.suggestTopic",
+          "when": "false"
+        }
+      ],
       "view/title": [
         {
           "command": "temcoAi.dockRight",

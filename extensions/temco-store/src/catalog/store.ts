@@ -971,6 +971,197 @@ export class Catalog {
       .run(state, documentSlug, pageId);
   }
 
+  // ── The forum ─────────────────────────────────────────────────────────────────────────────────────────────────
+  //
+  // A cache of the community site, written by a sync and read by a view. Nothing here decides what a topic means: the
+  // site holds the conversation, the registry holds the pages, and this is the bridge the two are read through.
+
+  /** The categories, in the order the site lists them. */
+  forumCategories(): ForumCategoryRow[] {
+    const rows = this.db
+      .prepare(
+        'SELECT id, slug, name, color, parent_id, topics, posts, position, synced_at FROM forum_categories ORDER BY position, name'
+      )
+      .all() as Record<string, unknown>[];
+    return rows.map((row) => ({
+      id: Number(row.id ?? 0),
+      slug: String(row.slug ?? ''),
+      name: String(row.name ?? ''),
+      color: text(row.color),
+      parentId: row.parent_id === null || row.parent_id === undefined ? undefined : Number(row.parent_id),
+      topics: Number(row.topics ?? 0),
+      posts: Number(row.posts ?? 0),
+      syncedAt: text(row.synced_at),
+    }));
+  }
+
+  saveForumCategories(rows: readonly ForumCategoryInput[]): void {
+    const at = new Date().toISOString();
+    const statement = this.db.prepare(
+      `INSERT INTO forum_categories (id, slug, name, color, parent_id, topics, posts, position, synced_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         slug = excluded.slug, name = excluded.name, color = excluded.color, parent_id = excluded.parent_id,
+         topics = excluded.topics, posts = excluded.posts, position = excluded.position, synced_at = excluded.synced_at`
+    );
+    for (const row of rows) {
+      statement.run(
+        row.id,
+        row.slug,
+        row.name,
+        row.color ?? null,
+        row.parentId ?? null,
+        row.topics ?? 0,
+        row.posts ?? 0,
+        row.position ?? 0,
+        at
+      );
+    }
+  }
+
+  /** The topics of one category — or of every category, when none is named. Pinned first, then newest activity. */
+  forumTopics(categoryId?: number): ForumTopicRow[] {
+    const where = categoryId === undefined ? '' : 'WHERE category_id = ?';
+    const statement = this.db.prepare(
+      `SELECT id, category_id, slug, title, excerpt, posts_count, reply_count, views, created_at, last_posted_at,
+              pinned, closed, posters, synced_at
+         FROM forum_topics ${where}
+        ORDER BY pinned DESC, COALESCE(last_posted_at, created_at) DESC`
+    );
+    const rows = (categoryId === undefined ? statement.all() : statement.all(categoryId)) as Record<string, unknown>[];
+    return rows.map((row) => ({
+      id: Number(row.id ?? 0),
+      categoryId: Number(row.category_id ?? 0),
+      slug: String(row.slug ?? ''),
+      title: String(row.title ?? ''),
+      excerpt: text(row.excerpt),
+      posts: Number(row.posts_count ?? 0),
+      replies: Number(row.reply_count ?? 0),
+      views: Number(row.views ?? 0),
+      createdAt: text(row.created_at),
+      lastPostedAt: text(row.last_posted_at),
+      pinned: Number(row.pinned ?? 0) === 1,
+      closed: Number(row.closed ?? 0) === 1,
+      posters: postersOf(row.posters),
+      syncedAt: text(row.synced_at),
+    }));
+  }
+
+  saveForumTopics(rows: readonly ForumTopicInput[]): void {
+    const at = new Date().toISOString();
+    const statement = this.db.prepare(
+      `INSERT INTO forum_topics (id, category_id, slug, title, excerpt, posts_count, reply_count, views, created_at,
+                                last_posted_at, pinned, closed, posters, synced_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         category_id = excluded.category_id, slug = excluded.slug, title = excluded.title, excerpt = excluded.excerpt,
+         posts_count = excluded.posts_count, reply_count = excluded.reply_count, views = excluded.views,
+         created_at = excluded.created_at, last_posted_at = excluded.last_posted_at, pinned = excluded.pinned,
+         closed = excluded.closed, posters = excluded.posters, synced_at = excluded.synced_at`
+    );
+    for (const row of rows) {
+      statement.run(
+        row.id,
+        row.categoryId,
+        row.slug,
+        row.title,
+        row.excerpt ?? null,
+        row.posts ?? 0,
+        row.replies ?? 0,
+        row.views ?? 0,
+        row.createdAt ?? null,
+        row.lastPostedAt ?? null,
+        row.pinned === true ? 1 : 0,
+        row.closed === true ? 1 : 0,
+        JSON.stringify(row.posters ?? []),
+        at
+      );
+    }
+  }
+
+  /** One topic's posts, in the order the forum shows them. */
+  forumPosts(topicId: number): ForumPostRow[] {
+    const rows = this.db
+      .prepare(
+        'SELECT id, topic_id, post_number, username, name, created_at, cooked, reply_to, synced_at FROM forum_posts WHERE topic_id = ? ORDER BY post_number'
+      )
+      .all(topicId) as Record<string, unknown>[];
+    return rows.map((row) => ({
+      id: Number(row.id ?? 0),
+      topicId: Number(row.topic_id ?? 0),
+      postNumber: Number(row.post_number ?? 0),
+      username: text(row.username),
+      name: text(row.name),
+      createdAt: text(row.created_at),
+      cooked: text(row.cooked),
+      replyTo: row.reply_to === null || row.reply_to === undefined ? undefined : Number(row.reply_to),
+      syncedAt: text(row.synced_at),
+    }));
+  }
+
+  /** A topic's posts, replaced whole: a read of a topic is a snapshot, not an accumulation. */
+  saveForumPosts(topicId: number, rows: readonly ForumPostInput[]): void {
+    const at = new Date().toISOString();
+    const insert = this.db.prepare(
+      `INSERT OR REPLACE INTO forum_posts (id, topic_id, post_number, username, name, created_at, cooked, reply_to, synced_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare('DELETE FROM forum_posts WHERE topic_id = ?').run(topicId);
+      for (const row of rows) {
+        insert.run(row.id, topicId, row.postNumber, row.username ?? null, row.name ?? null, row.createdAt ?? null, row.cooked ?? null, row.replyTo ?? null, at);
+      }
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  /** What was proposed for a topic, if anything was. */
+  forumSuggestion(topicId: number): ForumSuggestionRow | undefined {
+    const row = this.db
+      .prepare('SELECT topic_id, page_id, page_title, text, source, at FROM forum_suggestions WHERE topic_id = ?')
+      .get(topicId) as Record<string, unknown> | undefined;
+    if (row === undefined) {
+      return undefined;
+    }
+    return {
+      topicId: Number(row.topic_id ?? 0),
+      pageId: text(row.page_id),
+      pageTitle: text(row.page_title),
+      text: String(row.text ?? ''),
+      source: String(row.source ?? 'match'),
+      at: String(row.at ?? ''),
+    };
+  }
+
+  saveForumSuggestion(input: ForumSuggestionInput): void {
+    this.db
+      .prepare(
+        `INSERT INTO forum_suggestions (topic_id, page_id, page_title, text, source, at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(topic_id) DO UPDATE SET
+           page_id = excluded.page_id, page_title = excluded.page_title, text = excluded.text,
+           source = excluded.source, at = excluded.at`
+      )
+      .run(input.topicId, input.pageId ?? null, input.pageTitle ?? null, input.text, input.source, new Date().toISOString());
+  }
+
+  /** When the forum was last read, across categories and topics — the "read it again" line's own fact. */
+  forumSyncedAt(): string | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT MAX(at) AS at FROM (
+           SELECT MAX(synced_at) AS at FROM forum_categories
+           UNION ALL SELECT MAX(synced_at) FROM forum_topics
+         )`
+      )
+      .get() as { at?: unknown } | undefined;
+    return text(row?.at);
+  }
+
   /**
    * One row in `events`: what the platform noticed.
    *
@@ -1207,4 +1398,139 @@ export interface RepositoryCacheRow {
 /** The database file for a storage folder, whether or not it exists yet — used for reporting and for a click. */
 export function catalogFileUri(context: vscode.ExtensionContext): vscode.Uri {
   return vscode.Uri.joinPath(context.globalStorageUri, 'catalog', CATALOG_FILE);
+}
+
+/** A nullable column as a string, or nothing. */
+function text(value: unknown): string | undefined {
+  return value === null || value === undefined ? undefined : String(value);
+}
+
+/** The posters a topic list carried. A malformed value reads as "nobody", never as an error. */
+function postersOf(value: unknown): ForumPoster[] {
+  if (typeof value !== 'string' || value.length === 0) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed
+      .filter((entry): entry is { username?: unknown; name?: unknown } => entry !== null && typeof entry === 'object')
+      .map((entry) => ({ username: String(entry.username ?? ''), name: text(entry.name) }))
+      .filter((poster) => poster.username.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+/** One person who posted in a topic, as a list row names them. */
+export interface ForumPoster {
+  username: string;
+  name?: string;
+}
+
+/** A forum category, as the site lists it. */
+export interface ForumCategoryRow {
+  id: number;
+  slug: string;
+  name: string;
+  color?: string;
+  parentId?: number;
+  topics: number;
+  posts: number;
+  syncedAt?: string;
+}
+
+/** What a sync writes for a category. */
+export interface ForumCategoryInput {
+  id: number;
+  slug: string;
+  name: string;
+  color?: string;
+  parentId?: number;
+  topics?: number;
+  posts?: number;
+  /** Where the site puts it in its own list. */
+  position?: number;
+}
+
+/** A topic as the list shows it: the four figures the forum's own table has, and who is in it. */
+export interface ForumTopicRow {
+  id: number;
+  categoryId: number;
+  slug: string;
+  title: string;
+  excerpt?: string;
+  posts: number;
+  replies: number;
+  views: number;
+  createdAt?: string;
+  lastPostedAt?: string;
+  pinned: boolean;
+  closed: boolean;
+  posters: ForumPoster[];
+  syncedAt?: string;
+}
+
+/** What a sync writes for a topic. */
+export interface ForumTopicInput {
+  id: number;
+  categoryId: number;
+  slug: string;
+  title: string;
+  excerpt?: string;
+  posts?: number;
+  replies?: number;
+  views?: number;
+  createdAt?: string;
+  lastPostedAt?: string;
+  pinned?: boolean;
+  closed?: boolean;
+  posters?: ForumPoster[];
+}
+
+/** One post — the discussion history a topic page reads. */
+export interface ForumPostRow {
+  id: number;
+  topicId: number;
+  postNumber: number;
+  username?: string;
+  name?: string;
+  createdAt?: string;
+  /** The forum's own HTML for the post. */
+  cooked?: string;
+  /** The post this one answered, when it answered one. */
+  replyTo?: number;
+  syncedAt?: string;
+}
+
+/** What a sync writes for one post. */
+export interface ForumPostInput {
+  id: number;
+  postNumber: number;
+  username?: string;
+  name?: string;
+  createdAt?: string;
+  cooked?: string;
+  replyTo?: number;
+}
+
+/** What the platform proposes for a topic: the page, and the sentence a triager reads. */
+export interface ForumSuggestionRow {
+  topicId: number;
+  pageId?: string;
+  pageTitle?: string;
+  text: string;
+  /** `match` for what the registry alone can say, `ai` for an answer the model wrote. */
+  source: string;
+  at: string;
+}
+
+export interface ForumSuggestionInput {
+  topicId: number;
+  pageId?: string;
+  pageTitle?: string;
+  text: string;
+  source: string;
 }

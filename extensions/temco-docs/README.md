@@ -14,8 +14,7 @@ The module is a built-in extension of the platform: it is compiled with all the 
 | Folder | `extensions/temco-docs` |
 | Extension id | `temcocontrols.temco-docs` |
 | Command namespace | `temcoDocs.*` |
-| Activity bar | **Temco** (`temco`) — the Documentation module's own five sections (*Projects*, *Sources*, *Documents*, *Pipeline*, *How-To*) + the Workspace tree (`temcoDocs.pages`) in *Documents* |
-| Secondary side bar | **Forum** (`temcoForum`) — the threads panel (`temcoDocs.forum`), declared there rather than in the activity bar |
+| Activity bar | **Temco** (`temco`) — the Documentation module's own five sections (*Projects*, *Sources*, *Documents*, *Pipeline*, *How-To*) + the Workspace tree (`temcoDocs.pages`) in *Documents*; **Forum** (`temcoForum`) — the community forum's categories (`temcoDocs.forum`), with *Forum — All Topics* and *Read the Forum* in its title bar |
 | Settings | none |
 | Reads | [`temco-ai`](../temco-ai/README.md) for a draft or an analysis — optional, by command; and it needs nothing else |
 | Read by | [`temco-workbench`](../temco-workbench/README.md) (the Library and the dashboard) and [`temco-ai`](../temco-ai/README.md) — this module publishes its model (`src/api.ts`) rather than lending it |
@@ -27,7 +26,7 @@ Four surfaces:
 - **Workspace** (activity bar) — the pages of the project being worked on, as areas → chapters → pages, with the metadata a maintainer needs (owner, audience, whether the page ships, whether it was ever reviewed) and, from the source's own generated files, each page's last change, its headings, and whether the code it claims moved on since the last review. A **Gaps** node gathers every structural fault, problems land in the file that has to be fixed, and the status bar carries the totals.
 - **Documentation Owed** — the report of what needs attention, grouped by its owner.
 - **Builds** — the open repository's own site and offline-help builds, invoked as tasks and judged by the artifact they leave behind, never by an exit code.
-- **Forum** — the threads about this documentation set: the issues carrying the `docs-feedback` label in the repository the project cites, as a panel declared in the secondary side bar, and **Triage**, which opens one thread as a tab *beside* the conversation — the thread, the page it names, whether that page's code moved, and the two acts that follow (open the page, draft the fix, which opens the page and hands it to the AI panel). The list is read 50 at a time and **Load more** asks for the next page. Read only: nothing is labelled or commented from here.
+- **Forum** — the community forum at `forums.temcocontrols.com`, read into the platform rather than opened in a browser tab: the **categories** in the panel (the site's own order and colours), one category's **topics** in a page laid out as the forum lays them out (title, who is in it, replies, views, last activity), and one **topic** in a tab beside it — the discussion history, the page it is about, and what the documentation should do about it. Everything is read from the SQLite catalog (`forum_categories`, `forum_topics`, `forum_posts`, `forum_suggestions`), which **Read the Forum** fills from the site's own JSON: nothing is posted, replied to or liked from here. The suggestion is the platform's registry match first, and *Suggest with the AI* asks the local model for the sentence a triager reads.
 
 The documentation dashboard is deliberately not one of them: it is a generated static page in the docs site, built by the product repository's own pipeline. This module is the hand-off target its rows deep-link into; it neither generates nor re-implements that page.
 

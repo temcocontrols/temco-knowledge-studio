@@ -16,7 +16,7 @@ import { registerBuildCommands, registerScriptCommands, scriptsIn } from './buil
 import { registerExportCommands } from './export';
 import { publishDiagnostics } from './diagnostics';
 import { registerFeedbackCommands } from './feedback';
-import { FORUM_VIEW_ID, ForumPanel, TriagePage, openThread } from './forum';
+import { FORUM_VIEW_ID, ForumPanel, TopicListPage, TopicPage, openForum, suggestForTopic, syncForum } from './forum';
 import { registerDiffCommand } from './diffPage';
 import { registerDocxCommand } from './docx';
 import { GridEditor, openGrid } from './gridEditor';
@@ -329,19 +329,45 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   });
   context.subscriptions.push(vscode.window.registerWebviewViewProvider(PANEL_VIEW_TYPE, panel));
 
-  // The forum: what is being said about this documentation set, in a panel, and one thread opened for triage *beside*
-  // whatever the person was reading — never on top of it. The list is read from the repository the project cites.
-  const triage = new TriagePage(() => roots);
-  const forum = new ForumPanel(context, triage);
+  // The forum: the community site's categories in the left container, one category's topics in a page, and one thread
+  // in a tab beside it. Every surface reads the catalog, which `temcoDocs.forumSync` fills from the site.
+  const topics = new TopicPage(context, () => roots);
+  const topicList = new TopicListPage(context);
+  const forum = new ForumPanel(context, topicList);
+  const readForum = async (args?: unknown): Promise<void> => {
+    const choice = (args ?? {}) as { id?: unknown; slug?: unknown };
+    const category = typeof choice.id === 'number' && typeof choice.slug === 'string' ? { id: choice.id, slug: choice.slug } : undefined;
+    const note = await syncForum(context, category);
+    forum.refresh();
+    await topicList.refresh();
+    if (note !== undefined) {
+      void vscode.window.showWarningMessage(`Temco Docs: ${note}.`);
+    }
+  };
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(FORUM_VIEW_ID, forum),
-    { dispose: () => triage.dispose() },
-    // Reading again and going to the list are one act from the palette: the panel is where the answer appears.
+    { dispose: () => topics.dispose() },
+    { dispose: () => topicList.dispose() },
+    // Going to the list is one act from the palette: the panel is where the categories are, so the command goes there.
     vscode.commands.registerCommand('temcoDocs.forum', () => {
       forum.refresh();
       void vscode.commands.executeCommand(`${FORUM_VIEW_ID}.focus`);
     }),
-    vscode.commands.registerCommand('temcoDocs.openThread', (url?: unknown) => openThread(url))
+    vscode.commands.registerCommand('temcoDocs.forumPage', () => topicList.open()),
+    vscode.commands.registerCommand('temcoDocs.forumTopic', (payload?: unknown) => {
+      const request = (payload ?? {}) as { id?: unknown; slug?: unknown; title?: unknown };
+      if (typeof request.id !== 'number' || typeof request.slug !== 'string') {
+        return Promise.resolve();
+      }
+      return topics.open({
+        id: request.id,
+        slug: request.slug,
+        title: typeof request.title === 'string' && request.title.length > 0 ? request.title : `Topic ${request.id}`
+      });
+    }),
+    vscode.commands.registerCommand('temcoDocs.forumSync', (args?: unknown) => readForum(args)),
+    vscode.commands.registerCommand('temcoDocs.forumSuggest', (payload?: unknown) => suggestForTopic(context, () => roots, topics, payload)),
+    vscode.commands.registerCommand('temcoDocs.openForum', (url?: unknown) => openForum(url))
   );
 
   // Two reads can be in flight at once — a file event while the window is still coming up, one save firing two
@@ -461,9 +487,9 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     sidebar.refresh();
     queue.refresh();
     properties.refresh();
-    // The forum answers about a project, so a different project is a different list. It asks GitHub again only when the
-    // project changed — never on the save that just triggered this read.
-    forum.projectChanged();
+    // The forum panel reads the catalog, so it repaints on a change; its sync is what touches the network, and that is
+    // a command a person runs, not something a save triggers.
+    forum.refresh();
     // The view says which project it is showing: it answers about a project, never about the window, and a view
     // that silently answers a different question is worse than an empty one. The name and the page count are the
     // project row's own; the title carries the count only when there is no such row to carry it.

@@ -20,7 +20,6 @@ src/ui.ts               what it reads of the UI module — where a page opens, w
 src/surface.ts          the page's own view type
 src/repository.ts       the organisation's list as an API read, and the code files of a source
 src/read.ts             reading a source: the registry it declares, from a folder or over the API
-src/threads.ts          a source's forum: the issues carrying one label, read and never written
 src/dashboard.ts        every clone at once: what moved since the last read, and the pages that name it
 src/apply.ts            a drafted change reaching a clone: the question, `git apply`, and the reverse
 src/workarea.ts         the working area: clone, pull, remove, and where a copy lives
@@ -62,14 +61,14 @@ A clone is **never automatic**. A first read says a local copy would help and of
 
 ## What it offers other modules
 
-`onDidChange` (the catalog changed in a way a surface shows), `codeFiles(source)`, `tree(source)`, `readMaterials(source, files)` — the material a new page is drafted from, which is what `temco-docs`' new-page form asks for — and `threads(source, label)`, the issues carrying one label, which is what its forum panel lists. Declared in `extensionDependencies`, so the exports are ready before a consumer's `activate()` runs.
+`onDidChange` (the catalog changed in a way a surface shows), `codeFiles(source)`, `tree(source)` and `readMaterials(source, files)` — the material a new page is drafted from, which is what `temco-docs`' new-page form asks for. Declared in `extensionDependencies`, so the exports are ready before a consumer's `activate()` runs.
 
 ## What it deliberately does not own
 
 - **What a registry means.** A read records what a source's `registry.json` declares; the registry's shape, its checks, its areas, chapters and pages are `temco-docs`'. This module needs nothing from that module.
 - **The surfaces that show sources.** The Library's rows belong to the workbench; this module publishes facts and opens its own page.
 - **Where a page opens.** That rule is `temco-ui`'s, read here through `src/ui.ts`.
-- **What a thread means.** Reading the issues carrying a label and shaping them as threads is this module's; the label, the triage ritual and what a decision on a thread looks like are `temco-docs`'.
+- **The community forum.** `forums.temcocontrols.com` is read by `temco-docs` — it is Discourse, needs no token, and belongs with the documentation it is about.
 
 ## Checks
 

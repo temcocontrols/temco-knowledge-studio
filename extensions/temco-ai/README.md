@@ -46,6 +46,7 @@ The dependency runs one way, and it is declared in the manifest:
 |---|---|
 | `temcoAi.page` | Opens the AI page, or one of its sections (`downloads`) |
 | `temcoAi.openPanel` | Focuses the AI panel in the secondary side bar — opening the page it was given first, when a caller names one |
+| `temcoAi.suggestTopic` | What the documentation should do about one forum topic, from its title, opening posts and matched page |
 | `temcoAi.models` | Picks the runtime and the model, downloading what is missing |
 | `temcoAi.removeModel` | Removes a downloaded model or runtime |
 | `temcoAi.openModelFolder` | Opens the folder the models live in |

@@ -207,6 +207,111 @@ export interface SourceRow {
 	lastReadMode?: string;
 }
 
+/** One person who posted in a topic. */
+export interface ForumPoster {
+	username: string;
+	name?: string;
+}
+
+/** A forum category, as the site lists it. */
+export interface ForumCategoryRow {
+	id: number;
+	slug: string;
+	name: string;
+	color?: string;
+	parentId?: number;
+	topics: number;
+	posts: number;
+	syncedAt?: string;
+}
+
+export interface ForumCategoryInput {
+	id: number;
+	slug: string;
+	name: string;
+	color?: string;
+	parentId?: number;
+	topics?: number;
+	posts?: number;
+	position?: number;
+}
+
+/** A topic as the forum's own list shows it. */
+export interface ForumTopicRow {
+	id: number;
+	categoryId: number;
+	slug: string;
+	title: string;
+	excerpt?: string;
+	posts: number;
+	replies: number;
+	views: number;
+	createdAt?: string;
+	lastPostedAt?: string;
+	pinned: boolean;
+	closed: boolean;
+	posters: ForumPoster[];
+	syncedAt?: string;
+}
+
+export interface ForumTopicInput {
+	id: number;
+	categoryId: number;
+	slug: string;
+	title: string;
+	excerpt?: string;
+	posts?: number;
+	replies?: number;
+	views?: number;
+	createdAt?: string;
+	lastPostedAt?: string;
+	pinned?: boolean;
+	closed?: boolean;
+	posters?: ForumPoster[];
+}
+
+/** One post — the discussion history a topic page reads. */
+export interface ForumPostRow {
+	id: number;
+	topicId: number;
+	postNumber: number;
+	username?: string;
+	name?: string;
+	createdAt?: string;
+	cooked?: string;
+	replyTo?: number;
+	syncedAt?: string;
+}
+
+export interface ForumPostInput {
+	id: number;
+	postNumber: number;
+	username?: string;
+	name?: string;
+	createdAt?: string;
+	cooked?: string;
+	replyTo?: number;
+}
+
+/** What the platform proposes for a topic. */
+export interface ForumSuggestionRow {
+	topicId: number;
+	pageId?: string;
+	pageTitle?: string;
+	text: string;
+	/** `match` for what the registry alone can say, `ai` for an answer the model gave. */
+	source: string;
+	at: string;
+}
+
+export interface ForumSuggestionInput {
+	topicId: number;
+	pageId?: string;
+	pageTitle?: string;
+	text: string;
+	source: string;
+}
+
 /** The platform's database, as this module uses it — the copy of `Catalog` in the store. */
 export interface Catalog {
 	/** Where the file is. */
@@ -263,5 +368,15 @@ export interface Catalog {
 	draft(id: number): DraftRow | undefined;
 	setDraftState(id: number, state: 'accepted' | 'discarded'): void;
 	settleDrafts(documentSlug: string, pageId: string, state: 'accepted' | 'discarded'): void;
+	// The forum, as a sync wrote it.
+	forumCategories(): ForumCategoryRow[];
+	saveForumCategories(rows: readonly ForumCategoryInput[]): void;
+	forumTopics(categoryId?: number): ForumTopicRow[];
+	saveForumTopics(rows: readonly ForumTopicInput[]): void;
+	forumPosts(topicId: number): ForumPostRow[];
+	saveForumPosts(topicId: number, rows: readonly ForumPostInput[]): void;
+	forumSuggestion(topicId: number): ForumSuggestionRow | undefined;
+	saveForumSuggestion(input: ForumSuggestionInput): void;
+	forumSyncedAt(): string | undefined;
 	close(): void;
 }

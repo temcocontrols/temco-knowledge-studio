@@ -214,6 +214,63 @@ CREATE TABLE IF NOT EXISTS releases (
 
 CREATE INDEX IF NOT EXISTS releases_by_document ON releases (document_id, published_at DESC);
 
+-- The forum, as the platform last read it (Discourse): the categories a person can browse, the topics in each, the
+-- posts of a topic, and what was decided about one. Written by a sync and read by a view — a topic row is a cache of
+-- the forum, never the truth about it, and the community site stays the only place anything is posted.
+CREATE TABLE IF NOT EXISTS forum_categories (
+  id         INTEGER PRIMARY KEY,
+  slug       TEXT NOT NULL,
+  name       TEXT NOT NULL,
+  color      TEXT,
+  parent_id  INTEGER,
+  topics     INTEGER NOT NULL DEFAULT 0,
+  posts      INTEGER NOT NULL DEFAULT 0,
+  position   INTEGER NOT NULL DEFAULT 0,
+  synced_at  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS forum_topics (
+  id             INTEGER PRIMARY KEY,
+  category_id    INTEGER NOT NULL,
+  slug           TEXT NOT NULL,
+  title          TEXT NOT NULL,
+  excerpt        TEXT,
+  posts_count    INTEGER NOT NULL DEFAULT 0,
+  reply_count    INTEGER NOT NULL DEFAULT 0,
+  views          INTEGER NOT NULL DEFAULT 0,
+  created_at     TEXT,
+  last_posted_at TEXT,
+  pinned         INTEGER NOT NULL DEFAULT 0,
+  closed         INTEGER NOT NULL DEFAULT 0,
+  posters        TEXT,
+  synced_at      TEXT
+);
+CREATE INDEX IF NOT EXISTS forum_topics_by_category ON forum_topics (category_id, pinned DESC, last_posted_at DESC);
+
+CREATE TABLE IF NOT EXISTS forum_posts (
+  id          INTEGER PRIMARY KEY,
+  topic_id    INTEGER NOT NULL REFERENCES forum_topics(id) ON DELETE CASCADE,
+  post_number INTEGER NOT NULL,
+  username    TEXT,
+  name        TEXT,
+  created_at  TEXT,
+  cooked      TEXT,
+  reply_to    INTEGER,
+  synced_at   TEXT
+);
+CREATE INDEX IF NOT EXISTS forum_posts_by_topic ON forum_posts (topic_id, post_number);
+
+-- What the platform proposes for a topic: the page it is about and the sentence a triager reads. The source column
+-- says who wrote it: 'match' for what the registry alone can say, 'ai' for an answer the model gave.
+CREATE TABLE IF NOT EXISTS forum_suggestions (
+  topic_id   INTEGER PRIMARY KEY REFERENCES forum_topics(id) ON DELETE CASCADE,
+  page_id    TEXT,
+  page_title TEXT,
+  text       TEXT NOT NULL,
+  source     TEXT NOT NULL,
+  at         TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS events_unseen ON events (seen_at, at DESC);
 CREATE INDEX IF NOT EXISTS commits_by_source ON commits (source_id, at DESC);
 CREATE INDEX IF NOT EXISTS artifacts_by_document ON artifacts (document_id, built_at DESC);

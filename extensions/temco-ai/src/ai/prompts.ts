@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import * as vscode from 'vscode';
 
 /** Bumped whenever a file under `prompts/` changes, so a draft can be traced to the instructions behind it. */
-export const PROMPT_VERSION = 'ai-v4';
+export const PROMPT_VERSION = 'ai-v5';
 
 const TEMPLATE_FOLDER = 'prompts';
 const loaded = new Map<string, string>();
@@ -173,8 +173,29 @@ export function analysePrompt(
   });
 }
 
-/** A question that spans the pages of one area. */
-export function areaPrompt(
+/**
+ * What the documentation should do about one forum thread.
+ *
+ * The material is the thread's own words and the page the platform matched — never the rest of the registry and never a
+ * page's body, so the answer is about the thread, not a survey of the documentation.
+ */
+export function topicPrompt(
+  context: vscode.ExtensionContext,
+  request: { title: string; excerpt: string; thread: string; pageId?: string; pageTitle?: string }
+): string {
+  const page =
+    request.pageTitle === undefined
+      ? '(no page in the documentation names this thread)'
+      : `${request.pageTitle}${request.pageId === undefined ? '' : ` — ${request.pageId}`}`;
+  return fill(template(context, 'topic'), {
+    title: request.title,
+    excerpt: request.excerpt.trim() || '(none)',
+    thread: request.thread.trim() || '(the posts were not read)',
+    page,
+  });
+}
+
+/** A question that spans the pages of one area. */export function areaPrompt(
   context: vscode.ExtensionContext,
   question: string,
   page: PageContext | undefined,

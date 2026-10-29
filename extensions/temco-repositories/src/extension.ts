@@ -28,7 +28,6 @@ import { RepositorySettingsPage } from './settingsPage';
 import { OFFERED_SCRIPTS, OfferedScript } from './scripts';
 import { registerSourcesView } from './sourcesView';
 import { Catalog, selection, slugOf } from './store';
-import { ThreadsAnswer, threads as readThreads } from './threads';
 import { registerWorkareaCommands } from './workarea';
 import { cloneFolder, hasClone } from './workarea';
 
@@ -42,8 +41,6 @@ export interface TemcoRepositoriesApi {
 	tree(source: RepositorySource): Promise<{ files: CodeFile[]; note?: string } | { error: string }>;
 	/** The text of the files a person ticked, within one budget. */
 	readMaterials(source: RepositorySource, files: readonly string[], limit?: number): Promise<Material>;
-	/** The labeled issues of a source's repository — the forum's threads. Read only: no label, no comment, no state. */
-	threads(source: RepositorySource, label: string, after?: string): Promise<ThreadsAnswer>;
 	/** The repository's own documentation scripts: a vocabulary, not a runner. */
 	readonly offeredScripts: readonly OfferedScript[];
 }
@@ -164,7 +161,6 @@ export function activate(context: vscode.ExtensionContext): TemcoRepositoriesApi
 		codeFiles: (source) => codeFiles(context, source),
 		tree: (source) => sourceTree(context, source),
 		readMaterials: (source, files, limit) => readMaterials(context, source, files, limit),
-		threads: (source, label, after) => readThreads(context, source, label, after),
 		offeredScripts: OFFERED_SCRIPTS,
 	};
 }

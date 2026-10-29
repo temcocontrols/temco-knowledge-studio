@@ -18,7 +18,7 @@ import * as vscode from 'vscode';
 import { MODELS, RUNTIMES, entryById } from './ai/catalog';
 import { registerAiCommands } from './ai/commands';
 import { AiPanel, AI_VIEW_ID } from './ai/panel';
-import { PROMPT_VERSION, analysePrompt, newPagePrompt, systemPrompt } from './ai/prompts';
+import { PROMPT_VERSION, analysePrompt, newPagePrompt, systemPrompt, topicPrompt } from './ai/prompts';
 import { AiStatus, aiStatus, complete, disposeAi } from './ai/runtime';
 import { docs } from './docs';
 import { AiPages, registerAiViews } from './aiPages';
@@ -43,6 +43,16 @@ export interface DraftRequest {
 	onToken?(text: string): void;
 }
 
+/** What one suggestion about a forum thread needs: the thread's own words, and the page the platform matched. */
+export interface TopicRequest {
+	title: string;
+	excerpt: string;
+	/** The opening posts, as plain text. */
+	thread: string;
+	pageId?: string;
+	pageTitle?: string;
+}
+
 /**
  * What this module offers the rest of the platform.
  *
@@ -62,6 +72,8 @@ export interface TemcoAiApi {
 	analyse(request: AnalyseRequest): Promise<string>;
 	/** A draft of a new page's body, streamed to `onToken` as it is written. */
 	draft(request: DraftRequest): Promise<void>;
+	/** What the documentation should do about one forum thread, in a sentence or three. */
+	topic(request: TopicRequest): Promise<string>;
 }
 
 export function activate(context: vscode.ExtensionContext): TemcoAiApi {
@@ -88,7 +100,9 @@ export function activate(context: vscode.ExtensionContext): TemcoAiApi {
 		vscode.commands.registerCommand('temcoAi.actions', () => pages.actions()),
 		vscode.commands.registerCommand('temcoAi.citations', () => pages.citations()),
 		vscode.commands.registerCommand('temcoAi.localModels', () => pages.models()),
-		vscode.commands.registerCommand('temcoAi.stale', () => pages.stale())
+		vscode.commands.registerCommand('temcoAi.stale', () => pages.stale()),
+		// One forum thread, answered as a suggestion: the docs module stores it against the topic and shows it there.
+		vscode.commands.registerCommand('temcoAi.suggestTopic', (request?: unknown) => topicAnswer(context, request))
 	);
 
 	return {
@@ -130,7 +144,25 @@ export function activate(context: vscode.ExtensionContext): TemcoAiApi {
 				}
 			);
 		},
+
+		topic: (request) => topicAnswer(context, request),
 	};
+}
+
+/** What the documentation should do about one forum thread, through the same guardrails as every other answer. */
+async function topicAnswer(context: vscode.ExtensionContext, request: unknown): Promise<string> {
+	const input = (request ?? {}) as Partial<TopicRequest>;
+	if (typeof input.title !== 'string' || input.title.trim().length === 0) {
+		return '';
+	}
+	return complete(
+		context,
+		[
+			{ role: 'system', content: systemPrompt(context, undefined) },
+			{ role: 'user', content: topicPrompt(context, { title: input.title, excerpt: String(input.excerpt ?? ''), thread: String(input.thread ?? ''), pageId: typeof input.pageId === 'string' ? input.pageId : undefined, pageTitle: typeof input.pageTitle === 'string' ? input.pageTitle : undefined }) },
+		],
+		{ maxTokens: 300 }
+	);
 }
 
 export function deactivate(): void {

@@ -2,13 +2,19 @@
 
 ## Unreleased
 
-- **The forum.** The issues carrying the `docs-feedback` label in the repository the project cites, read through the
-  repositories module, as a panel declared in the secondary side bar (`temcoForum`), with a **Triage** tab per thread
-  opened *beside* the conversation: the thread, the page it names (longest id first, then by title), whether that
-  page's code moved since its last review, and the acts that follow — open the page, draft the fix (the page opens and
-  the AI panel takes it), decide on the thread. Read only: nothing is labelled, commented or closed from here, and a
-  thread's link is checked for `http(s)` before it is handed to the browser, and a repository with more threads than one
-  answer carries gets a **Load more** that asks for the next page GitHub pointed at, appending rather than replacing.
+- **The forum, redesigned around the forum itself.** `forums.temcocontrols.com` is Discourse, and the platform now reads
+  it the way a reader uses it: the **categories** in the panel (the site's order and colours, with how many topics each
+  holds), one category's **topics** in a page with the forum's own five columns — title, participants, replies, views,
+  and activity like `Sep 2026` or `1.1k` reads — and one **topic** in a tab beside it: the discussion history, the page
+  it names, and a suggestion. All of it is stored in SQLite (`forum_categories`, `forum_topics`, `forum_posts`,
+  `forum_suggestions`) and filled by **Read the Forum** from the site's own JSON (`site.json`, a category's `.json`, a
+  topic's `.json`), so no surface touches the network and no view parses JSON. The site is a setting
+  (`temcoDocs.forumUrl`). Nothing is posted, replied to or liked from here, and a post's HTML is read as text rather
+  than trusted as markup.
+- **A suggestion for every topic, and the AI's when you ask.** The platform matches a topic to the page whose id or
+  title it names and records that match the first time the topic is read; *Suggest with the AI* (`temcoAi.suggestTopic`,
+  prompt `topic.md`, `ai-v5`) asks the local model what that page should add, and the answer replaces the match in the
+  catalog. A suggestion is advice: it never writes a page and never posts a reply.
 - **Applying a draft says where it goes.** *Apply* now lands through `temcoRepositories.applyToSource`: a modal
   question naming the clone and the file, a `git apply` in that clone's working tree, the words *not committed*, and
   an Undo that reverses the same patch. A page in the window's own tree still takes the editor's edit and its

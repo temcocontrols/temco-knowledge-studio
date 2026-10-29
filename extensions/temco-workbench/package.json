@@ -303,6 +303,11 @@
           "icon": "media/docs.svg"
         },
         {
+          "id": "temcoForum",
+          "title": "Forum",
+          "icon": "media/forum.svg"
+        },
+        {
           "id": "temcoSql",
           "title": "Tools",
           "icon": "media/sql.svg"
@@ -311,13 +316,6 @@
           "id": "temcoSettings",
           "title": "Settings",
           "icon": "media/settings.svg"
-        }
-      ],
-      "secondarySidebar": [
-        {
-          "id": "temcoForum",
-          "title": "Forum",
-          "icon": "media/forum.svg"
         }
       ]
     }
