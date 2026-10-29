@@ -156,9 +156,27 @@ function resolve(fromId: string, href: string): string | undefined {
 	return joined.toLowerCase().endsWith('.md') ? joined.slice(0, -3) : joined;
 }
 
+/**
+ * An id on every `h2` and `h3`, so the reader's "In this article" column has something to link to.
+ *
+ * The id is the heading's own text, slugged the same way an address is, and made unique within the page — the same
+ * rules a reader's deep link depends on. `h1` is left alone: it is the page's title, and it is already at the top.
+ */
+export function withHeadingIds(html: string): string {
+	const seen = new Map<string, number>();
+	return html.replace(/<h([23])>([\s\S]*?)<\/h\1>/gu, (_whole, level: string, inner: string) => {
+		const text = inner.replace(/<[^>]+>/gu, '');
+		const base = slug(text) || 'section';
+		const count = seen.get(base) ?? 0;
+		seen.set(base, count + 1);
+		const id = count === 0 ? base : `${base}-${count + 1}`;
+		return `<h${level} id="${id}">${inner}</h${level}>`;
+	});
+}
+
 /** The Markdown of one page, as the article of the site. */
 export function renderArticle(entry: SiteEntry, where: ReadonlyMap<string, string>): string {
-	const html = withPictureWidths(String(marked.parse(entry.markdown)));
+	const html = withHeadingIds(withPictureWidths(String(marked.parse(entry.markdown))));
 	return rewriteLinks(html, entry.id, where);
 }
 
@@ -172,6 +190,8 @@ export interface Neighbours {
  *
  * The head is the reader's: the title first, then the project, so a tab strip of ten pages from one project is still
  * readable. The body is the article and nothing else — the site is the documentation, not an application around it.
+ * Chrome (the product bar, the navigation, the breadcrumb) belongs to the reader that frames this page
+ * (`learnReader.ts`); a page that draws its own would show it twice.
  */
 export function renderPage(options: {
 	entry: SiteEntry;
@@ -191,12 +211,7 @@ export function renderPage(options: {
 <title>${escapeHtml(entry.title)} · ${escapeHtml(model.project)}</title>
 <link rel="stylesheet" href="${up}assets/site.css">
 </head>
-<body>
-<header class="bar">
-	<a class="bar__home" href="${up}index.html">${escapeHtml(model.project)}</a>
-	${model.version === undefined ? '' : `<span class="bar__version">v${escapeHtml(model.version)}</span>`}
-	<span class="bar__area">${escapeHtml(entry.area)}</span>
-</header>
+<body class="doc-page">
 <main class="page">
 	<article class="doc">
 ${renderArticle(entry, where)}
@@ -237,7 +252,7 @@ export function renderIndex(model: SiteModel, where: ReadonlyMap<string, string>
 </header>
 <main class="index">
 	<h1>${escapeHtml(model.project)}</h1>
-	<p class="index__count">${count} page${count === 1 ? '' : 's'}</p>
+	<p class="index__count">${count} page${count === 1 ? '' : 's'} · <a href="temco-reader.html">Read in the reader</a></p>
 ${areas}
 </main>
 </body>

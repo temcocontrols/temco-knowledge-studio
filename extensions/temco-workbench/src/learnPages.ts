@@ -169,7 +169,7 @@ export class LearnPages {
 			enableScripts: true,
 			localResourceRoots: []
 		});
-		panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'learn.svg');
+		panel.iconPath = new vscode.ThemeIcon('cloud-upload');
 		panel.webview.onDidReceiveMessage(runCommand);
 		panel.webview.html = html;
 		this.panels.set(key, panel);

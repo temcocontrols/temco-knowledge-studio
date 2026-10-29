@@ -298,6 +298,11 @@
         "icon": "$(globe)"
       },
       {
+        "command": "temcoDocs.previewSite",
+        "title": "Preview the Site",
+        "icon": "$(eye)"
+      },
+      {
         "command": "temcoDocs.publishSite",
         "title": "Publish to GitHub Pages",
         "icon": "$(cloud-upload)"

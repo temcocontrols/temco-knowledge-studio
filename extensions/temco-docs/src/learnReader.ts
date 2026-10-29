@@ -142,7 +142,7 @@ export function readerPage(model: ReaderModel): string {
 	<div class="product" id="product">${escape(model.product)}</div>
 	<span class="spacer"></span>
 	<label for="version" class="sr-only" hidden>Version</label>
-	<select class="version" id="version" aria-label="Version">${versions}</select>
+	${model.versions.length > 1 ? `<select class="version" id="version" aria-label="Version">${versions}</select>` : ''}
 	<input class="search" id="search" type="search" placeholder="Search this version…" aria-label="Search the documentation">
 </header>
 
@@ -264,9 +264,13 @@ export function readerPage(model: ReaderModel): string {
 		}
 	});
 
-	document.getElementById('version').addEventListener('change', function (event) {
-		location.href = '../' + encodeURIComponent(event.target.value) + '/temco-reader.html';
-	});
+	// One version is not a choice: the picker is only drawn when there is somewhere to go.
+	var picker = document.getElementById('version');
+	if (picker) {
+		picker.addEventListener('change', function (event) {
+			location.href = '../' + encodeURIComponent(event.target.value) + '/temco-reader.html';
+		});
+	}
 
 	// A deep link is the hash, so a page can be sent to somebody.
 	var wanted = decodeURIComponent(location.hash.replace(/^#/, ''));

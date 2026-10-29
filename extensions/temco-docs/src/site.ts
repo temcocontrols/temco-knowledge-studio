@@ -6,6 +6,7 @@
 
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { readerPage } from './learnReader';
 import { DocsRoot, PageEntry, collectPages } from './registry';
 import {
 	SiteArea,
@@ -91,7 +92,19 @@ export async function generateSite(
 	}
 
 	files += await write(destination, 'index.html', renderIndex(model, where), written);
-	step('Assets: one stylesheet, one index');
+	// The MSDN-shaped shell: the same pages, framed by a reader with the navigation, the breadcrumb and the article's own
+	// headings. Written into the same folder, so the frame and every link in it stay same-origin and relative.
+	const contents = entries
+		.map(entry => ({ href: `${where.get(entry.id) ?? ''}.html`, title: entry.title }))
+		.filter(page => page.href !== '.html');
+	const version = options.version ?? 'latest';
+	files += await write(
+		destination,
+		'temco-reader.html',
+		readerPage({ product: model.project, version, versions: [version], pages: contents }),
+		written
+	);
+	step('Assets: one stylesheet, one index, one reader');
 	files += await write(destination, 'assets/site.css', renderStylesheet(), written);
 	if (options.base === undefined) {
 		// A sitemap's locations have to be absolute URLs, and guessing the public address would put wrong URLs in a file

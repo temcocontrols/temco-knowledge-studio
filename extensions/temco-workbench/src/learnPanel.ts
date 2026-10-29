@@ -12,15 +12,17 @@
 //   **Outputs**  — the files a build wrote: the site, the offline help, the PDF, the search index.
 //   **Coverage** — what has no output, was never reviewed, or whose code moved.
 //
-// It reads the same catalog rows as Build Center and Publish & Releases rather than keeping a second record: a page
-// that says "3 outputs" is wrong the moment a build writes a fourth, and a second copy of the truth is how that happens.
+// The panel beside this page is a native tree (`learnTree.ts`) with the same five groups; this file holds the page
+// itself, and the handful of readings both surfaces share — the catalog facts, the words for an artifact's kind, and
+// how long ago a build was. It reads the same catalog rows as Build Center and Publish & Releases rather than keeping
+// a second record: a page that says "3 outputs" is wrong the moment a build writes a fourth, and a second copy of the
+// truth is how that happens.
 
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { Catalog, ReleaseRow, selection } from './store';
 import { commandScript, escapeHtml as esc, icon, page, pageColumn, runCommand } from './ui';
 
-export const LEARN_VIEW_ID = 'temcoLearn.panel';
 export const LEARN_PAGE_TYPE = 'temcoLearn.page';
 
 /** One file a build left. */
@@ -30,7 +32,7 @@ interface Artifact {
 	builtAt: string;
 }
 
-interface LearnFacts {
+export interface LearnFacts {
 	project?: string;
 	pages: number;
 	releases: ReleaseRow[];
@@ -38,16 +40,16 @@ interface LearnFacts {
 }
 
 /** The words for an artifact's kind, in the order a build produces them. */
-function kindLabel(kind: string): string {
+export function kindLabel(kind: string): string {
 	return kind === 'chm' ? 'Offline help (CHM)' : kind === 'pdf' ? 'PDF' : kind === 'site' ? 'Website' : kind === 'search' ? 'Search index' : kind;
 }
 
-function kindMark(kind: string): string {
+export function kindMark(kind: string): string {
 	return kind === 'chm' ? 'package' : kind === 'pdf' ? 'document' : kind === 'search' ? 'search' : 'globe';
 }
 
 /** When something happened, in the words a person uses. */
-function since(iso: string | undefined): string {
+export function since(iso: string | undefined): string {
 	if (iso === undefined) {
 		return 'never';
 	}
@@ -71,7 +73,7 @@ function since(iso: string | undefined): string {
 }
 
 /** What the catalog knows: the project on screen, its releases, the files they left, and how many pages there are. */
-async function facts(context: vscode.ExtensionContext): Promise<LearnFacts> {
+export async function facts(context: vscode.ExtensionContext): Promise<LearnFacts> {
 	let catalog: Catalog | undefined;
 	try {
 		catalog = await Catalog.open(context);
@@ -93,75 +95,6 @@ async function facts(context: vscode.ExtensionContext): Promise<LearnFacts> {
 		catalog?.close();
 	}
 }
-
-/** The rows of the panel: three ways into the same page, each with the fact it is about. */
-function panelRows(state: LearnFacts): { label: string; note: string; mark: string; command: string }[] {
-	const newest = state.releases[0];
-	return [
-		{ label: 'Preview', note: newest === undefined ? 'nothing published yet' : `published ${since(newest.publishedAt)} · ${newest.destination}`, mark: 'globe', command: 'temcoDocs.releases' },
-		{ label: 'Outputs', note: `${state.artifacts.length} ${state.artifacts.length === 1 ? 'file' : 'files'} a build wrote`, mark: 'package', command: 'temcoLearn.page' },
-		{ label: 'Coverage', note: `${state.pages} ${state.pages === 1 ? 'page' : 'pages'} in this project`, mark: 'check', command: 'temcoLearn.page' }
-	];
-}
-
-/** The panel above the container: what was built, and the one way in. */
-export class LearnPanel implements vscode.WebviewViewProvider {
-	private view: vscode.WebviewView | undefined;
-
-	constructor(private readonly context: vscode.ExtensionContext) { }
-
-	resolveWebviewView(view: vscode.WebviewView): void {
-		this.view = view;
-		view.webview.options = { enableScripts: true };
-		view.webview.onDidReceiveMessage(runCommand);
-		view.onDidDispose(() => {
-			this.view = undefined;
-		});
-		void this.render();
-	}
-
-	refresh(): void {
-		void this.render();
-	}
-
-	private async render(): Promise<void> {
-		const view = this.view;
-		if (view === undefined) {
-			return;
-		}
-		const state = await facts(this.context);
-		view.webview.html = strip(state, commandScript);
-	}
-}
-
-function strip(state: LearnFacts, script: string): string {
-	const newest = state.releases[0];
-	const body = `${panelHead(state)}
-<div class="learn-strip">${panelRows(state).map((row) => `<button type="button" class="learn-row" data-command="${row.command}" title="${esc(row.note)}">${icon(row.mark)}<span class="learn-row__main"><span class="learn-row__label">${esc(row.label)}</span><span class="learn-row__note">${esc(row.note)}</span></span></button>`).join('')}</div>
-<button type="button" class="btn btn--sm btn--ghost learn-open" data-command="temcoLearn.page"><span>Open the page</span></button>
-${newest === undefined ? '<p class="learn-note">Nothing has been published. Build the site, then publish it from Publish &amp; Releases.</p>' : ''}`;
-	return page(body, { title: 'Temco Learn', script, extraCss: STRIP_CSS });
-}
-
-function panelHead(state: LearnFacts): string {
-	return `<div class="learn-head"><span class="learn-head__title">Temco Learn</span><span class="learn-head__meta">${state.project === undefined ? 'no project' : esc(state.project)} · ${state.artifacts.length} ${state.artifacts.length === 1 ? 'output' : 'outputs'}</span></div>`;
-}
-
-const STRIP_CSS = `
-.learn-head { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 8px; }
-.learn-head__title { font-weight: 600; }
-.learn-head__meta { color: var(--fg-muted); font-size: 11px; }
-.learn-strip { display: flex; flex-direction: column; gap: 1px; }
-.learn-row { display: flex; align-items: flex-start; gap: 8px; text-align: left; border: 0; background: none;
-  color: inherit; font: inherit; padding: 6px; border-radius: var(--radius-sm); cursor: pointer; }
-.learn-row:hover { background: var(--bg-hover); }
-.learn-row .icon { width: 16px; height: 16px; color: var(--fg-muted); flex: none; margin-top: 1px; }
-.learn-row__main { display: flex; flex-direction: column; min-width: 0; }
-.learn-row__label { font-size: 12px; }
-.learn-row__note { color: var(--fg-subtle); font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
-.learn-open { margin-top: 8px; }
-.learn-note { color: var(--fg-subtle); font-size: 11px; margin: 8px 0 0; line-height: 1.5; }
-`;
 
 /** The page: hero, then Preview, Outputs and Coverage side by side where there is room. */
 export function learnPageBody(state: LearnFacts): string {
@@ -200,7 +133,7 @@ export function learnPageBody(state: LearnFacts): string {
 ${outputs.length === 0 ? '<p class="az-note">No build has written a file yet. Build the site or the offline help from Build Center.</p>' : `<div class="az-entries">${outputs}</div>`}
 </div>
 </div>
-<div class="az-section"><div class="az-section__text"><h2 class="az-section__title">Coverage</h2><p class="az-section__desc">The two lists that say what to do next, both read from the registry rather than counted by hand.</p></div><div class="az-section__actions"><button type="button" class="az-btn az-btn--sm" data-command="temcoAi.stale">Pages whose code moved</button><button type="button" class="az-btn az-btn--sm" data-command="temcoDocs.registryPage">The registry</button></div></div>
+<div class="az-section"><div class="az-section__text"><h2 class="az-section__title">Coverage</h2><p class="az-section__desc">The two lists that say what to do next, both read from the registry rather than counted by hand.</p></div><div class="az-section__actions"><button type="button" class="az-btn az-btn--sm" data-command="temcoAi.stale">Pages whose code moved</button><button type="button" class="az-btn az-btn--sm" data-command="temcoDocs.openRegistry">The registry</button></div></div>
 <div class="az-entries">
 <div class="az-entry" data-command="temcoDocs.staleScreenshots"><span class="az-entry__icon">${icon('warning')}</span><div class="az-entry__main"><span class="az-entry__title">Screenshots that may be out of date</span><span class="az-entry__meta">the pages that cite code which has since changed</span></div><span class="az-entry__go">Open ${icon('chevron-right', 'icon--sm')}</span></div>
 <div class="az-entry" data-command="temcoDocs.review"><span class="az-entry__icon">${icon('sparkle')}</span><div class="az-entry__main"><span class="az-entry__title">Drafts waiting for a person</span><span class="az-entry__meta">a page is not changed by the model; it is changed by accepting a draft</span></div><span class="az-entry__go">Open ${icon('chevron-right', 'icon--sm')}</span></div>

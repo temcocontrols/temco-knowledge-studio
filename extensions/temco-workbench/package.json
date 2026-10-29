@@ -65,8 +65,7 @@
       "temcoLearn": [
         {
           "id": "temcoLearn.panel",
-          "type": "webview",
-          "name": "Temco Learn"
+          "name": "Overview"
         }
       ]
     },
@@ -75,6 +74,12 @@
         "command": "temcoLearn.page",
         "title": "Temco Learn — Preview",
         "icon": "$(eye)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)",
         "category": "Temco Learn"
       },
       {
@@ -300,7 +305,7 @@
         {
           "id": "temcoLearn",
           "title": "Temco Learn",
-          "icon": "media/docs.svg"
+          "icon": "$(cloud-upload)"
         },
         {
           "id": "temcoForum",
@@ -316,6 +321,25 @@
           "id": "temcoSettings",
           "title": "Settings",
           "icon": "media/settings.svg"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "temcoDocs.buildSite",
+          "when": "view == temcoLearn.panel",
+          "group": "navigation@1"
+        },
+        {
+          "command": "temcoDocs.previewSite",
+          "when": "view == temcoLearn.panel",
+          "group": "navigation@2"
+        },
+        {
+          "command": "temcoLearn.refresh",
+          "when": "view == temcoLearn.panel",
+          "group": "navigation@3"
         }
       ]
     }

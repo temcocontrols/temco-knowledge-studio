@@ -17,7 +17,8 @@ import { roots, onDidChange, refresh as reread, totals } from './docs';
 import { DashboardPages } from './dashboard';
 import { HelpPages } from './helpPages';
 import { LearnPages } from './learnPages';
-import { LEARN_VIEW_ID, LearnPage, LearnPanel } from './learnPanel';
+import { LearnPage } from './learnPanel';
+import { LEARN_VIEW_ID, LearnTree } from './learnTree';
 import { NeedsPage } from './needsPage';
 import { registerSettings } from './settingsPages';
 import { registerSidebarViews } from './sidebar';
@@ -71,10 +72,27 @@ export function activate(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(dashboard);
 	// Temco Learn: the published site as a reader sees it — Home, T3000, an article, Downloads, Learning Paths.
 	const learn = new LearnPages(context);
-	// Temco Learn's own container: the strip that says what was built, and the page that previews it.
-	const learnPanel = new LearnPanel(context);
+	// Temco Learn's own container: a native tree — preview, output, the reader's surfaces, coverage, and publishing.
+	const learnPanel = new LearnTree(context);
 	const learnSurface = new LearnPage(context);
-	context.subscriptions.push(vscode.window.registerWebviewViewProvider(LEARN_VIEW_ID, learnPanel));
+	const learnView = vscode.window.createTreeView(LEARN_VIEW_ID, { treeDataProvider: learnPanel, showCollapseAll: true });
+	// The panel is a list of places; the first time it is opened it also opens the page that explains the list, the way a
+	// home page does. Only from the second click onwards — a container that is already open at startup opens nothing.
+	let learnHomeShown = false;
+	context.subscriptions.push(
+		learnPanel,
+		learnView,
+		learnView.onDidChangeVisibility(() => {
+			if (learnView.visible && !learnHomeShown) {
+				learnHomeShown = true;
+				void vscode.commands.executeCommand('temcoWorkbench.learn.home');
+			}
+		}),
+		vscode.commands.registerCommand('temcoLearn.refresh', async () => {
+			await reread();
+			learnPanel.refresh();
+		})
+	);
 
 	context.subscriptions.push(
 		help,

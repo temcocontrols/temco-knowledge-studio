@@ -1099,7 +1099,14 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     }),
     // Serving, rather than opening a file: a generator's links and directory indexes only resolve over a host.
     vscode.commands.registerCommand('temcoDocs.servePublished', async (destination?: unknown) => {
-      const where = typeof destination === 'string' && destination.length > 0
+      // Preview passes the folder *and* the page to open: a preview that needs a second click is not a preview.
+      const asked = typeof destination === 'object' && destination !== null
+        ? destination as { where?: unknown; entry?: unknown }
+        : undefined;
+      const named = typeof asked?.where === 'string' ? asked.where : undefined;
+      const where = named !== undefined && named.length > 0
+        ? named
+        : typeof destination === 'string' && destination.length > 0
         ? destination
         : await newestPublished(context);
       if (where === undefined) {
@@ -1110,13 +1117,17 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
       }
       try {
         const url = await site.serve(where);
+        const entry = typeof asked?.entry === 'string' && asked.entry.length > 0 ? asked.entry : undefined;
+        if (entry !== undefined) {
+          await vscode.env.openExternal(vscode.Uri.parse(`${url}${entry}`));
+        }
         const answer = await vscode.window.showInformationMessage(
           `Temco Docs: serving ${where} at ${url}`,
           'Open in Browser',
           'Stop Serving'
         );
         if (answer === 'Open in Browser') {
-          await vscode.env.openExternal(vscode.Uri.parse(url));
+          await vscode.env.openExternal(vscode.Uri.parse(entry === undefined ? url : `${url}${entry}`));
         } else if (answer === 'Stop Serving') {
           site.stop();
         }
