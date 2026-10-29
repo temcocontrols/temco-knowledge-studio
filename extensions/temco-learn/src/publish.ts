@@ -1,10 +1,14 @@
 // Publishing the site: one folder, one commit, one push.
 //
-// The site folder is a checkout of the repository GitHub Pages serves (`temcocontrols/docs`), and the folder *is* the
-// site — `index.html` at its root, one folder per product beside it. So publishing is a git operation and nothing else:
-// commit what changed, and push `HEAD` at `gh-pages`.
+// The site folder *is* the site — the app at its root, one folder per project beside it — and the repository that
+// GitHub Pages serves is that folder (`temcocontrols/docs`). So publishing is a git operation and nothing else: commit
+// what changed, and push `HEAD` at `gh-pages`.
 //
-// Never a forced push. If the branch carries work this checkout does not know about, that is a fact to report — the
+// The first publish arranges what a first publish always needs: a repository in the folder, and the remote the account
+// serves Pages from. Nothing is cloned, because the folder already holds the site — a clone would have to be merged
+// into it, and the site folder is the truth here rather than a copy of one.
+//
+// Never a forced push. If the branch carries work this clone does not know about, that is a fact to report — the
 // commit is in the repository either way, and the next publish will be a fast-forward.
 
 import { execFile } from 'child_process';
@@ -12,6 +16,9 @@ import * as vscode from 'vscode';
 
 /** The branch GitHub Pages serves for a project repository. */
 const BRANCH = 'gh-pages';
+
+/** Where the site belongs when the folder is not a repository yet: the account Pages serves it from. */
+const REMOTE = 'https://github.com/temcocontrols/docs.git';
 
 /** The largest output a git command may produce before it is treated as a failure rather than a message. */
 const LIMIT = 32 * 1024 * 1024;
@@ -75,15 +82,38 @@ export interface Published {
 }
 
 /**
+ * The site folder as a publishing clone: a repository with an `origin`.
+ *
+ * A folder that is already a repository is left alone — its remote is the account's decision, not this module's. A
+ * folder that is not gets one, because the alternative is a publish that fails with "there is nowhere to publish to"
+ * on the one machine that has never published before.
+ */
+export async function ensureRepo(root: string, output: vscode.OutputChannel): Promise<void> {
+	try {
+		await git(root, ['rev-parse', '--git-dir']);
+	} catch {
+		output.appendLine('[publish] the site folder was not a repository; starting one');
+		await git(root, ['init']);
+	}
+	try {
+		await git(root, ['remote', 'get-url', 'origin']);
+	} catch {
+		output.appendLine(`[publish] no origin; publishing to ${REMOTE}`);
+		await git(root, ['remote', 'add', 'origin', REMOTE]);
+	}
+}
+
+/**
  * Commit the site folder and push it at `gh-pages`.
  *
- * The commit message names the date rather than a version: the folder holds several products, each with its own
+ * The commit message names the date rather than a version: the folder holds several projects, each with its own
  * versions, and a message that claims one of them would be wrong about the others.
  */
 export async function publishSite(root: string, output: vscode.OutputChannel): Promise<Published> {
+	await ensureRepo(root, output);
 	const target = await publishingTarget(root);
 	if (target === undefined) {
-		throw new Error('this folder is not a git repository with a GitHub `origin`, so there is nowhere to publish to');
+		throw new Error('this folder has no GitHub `origin`, so there is nowhere to publish to');
 	}
 
 	const changed = (await git(target.root, ['status', '--porcelain'])).trim();

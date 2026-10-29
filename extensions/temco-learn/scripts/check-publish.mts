@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 interface Publish {
 	publishingTarget(root: string): Promise<{ owner: string; repo: string; base: string } | undefined>;
+	ensureRepo(root: string, output: { appendLine(text: string): void }): Promise<void>;
 	publishSite(root: string, output: { appendLine(text: string): void }): Promise<unknown>;
 }
 
@@ -28,7 +29,7 @@ try {
 	process.exit(1);
 }
 
-const { publishingTarget, publishSite } = createRequire(import.meta.url)(built) as Publish;
+const { publishingTarget, ensureRepo, publishSite } = createRequire(import.meta.url)(built) as Publish;
 
 /** A throwaway repository whose `origin` is `remote`. */
 function repository(remote: string | undefined): string {
@@ -68,25 +69,32 @@ test('an owner site publishes at the domain root', async () => {
 	}
 });
 
-test('a repository with no remote is not publishable, and says so', async () => {
-	const folder = repository(undefined);
+test('a folder that is not a repository is made one, with the site’s origin', async () => {
+	const folder = mkdtempSync(join(tmpdir(), 'temco-plain-'));
 	try {
 		assert.equal(await publishingTarget(folder), undefined);
-		await assert.rejects(
-			() => publishSite(folder, { appendLine: () => undefined }),
-			/is not a git repository with a GitHub `origin`/u
-		);
+		const said: string[] = [];
+		await ensureRepo(folder, { appendLine: (text: string) => said.push(text) });
+		const target = await publishingTarget(folder);
+		assert.equal(target?.owner, 'temcocontrols');
+		assert.equal(target?.repo, 'docs');
+		assert.equal(said.length, 2, 'the first publish should say what it started and where it points');
 	} finally {
 		rmSync(folder, { recursive: true, force: true });
 	}
 });
 
-test('a folder that is not a repository at all is not publishable either', async () => {
-	const folder = mkdtempSync(join(tmpdir(), 'temco-plain-'));
+test('a remote that is not GitHub is not publishable, and says so', async () => {
+	const elsewhere = mkdtempSync(join(tmpdir(), 'temco-elsewhere-'));
+	const folder = repository(join(elsewhere, 'somewhere-else.git'));
 	try {
 		assert.equal(await publishingTarget(folder), undefined);
+		await assert.rejects(
+			() => publishSite(folder, { appendLine: () => undefined }),
+			/has no GitHub `origin`/u		);
 	} finally {
 		rmSync(folder, { recursive: true, force: true });
+		rmSync(elsewhere, { recursive: true, force: true });
 	}
 });
 

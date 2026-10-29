@@ -1,240 +1,323 @@
 // The site, on disk.
 //
-// One folder is the site: `index.html` and one `<section>.html` per section at the top, then a folder per product, and a
-// folder per version inside it. Adding a build is a copy and two files — the pages are the build's own, unchanged.
+// One folder is the site, and everything in it is either the app or a project's build:
 //
-//   <site>/
-//     index.html            Documentation
-//     training.html         … one per section
-//     t3000/
-//       manifest.json       title, summary, section, latest, versions
-//       index.html          the product page
-//       13.0/
-//         temco-reader.html the reader for this version
-//         … the pages a build wrote, as they were
+//   ~/Temco/site/                 the site folder — a subfolder of the working area, made on first use
+//     index.html                  a section of the site ┐
+//     project.html                one project          ├ the app: copied from this module's `site/` folder, unchanged
+//     reader.html                 one version          ┘
+//     assets/site.css  assets/reader.css  assets/site.js
+//     projects.json               what the app reads: the projects, their versions, and each version's pages
+//     t3000/13.0/                 a build, copied in as it was
 //
-// Published, that folder is the whole site: GitHub Pages serves it as it stands.
+// The app is the module's own files copied in, not markup generated here: a published site is then the same bytes a
+// preview shows, and adding a project is a copy plus one entry in `projects.json` — no page to regenerate, and no
+// second renderer to keep in step with the first.
+//
+// `~/Temco` is the working area `temco-repositories` owns (`temcoRepositories.workspaceFolder`, or the user's home
+// folder). One working area, one owner: this module reads the same setting rather than inventing a second place.
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { SECTIONS, SiteProduct, productPage, sectionPage, sectionHref } from './portal';
-import { readerPage } from './reader';
 
-/** Where the site folder is remembered, when it was chosen rather than configured. */
-const SITE_KEY = 'temcoLearn.site';
+/** The folder under the working area that holds the site. Lowercase, like every folder under it. */
+const SITE_FOLDER = 'site';
 
-/** The folder the site lives in: the setting, then the last folder chosen, then nothing. */
-export function siteRoot(context: vscode.ExtensionContext): string | undefined {
-	const configured = vscode.workspace.getConfiguration().get<string>('temcoLearn.site');
-	if (typeof configured === 'string' && configured.trim() !== '') {
-		return configured;
+/** The one file in the site that is data rather than the app. */
+const PROJECTS_FILE = 'projects.json';
+
+/** The section a project is listed under until somebody says otherwise. */
+const DEFAULT_SECTION = 'documentation';
+
+/** One page of one version, as the reader lists it: relative to the version's folder. */
+export interface SitePage {
+	href: string;
+	title: string;
+}
+
+/** One version of one project: the build that was copied in, and the pages it holds. */
+export interface SiteVersion {
+	version: string;
+	/** When it was added to the site, ISO. */
+	builtAt?: string;
+	pages: SitePage[];
+}
+
+/** One project: a folder of the site, and every version of it. */
+export interface SiteProject {
+	/** The folder name — `t3000` — which is also its address. */
+	id: string;
+	title: string;
+	summary?: string;
+	section: string;
+	/** Newest first, which is what `versions[0].version` is. */
+	versions: SiteVersion[];
+	builtAt?: string;
+}
+
+/** Everything the app reads. Written on every change, so the folder is the database and this is its index. */
+export interface Site {
+	generatedAt?: string;
+	projects: SiteProject[];
+}
+
+/** The newest version of a project, or nothing when it holds none. */
+export function latestOf(project: SiteProject): string | undefined {
+	return project.versions[0]?.version;
+}
+
+/** The working area: the setting `temco-repositories` owns, or a visible folder in the user's home. */
+export function workRoot(): string {
+	const configured = vscode.workspace.getConfiguration('temcoRepositories').get<string>('workspaceFolder');
+	return typeof configured === 'string' && configured.trim().length > 0
+		? expandHome(configured.trim())
+		: path.join(os.homedir(), 'Temco');
+}
+
+/** `~` written by hand means the home folder. */
+function expandHome(value: string): string {
+	if (value === '~') {
+		return os.homedir();
 	}
-	const remembered = context.globalState.get<string>(SITE_KEY);
-	return typeof remembered === 'string' && remembered.trim() !== '' ? remembered : undefined;
+	return value.startsWith('~/') || value.startsWith('~\\')
+		? path.join(os.homedir(), value.slice(2))
+		: value;
 }
 
-export async function rememberSite(context: vscode.ExtensionContext, folder: string): Promise<void> {
-	await context.globalState.update(SITE_KEY, folder);
+/** The site folder. Never a question: it is the working area's `site`, unless the setting names another. */
+export function siteFolder(): string {
+	const configured = vscode.workspace.getConfiguration('temcoLearn').get<string>('site');
+	return typeof configured === 'string' && configured.trim().length > 0
+		? expandHome(configured.trim())
+		: path.join(workRoot(), SITE_FOLDER);
 }
 
-/** One product's manifest, as it is written: what the portal needs, and nothing it cannot use. */
-interface Manifest {
-	title?: unknown;
-	summary?: unknown;
-	section?: unknown;
-	latest?: unknown;
-	version?: unknown;
-	versions?: unknown;
-	builtAt?: unknown;
+/** The module's own `site/` folder: the app that gets copied into the site folder. */
+export function appFolder(context: vscode.ExtensionContext): string {
+	return path.join(context.extensionUri.fsPath, 'site');
 }
 
 /**
- * Every product under the site root, read from the folders and their manifests.
+ * Where the site's script is built.
  *
- * A folder with no readable manifest is skipped rather than guessed at: an entry the portal cannot link to is worse than
- * an entry that is not there. The three manifest shapes the publisher has written over time are all read.
+ * The script is TypeScript (`src/siteApp.ts`) and JavaScript only once compiled, because the repository keeps no
+ * JavaScript of its own. It compiles to the module's `out/`, so the site folder gets `assets/site.js` from there.
  */
-export async function readProducts(root: string): Promise<SiteProduct[]> {
-	let entries: fs.Dirent[];
-	try {
-		entries = await fs.promises.readdir(root, { withFileTypes: true });
-	} catch {
-		return [];
-	}
-	const products: SiteProduct[] = [];
-	for (const entry of entries) {
-		if (!entry.isDirectory() || entry.name.startsWith('.')) {
-			continue;
-		}
-		let manifest: Manifest;
-		try {
-			manifest = JSON.parse(await fs.promises.readFile(path.join(root, entry.name, 'manifest.json'), 'utf8')) as Manifest;
-		} catch {
-			continue;
-		}
-		const product = toProduct(entry.name, manifest);
-		if (product !== undefined) {
-			products.push(product);
-		}
-	}
-	return products.sort((one, other) => one.title.localeCompare(other.title));
+export function appScript(app: string): string {
+	return path.join(path.dirname(app), 'out', 'siteApp.js');
 }
 
-function toProduct(id: string, manifest: Manifest): SiteProduct | undefined {
-	const versions = Array.isArray(manifest.versions)
-		? manifest.versions.filter((value): value is string => typeof value === 'string')
-		: [];
-	const latest =
-		typeof manifest.latest === 'string' ? manifest.latest : typeof manifest.version === 'string' ? manifest.version : versions[0];
-	if (latest === undefined || latest === '') {
-		return undefined;
+/**
+ * Make the site folder hold the app.
+ *
+ * Copied on every use rather than once, because the app is this module's and the site is a folder a person may have
+ * carried to another machine: the preview must show the code that is installed, not whatever was copied last month.
+ * The one file that survives the copy is `projects.json` — that is the site's data, and the module has no copy of it.
+ */
+export async function installSite(folder: string, app: string): Promise<string> {
+	await fs.promises.mkdir(folder, { recursive: true });
+	await copyTree(app, folder);
+
+	const script = appScript(app);
+	if (!fs.existsSync(script)) {
+		throw new Error(`The site's script has not been built: ${script} is missing. Build the module, then try again.`);
+	}
+	await fs.promises.mkdir(path.join(folder, 'assets'), { recursive: true });
+	const code = await fs.promises.readFile(script, 'utf8');
+	// The built file ends with a source map reference that the site has no map for: a published site carries no map.
+	await fs.promises.writeFile(path.join(folder, 'assets', 'site.js'), code.replace(/\r?\n\/\/# sourceMappingURL=.*$/, '\n'), 'utf8');
+
+	if (!fs.existsSync(path.join(folder, PROJECTS_FILE))) {
+		await writeSite(folder, { projects: [] });
+	}
+	return folder;
+}
+
+/** Every file under `source`, copied to the same place under `target`, overwriting. */
+async function copyTree(source: string, target: string): Promise<void> {
+	for (const entry of await fs.promises.readdir(source, { withFileTypes: true })) {
+		if (entry.name === PROJECTS_FILE) {
+			continue;
+		}
+		const from = path.join(source, entry.name);
+		const to = path.join(target, entry.name);
+		if (entry.isDirectory()) {
+			await fs.promises.mkdir(to, { recursive: true });
+			await copyTree(from, to);
+		} else if (entry.isFile()) {
+			await fs.promises.copyFile(from, to);
+		}
+	}
+}
+
+/** The site as a file, read tolerantly: a hand-edited or half-written entry is repaired rather than fatal. */
+export async function readSite(root: string): Promise<Site> {
+	let held: unknown;
+	try {
+		held = JSON.parse(await fs.promises.readFile(path.join(root, PROJECTS_FILE), 'utf8'));
+	} catch {
+		return { projects: [] };
+	}
+	const data = held as { generatedAt?: unknown; projects?: unknown };
+	const projects: SiteProject[] = [];
+	if (Array.isArray(data.projects)) {
+		for (const entry of data.projects) {
+			const project = toProject(entry);
+			if (project !== undefined) {
+				projects.push(project);
+			}
+		}
 	}
 	return {
-		id,
-		title: typeof manifest.title === 'string' && manifest.title !== '' ? manifest.title : id,
-		summary: typeof manifest.summary === 'string' && manifest.summary !== '' ? manifest.summary : undefined,
-		section: typeof manifest.section === 'string' && manifest.section !== '' ? manifest.section : SECTIONS[0].id,
-		latest,
-		versions: versions.length > 0 ? versions : [latest],
-		builtAt: typeof manifest.builtAt === 'string' && manifest.builtAt !== '' ? manifest.builtAt : undefined
+		generatedAt: typeof data.generatedAt === 'string' ? data.generatedAt : undefined,
+		projects: projects.sort((one, other) => one.title.localeCompare(other.title))
 	};
 }
 
-/**
- * Write the pages that hold the products: the six sections, and one page per product.
- *
- * Written from the manifests on every change, so there is no third copy of the truth to keep in step — the folder is
- * the database, and these are its indexes.
- */
-export async function writePages(root: string, assets?: string): Promise<number> {
-	const products = await readProducts(root);
-	if (assets !== undefined) {
-		await copyAssets(assets, path.join(root, 'assets'));
+function toProject(entry: unknown): SiteProject | undefined {
+	const held = entry as { id?: unknown; title?: unknown; summary?: unknown; section?: unknown; versions?: unknown; builtAt?: unknown };
+	const id = typeof held.id === 'string' && held.id !== '' ? held.id : undefined;
+	if (id === undefined) {
+		return undefined;
 	}
-	let written = 0;
-	for (const section of SECTIONS) {
-		await fs.promises.writeFile(path.join(root, sectionHref(section)), sectionPage({ section, products }), 'utf8');
-		written += 1;
+	const versions: SiteVersion[] = [];
+	if (Array.isArray(held.versions)) {
+		for (const value of held.versions) {
+			const version = toVersion(value);
+			if (version !== undefined) {
+				versions.push(version);
+			}
+		}
 	}
-	for (const product of products) {
-		const folder = path.join(root, product.id);
-		await fs.promises.mkdir(folder, { recursive: true });
-		await fs.promises.writeFile(path.join(folder, 'index.html'), productPage({ product, sections: SECTIONS }), 'utf8');
-		written += 1;
+	versions.sort((one, other) => compareVersions(one.version, other.version));
+	return {
+		id,
+		title: typeof held.title === 'string' && held.title !== '' ? held.title : id,
+		summary: typeof held.summary === 'string' && held.summary !== '' ? held.summary : undefined,
+		section: typeof held.section === 'string' && held.section !== '' ? held.section : DEFAULT_SECTION,
+		versions,
+		builtAt: typeof held.builtAt === 'string' && held.builtAt !== '' ? held.builtAt : versions[0]?.builtAt
+	};
+}
+
+function toVersion(entry: unknown): SiteVersion | undefined {
+	const held = entry as { version?: unknown; builtAt?: unknown; pages?: unknown };
+	const version = typeof held.version === 'string' && held.version !== '' ? held.version : undefined;
+	if (version === undefined) {
+		return undefined;
 	}
-	return written;
+	const pages: SitePage[] = [];
+	if (Array.isArray(held.pages)) {
+		for (const value of held.pages) {
+			const page = value as { href?: unknown; title?: unknown };
+			if (typeof page.href === 'string' && page.href !== '') {
+				pages.push({ href: page.href, title: typeof page.title === 'string' && page.title !== '' ? page.title : page.href });
+			}
+		}
+	}
+	return { version, builtAt: typeof held.builtAt === 'string' ? held.builtAt : undefined, pages };
+}
+
+/** Write the site's data file: the only thing on disk that the app cannot work out for itself. */
+export async function writeSite(root: string, site: Site): Promise<void> {
+	const data: Site = { generatedAt: new Date().toISOString(), projects: site.projects };
+	await fs.promises.mkdir(root, { recursive: true });
+	await fs.promises.writeFile(path.join(root, PROJECTS_FILE), `${JSON.stringify(data, undefined, 2)}\n`, 'utf8');
 }
 
 /** What adding a build produced, so the caller can say it in one sentence. */
 export interface Added {
-	product: SiteProduct;
+	project: SiteProject;
 	version: string;
 	pages: number;
 	destination: string;
 }
 
-/** The site's own files — `site.css` and whatever else sits beside it — copied into a folder that serves them. */
-async function copyAssets(assets: string, target: string): Promise<void> {
-	await fs.promises.mkdir(target, { recursive: true });
-	for (const entry of await fs.promises.readdir(assets, { withFileTypes: true })) {
-		if (entry.isFile()) {
-			await fs.promises.copyFile(path.join(assets, entry.name), path.join(target, entry.name));
-		}
-	}
-}
-
 /**
- * Put one build into the site as `<product>/<version>/`.
+ * Put one build into the site as `<project>/<version>/`.
  *
- * The build is copied as it stands — the pages are the generator's, and rewriting them here would be a second
- * renderer. The one file this adds is the reader, because the reader is the site's, not the generator's: it needs the
- * page list of this version and the list of versions beside it, which only the site knows.
+ * The build is copied as it stands — the pages are the generator's, and rewriting them here would be a second renderer.
+ * Adding the same version twice replaces it, because rebuilding a version and adding it again is the ordinary way to
+ * fix a page, not a mistake to refuse.
  */
-export async function addBuild(options: {
+export async function addVersion(options: {
 	root: string;
-	/** The module's `site/` folder: the stylesheet the pages are written against. */
-	assets?: string;
+	/** The module's `site/` folder, installed first so the site is never data without an app to read it. */
+	app: string;
 	id: string;
 	title: string;
 	summary?: string;
-	section: string;
+	/** Absent keeps whatever the project already had. */
+	section?: string;
 	version: string;
+	/** The folder a build wrote. */
 	built: string;
 }): Promise<Added> {
-	const destination = path.join(options.root, options.id, options.version);
-	const existing = await readProducts(options.root);
-	const before = existing.find((product) => product.id === options.id);
-	// Newest first: `compareVersions` sorts descending, so the head of the list is what "latest" means.
-	const versions = [...new Set([options.version, ...(before?.versions ?? [])])].sort(compareVersions);
-	const latest = versions[0] ?? options.version;
+	await installSite(options.root, options.app);
 
+	const destination = path.join(options.root, options.id, options.version);
 	await fs.promises.mkdir(path.dirname(destination), { recursive: true });
 	await fs.promises.rm(destination, { recursive: true, force: true });
 	await fs.promises.cp(options.built, destination, { recursive: true });
 
-	const pages = await htmlPages(destination);
-	await fs.promises.writeFile(
-		path.join(destination, 'temco-reader.html'),
-		readerPage({ product: options.title, version: options.version, versions, pages }),
-		'utf8'
-	);
-	// The site's stylesheet, at the root: the section and product pages are written against it. A version keeps the
-	// build's own `assets/`, because its pages were rendered against that one.
-	if (options.assets !== undefined) {
-		await copyAssets(options.assets, path.join(options.root, 'assets'));
-	}
-
-	const builtAt = new Date().toISOString();
-	const manifest = {
-		title: options.title,
-		summary: options.summary,
-		section: options.section,
-		latest,
-		versions,
-		builtAt
-	};
-	await fs.promises.writeFile(
-		path.join(options.root, options.id, 'manifest.json'),
-		`${JSON.stringify(manifest, undefined, 2)}\n`,
-		'utf8'
-	);
-
-	await writePages(options.root, options.assets);
-
-	return {
-		product: { id: options.id, title: options.title, summary: options.summary, section: options.section, latest, versions, builtAt },
+	const entry: SiteVersion = {
 		version: options.version,
-		pages: pages.length,
-		destination
+		builtAt: new Date().toISOString(),
+		pages: await htmlPages(destination)
 	};
+
+	const site = await readSite(options.root);
+	let project = site.projects.find((held) => held.id === options.id);
+	if (project === undefined) {
+		project = {
+			id: options.id,
+			title: options.title,
+			summary: options.summary,
+			section: options.section ?? DEFAULT_SECTION,
+			versions: [entry],
+			builtAt: entry.builtAt
+		};
+		site.projects.push(project);
+	} else {
+		project.title = options.title;
+		project.summary = options.summary ?? project.summary;
+		project.section = options.section ?? project.section;
+		project.versions = [entry, ...project.versions.filter((held) => held.version !== options.version)].sort((one, other) =>
+			compareVersions(one.version, other.version)
+		);
+		project.builtAt = entry.builtAt;
+	}
+	site.projects.sort((one, other) => one.title.localeCompare(other.title));
+	await writeSite(options.root, site);
+
+	return { project, version: options.version, pages: entry.pages.length, destination };
 }
 
-/** Every page in the folder, as the reader lists it: the build's own order, without the build's index in the list. */
-async function htmlPages(root: string, under = ''): Promise<{ href: string; title: string }[]> {
+/** Every page in the folder, in the build's own reading order, without the build's index in the list. */
+export async function htmlPages(root: string, under = ''): Promise<SitePage[]> {
 	const order = await readingOrderOf(root);
 	const readingOrder = (href: string): number => {
 		const at = order.indexOf(href);
 		return at === -1 ? order.length : at;
 	};
-	const found: { href: string; title: string }[] = [];
-	const entries = await fs.promises.readdir(path.join(root, under), { withFileTypes: true });
-	for (const entry of entries) {
+	const found: SitePage[] = [];
+	for (const entry of await fs.promises.readdir(path.join(root, under), { withFileTypes: true })) {
 		const relative = under === '' ? entry.name : `${under}/${entry.name}`;
 		if (entry.isDirectory()) {
 			found.push(...(await htmlPages(root, relative)));
 			continue;
 		}
-		if (!/\.html?$/i.test(entry.name) || entry.name.toLowerCase() === 'temco-reader.html') {
+		if (!/\.html?$/i.test(entry.name)) {
 			continue;
 		}
 		// The build's own index is a page list; the reader is that list, so it is not a document of the set.
 		if (under === '' && entry.name.toLowerCase() === 'index.html') {
 			continue;
 		}
-		found.push({ href: relative, title: await titleOf(path.join(root, ...relative.split('/'))) ?? titleFromHref(relative) });
+		found.push({ href: relative, title: (await titleOf(path.join(root, ...relative.split('/')))) ?? titleFromHref(relative) });
 	}
-	// The build's own index is a page list in reading order; the reader shows that list, so the order comes from it.
 	return found.sort((one, other) => readingOrder(one.href) - readingOrder(other.href) || one.href.localeCompare(other.href));
 }
 
@@ -245,6 +328,24 @@ async function readingOrderOf(root: string): Promise<string[]> {
 		return [...html.matchAll(/href="([^"#?]+\.html?)"/gi)].map((match) => match[1]);
 	} catch {
 		return [];
+	}
+}
+
+/** The project's name, as the build itself spells it: the title of the index page it wrote. */
+export async function projectNameOf(build: string): Promise<string | undefined> {
+	try {
+		const html = await fs.promises.readFile(path.join(build, 'index.html'), 'utf8');
+		const held = /<title>([\s\S]*?)<\/title>/i.exec(html)?.[1];
+		if (held === undefined) {
+			return undefined;
+		}
+		// A page's title carries its own name and the project's (`Page · Project`); the index carries the project alone.
+		const text = unescapeText(held).trim();
+		const parts = text.split(' · ');
+		const name = (parts.length > 1 ? parts[parts.length - 1] : text).trim();
+		return name === '' ? undefined : name;
+	} catch {
+		return undefined;
 	}
 }
 
@@ -272,6 +373,15 @@ function unescapeText(text: string): string {
 		.replace(/&quot;/g, '"')
 		.replace(/&#39;/g, "'")
 		.replace(/&amp;/g, '&');
+}
+
+/** A folder name from a title: lowercase, and nothing that needs escaping in an address. */
+export function slugOf(title: string): string {
+	const slug = title
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '');
+	return slug === '' ? 'project' : slug;
 }
 
 /** `13.0` after `12.9`: the numbers compared as numbers, so `9` does not sort after `10`. */

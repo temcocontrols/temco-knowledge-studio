@@ -1,137 +1,246 @@
-// The site's rules, checked without a browser.
+// The site's folder rules, checked against real files.
 //
-// Every case is something a visitor would notice and a developer would not: a section the rail promises but the folder
-// does not hold, a card that leads to an address nothing writes, a page that says nothing about why it is empty, a
-// manifest title that ends up in the markup as markup. The renderers are pure, so these are string comparisons —
-// fast, and honest about what they prove. `site.ts` (the half that writes folders) is checked by adding a real build.
+// Every case here is something a reader would notice and a developer would not: a version that lists a page its build
+// does not hold, a page list in the wrong order, an older build over a newer one, a project title taken from the folder
+// instead of from the build. `site.ts` is pure folder work, so these are a throwaway tree and the files it writes —
+// no editor, no browser, no network.
 
 import assert from 'node:assert/strict';
-import { readFileSync, statSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createRequire, Module } from 'node:module';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-interface SiteProduct {
-	id: string;
-	title: string;
-	summary?: string;
-	section: string;
-	latest: string;
-	versions: readonly string[];
+interface SiteModule {
+	installSite(folder: string, app: string): Promise<string>;
+	readSite(root: string): Promise<{ projects: { id: string; title: string; section: string; versions: { version: string; pages: { href: string; title: string }[] }[] }[] }>;
+	writeSite(root: string, site: unknown): Promise<void>;
+	addVersion(options: {
+		root: string;
+		app: string;
+		id: string;
+		title: string;
+		section?: string;
+		version: string;
+		built: string;
+	}): Promise<{ project: { title: string }; version: string; pages: number; destination: string }>;
+	latestOf(project: { versions: { version: string }[] }): string | undefined;
+	projectNameOf(build: string): Promise<string | undefined>;
+	slugOf(title: string): string;
+	compareVersions(one: string, other: string): number;
 }
 
-interface Section {
-	id: string;
-	title: string;
-	desc: string;
-	empty: string;
-}
-
-interface Portal {
-	SECTIONS: readonly Section[];
-	escape(text: string): string;
-	sectionHref(section: Section): string;
-	productHref(product: SiteProduct): string;
-	readerHref(product: SiteProduct, version: string): string;
-	sectionPage(options: { section: Section; products: readonly SiteProduct[] }): string;
-	productPage(options: { product: SiteProduct; sections: readonly Section[] }): string;
-	siteCss(): string;
-}
-
-const source = fileURLToPath(new URL('../src/portal.ts', import.meta.url));
-const built = fileURLToPath(new URL('../out/portal.js', import.meta.url));
+const source = fileURLToPath(new URL('../src/site.ts', import.meta.url));
+const built = fileURLToPath(new URL('../out/site.js', import.meta.url));
+const app = fileURLToPath(new URL('../site', import.meta.url));
 
 try {
-	assert.ok(statSync(built).mtimeMs >= statSync(source).mtimeMs, 'out/portal.js is older than src/portal.ts');
+	assert.ok(statSync(built).mtimeMs >= statSync(source).mtimeMs, 'out/site.js is older than src/site.ts');
 } catch (error) {
 	console.log(`Cannot run: ${(error as Error).message}`);
 	console.log('Compile first:  npm run compile');
 	process.exit(1);
 }
 
-const portal = createRequire(import.meta.url)(built) as Portal;
+// `site.ts` reads two settings through `vscode`; nothing checked here reads one, but loading the module does need the
+// import to resolve, so it is answered with a stub rather than a running editor.
+const load = Module._load;
+Module._load = function (request: string, parent: unknown, isMain: boolean) {
+	if (request === 'vscode') {
+		return { workspace: { getConfiguration: () => ({ get: () => undefined }) } };
+	}
+	return load.call(this as unknown as NodeModule, request, parent, isMain);
+};
 
-const products: SiteProduct[] = [
-	{ id: 't3000', title: 'T3000', summary: 'The controller and its workbench.', section: 'documentation', latest: '13.0', versions: ['13.0', '12.9'] },
-	{ id: 'bacnet', title: 'BACnet', section: 'documentation', latest: '4.2', versions: ['4.2'] }
-];
+const site = createRequire(import.meta.url)(built) as SiteModule;
 
-const cases: { name: string; run: () => void }[] = [];
-const test = (name: string, run: () => void) => cases.push({ name, run });
+/** A build as the generator writes one: an index that lists the pages, and the pages themselves. */
+function build(folder: string, project: string, pages: readonly string[]): string {
+	mkdirSync(folder, { recursive: true });
+	const links = pages.map((href) => `<li><a href="${href}">${href}</a></li>`).join('\n');
+	writeFileSync(join(folder, 'index.html'), `<!doctype html><html><head><title>${project}</title></head><body><ul>${links}</ul></body></html>`);
+	for (const href of pages) {
+		const file = join(folder, ...href.split('/'));
+		mkdirSync(join(file, '..'), { recursive: true });
+		const name = href.replace(/\.html?$/i, '').split('/').pop() ?? href;
+		writeFileSync(file, `<!doctype html><html><head><title>${name} · ${project}</title></head><body><h2 id="top">Top</h2></body></html>`);
+	}
+	return folder;
+}
 
-test('the rail promises the six sections, in one order', () => {
-	assert.deepEqual(
-		portal.SECTIONS.map((section) => section.title),
-		['Documentation', 'Training & Labs', 'Tests', 'Products', 'Q&A', 'Topics']
-	);
-	assert.equal(portal.SECTIONS[0].id, 'documentation');
-});
+const cases: { name: string; run: () => Promise<void> }[] = [];
+const test = (name: string, run: () => Promise<void>) => cases.push({ name, run });
 
-test('a section has a page of its own, and the first one is the site root', () => {
-	assert.equal(portal.sectionHref(portal.SECTIONS[0]), 'index.html');
-	for (const section of portal.SECTIONS.slice(1)) {
-		assert.equal(portal.sectionHref(section), `${section.id}.html`);
+/** A fresh site folder and a fresh build, removed whatever the case does with them. */
+function fresh(): { root: string; keep: string; wide: string } {
+	const base = mkdtempSync(join(tmpdir(), 'temco-learn-'));
+	return {
+		root: join(base, 'site'),
+		keep: base,
+		wide: build(join(base, 't3000', 'dist', 'site'), 'T3000', ['guides/intro.html', 'guides/setup.html', 'faq.html'])
+	};
+}
+
+test('installing the app copies every page and the script, and starts an empty site', async () => {
+	const space = fresh();
+	try {
+		await site.installSite(space.root, app);
+		for (const file of ['index.html', 'project.html', 'reader.html', join('assets', 'site.js'), join('assets', 'site.css')]) {
+			assert.ok(existsSync(join(space.root, file)), `${file} was not copied into the site`);
+		}
+		const data = JSON.parse(readFileSync(join(space.root, 'projects.json'), 'utf8')) as { projects: unknown[] };
+		assert.deepEqual(data.projects, []);
+	} finally {
+		rmSync(space.keep, { recursive: true, force: true });
 	}
 });
 
-test('every page carries the whole rail, and marks where the reader is', () => {
-	const html = portal.sectionPage({ section: portal.SECTIONS[2], products });
-	for (const section of portal.SECTIONS) {
-		assert.ok(html.includes(portal.sectionHref(section)), `${section.title} is not in the rail`);
+test('the script installed into the site is the one that was built, and the site asks for no map', async () => {
+	const space = fresh();
+	try {
+		await site.installSite(space.root, app);
+		const installed = readFileSync(join(space.root, 'assets', 'site.js'), 'utf8');
+		const compiled = readFileSync(fileURLToPath(new URL('../out/siteApp.js', import.meta.url)), 'utf8');
+		assert.ok(installed.startsWith(compiled.slice(0, 400)), 'the installed script is not the built one');
+		assert.doesNotMatch(installed, /sourceMappingURL/u, 'the site would ask for a source map it does not hold');
+	} finally {
+		rmSync(space.keep, { recursive: true, force: true });
 	}
-	assert.match(html, /aria-current="page"/u);
-	assert.match(html, /<title>Tests · Temco Learn<\/title>/u);
 });
 
-test('a section lists its own products, and links to their pages', () => {
-	const html = portal.sectionPage({ section: portal.SECTIONS[0], products });
-	assert.match(html, /href="t3000\/"/u);
-	assert.match(html, /href="bacnet\/"/u);
-	// Documentation is the only section with products, so the others must not borrow them.
-	assert.ok(!portal.sectionPage({ section: portal.SECTIONS[1], products }).includes('href="t3000/"'));
-});
-
-test('an empty section says why it is empty instead of showing nothing', () => {
-	const html = portal.sectionPage({ section: portal.SECTIONS[4], products });
-	assert.match(html, /class="empty"/u);
-	assert.match(html, /Temco forum/u);
-});
-
-test('a product page lists its versions, newest first, each reading in the reader', () => {
-	const html = portal.productPage({ product: products[0], sections: portal.SECTIONS });
-	const first = html.indexOf('13.0');
-	const second = html.indexOf('12.9');
-	assert.ok(first > 0 && second > first, 'the newest version is not first');
-	assert.match(html, /href="13\.0\/temco-reader\.html"/u);
-	// A product page is one folder down, so its rail climbs.
-	assert.match(html, /href="\.\.\/index\.html"/u);
-});
-
-test('a reader address is product, version, and the reader file', () => {
-	assert.equal(portal.readerHref(products[0], '13.0'), 't3000/13.0/temco-reader.html');
-});
-
-test('text from a manifest is text', () => {
-	assert.equal(portal.escape('a & b <c> "d"'), 'a &amp; b &lt;c&gt; &quot;d&quot;');
-	const hostile: SiteProduct = { id: 'x', title: '<script>alert(1)</script>', section: 'documentation', latest: '1', versions: ['1'] };
-	const html = portal.sectionPage({ section: portal.SECTIONS[0], products: [hostile] });
-	assert.ok(!html.includes('<script>alert(1)</script>'), 'a title was written as markup');
-	assert.match(html, /&lt;script&gt;/u);
-});
-
-test('the stylesheet is one file, and it works in the dark', () => {
-	const css = readFileSync(new URL('../site/site.css', import.meta.url), 'utf8');
-	for (const selector of ['.bar', '.wrap', '.card', '.row', '.empty', '.foot', '.tab']) {
-		assert.ok(css.includes(`${selector} {`) || css.includes(`${selector},`), `the stylesheet has no rule for ${selector}`);
+test('installing the app again keeps the data the site already holds', async () => {
+	const space = fresh();
+	try {
+		await site.installSite(space.root, app);
+		const before = '{"projects":[{"id":"t3000","title":"T3000","versions":[]}]}';
+		writeFileSync(join(space.root, 'projects.json'), before);
+		await site.installSite(space.root, app);
+		assert.equal(readFileSync(join(space.root, 'projects.json'), 'utf8'), before, 'the site’s data was overwritten');
+	} finally {
+		rmSync(space.keep, { recursive: true, force: true });
 	}
-	assert.match(css, /@media \(prefers-color-scheme: dark\)/u);
-	// The site is read in a browser: nothing in it may depend on the editor's own variables.
-	assert.ok(!css.includes('--vscode-'), 'the stylesheet depends on the editor');
+});
+
+test('a build is copied in as it was, and its pages are listed in the build order', async () => {
+	const space = fresh();
+	try {
+		await site.addVersion({ root: space.root, app, id: 't3000', title: 'T3000', version: '13.0', built: space.wide });
+		assert.ok(existsSync(join(space.root, 't3000', '13.0', 'index.html')), 'the build was not copied in');
+		const data = await site.readSite(space.root);
+		assert.deepEqual(
+			data.projects[0].versions[0].pages.map((page) => page.href),
+			['guides/intro.html', 'guides/setup.html', 'faq.html']
+		);
+		assert.deepEqual(
+			data.projects[0].versions[0].pages.map((page) => page.title),
+			['intro', 'setup', 'faq']
+		);
+	} finally {
+		rmSync(space.keep, { recursive: true, force: true });
+	}
+});
+
+test('the build index is a page list, so it is not one of the pages', async () => {
+	const space = fresh();
+	try {
+		await site.addVersion({ root: space.root, app, id: 't3000', title: 'T3000', version: '13.0', built: space.wide });
+		const data = await site.readSite(space.root);
+		assert.equal(
+			data.projects[0].versions[0].pages.some((page) => page.href === 'index.html'),
+			false,
+			'the build index was listed as a document'
+		);
+	} finally {
+		rmSync(space.keep, { recursive: true, force: true });
+	}
+});
+
+test('a second version lists above the first, and the newest is the latest', async () => {
+	const space = fresh();
+	try {
+		await site.addVersion({ root: space.root, app, id: 't3000', title: 'T3000', version: '9.0', built: space.wide });
+		await site.addVersion({ root: space.root, app, id: 't3000', title: 'T3000', version: '13.0', built: space.wide });
+		const data = await site.readSite(space.root);
+		assert.deepEqual(data.projects[0].versions.map((version) => version.version), ['13.0', '9.0']);
+		assert.equal(site.latestOf(data.projects[0] as never), '13.0');
+	} finally {
+		rmSync(space.keep, { recursive: true, force: true });
+	}
+});
+
+test('adding the same version twice replaces it instead of duplicating it', async () => {
+	const space = fresh();
+	try {
+		await site.addVersion({ root: space.root, app, id: 't3000', title: 'T3000', version: '13.0', built: space.wide });
+		await site.addVersion({ root: space.root, app, id: 't3000', title: 'T3000', version: '13.0', built: space.wide });
+		const data = await site.readSite(space.root);
+		assert.deepEqual(data.projects[0].versions.map((version) => version.version), ['13.0']);
+	} finally {
+		rmSync(space.keep, { recursive: true, force: true });
+	}
+});
+
+test('a second project is listed by its title, and keeps the section it had', async () => {
+	const space = fresh();
+	try {
+		await site.addVersion({ root: space.root, app, id: 't3000', title: 'T3000', section: 'products', version: '13.0', built: space.wide });
+		// A rebuild of the same project arrives without a section, and must not move the project back to the default.
+		await site.addVersion({ root: space.root, app, id: 't3000', title: 'T3000', version: '14.0', built: space.wide });
+		await site.addVersion({ root: space.root, app, id: 'bacnet', title: 'BACnet', version: '4.2', built: space.wide });
+		const data = await site.readSite(space.root);
+		assert.deepEqual(data.projects.map((project) => project.title), ['BACnet', 'T3000']);
+		assert.equal(data.projects[1].section, 'products');
+	} finally {
+		rmSync(space.keep, { recursive: true, force: true });
+	}
+});
+
+test('a hand-written data file is repaired rather than fatal', async () => {
+	const space = fresh();
+	try {
+		mkdirSync(space.root, { recursive: true });
+		writeFileSync(
+			join(space.root, 'projects.json'),
+			JSON.stringify({
+				projects: [
+					{ id: 't3000', versions: [{ version: '9.0' }, { version: '13.0', pages: [{ href: 'a.html' }] }] },
+					{ title: 'no id' },
+					{ id: 'empty', title: 'Empty' }
+				]
+			})
+		);
+		const data = await site.readSite(space.root);
+		assert.deepEqual(data.projects.map((project) => project.id), ['empty', 't3000']);
+		assert.equal(data.projects[1].title, 't3000', 'a project with no title falls back to its folder');
+		assert.deepEqual(data.projects[1].versions.map((version) => version.version), ['13.0', '9.0']);
+		assert.equal(data.projects[1].versions[0].pages[0].title, 'a.html', 'a page with no title falls back to its address');
+		assert.equal(data.projects[1].section, 'documentation');
+	} finally {
+		rmSync(space.keep, { recursive: true, force: true });
+	}
+});
+
+test("a build names its project, and the folder does not", async () => {
+	const space = fresh();
+	try {
+		assert.equal(await site.projectNameOf(space.wide), 'T3000');
+		assert.equal(await site.projectNameOf(join(space.keep, 'nowhere')), undefined);
+	} finally {
+		rmSync(space.keep, { recursive: true, force: true });
+	}
+});
+
+test('a title becomes a lowercase folder name, and versions compare as numbers', () => {
+	assert.equal(site.slugOf('T3000 Controller'), 't3000-controller');
+	assert.equal(site.slugOf('  BACnet  '), 'bacnet');
+	assert.deepEqual(['9.0', '13.0', '10.1'].sort(site.compareVersions), ['13.0', '10.1', '9.0']);
 });
 
 let failed = 0;
 for (const { name, run } of cases) {
 	try {
-		run();
+		await run();
 		console.log(`  ok  ${name}`);
 	} catch (error) {
 		failed += 1;

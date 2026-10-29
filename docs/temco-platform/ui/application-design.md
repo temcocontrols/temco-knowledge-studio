@@ -73,7 +73,7 @@ a view pointed at a container nobody declares, which is the mistake this consoli
 | S12 | **Deploy to Pages** | repo · address the site will have · what will be committed · **Publish**; never force-push | as S5 | — |
 | S13 | **Export** | format cards: site `.zip` · single-file HTML · Markdown bundle · (`.docx`) · scope | as S5 | — |
 | S14 | **AI** | conversations, models, the answer with page citations | conversations + runtime | — |
-| S15 | **Learn** | the reader | lessons | — |
+| S15 | **Learn** | the site: documentation · training · tests · products · Q&A · topics, then the reader for one version | the site folder | — |
 | S16 | **Settings** | profile · platform (theme, AI runtime, build defaults, Pages branch) | sections | — |
 | S17 | **Help** | search, topics, support (logs, diagnostics) | topics | — |
 
@@ -120,6 +120,26 @@ create project ─▶ add source ─▶ registry ─▶ write ─▶ validate �
   rather than a dependency, because an export a colleague cannot open is not an export. `.docx` needs a writer package
   (`mammoth` is import-only) and is still owed.
 
+## Temco Learn
+
+The site is its own module (`extensions/temco-learn`, the tenth), because a reader-facing site is not the same job as
+keeping a page in step with the code. One working area — `temcoRepositories.workspaceFolder`, `~/Temco` when unset — holds
+a `site/` folder, and that folder is the whole site:
+
+- the app: `index.html` (one section), `project.html` (one project and its versions), `reader.html` (one version), plus
+  `assets/site.css`, `assets/reader.css` and `assets/site.js`. The page shell and styles are copied in from the module on
+  every refresh, so the app can be updated without losing data; the script is `src/siteApp.ts` — TypeScript, because the
+  repository keeps no JavaScript of its own — compiled to `out/siteApp.js` and written in as `assets/site.js`, which is
+  why `site/assets/` holds no script in the repository;
+- `projects.json`: every project with its section, its versions and each version's pages in reading order;
+- one folder per project and version holding a build exactly as it came out (`dist/site`).
+
+`Add to Site` copies a build in, takes the project name from the build's own `<title>`, and records its pages in the order
+the build's `index.html` links them; only the version is asked. `Preview` serves that folder on loopback and shows it as a
+page — the site a reader would see, with the same URLs the published site will have. `Publish` commits the folder and
+pushes `gh-pages`. The panel is a plain list — preview, then each project with its versions, then build · add · publish —
+and never asks for a folder: the folder is the convention, not a question.
+
 ## Design system
 
 - **Fluent v9** (`@fluentui/react-components`, `@fluentui/react-icons`) with the brand ramp seeded from Azure blue
@@ -144,9 +164,10 @@ create project ─▶ add source ─▶ registry ─▶ write ─▶ validate �
 
 1. **Generator** ✅ — `src/siteRender.ts` (pure: slugs, page shell, index, sitemap, one stylesheet), `src/site.ts` (host:
    read, render, write, copy media), `scripts/check-site.mts` (10 cases); `Build the Site` falls back to it.
-2. **Deploy** ✅ — `src/pages.ts` (the remote decides the sitemap's address), `src/publish.ts`
-   (`temcoDocs.publishSite`), `scripts/check-publish.mts` (5 cases against a real bare repository);
-   `src/git.ts` shared with the diff command. Still owed: the status-bar state and the confirmation screen S12.
+2. **Deploy** ✅ — `src/pages.ts` (the remote decides the sitemap's address) and `src/git.ts` shared with the diff command.
+   The push itself lives in `temco-learn` (`src/publish.ts`: `ensureRepo` for a folder that is not a repository yet, then a
+   plain, never-forced `git push origin HEAD:gh-pages`; `scripts/check-publish.mts`, 4 cases against a real bare repository);
+   `temcoDocs.publishSite` stays behind as a redirect. Still owed: the status-bar state and the confirmation screen S12.
 3. **Export** ✅ — `src/zip.ts` (a real archive writer: store, deflate, CRC32), `src/export.ts` (site zip, single-file
    page, Markdown bundle; `temcoDocs.export` + three commands), `scripts/check-export.mts` (5 cases that read the archive
    back). Still owed: `.docx`. Then the panel.

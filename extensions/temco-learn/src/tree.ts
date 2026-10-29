@@ -1,44 +1,26 @@
-// The site's tree: the panel beside the pages.
+// The panel: the site's index, and the three things that change it.
 //
-// It never asks for anything. Every row is a place that exists: a section of the site, a product, a version, or one of
-// the three things that change the folder (a build, adding a build, a publish). The site folder is shown as the Site
-// row's description — a fact to read, not a question to answer — and changing it is a command in the view's title.
-//
-// The rows read the same manifests the pages are written from, so the panel and the site cannot disagree about what
-// exists.
+// Names only. A row here is a place or an act — a project on the site, one of its versions, or a command — so nothing
+// needs a sentence under it, and the folder the site lives in is not something to read on every glance. What a row
+// does say is where it goes: Preview opens the portal, a project opens its page, a version opens the reader.
 
 import * as vscode from 'vscode';
-import { SECTIONS, SiteProduct, sectionHref, since } from './portal';
-import { readProducts } from './site';
+import { Site, SiteProject } from './site';
 
 export const VIEW_ID = 'temcoLearn.panel';
 
-/** A row that also knows which group or product it belongs to, so its children can be drawn. */
+/** A row that also knows which project it belongs to, so its versions can be drawn. */
 interface Row extends vscode.TreeItem {
-	group?: 'site' | 'products' | 'build' | 'publish';
-	product?: SiteProduct;
-}
-
-/** A group: always expanded, because this panel is the site's index rather than a menu that hides things. */
-function group(label: string, id: 'site' | 'products' | 'build' | 'publish', mark: string, description?: string): Row {
-	const item: Row = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.Expanded);
-	item.id = `temcoLearn.group.${id}`;
-	item.iconPath = new vscode.ThemeIcon(mark);
-	item.description = description;
-	item.group = id;
-	return item;
+	project?: SiteProject;
 }
 
 export class SiteTree implements vscode.TreeDataProvider<Row>, vscode.Disposable {
 	private readonly changed = new vscode.EventEmitter<void>();
 	readonly onDidChangeTreeData = this.changed.event;
 
-	private products: SiteProduct[] | undefined;
-
-	constructor(private readonly root: () => string | undefined) { }
+	constructor(private readonly site: () => Promise<Site>) { }
 
 	refresh(): void {
-		this.products = undefined;
 		this.changed.fire();
 	}
 
@@ -51,108 +33,59 @@ export class SiteTree implements vscode.TreeDataProvider<Row>, vscode.Disposable
 	}
 
 	async getChildren(item?: Row): Promise<Row[]> {
-		const products = await this.read();
-		if (item === undefined) {
-			return [
-				group('Site', 'site', 'globe', this.root()),
-				group('Products', 'products', 'book', products.length === 0 ? 'nothing published yet' : String(products.length)),
-				group('Build', 'build', 'tools'),
-				group('Publish', 'publish', 'cloud-upload')
-			];
+		if (item !== undefined) {
+			return item.project === undefined ? [] : this.versions(item.project);
 		}
-		if (item.product !== undefined) {
-			return this.versions(item.product);
-		}
-		switch (item.group) {
-			case 'site':
-				return this.sections(products);
-			case 'products':
-				return products.length === 0
-					? [this.row('products.none', 'No product yet', 'a build becomes a product when it is added', 'add', 'temcoLearn.assemble')]
-					: products.map((product) => this.product(product));
-			case 'build':
-				return [
-					this.row('build.run', 'Build the documentation', 'runs the open project’s own build', 'play', 'temcoLearn.build'),
-					this.row('build.add', 'Add a build to the site…', 'copies a dist folder in as a product version', 'add', 'temcoLearn.assemble')
-				];
-			case 'publish':
-				return [
-					this.row('publish.pages', 'Publish to GitHub Pages', 'the site folder’s repository, on gh-pages', 'cloud-upload', 'temcoLearn.publish'),
-					this.row('publish.newest', 'Newest build', this.newest(products), 'history', 'temcoLearn.preview')
-				];
-			default:
-				return [];
-		}
+		const site = await this.site();
+		return [
+			this.row('preview', 'Preview', 'open-preview', 'temcoLearn.preview', { page: 'index.html' }),
+			...site.projects.map((project) => this.project(project)),
+			this.row('build', 'Build', 'tools', 'temcoLearn.build'),
+			this.row('add', 'Add to Site', 'add', 'temcoLearn.assemble'),
+			this.row('publish', 'Publish', 'cloud-upload', 'temcoLearn.publish')
+		];
 	}
 
-	private async read(): Promise<SiteProduct[]> {
-		const root = this.root();
-		if (root === undefined) {
-			return [];
-		}
-		if (this.products === undefined) {
-			this.products = await readProducts(root);
-		}
-		return this.products;
-	}
-
-	/** The six sections, in the order the site draws them: the panel and the tabs are the same list. */
-	private sections(products: readonly SiteProduct[]): Row[] {
-		return SECTIONS.map((section) => {
-			const held = products.filter((product) => product.section === section.id).length;
-			const item: Row = new vscode.TreeItem(section.title, vscode.TreeItemCollapsibleState.None);
-			item.id = `temcoLearn.section.${section.id}`;
-			item.description = held === 0 ? 'nothing yet' : `${String(held)} ${held === 1 ? 'product' : 'products'}`;
-			item.iconPath = new vscode.ThemeIcon(held === 0 ? 'circle-slash' : 'link');
-			item.tooltip = section.desc;
-			item.command = { command: 'temcoLearn.preview', title: section.title, arguments: [{ page: sectionHref(section) }] };
-			return item;
-		});
-	}
-
-	private product(product: SiteProduct): Row {
-		const item: Row = new vscode.TreeItem(product.title, vscode.TreeItemCollapsibleState.Expanded);
-		item.id = `temcoLearn.product.${product.id}`;
-		item.description = `latest ${product.latest}`;
+	/** A project: its page, and under it every version it has, newest first. */
+	private project(project: SiteProject): Row {
+		const item: Row = new vscode.TreeItem(
+			project.title,
+			project.versions.length > 1 ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None
+		);
+		item.id = `temcoLearn.project.${project.id}`;
 		item.iconPath = new vscode.ThemeIcon('book');
-		item.tooltip = product.summary ?? product.title;
-		item.contextValue = 'temcoLearn.product';
-		item.product = product;
+		item.contextValue = 'temcoLearn.project';
+		item.project = project;
+		item.command = {
+			command: 'temcoLearn.preview',
+			title: project.title,
+			arguments: [{ page: `project.html?id=${encodeURIComponent(project.id)}` }]
+		};
 		return item;
 	}
 
-	private versions(product: SiteProduct): Row[] {
-		return product.versions.map((version) => {
-			const latest = version === product.latest;
-			const item: Row = new vscode.TreeItem(version, vscode.TreeItemCollapsibleState.None);
-			item.id = `temcoLearn.version.${product.id}.${version}`;
-			item.description = latest ? (product.builtAt === undefined ? 'latest' : `latest · ${since(product.builtAt)}`) : 'earlier';
+	private versions(project: SiteProject): Row[] {
+		return project.versions.map((version) => {
+			const item: Row = new vscode.TreeItem(version.version, vscode.TreeItemCollapsibleState.None);
+			item.id = `temcoLearn.version.${project.id}.${version.version}`;
 			item.iconPath = new vscode.ThemeIcon('tag');
-			item.tooltip = `Read ${product.title} ${version}`;
+			item.contextValue = 'temcoLearn.version';
 			item.command = {
 				command: 'temcoLearn.preview',
-				title: 'Read this version',
-				arguments: [{ page: `${encodeURIComponent(product.id)}/${encodeURIComponent(version)}/temco-reader.html` }]
+				title: version.version,
+				arguments: [
+					{ page: `reader.html?id=${encodeURIComponent(project.id)}&version=${encodeURIComponent(version.version)}` }
+				]
 			};
 			return item;
 		});
 	}
 
-	/** The newest build on the site, said in words: the one fact a publishing panel can prove. */
-	private newest(products: readonly SiteProduct[]): string {
-		const built = products
-			.filter((product) => product.builtAt !== undefined)
-			.sort((one, other) => String(other.builtAt).localeCompare(String(one.builtAt)))[0];
-		return built === undefined ? 'nothing built yet' : `${built.title} ${built.latest} · ${since(built.builtAt)}`;
-	}
-
-	private row(key: string, label: string, note: string, mark: string, command: string): Row {
+	private row(key: string, label: string, mark: string, command: string, args?: { page: string }): Row {
 		const item: Row = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
 		item.id = `temcoLearn.${key}`;
-		item.description = note;
 		item.iconPath = new vscode.ThemeIcon(mark);
-		item.tooltip = `${label} — ${note}`;
-		item.command = { command, title: label };
+		item.command = { command, title: label, arguments: args === undefined ? [] : [args] };
 		return item;
 	}
 }
