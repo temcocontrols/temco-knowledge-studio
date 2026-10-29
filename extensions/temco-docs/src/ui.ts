@@ -57,6 +57,8 @@ interface HeroOptions {
 	panel?: boolean;
 	/** The figures the page opens on, drawn on the panel's own floor. */
 	stats?: readonly { value: string; label: string }[];
+	/** One line of context that belongs to the header, drawn as an information strip under the description. */
+	note?: { text: string; mark?: string; mono?: boolean; link?: { command: string; args?: unknown } };
 }
 /** The UI module's exports. */
 interface UiApi {

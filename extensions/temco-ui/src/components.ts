@@ -87,6 +87,14 @@ export interface HeroOptions {
 	 * once, and the facts read as the panel's own foot rather than as a card that happens to follow it.
 	 */
 	stats?: readonly { value: string; label: string }[];
+	/**
+	 * One line of context that belongs to the header: an address, a caveat, what the page is reading.
+	 *
+	 * Drawn as an information strip under the description, at the header's own width — the place a page says *where*
+	 * it is, rather than putting a machine's address where a person's name belongs. With a `link`, the text is a
+	 * button drawn as a link: an address in a header is something to go to, not something to read.
+	 */
+	note?: { text: string; mark?: string; mono?: boolean; link?: { command: string; args?: unknown } };
 }
 
 /** Buttons, rendered the one way this application renders them. */
@@ -110,6 +118,14 @@ export function hero(options: HeroOptions): string {
 		? `<p class="az-crumbs">${escapeHtml(options.crumbs)}</p>`
 		: options.eyebrow === undefined ? '' : `<p class="az-crumbs az-crumbs--eyebrow">${escapeHtml(options.eyebrow)}</p>`;
 	const desc = options.desc === undefined ? '' : `<p class="az-intro${options.descWide === true ? ' az-intro--wide' : ''}">${escapeHtml(options.desc)}</p>`;
+	const noteMark = options.note?.mark === undefined ? '' : `<span class="az-note__mark">${icon(options.note.mark)}</span>`;
+	const noteMono = options.note?.mono === true ? ' az-note__text--mono' : '';
+	const noteText = options.note === undefined
+		? ''
+		: options.note.link === undefined
+			? `<span class="az-note__text${noteMono}">${escapeHtml(options.note.text)}</span>`
+			: `<button type="button" class="az-note__text az-note__text--link${noteMono}" data-command="${escapeHtml(options.note.link.command)}"${options.note.link.args === undefined ? '' : ` data-args="${escapeHtml(JSON.stringify(options.note.link.args))}"`}>${escapeHtml(options.note.text)}</button>`;
+	const note = options.note === undefined ? '' : `<p class="az-note">${noteMark}${noteText}</p>`;
 	const search = options.search === undefined
 		? ''
 		: `<button type="button" class="az-field" data-command="${escapeHtml(options.search.command)}" title="${escapeHtml(options.search.label)}">${icon('search')}<span class="az-field__label">${escapeHtml(options.search.label)}</span>${options.search.hint === undefined ? '' : `<kbd class="az-field__hint">${escapeHtml(options.search.hint)}</kbd>`}</button>`;
@@ -125,7 +141,7 @@ export function hero(options: HeroOptions): string {
 	const tail = row === '' && stats === ''
 		? ''
 		: options.panel === true ? `<div class="az-lead__side">${row}${stats}</div>` : `${row}${stats}`;
-	return `<div class="az-wash${options.panel === true ? ' az-wash--panel' : ''}"><header class="az-lead">${crumbs}<h1 class="az-title${size}">${mark}${escapeHtml(options.title)}</h1>${desc}${tail}</header></div>`;
+	return `<div class="az-wash${options.panel === true ? ' az-wash--panel' : ''}"><header class="az-lead">${crumbs}<h1 class="az-title${size}">${mark}${escapeHtml(options.title)}</h1>${desc}${note}${tail}</header></div>`;
 }
 
 /** One figure in the number row. */

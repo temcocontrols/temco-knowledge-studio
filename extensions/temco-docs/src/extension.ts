@@ -16,7 +16,7 @@ import { registerBuildCommands, registerScriptCommands, scriptsIn } from './buil
 import { registerExportCommands } from './export';
 import { publishDiagnostics } from './diagnostics';
 import { registerFeedbackCommands } from './feedback';
-import { FORUM_VIEW_ID, ForumTree, TopicListPage, TopicPage, openForum, suggestForTopic, syncForum } from './forum';
+import { FORUM_VIEW_ID, ForumTree, TopicListPage, TopicPage, copyText, openForum, suggestForTopic, syncForum } from './forum';
 import { registerDiffCommand } from './diffPage';
 import { registerDocxCommand } from './docx';
 import { GridEditor, openGrid } from './gridEditor';
@@ -375,7 +375,8 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     }),
     vscode.commands.registerCommand('temcoDocs.forumSync', (args?: unknown) => readForum(args)),
     vscode.commands.registerCommand('temcoDocs.forumSuggest', (payload?: unknown) => suggestForTopic(context, () => roots, topics, payload)),
-    vscode.commands.registerCommand('temcoDocs.openForum', (url?: unknown) => openForum(url))
+    vscode.commands.registerCommand('temcoDocs.openForum', (url?: unknown) => openForum(url)),
+    vscode.commands.registerCommand('temcoDocs.copyText', (text?: unknown) => copyText(text))
   );
 
   // Two reads can be in flight at once — a file event while the window is still coming up, one save firing two

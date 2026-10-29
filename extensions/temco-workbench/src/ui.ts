@@ -57,6 +57,8 @@ interface HeroOptions {
 	search?: { label: string; command: string; hint?: string };
 	actions?: readonly { label: string; command: string; args?: unknown; mark?: string; kind?: 'primary' | 'link' }[];
 	hero?: boolean;
+	/** One line of context that belongs to the header, drawn as an information strip under the description. */
+	note?: { text: string; mark?: string; mono?: boolean; link?: { command: string; args?: unknown } };
 }
 /** The UI module's exports. */
 interface UiApi {

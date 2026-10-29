@@ -18,7 +18,7 @@ import * as vscode from 'vscode';
 import { MODELS, RUNTIMES, entryById } from './ai/catalog';
 import { registerAiCommands } from './ai/commands';
 import { AiPanel, AI_VIEW_ID } from './ai/panel';
-import { PROMPT_VERSION, analysePrompt, newPagePrompt, systemPrompt, topicPrompt } from './ai/prompts';
+import { PROMPT_VERSION, analysePrompt, newPagePrompt, systemPrompt } from './ai/prompts';
 import { AiStatus, aiStatus, complete, disposeAi } from './ai/runtime';
 import { docs } from './docs';
 import { AiPages, registerAiViews } from './aiPages';
@@ -51,6 +51,8 @@ export interface TopicRequest {
 	thread: string;
 	pageId?: string;
 	pageTitle?: string;
+	/** The thread's own address, shown with the question so the panel says what it is answering about. */
+	url?: string;
 }
 
 /**
@@ -101,8 +103,9 @@ export function activate(context: vscode.ExtensionContext): TemcoAiApi {
 		vscode.commands.registerCommand('temcoAi.citations', () => pages.citations()),
 		vscode.commands.registerCommand('temcoAi.localModels', () => pages.models()),
 		vscode.commands.registerCommand('temcoAi.stale', () => pages.stale()),
-		// One forum thread, answered as a suggestion: the docs module stores it against the topic and shows it there.
-		vscode.commands.registerCommand('temcoAi.suggestTopic', (request?: unknown) => topicAnswer(context, request))
+		// One forum thread, answered in the panel so it can be read and followed up: the docs module stores the answer
+		// against the topic and shows it there as well.
+		vscode.commands.registerCommand('temcoAi.suggestTopic', (request?: unknown) => topicAnswer(panel, request))
 	);
 
 	return {
@@ -145,24 +148,29 @@ export function activate(context: vscode.ExtensionContext): TemcoAiApi {
 			);
 		},
 
-		topic: (request) => topicAnswer(context, request),
+		topic: (request) => topicAnswer(panel, request),
 	};
 }
 
-/** What the documentation should do about one forum thread, through the same guardrails as every other answer. */
-async function topicAnswer(context: vscode.ExtensionContext, request: unknown): Promise<string> {
+/**
+ * What the documentation should do about one forum thread, through the same guardrails as every other answer.
+ *
+ * The answer is not returned only: it is streamed into the panel, so the reader sees it arrive and can ask a follow-up
+ * about the same thread. With no model on disk the panel says so in its own words, and the text is empty.
+ */
+async function topicAnswer(panel: AiPanel, request: unknown): Promise<string> {
 	const input = (request ?? {}) as Partial<TopicRequest>;
 	if (typeof input.title !== 'string' || input.title.trim().length === 0) {
 		return '';
 	}
-	return complete(
-		context,
-		[
-			{ role: 'system', content: systemPrompt(context, undefined) },
-			{ role: 'user', content: topicPrompt(context, { title: input.title, excerpt: String(input.excerpt ?? ''), thread: String(input.thread ?? ''), pageId: typeof input.pageId === 'string' ? input.pageId : undefined, pageTitle: typeof input.pageTitle === 'string' ? input.pageTitle : undefined }) },
-		],
-		{ maxTokens: 300 }
-	);
+	return panel.answerTopic({
+		title: input.title,
+		excerpt: String(input.excerpt ?? ''),
+		thread: String(input.thread ?? ''),
+		pageId: typeof input.pageId === 'string' ? input.pageId : undefined,
+		pageTitle: typeof input.pageTitle === 'string' ? input.pageTitle : undefined,
+		url: typeof input.url === 'string' ? input.url : undefined,
+	});
 }
 
 export function deactivate(): void {

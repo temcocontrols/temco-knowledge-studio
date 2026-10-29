@@ -233,6 +233,12 @@
         "icon": "$(link-external)"
       },
       {
+        "command": "temcoDocs.copyText",
+        "title": "Copy to the Clipboard",
+        "category": "Temco Docs",
+        "icon": "$(copy)"
+      },
+      {
         "command": "temcoDocs.showStatus",
         "title": "Temco Docs: Show Status"
       },
@@ -693,6 +699,10 @@
         },
         {
           "command": "temcoDocs.forumSuggest",
+          "when": "false"
+        },
+        {
+          "command": "temcoDocs.copyText",
           "when": "false"
         }
       ],

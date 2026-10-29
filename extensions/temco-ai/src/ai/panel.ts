@@ -15,6 +15,7 @@ import {
   askPrompt,
   draftPrompt,
   systemPrompt,
+  topicPrompt,
 } from './prompts';
 import { resolveCitations, searchPages } from './citations';
 import { ChangeRange, readChangeRange } from './history';
@@ -42,6 +43,13 @@ interface Turn {
 
 export class AiPanel implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
+  /**
+   * Messages written before the view exists.
+   *
+   * A question can be asked from another surface — a forum thread — before this panel has ever been on screen. The
+   * answer is streamed as it arrives, so the messages have to wait for the view rather than be dropped on the way.
+   */
+  private queue: unknown[] = [];
   private turns: Turn[] = [];
   private busy = false;
   private draft?: { page: PageEntry; text: string };
@@ -65,6 +73,7 @@ export class AiPanel implements vscode.WebviewViewProvider {
     });
     view.webview.onDidReceiveMessage((message: unknown) => void this.receive(message));
     this.refresh();
+    this.flush();
   }
 
   /** Re-states what the header shows: the page, the model, whether a draft is waiting. */
@@ -136,6 +145,97 @@ export class AiPanel implements vscode.WebviewViewProvider {
         return;
       default:
         return;
+    }
+  }
+
+  /**
+   * Answers one forum thread where the reader can see it.
+   *
+   * A question asked from a thread tab lands here rather than in a corner: the panel is brought up, the thread is
+   * shown as the question, and the answer streams into the same transcript a typed question uses — so the reader can
+   * read it, stop it, or follow it up. The text comes back as well, because the documentation module keeps the
+   * suggestion in its catalog and cannot read a webview.
+   */
+  async answerTopic(request: {
+    title: string;
+    excerpt: string;
+    thread: string;
+    pageId?: string;
+    pageTitle?: string;
+    url?: string;
+  }): Promise<string> {
+    if (this.busy) {
+      this.post({ type: 'note', text: 'The panel is answering something else. Wait for it, or press Stop, then ask again.' });
+      return '';
+    }
+    const question = `What should the documentation do about the forum thread “${request.title}”${
+      request.url === undefined ? '' : ` — ${request.url}`
+    }?`;
+    this.post({ type: 'user', text: question });
+    // The panel may never have been opened: bring it up first, so the answer lands where a person can see it.
+    await vscode.commands.executeCommand('workbench.view.extension.temcoAi');
+    await vscode.commands.executeCommand(`${AI_VIEW_ID}.focus`);
+
+    const status = aiStatus(this.context);
+    if (!status.runtime || !status.model) {
+      this.post({
+        type: 'note',
+        text: 'No local model yet. Use “Models…” to download the runtime and a model — once they are on the disk, nothing leaves this machine.',
+        models: true,
+      });
+      return '';
+    }
+
+    this.busy = true;
+    this.refresh();
+    this.post({ type: 'start' });
+    this.post({ type: 'busy', busy: true });
+    const tokenSource = new vscode.CancellationTokenSource();
+    this.cancelling = tokenSource;
+    let streamed = '';
+    try {
+      const answer = await complete(
+        this.context,
+        [
+          { role: 'system', content: systemPrompt(this.context, undefined) },
+          {
+            role: 'user',
+            content: topicPrompt(this.context, {
+              title: request.title,
+              excerpt: request.excerpt,
+              thread: request.thread,
+              pageId: request.pageId,
+              pageTitle: request.pageTitle,
+            }),
+          },
+        ],
+        {
+          onToken: (piece) => {
+            streamed += piece;
+            this.post({ type: 'chunk', text: piece });
+          },
+          token: tokenSource.token,
+          maxTokens: ANSWER_TOKENS,
+        }
+      );
+      const text = (answer || streamed).trim();
+      if (text.length === 0) {
+        this.post({ type: 'note', text: 'The model returned nothing. Try again, or a different model.' });
+        return '';
+      }
+      this.remember(question, text);
+      this.verify(text, question, 'ask');
+      return text;
+    } catch (error) {
+      this.post({ type: 'error', text: messageOf(error) });
+      return '';
+    } finally {
+      tokenSource.dispose();
+      this.cancelling = undefined;
+      this.busy = false;
+      this.post({ type: 'end' });
+      this.post({ type: 'busy', busy: false });
+      this.refresh();
     }
   }
 
@@ -517,7 +617,22 @@ export class AiPanel implements vscode.WebviewViewProvider {
   }
 
   private post(message: unknown): void {
-    void this.view?.webview.postMessage(message);
+    if (this.view === undefined) {
+      // Bounded: a panel that is never opened must not grow a transcript in memory.
+      if (this.queue.length < 500) {
+        this.queue.push(message);
+      }
+      return;
+    }
+    void this.view.webview.postMessage(message);
+  }
+
+  private flush(): void {
+    const queued = this.queue;
+    this.queue = [];
+    for (const message of queued) {
+      void this.view?.webview.postMessage(message);
+    }
   }
 
   private html(webview: vscode.Webview): string {

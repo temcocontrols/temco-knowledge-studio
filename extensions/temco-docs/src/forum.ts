@@ -17,7 +17,7 @@
 // or liked from here: the community site owns the conversation, and this is the reading side of it.
 
 import * as vscode from 'vscode';
-import { categoryUrl, forumBase, readCategories, readCategoryTopics, readLatestTopics, readTopic, topicUrl } from './forumSource';
+import { categoryUrl, latestUrl, readCategories, readCategoryTopics, readLatestTopics, readTopic, topicUrl } from './forumSource';
 import { DocsRoot, PageEntry, collectPages } from './registry';
 import { Catalog, ForumCategoryRow, ForumPostRow, ForumTopicRow, selection } from './store';
 import { commandScript, escapeHtml as esc, hero, icon, numbers, page, pageColumn, runCommand, section } from './ui';
@@ -265,14 +265,17 @@ export class TopicPage {
 
 	constructor(private readonly context: vscode.ExtensionContext, private readonly roots: () => readonly DocsRoot[]) { }
 
-	async open(topic: { id: number; slug: string; title: string }, categoryName?: string): Promise<void> {
+	async open(topic: { id: number; slug: string; title: string }): Promise<void> {
 		const existing = this.panels.get(topic.id);
 		if (existing !== undefined) {
-			existing.reveal(undefined, true);
-			await this.render(topic, categoryName);
+			// A page of ours is a tab in the one group our pages live in, never a split: revealing with that column
+			// also heals a tab a previous layout left in a second group.
+			existing.reveal(pageColumn(), true);
+			await this.render(topic);
 			return;
 		}
-		const panel = vscode.window.createWebviewPanel(TOPIC_TYPE, topic.title, vscode.ViewColumn.Beside, {
+		// The thread is another tab beside the topics page, in the same strip — not a second editor group.
+		const panel = vscode.window.createWebviewPanel(TOPIC_TYPE, topic.title, pageColumn(), {
 			enableScripts: true,
 			localResourceRoots: []
 		});
@@ -280,11 +283,11 @@ export class TopicPage {
 		panel.onDidDispose(() => this.panels.delete(topic.id));
 		panel.webview.onDidReceiveMessage(runCommand);
 		this.panels.set(topic.id, panel);
-		await this.render(topic, categoryName);
+		await this.render(topic);
 	}
 
 	/** Reads the conversation again and repaints — after a sync, or when a suggestion was just written. */
-	async render(topic: { id: number; slug: string; title: string }, categoryName?: string): Promise<void> {
+	async render(topic: { id: number; slug: string; title: string }): Promise<void> {
 		const panel = this.panels.get(topic.id);
 		if (panel === undefined) {
 			return;
@@ -303,12 +306,19 @@ export class TopicPage {
 			const row = catalog.forumTopics().find((candidate) => candidate.id === topic.id);
 			const posts = catalog.forumPosts(topic.id);
 			const named = row === undefined ? undefined : pageFor(row, this.roots());
+			// The category is the page's own name for what it is showing; the site's address is not a name.
+			const categoryName = row === undefined ? undefined : catalog.forumCategories().find((candidate) => candidate.id === row.categoryId)?.name;
 			let suggestion = catalog.forumSuggestion(topic.id);
-			// The platform's own guess is recorded the first time a topic is read, so the tab never shows "nothing" when
-			// the registry already knows which page the topic is about. An answer from the model replaces it later.
-			if (suggestion === undefined && named !== undefined && row !== undefined) {
-				const text = `The topic names ${named.title}. A fix here is a draft of that page — ${named.reviewed === null ? 'it has never been reviewed' : `last reviewed ${named.reviewed}`}${named.provenance?.stale === true ? ', and its code has moved since' : ''}.`;
-				catalog.saveForumSuggestion({ topicId: row.id, pageId: named.id, pageTitle: named.title, text, source: 'match' });
+			// The platform's own answer is recorded the first time a topic is read, so the tab never shows "nothing"
+			// when the project can already say which page the topic is about. The model's answer replaces it later.
+			if (suggestion === undefined && row !== undefined) {
+				catalog.saveForumSuggestion({
+					topicId: row.id,
+					pageId: named?.id,
+					pageTitle: named?.title,
+					text: draftSuggestion(row, named, posts),
+					source: 'match'
+				});
 				suggestion = catalog.forumSuggestion(topic.id);
 			}
 			if (this.panels.get(topic.id) !== panel) {
@@ -431,12 +441,22 @@ export async function openForum(url: unknown): Promise<void> {
 	await vscode.env.openExternal(vscode.Uri.parse(url));
 }
 
+/** Puts a page's own text — an address, a command — on the clipboard, so it can be pasted somewhere it is needed. */
+export async function copyText(text: unknown): Promise<void> {
+	if (typeof text !== 'string' || text.length === 0) {
+		return;
+	}
+	await vscode.env.clipboard.writeText(text);
+	void vscode.window.setStatusBarMessage('Temco Docs: copied to the clipboard.', 3000);
+}
+
 /**
- * What the documentation should do about a topic, as the model proposes it.
+ * What the documentation should do about a topic, as the project and then the model propose it.
  *
- * The registry match is the platform's own guess — a page whose id or title the topic names. This asks the AI module
- * for the sentence a triager reads: what that page should add, or which page is missing. The answer is stored against
- * the topic, so the tab, and whoever opens it next, sees it without asking again.
+ * The project's own answer is written first and always — what the thread asks, the page it names, that page's state,
+ * and how long the thread has waited — so the button does something whether or not a model is running. When the model
+ * answers, its sentence replaces that draft and is stored as the model's, so the tab, and whoever opens it next, sees
+ * the answer without asking again.
  */
 export async function suggestForTopic(
 	context: vscode.ExtensionContext,
@@ -457,34 +477,50 @@ export async function suggestForTopic(
 			return;
 		}
 		const named = pageFor(topic, roots());
-		// What a person would read to decide: the opening posts, and the page the platforms thinks it is about.
-		const thread = catalog
-			.forumPosts(topic.id)
-			.slice(0, 4)
-			.map((post) => `${post.username ?? 'someone'}: ${plainText(post.cooked ?? '')}`)
-			.join('\n\n');
-		const answer = await vscode.commands.executeCommand<string | undefined>('temcoAi.suggestTopic', {
-			title: topic.title,
-			excerpt: topic.excerpt ?? '',
-			thread,
-			pageId: named?.id,
-			pageTitle: named?.title
-		});
-		const text = typeof answer === 'string' ? answer.trim() : '';
-		if (text.length === 0) {
-			void vscode.window.showWarningMessage(
-				'Temco Docs: the AI gave no suggestion — check that a model is downloaded and the runtime is running.'
-			);
-			return;
-		}
+		const posts = catalog.forumPosts(topic.id);
+		const opened = { id: topic.id, slug: topic.slug, title: topic.title };
+		// Painted before the model is asked: a suggestion appears at once, and stays even if the model never answers.
 		catalog.saveForumSuggestion({
 			topicId: topic.id,
 			pageId: named?.id,
 			pageTitle: named?.title,
-			text,
-			source: 'ai'
+			text: draftSuggestion(topic, named, posts),
+			source: 'match'
 		});
-		await topics.render({ id: topic.id, slug: topic.slug, title: topic.title });
+		await topics.render(opened);
+
+		const busy = vscode.window.setStatusBarMessage('$(sync~spin) Temco Docs: asking the AI about this topic…');
+		let text = '';
+		try {
+			const answer = await vscode.commands.executeCommand<string | undefined>('temcoAi.suggestTopic', {
+				title: topic.title,
+				excerpt: topic.excerpt ?? '',
+				thread: posts
+					.slice(0, 4)
+					.map((post) => `${post.username ?? 'someone'}: ${plainText(post.cooked ?? '')}`)
+					.join('\n\n'),
+				pageId: named?.id,
+				pageTitle: named?.title,
+				url: topicUrl({ id: topic.id, slug: topic.slug })
+			});
+			text = typeof answer === 'string' ? answer.trim() : '';
+		} catch (error) {
+			// The AI module is not installed, or its command is gone: there is no panel to explain anything, so this is
+			// the one path that has to say it here.
+			void vscode.window.showWarningMessage(
+				`Temco Docs: the AI is not available (${messageOf(error)}), so the suggestion above comes from this project's own pages.`
+			);
+			return;
+		} finally {
+			busy.dispose();
+		}
+		// Empty means no model answered — and the panel it opened already said so, in its own words, where the question
+		// was asked. The draft above stands as the suggestion, which is why this says nothing more.
+		if (text.length === 0) {
+			return;
+		}
+		catalog.saveForumSuggestion({ topicId: topic.id, pageId: named?.id, pageTitle: named?.title, text, source: 'ai' });
+		await topics.render(opened);
 	} catch (error) {
 		void vscode.window.showWarningMessage(`Temco Docs: ${messageOf(error)}.`);
 	} finally {
@@ -523,6 +559,51 @@ function pageFor(topic: ForumTopicRow, roots: readonly DocsRoot[]): PageEntry | 
 	return pages.find((candidate) => candidate.title.length >= 8 && lower.includes(candidate.title.toLowerCase()));
 }
 
+/** The thread's own words, as one sentence: what it asks, before anything is said about pages. */
+function askLine(topic: ForumTopicRow, posts: readonly ForumPostRow[]): string {
+	const source = topic.excerpt !== undefined && topic.excerpt.trim().length > 0
+		? topic.excerpt
+		: posts.length === 0 ? '' : plainText(posts[0].cooked ?? '');
+	// A post is markup read as text and an excerpt is the site's own plain text: both are quoted rather than trusted.
+	const text = plainText(source).replace(/\s+/g, ' ').trim();
+	if (text.length === 0) {
+		return '';
+	}
+	const stop = text.search(/[.!?](\s|$)/);
+	const sentence = stop === -1 ? text : text.slice(0, stop + 1);
+	return sentence.length <= 160 ? sentence : `${sentence.slice(0, 157).replace(/[\s,;:]+$/, '')}…`;
+}
+
+/**
+ * What the project can say about a topic with no model at all.
+ *
+ * Three sentences, each one from the registry or the thread itself — what was asked, the page the thread names and
+ * that page's state, and whether the answer is owed to the documentation. It never claims what the page says: this
+ * module has not read the page's words.
+ */
+function draftSuggestion(topic: ForumTopicRow, named: PageEntry | undefined, posts: readonly ForumPostRow[]): string {
+	const sentences: string[] = [];
+	const ask = askLine(topic, posts);
+	if (ask.length > 0) {
+		sentences.push(`The thread asks: ${ask}`);
+	}
+	if (named === undefined) {
+		sentences.push('No page in this project is named by the thread, so either the page is missing or its title does not use the thread\'s words.');
+	} else {
+		const state = named.reviewed === null ? 'has never been reviewed' : `was last reviewed ${named.reviewed}`;
+		sentences.push(`${named.title} (${named.id}) is the page it names, and that page ${state}${named.provenance?.stale === true ? ', with code that has moved since' : ''}.`);
+	}
+	const days = ageDays(topic.lastPostedAt ?? topic.createdAt);
+	if (topic.replies === 0 && !topic.closed) {
+		sentences.push(days >= AGING_DAYS
+			? `Nobody has answered in ${days} days, so the answer belongs in the documentation rather than in the thread.`
+			: 'Nobody has answered yet, so the answer belongs in the documentation rather than in the thread.');
+	} else if (named !== undefined) {
+		sentences.push('Draft the change into that page rather than answering only in the thread.');
+	}
+	return sentences.join(' ');
+}
+
 /** A date as the forum shows it: the month and the year. */
 function when(value: string | undefined): string {
 	if (value === undefined) {
@@ -553,6 +634,13 @@ function ageDays(value: string | undefined): number {
 const FORUM_CSS = `
 tbody tr[data-command] { cursor: pointer; }
 tbody tr[data-command]:hover td { background: var(--bg-hover); }
+.az-lead .az-row { gap: var(--sp-4); }
+.forum-summary__facts { color: var(--fg-subtle); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.forum-summary__ask { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.forum-summary__note { color: var(--fg-subtle); font-size: var(--fs-xs); margin-top: 10px; }
+.forum-say { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.forum-say__when { color: var(--fg-subtle); font-size: var(--fs-xs); }
+.forum-say__text { white-space: pre-wrap; line-height: 1.55; }
 .topic__title { line-height: 1.4; }
 .topic__title .badge { margin-right: 6px; }
 .topic__meta { color: var(--fg-subtle); font-size: var(--fs-xs); margin-top: 2px; }
@@ -602,29 +690,25 @@ export function topicListBody(state: {
 	const views = state.topics.reduce((sum, topic) => sum + topic.views, 0);
 	const unanswered = state.topics.filter((topic) => topic.replies === 0 && !topic.closed).length;
 	const readArgs = state.category === undefined ? undefined : { id: state.category.id, slug: state.category.slug };
+	// The address the page is *of* — the site's own, shown in the header and offered as the two ways out of the window.
+	const address = state.category === undefined ? latestUrl() : categoryUrl(state.category);
 
 	const table = state.topics.length === 0
 		? `<div class="mt-24"><div class="card card--plain"><p class="card__desc">${state.syncedAt === undefined ? 'Nothing has been read from the forum yet.' : 'This category has no topics in the last read.'} <button type="button" class="az-btn az-btn--sm az-btn--primary" data-command="temcoDocs.forumSync"${readArgs === undefined ? '' : ` data-args="${esc(JSON.stringify(readArgs))}"`}>Read the forum</button></p></div></div>`
 		: `<div class="mt-24"><div class="table-wrap table-wrap--plain"><table class="table table--compact"><thead><tr><th>Topic</th><th>Participants</th><th class="num">Replies</th><th class="num">Views</th><th class="when">Activity</th></tr></thead><tbody>${state.topics.map((topic) => topicRow(topic, state.categories)).join('')}</tbody></table></div></div>`;
 
 	return `${hero({
-		eyebrow: forumBase().replace(/^https?:\/\//, ''),
 		title,
 		mark: 'users',
 		desc: state.category === undefined
 			? 'The community forum, read into this window: the site\'s own Topics list across every category, and one category\'s table when you pick one. Nothing is posted from here.'
 			: `The topics of ${state.category.name}, newest activity first. A row opens the conversation beside this page.`,
+		descWide: true,
+		note: { text: address, mark: 'info', mono: true, link: { command: 'temcoDocs.openForum', args: address } },
 		actions: [
-			{
-				label: 'Read the forum',
-				command: 'temcoDocs.forumSync',
-				args: readArgs,
-				mark: 'refresh',
-				kind: 'primary' as const
-			},
-			...(state.category === undefined
-				? []
-				: [{ label: 'Open on the forum', command: 'temcoDocs.openForum', args: categoryUrl(state.category), mark: 'link' as const }])
+			{ label: 'Read the forum', command: 'temcoDocs.forumSync', args: readArgs, mark: 'refresh', kind: 'primary' as const },
+			{ label: 'Copy', command: 'temcoDocs.copyText', args: address, kind: 'link' as const },
+			{ label: 'Open on the forum', command: 'temcoDocs.openForum', args: address, mark: 'link', kind: 'link' as const }
 		]
 	})}
 ${numbers([
@@ -640,7 +724,7 @@ ${section({
 ${table}`;
 }
 
-/** One topic as a tab: the conversation, the page it is about, and what to do. */
+/** One topic as a tab: what it is, what the docs owe it, the page it is about, and the conversation. */
 export function topicBody(state: {
 	topic: ForumTopicRow;
 	posts: readonly ForumPostRow[];
@@ -650,7 +734,11 @@ export function topicBody(state: {
 }): string {
 	const topic = state.topic;
 	const waiting = topic.replies === 0 && !topic.closed;
-	const answers = topic.replies === 0 ? 'no reply yet' : `${topic.replies} ${topic.replies === 1 ? 'reply' : 'replies'}`;
+	const days = ageDays(topic.lastPostedAt ?? topic.createdAt);
+	const posts = topic.posts > 0 ? topic.posts : state.posts.length;
+	const author = topic.posters[0]?.name ?? topic.posters[0]?.username ?? 'someone';
+	const ask = askLine(topic, state.posts);
+	const address = topicUrl({ id: topic.id, slug: topic.slug });
 	const named = state.named;
 	const suggestion = state.suggestion;
 	const suggestArgs = esc(JSON.stringify({ id: topic.id }));
@@ -665,38 +753,58 @@ export function topicBody(state: {
 			)
 			.join('');
 
-	const suggestionCard = suggestion === undefined
-		? `<div class="card card--plain"><p class="card__desc">No suggestion yet. The platform can match a topic to a page on its own; the AI can say what that page should add.</p>
-<div class="az-row" style="margin-top:10px"><button type="button" class="az-btn az-btn--sm" data-command="temcoDocs.forumSuggest" data-args="${suggestArgs}"><span>Suggest with the AI</span></button></div></div>`
-		: `<div class="card card--plain"><div class="card__head"><span class="card__icon">${icon('sparkle')}</span><div class="card__title">${suggestion.source === 'ai' ? 'The AI suggests' : 'The platform suggests'}</div><div class="card__actions"><span class="badge">${esc(suggestion.source)}</span></div></div>
-<p class="card__desc" style="white-space:pre-wrap">${esc(suggestion.text)}</p>
-<div class="az-row" style="margin-top:10px"><button type="button" class="az-btn az-btn--sm" data-command="temcoDocs.forumSuggest" data-args="${suggestArgs}"><span>Ask the AI again</span></button></div></div>`;
+	// The card is where a triager learns whether anything is owed: the thread's state, the thread in numbers, and the
+	// one thing to do about it. The suggestion sits inside it, so "nobody answered" and "ask the AI" are one look.
+	const badge = waiting
+		? `<span class="badge${days >= AGING_DAYS ? ' badge--warn' : ''}">needs an answer</span>`
+		: topic.closed ? '<span class="badge">closed</span>' : '<span class="badge badge--ok">answered</span>';
+	const answeredBy = topic.posters.slice(1, 4).map((poster) => esc(poster.name ?? poster.username)).join(', ');
+	const stateLine = waiting
+		? days >= AGING_DAYS
+			? `No reply yet — this thread has waited ${days} days.`
+			: 'No reply yet — nobody has answered it.'
+		: topic.closed
+			? `This thread is closed, after ${topic.replies} ${topic.replies === 1 ? 'reply' : 'replies'}.`
+			: `${topic.replies} ${topic.replies === 1 ? 'reply' : 'replies'}${answeredBy === '' ? '' : `, from ${answeredBy}`}.`;
+	const facts = [
+		`${topic.replies} ${topic.replies === 1 ? 'reply' : 'replies'}`,
+		`${posts} ${posts === 1 ? 'post' : 'posts'}`,
+		`${reads(topic.views)} reads`,
+		`last activity ${when(topic.lastPostedAt ?? topic.createdAt)}`
+	].join(' · ');
+	const advise = suggestion === undefined
+		? '<p class="card__desc">The AI can say what a page should add about it. Without one, the platform matches the thread to a page on its own.</p>'
+		: `<div class="forum-say"><span class="badge${suggestion.source === 'ai' ? ' badge--purple' : ''}">${suggestion.source === 'ai' ? 'AI' : 'from the registry'}</span><span class="forum-say__when">${esc(when(suggestion.at))}</span></div>
+<p class="card__desc forum-say__text">${esc(suggestion.text)}</p>`;
+
+	const summary = `<div class="card card--plain"><div class="card__head"><span class="card__icon">${icon(waiting ? 'alert' : 'check')}</span><div class="card__title">Summary</div><div class="card__actions">${badge}</div></div>
+<p class="card__desc">${stateLine}</p>
+<p class="card__desc forum-summary__facts">${esc(facts)}</p>
+<div class="forum-summary__ask">${advise}
+<div class="az-row" style="margin-top:10px"><button type="button" class="az-btn az-btn--sm${suggestion === undefined || suggestion.source !== 'ai' ? ' az-btn--primary' : ''}" data-command="temcoDocs.forumSuggest" data-args="${suggestArgs}">${icon('sparkle')}<span>${suggestion === undefined || suggestion.source !== 'ai' ? 'Suggest with the AI' : 'Ask the AI again'}</span></button></div>
+<p class="card__desc forum-summary__note">A suggestion is advice, not a decision: nothing is written to a page or posted to the forum from here.</p></div></div>`;
 
 	const pageCard = named === undefined
-		? '<div class="card card--plain"><p class="card__desc">No page in this documentation set is named by the topic, so a suggestion has nothing to attach to. A page\'s id or title in the topic is enough.</p></div>'
+		? '<div class="card card--plain"><p class="card__desc">No page in this documentation set is named by the topic: either the page is missing, or its title does not use the thread\'s words. A page\'s id or title in the topic is what attaches a suggestion to it.</p></div>'
 		: `<div class="card card--plain"><div class="card__head"><span class="card__icon">${icon('document')}</span><div class="card__title">${esc(named.title)}</div><div class="card__actions"><span class="badge${named.provenance?.stale === true ? ' badge--warn' : ''}">${named.provenance?.stale === true ? 'code moved' : 'current'}</span></div></div>
 <p class="card__desc">${esc(named.id)} · ${esc(named.area)}${named.chapter === '' ? '' : ` › ${esc(named.chapter)}`} · ${named.reviewed === null ? 'never reviewed' : `last reviewed ${esc(named.reviewed)}`}</p>
 <div class="az-row" style="margin-top:10px"><button type="button" class="az-btn az-btn--sm" data-command="temcoDocs.openFile" data-args="${esc(JSON.stringify(named.uri.fsPath))}"><span>Open the page</span></button><button type="button" class="az-btn az-btn--sm az-btn--primary" data-command="temcoAi.openPanel" data-args="${esc(JSON.stringify(named.uri.fsPath))}"><span>Draft the fix</span></button></div></div>`;
 
 	return `${hero({
-		eyebrow: state.categoryName ?? 'Forum',
+		eyebrow: state.categoryName === undefined ? `Topic #${topic.id}` : `${state.categoryName} · #${topic.id}`,
 		title: topic.title,
 		mark: 'users',
-		desc: `${esc(topic.posters[0]?.name ?? topic.posters[0]?.username ?? 'someone')} · ${answers} · ${reads(topic.views)} reads · ${esc(when(topic.lastPostedAt ?? topic.createdAt))}${waiting ? ' · waiting for an answer' : ''}`,
+		desc: `${author} started this thread${state.categoryName === undefined ? '' : ` in ${state.categoryName}`}.${ask.length === 0 ? '' : ` It asks: ${ask}`}`,
+		descWide: true,
+		note: { text: address, mark: 'info', mono: true, link: { command: 'temcoDocs.openForum', args: address } },
 		actions: [
-			{
-				label: 'Open on the forum',
-				command: 'temcoDocs.openForum',
-				args: topicUrl({ id: topic.id, slug: topic.slug }),
-				mark: 'link',
-				kind: 'primary' as const
-			}
+			{ label: 'Copy', command: 'temcoDocs.copyText', args: address, kind: 'link' as const },
+			{ label: 'Open on the forum', command: 'temcoDocs.openForum', args: address, mark: 'link', kind: 'link' as const }
 		]
 	})}
+<div class="mt-24">${summary}</div>
 <div class="mt-24">${section({ title: 'The page it is about' })}</div>
 ${pageCard}
-<div class="mt-24">${section({ title: 'What to do about it', desc: 'A suggestion is advice, not a decision: nothing is written to a page or posted to the forum from here.' })}</div>
-${suggestionCard}
 <div class="mt-24">${section({ title: 'Discussion', desc: state.posts.length === 0 ? undefined : `${state.posts.length} ${state.posts.length === 1 ? 'post' : 'posts'}, as the forum shows them` })}</div>
 ${history}`;
 }

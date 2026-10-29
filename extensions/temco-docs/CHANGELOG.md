@@ -7,16 +7,25 @@
   the screen reader — shaped like the site's navigation: *Topics*, a *Categories* group with each category in its own
   colour (written as a 16px square, since a theme icon cannot carry a hex) and its topic count, then *All categories*.
   The page is the site's **latest topics** across every category, or one category's table, with the forum's own five
-  columns (title, participants, replies, views, and activity like `Sep 2026` or `1.1k` reads). A **topic** opens in a
-  tab beside it: the discussion history, the page it names, and a suggestion. All of it is stored in SQLite
+  columns (title, participants, replies, views, and activity like `Sep 2026` or `1.1k` reads). Both pages open on one
+  header shape: the title, a **full-width** sentence saying what the page is, the forum's own **address in an
+  information bar** (mono, selectable, at the header's width) and every way in — *Read the forum*, *Copy*, *Open on the
+  forum* — in one row at the header's bottom, so no page puts a machine's address where a person's name belongs. A
+  **topic** opens in a tab beside it with the same header plus a **Summary** card that says whether anything is owed
+  (*needs an answer* after 30 days, or *answered*, and by whom) with the thread in numbers, then the page it names and
+  the discussion history. All of it is stored in SQLite
   (`forum_categories`, `forum_topics`, `forum_posts`, `forum_suggestions`) and filled by **Read the Forum** from the
   site's own JSON (`site.json`, `latest.json`, a category's `.json`, a topic's `.json`), so no surface touches the
   network and no view parses JSON. The site is a setting (`temcoDocs.forumUrl`). Nothing is posted, replied to or liked
   from here, and a post's HTML is read as text rather than trusted as markup.
-- **A suggestion for every topic, and the AI's when you ask.** The platform matches a topic to the page whose id or
-  title it names and records that match the first time the topic is read; *Suggest with the AI* (`temcoAi.suggestTopic`,
-  prompt `topic.md`, `ai-v5`) asks the local model what that page should add, and the answer replaces the match in the
-  catalog. A suggestion is advice: it never writes a page and never posts a reply.
+- **A suggestion for every topic, and the AI's answer where you can read it.** The platform writes its own answer the
+  first time a topic is read — what the thread asks, the page whose id or title it names, that page's review state and
+  whether its code has moved, and how long the thread has waited. *Suggest with the AI* (`temcoAi.suggestTopic`, prompt
+  `topic.md`, `ai-v5`) then brings up the **Temco AI panel in the right side bar**, shows the thread as the question,
+  and streams the model's answer into the same transcript a typed question uses — so it can be read, stopped, or
+  followed up — and the same text lands in the tab's card. With no runtime or model on disk the panel opens and says
+  so in its own words, the draft stands as the suggestion, and no warning interrupts. A suggestion is advice: it never
+  writes a page and never posts a reply.
 - **Applying a draft says where it goes.** *Apply* now lands through `temcoRepositories.applyToSource`: a modal
   question naming the clone and the file, a `git apply` in that clone's working tree, the words *not committed*, and
   an Undo that reverses the same patch. A page in the window's own tree still takes the editor's edit and its

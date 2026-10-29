@@ -38,6 +38,11 @@ export function categoryUrl(category: { id: number; slug: string }): string {
 	return `${forumBase()}/c/${category.slug}/${category.id}`;
 }
 
+/** The site's own *Topics* list, which is what "the forum" means when no category is chosen. */
+export function latestUrl(): string {
+	return `${forumBase()}/latest`;
+}
+
 /** Fetches one JSON answer. A refusal is a sentence, never a thrown error: the caller shows it. */
 export async function readJson<T>(url: string): Promise<SiteAnswer<T>> {
 	let response: Response;
@@ -133,7 +138,7 @@ export async function readCategoryTopics(category: { id: number; slug: string })
 
 /** The site's own *Topics* list: everything, newest activity first, across every category. */
 export async function readLatestTopics(): Promise<SiteAnswer<ForumTopicInput[]>> {
-	return readTopics(`${forumBase()}/latest.json`, undefined, 'the latest topics');
+	return readTopics(`${latestUrl()}.json`, undefined, 'the latest topics');
 }
 
 async function readTopics(url: string, categoryId: number | undefined, where: string): Promise<SiteAnswer<ForumTopicInput[]>> {
