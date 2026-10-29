@@ -1,34 +1,32 @@
-// The panel: VS Code's own grouping, the way Home ▸ Overview does it.
+// The panel: VS Code's own grouping, in VS Code's own tree.
 //
 // Each group is a *view* — a real section with its own header, its own collapse state, its own title-bar actions — not a
-// row pretending to be a heading. A row is a name and an icon; the one thing a row shows besides its name is a number,
-// and that number sits at the row's right edge as a badge (a `FileDecoration`), the way Home counts projects and pages.
-// Sentences belong on the Overview page, never in a row.
+// row pretending to be a heading. A row is a name and a glyph, and what it holds is `description`: the grey words the
+// Explorer writes beside a folder, never a badge of our own. Sentences belong on the Overview page, never in a row.
+//
+// Four views: the module's page as one row, **Browse** (the site as a whole, and the same pages project by project),
+// **Download** (the files a build wrote) and **Next steps** (the acts, publishing among them).
 
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { Artifact, ArtifactKind, formatSize, isDownloadable, isPreviewable, nameOf } from './artifacts';
-import { SiteProject } from './site';
+import { Build } from './builds';
+import { shortName, SiteProject } from './site';
 import { Snapshot } from './snapshot';
 import { ago } from './state';
 
 /** The four views this module contributes, by the ids its manifest declares. */
 export const VIEWS = {
 	overview: 'temcoLearn.overviewView',
-	projects: 'temcoLearn.projects',
-	preview: 'temcoLearn.preview',
+	browse: 'temcoLearn.browse',
 	download: 'temcoLearn.download',
 	todo: 'temcoLearn.todo'
 } as const;
 
-/** What a row's click means in Preview and Download: looking at something, or taking a copy of it. */
-type Intent = 'preview' | 'download';
-
 /** A row that knows what hangs under it. */
 interface Row extends vscode.TreeItem {
-	root?: boolean;
-	artifacts?: Artifact[];
-	intent?: Intent;
+	/** The rows under this one, decided when the row is built. */
+	kids?: Row[];
 	/** The file the row stands for, so a context-menu command can find it. */
 	file?: string;
 }
@@ -43,34 +41,16 @@ const ICON: Record<ArtifactKind, string> = {
 	docx: 'file-text'
 };
 
-const COUNT_SCHEME = 'temco-learn-count';
+/** `3 versions` — how many things a row holds, in the words the Explorer writes beside a folder. */
+const plural = (count: number, one: string, many?: string): string =>
+	`${count} ${count === 1 ? one : many === undefined ? `${one}s` : many}`;
 
-/** The number, as the badge a row pushes to its right edge — a description would sit beside the label instead. */
-function badge(text: string, key: string): vscode.Uri {
-	return vscode.Uri.parse(`${COUNT_SCHEME}:/${encodeURIComponent(text)}/${encodeURIComponent(key)}`);
-}
-
-/** Teaches the workbench to draw the counts. Registered once, by the module's activation. */
-export function registerCounts(context: vscode.ExtensionContext): void {
-	context.subscriptions.push(
-		vscode.window.registerFileDecorationProvider({
-			provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
-				if (uri.scheme !== COUNT_SCHEME) {
-					return undefined;
-				}
-				const text = decodeURIComponent(uri.path.split('/')[1] ?? '');
-				return text.length === 0 ? undefined : { badge: text, tooltip: text };
-			}
-		})
-	);
-}
-
-/** A row: the name, its glyph, and — when there is one — the number at its right edge. */
-function row(label: string, icon: string, options: { count?: string; command?: vscode.Command; tooltip?: string } = {}): Row {
+/** A row: the name, its glyph, and the grey words beside it that say what it holds. */
+function row(label: string, icon: string, options: { description?: string; command?: vscode.Command; tooltip?: string } = {}): Row {
 	const item: Row = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
 	item.iconPath = new vscode.ThemeIcon(icon);
-	if (options.count !== undefined) {
-		item.resourceUri = badge(options.count, label);
+	if (options.description !== undefined) {
+		item.description = options.description;
 	}
 	if (options.tooltip !== undefined) {
 		item.tooltip = options.tooltip;
@@ -81,6 +61,32 @@ function row(label: string, icon: string, options: { count?: string; command?: v
 	return item;
 }
 
+/** A row that holds rows: a heading, the grey words beside it, and what hangs under it. */
+function group(
+	label: string,
+	icon: string,
+	options: {
+		kids: Row[];
+		description?: string;
+		tooltip?: string;
+		state?: vscode.TreeItemCollapsibleState;
+		command?: vscode.Command;
+	}
+): Row {
+	const item: Row = new vscode.TreeItem(label, options.state ?? vscode.TreeItemCollapsibleState.Collapsed);
+	item.iconPath = new vscode.ThemeIcon(icon);
+	item.kids = options.kids;
+	if (options.description !== undefined) {
+		item.description = options.description;
+	}
+	if (options.tooltip !== undefined) {
+		item.tooltip = options.tooltip;
+	}
+	if (options.command !== undefined) {
+		item.command = options.command;
+	}
+	return item;
+}
 /** One read per refresh, shared by the four views, so a panel and a page can never disagree. */
 export class Reads {
 	private reading: Promise<Snapshot> | undefined;
@@ -102,8 +108,6 @@ export class Reads {
 	}
 }
 
-/** The number of a project's versions, in a form a badge can take. */
-const versionsOf = (project: SiteProject): number => project.versions.length;
 
 /** The builds newer than what the website holds: those are the ones worth adding. */
 function waiting(data: Snapshot): Snapshot['builds'] {
@@ -117,14 +121,12 @@ function waiting(data: Snapshot): Snapshot['builds'] {
 	});
 }
 
-/* ---- Overview: the platform's facts, one row each ------------------------------------------------------------- */
+/* ---- Overview: the module's page, as one row ------------------------------------------------------------------ */
 
 export class OverviewTree implements vscode.TreeDataProvider<Row> {
 	private readonly changed = new vscode.EventEmitter<void>();
 	readonly onDidChangeTreeData = this.changed.event;
 
-	constructor(private readonly reads: Reads) { }
-
 	refresh(): void {
 		this.changed.fire();
 	}
@@ -134,40 +136,21 @@ export class OverviewTree implements vscode.TreeDataProvider<Row> {
 	}
 
 	async getChildren(item?: Row): Promise<Row[]> {
-		if (item === undefined) {
-			const root: Row = new vscode.TreeItem('Temco Learn', vscode.TreeItemCollapsibleState.Expanded);
-			root.root = true;
-			root.id = 'temcoLearn.overview.root';
-			root.iconPath = new vscode.ThemeIcon('cloud-upload');
-			root.tooltip = 'What is on the website, what is waiting, and where it is published';
-			root.command = { command: 'temcoLearn.overview', title: 'How Temco Learn Works' };
-			return [root];
+		if (item !== undefined) {
+			return [];
 		}
-		return item.root === true ? this.facts() : [];
-	}
-
-	private async facts(): Promise<Row[]> {
-		const data = await this.reads.data();
-		const pages = data.site.projects.reduce(
-			(total, project) => total + project.versions.reduce((count, version) => count + version.pages.length, 0),
-			0
-		);
-		const versions = data.site.projects.reduce((total, project) => total + versionsOf(project), 0);
-		const last = data.published.commit === undefined ? 'never' : ago(data.published.at);
-		return [
-			row('Projects', 'book', { count: String(data.site.projects.length), command: { command: `${VIEWS.projects}.focus`, title: 'Projects' } }),
-			row('Versions', 'tag', { count: String(versions), command: { command: `${VIEWS.projects}.focus`, title: 'Versions' } }),
-			row('Pages', 'file', { count: String(pages), command: { command: 'temcoLearn.preview', title: 'Read the Website' } }),
-			row('Waiting to be added', 'add', { count: String(waiting(data).length), command: { command: `${VIEWS.todo}.focus`, title: 'What Needs Doing' } }),
-			row('Not published', 'cloud-upload', { count: String(data.published.pending), command: { command: `${VIEWS.todo}.focus`, title: 'What Needs Doing' } }),
-			row('Last publish', 'repo', { count: last === 'never' ? 'never' : last.replace(' ago', ''), command: { command: 'temcoLearn.openPublished', title: 'Open the Published Website' } })
-		];
+		const entry = row('Temco Learn', 'cloud-upload', {
+			tooltip: 'Open the Overview page: what is on the website, what is waiting, and where it is published',
+			command: { command: 'temcoLearn.overview', title: 'Open the Overview Page' }
+		});
+		entry.id = 'temcoLearn.overview.root';
+		return [entry];
 	}
 }
 
-/* ---- Projects: the website's projects, and the versions of each ------------------------------------------------ */
+/* ---- Browse: the whole site, the pages by project, and the dist sites ------------------------------------------ */
 
-export class ProjectsTree implements vscode.TreeDataProvider<Row> {
+export class BrowseTree implements vscode.TreeDataProvider<Row> {
 	private readonly changed = new vscode.EventEmitter<void>();
 	readonly onDidChangeTreeData = this.changed.event;
 
@@ -182,112 +165,126 @@ export class ProjectsTree implements vscode.TreeDataProvider<Row> {
 	}
 
 	async getChildren(item?: Row): Promise<Row[]> {
-		const data = await this.reads.data();
 		if (item !== undefined) {
-			return (item as Row & { project?: SiteProject }).project === undefined ? [] : this.versions((item as Row & { project: SiteProject }).project);
+			return item.kids ?? [];
 		}
-		if (data.site.projects.length === 0) {
-			return [row('Nothing yet', 'info', { tooltip: 'Build a project in Temco Docs, then add the build here.' })];
-		}
-		return data.site.projects.map((project) => {
-			const entry: Row & { project?: SiteProject } = new vscode.TreeItem(
-				project.title,
-				project.versions.length > 1 ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None
-			);
-			entry.id = `temcoLearn.project.${project.id}`;
-			entry.iconPath = new vscode.ThemeIcon('book');
-			entry.contextValue = 'temcoLearn.project';
-			entry.project = project;
-			entry.resourceUri = badge(String(versionsOf(project)), project.title);
-			entry.command = {
+		const data = await this.reads.data();
+		return [this.theSite(), this.byProject(data)];
+	}
+
+	/** The site as a reader gets it: six sections over every published project, at one address. */
+	private theSite(): Row {
+		const entry = row('Preview the site', 'globe', {
+			tooltip: 'The site readers open — Documentation, Training & Labs, Tests, Products, Q&A and Topics',
+			command: { command: 'temcoLearn.preview', title: 'Preview the Site' }
+		});
+		entry.id = 'temcoLearn.browse.site';
+		entry.contextValue = 'temcoLearn.browse.site';
+		return entry;
+	}
+
+	/** The same pages, one project at a time. */
+	private byProject(data: Snapshot): Row {
+		const kids =
+			data.site.projects.length === 0
+				? [row('Nothing yet', 'info', { tooltip: 'Build a project in Temco Docs, then add the build here.' })]
+				: data.site.projects.map((project, index) => this.project(project, index === 0));
+		const entry = group('Preview by project', 'library', {
+			description: plural(data.site.projects.length, 'project'),
+			tooltip: 'The projects on the website, with every version they keep',
+			kids,
+			state: vscode.TreeItemCollapsibleState.Expanded
+		});
+		entry.id = 'temcoLearn.browse.projects';
+		return entry;
+	}
+
+	/** One project: its versions, each with what it holds. The first project opens, so the view never reads as shut doors. */
+	private project(project: SiteProject, open: boolean): Row {
+		const kids = project.versions.map((version) => {
+			const entry = row(version.version, 'tag', {
+				tooltip: `Published ${version.builtAt === undefined ? 'at an unknown time' : ago(version.builtAt)}`,
+				command: {
+					command: 'temcoLearn.preview',
+					title: version.version,
+					arguments: [{ page: `reader.html?id=${encodeURIComponent(project.id)}&version=${encodeURIComponent(version.version)}` }]
+				}
+			});
+			entry.id = `temcoLearn.browse.version.${project.id}.${version.version}`;
+			entry.contextValue = 'temcoLearn.version';
+			return entry;
+		});
+		const entry = group(shortName(project.title), 'file-directory', {
+			description: plural(kids.length, 'version'),
+			tooltip: `Read ${shortName(project.title)} on the website`,
+			kids,
+			state: open ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
+			command: {
 				command: 'temcoLearn.preview',
 				title: project.title,
 				arguments: [{ page: `project.html?id=${encodeURIComponent(project.id)}` }]
-			};
-			return entry;
-		});
-	}
-
-	private versions(project: SiteProject): Row[] {
-		return project.versions.map((version) => {
-			const entry: Row = new vscode.TreeItem(version.version, vscode.TreeItemCollapsibleState.None);
-			entry.id = `temcoLearn.version.${project.id}.${version.version}`;
-			entry.iconPath = new vscode.ThemeIcon('tag');
-			entry.contextValue = 'temcoLearn.version';
-			entry.resourceUri = badge(String(version.pages.length), `${project.id}-${version.version}`);
-			entry.command = {
-				command: 'temcoLearn.preview',
-				title: version.version,
-				arguments: [{ page: `reader.html?id=${encodeURIComponent(project.id)}&version=${encodeURIComponent(version.version)}` }]
-			};
-			return entry;
-		});
-	}
-}
-
-/* ---- Preview and Download: the project name is the category --------------------------------------------------- */
-
-export class ArtifactsTree implements vscode.TreeDataProvider<Row> {
-	private readonly changed = new vscode.EventEmitter<void>();
-	readonly onDidChangeTreeData = this.changed.event;
-
-	constructor(private readonly reads: Reads, private readonly intent: Intent) { }
-
-	refresh(): void {
-		this.changed.fire();
-	}
-
-	getTreeItem(item: Row): vscode.TreeItem {
-		return item;
-	}
-
-	async getChildren(item?: Row): Promise<Row[]> {
-		const data = await this.reads.data();
-		if (item !== undefined) {
-			return item.artifacts === undefined ? [] : item.artifacts.map((artifact) => this.artifact(artifact));
-		}
-		const keep = this.intent === 'preview' ? isPreviewable : isDownloadable;
-		const rows: Row[] = [];
-		for (const project of data.artifacts) {
-			const shown = project.artifacts.filter(keep);
-			if (shown.length === 0) {
-				continue;
 			}
-			const entry: Row = new vscode.TreeItem(project.title, vscode.TreeItemCollapsibleState.Collapsed);
-			entry.id = `temcoLearn.${this.intent}.${project.id}`;
-			entry.iconPath = new vscode.ThemeIcon('book');
-			entry.contextValue = `temcoLearn.${this.intent}.project`;
-			entry.resourceUri = badge(String(shown.length), `${this.intent}-${project.id}`);
-			entry.artifacts = shown;
-			entry.intent = this.intent;
-			rows.push(entry);
-		}
-		return rows.length === 0
-			? [row(this.intent === 'preview' ? 'Nothing to look at' : 'No file to take', 'info', { tooltip: 'A build writes these; build a project in Temco Docs.' })]
-			: rows;
-	}
-
-	/** One file the build wrote: its name, and for a download how big it is. */
-	private artifact(artifact: Artifact): Row {
-		const entry: Row = new vscode.TreeItem(nameOf(artifact), vscode.TreeItemCollapsibleState.None);
-		entry.id = `temcoLearn.${this.intent}.artifact.${artifact.file}`;
-		entry.iconPath = new vscode.ThemeIcon(ICON[artifact.kind]);
-		entry.contextValue = 'temcoLearn.artifact';
-		entry.file = artifact.file;
-		entry.tooltip = artifact.file;
-		if (this.intent === 'download' && artifact.size !== undefined) {
-			entry.resourceUri = badge(formatSize(artifact.size), artifact.file);
-		}
-		entry.command = {
-			command: this.intent === 'preview' ? 'temcoLearn.previewArtifact' : 'temcoLearn.downloadArtifact',
-			title: this.intent === 'preview' ? 'Look at It' : 'Save a Copy',
-			arguments: [artifact.file]
-		};
+		});
+		entry.id = `temcoLearn.browse.project.${project.id}`;
+		entry.contextValue = 'temcoLearn.project';
 		return entry;
 	}
 }
 
-/* ---- What needs doing: the acts, with how many things each one clears ------------------------------------------ */
+/* ---- Download: the project name is the category -------------------------------------------------------------- */
+
+export class DownloadTree implements vscode.TreeDataProvider<Row> {
+	private readonly changed = new vscode.EventEmitter<void>();
+	readonly onDidChangeTreeData = this.changed.event;
+
+	constructor(private readonly reads: Reads) { }
+
+	refresh(): void {
+		this.changed.fire();
+	}
+
+	getTreeItem(item: Row): vscode.TreeItem {
+		return item;
+	}
+
+	async getChildren(item?: Row): Promise<Row[]> {
+		if (item !== undefined) {
+			return item.kids ?? [];
+		}
+		const data = await this.reads.data();
+		const rows: Row[] = [];
+		for (const project of data.artifacts) {
+			const shown = project.artifacts.filter(isDownloadable);
+			if (shown.length === 0) {
+				continue;
+			}
+			const entry = group(shortName(project.title), 'book', {
+				description: plural(shown.length, 'file'),
+				kids: shown.map((artifact) => this.artifact(artifact))
+			});
+			entry.id = `temcoLearn.download.${project.id}`;
+			entry.contextValue = 'temcoLearn.download.project';
+			rows.push(entry);
+		}
+		return rows.length === 0
+			? [row('No file to take', 'info', { tooltip: 'A build writes these; build a project in Temco Docs.' })]
+			: rows;
+	}
+
+	/** One file the build wrote: its name, and how big it is. */
+	private artifact(artifact: Artifact): Row {
+		const entry = row(nameOf(artifact), ICON[artifact.kind], {
+			description: artifact.size === undefined ? undefined : formatSize(artifact.size),
+			tooltip: artifact.file,
+			command: { command: 'temcoLearn.downloadArtifact', title: 'Save a Copy', arguments: [artifact.file] }
+		});
+		entry.id = `temcoLearn.download.artifact.${artifact.file}`;
+		entry.contextValue = isPreviewable(artifact) ? 'temcoLearn.artifact.look' : 'temcoLearn.artifact';
+		entry.file = artifact.file;
+		return entry;
+	}
+}
+/* ---- Next steps: the acts, with how many things each one clears ------------------------------------------------ */
 
 export class TodoTree implements vscode.TreeDataProvider<Row> {
 	private readonly changed = new vscode.EventEmitter<void>();
@@ -311,21 +308,16 @@ export class TodoTree implements vscode.TreeDataProvider<Row> {
 		const builds = waiting(data);
 		const rows: Row[] = [];
 		if (builds.length > 0) {
-			const add: Row = new vscode.TreeItem('Waiting to be added', vscode.TreeItemCollapsibleState.Collapsed);
+			const add = group('Waiting to be added', 'add', {
+				description: plural(builds.length, 'build'),
+				tooltip: 'Builds on disk that the website does not have yet',
+				kids: builds.map((build) => this.build(build))
+			});
 			add.id = 'temcoLearn.todo.builds';
-			add.iconPath = new vscode.ThemeIcon('add');
 			add.contextValue = 'temcoLearn.todo.builds';
-			add.resourceUri = badge(String(builds.length), 'waiting');
 			rows.push(add);
 		}
-		if (data.published.pending > 0) {
-			const publish: Row = new vscode.TreeItem('Not published', vscode.TreeItemCollapsibleState.Collapsed);
-			publish.id = 'temcoLearn.todo.publish';
-			publish.iconPath = new vscode.ThemeIcon('cloud-upload');
-			publish.contextValue = 'temcoLearn.todo.publish';
-			publish.resourceUri = badge(String(data.published.pending), 'changes');
-			rows.push(publish);
-		}
+		rows.push(this.publish(data));
 		rows.push(row('Build a project', 'tools', { command: { command: 'temcoDocs.builds', title: 'Build a Project in Temco Docs' }, tooltip: 'Building belongs to Temco Docs' }));
 		if (builds.length === 0 && data.published.pending === 0) {
 			return [row('Nothing to do', 'check', { tooltip: 'Everything built is on the website, and it is published' }), ...rows];
@@ -333,22 +325,33 @@ export class TodoTree implements vscode.TreeDataProvider<Row> {
 		return rows;
 	}
 
-	/** The acts under a finding: the builds to add, or the publish that clears the changes. */
+	/** Publishing is an act, so it lives with the acts: the first time, and again after a change. */
+	private publish(data: Snapshot): Row {
+		const published = data.published;
+		const last = published.commit === undefined ? 'never published' : `last publish ${published.commit}, ${ago(published.at)}`;
+		const entry = row('Publish', 'cloud-upload', {
+			description: published.pending === 0 ? 'up to date' : plural(published.pending, 'change'),
+			tooltip: `${published.base ?? 'no address yet'} · ${last} · publishes the site, or publishes it again after a change`,
+			command: { command: 'temcoLearn.publish', title: 'Publish the Website' }
+		});
+		entry.id = 'temcoLearn.todo.publish';
+		entry.contextValue = 'temcoLearn.publish';
+		return entry;
+	}
+
+	/** The builds to add, under the finding that names them. */
 	private under(item: Row, data: Snapshot): Row[] {
-		if (item.id === 'temcoLearn.todo.builds') {
-			return waiting(data).map((build) => {
-				const entry: Row = new vscode.TreeItem(build.title, vscode.TreeItemCollapsibleState.None);
-				entry.id = `temcoLearn.todo.build.${build.folder}`;
-				entry.iconPath = new vscode.ThemeIcon('package');
-				entry.contextValue = 'temcoLearn.build';
-				entry.tooltip = path.join(build.folder, 'index.html');
-				entry.command = { command: 'temcoLearn.addBuild', title: 'Add to the Website', arguments: [build.folder] };
-				return entry;
-			});
-		}
-		if (item.id === 'temcoLearn.todo.publish') {
-			return [row('Publish the website', 'cloud-upload', { command: { command: 'temcoLearn.publish', title: 'Publish the Website' } })];
-		}
-		return [];
+		return item.id === 'temcoLearn.todo.builds' ? waiting(data).map((build) => this.build(build)) : [];
+	}
+
+	/** One build waiting to be added: its name, and the act that adds it. */
+	private build(build: Build): Row {
+		const entry: Row = new vscode.TreeItem(build.title, vscode.TreeItemCollapsibleState.None);
+		entry.id = `temcoLearn.todo.build.${build.folder}`;
+		entry.iconPath = new vscode.ThemeIcon('package');
+		entry.contextValue = 'temcoLearn.build';
+		entry.tooltip = path.join(build.folder, 'index.html');
+		entry.command = { command: 'temcoLearn.addBuild', title: 'Add to the Website', arguments: [build.folder] };
+		return entry;
 	}
 }

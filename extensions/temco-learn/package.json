@@ -40,24 +40,22 @@
         {
           "id": "temcoLearn.overviewView",
           "name": "Overview",
+          "initialSize": 1
+        },
+        {
+          "id": "temcoLearn.browse",
+          "name": "Browse",
           "initialSize": 6
         },
         {
-          "id": "temcoLearn.projects",
-          "name": "Projects"
-        },
-        {
-          "id": "temcoLearn.preview",
-          "name": "Preview"
-        },
-        {
           "id": "temcoLearn.download",
-          "name": "Download"
+          "name": "Download",
+          "initialSize": 2
         },
         {
           "id": "temcoLearn.todo",
-          "name": "What Needs Doing",
-          "initialSize": 2
+          "name": "Next steps",
+          "initialSize": 3
         }
       ]
     },
@@ -88,7 +86,7 @@
       },
       {
         "command": "temcoLearn.addBuilds",
-        "title": "Add a Build to the Website…",
+        "title": "Add a Build to the Website",
         "icon": "$(add)",
         "category": "Temco Learn"
       },
@@ -156,12 +154,7 @@
         },
         {
           "command": "temcoLearn.refresh",
-          "when": "view == temcoLearn.projects",
-          "group": "navigation@9"
-        },
-        {
-          "command": "temcoLearn.refresh",
-          "when": "view == temcoLearn.preview",
+          "when": "view == temcoLearn.browse",
           "group": "navigation@9"
         },
         {
@@ -181,25 +174,20 @@
         },
         {
           "command": "temcoLearn.build",
-          "when": "view == temcoLearn.projects",
+          "when": "view == temcoLearn.browse",
           "group": "navigation@1"
         },
         {
-          "command": "temcoLearn.assemble",
-          "when": "view == temcoLearn.projects",
+          "command": "temcoLearn.addBuilds",
+          "when": "view == temcoLearn.browse",
           "group": "navigation@2"
-        },
-        {
-          "command": "temcoLearn.publish",
-          "when": "view == temcoLearn.projects",
-          "group": "navigation@3"
         }
       ],
       "view/item/context": [
         {
-          "command": "temcoLearn.downloadArtifact",
-          "when": "view == temcoLearn.preview && viewItem == temcoLearn.artifact",
-          "group": "inline@1"
+          "command": "temcoLearn.previewArtifact",
+          "when": "view == temcoLearn.download && viewItem == temcoLearn.artifact.look",
+          "group": "inline@0"
         },
         {
           "command": "temcoLearn.downloadArtifact",

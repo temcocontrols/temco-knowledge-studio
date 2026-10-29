@@ -8,7 +8,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { formatSize, ProjectArtifacts } from './artifacts';
-import { latestOf, sectionTitle, siteFolder, workRoot } from './site';
+import { latestOf, sectionTitle, shortName, siteFolder, workRoot } from './site';
 import { Snapshot } from './snapshot';
 import { ago } from './state';
 import { callout, commandScript, entryRow, escapeHtml, hero, icon, page, pageColumn, runCommand, section } from './ui';
@@ -18,7 +18,8 @@ export const OVERVIEW_VIEW_TYPE = 'temcoLearn.overview';
 /** The page's own rules, on top of the vocabulary: a short brand bar before a section title, four cards in a row, and
  *  the acts of a section along its bottom edge instead of at the right of its heading. */
 export const PAGE_STYLE = `
-.az-section__title { border-left: 2px solid var(--az-blue, #0078d4); padding-left: 8px; }
+.az-section__title { position: relative; padding-left: 10px; }
+.az-section__title::before { content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 2px; height: 12px; border-radius: 1px; background: var(--az-blue, #0078d4); }
 .az-options { grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); }
 .az-block__note { margin: var(--sp-2) 0 0; color: var(--ink-3); font-size: 11.5px; line-height: 16px; }
 .az-block__foot { display: flex; flex-wrap: wrap; gap: var(--sp-5); margin: var(--sp-3) 0 0; padding-top: var(--sp-2); border-top: 1px solid var(--border); }
@@ -294,7 +295,7 @@ function published(state: Snapshot): string {
 		const pages = project.versions.reduce((total, version) => total + version.pages.length, 0);
 		const newest = latestOf(project);
 		return entryRow({
-			title: project.title,
+			title: shortName(project.title),
 			meta: [plural(project.versions.length, 'version'), plural(pages, 'page'), newest === undefined ? 'not built yet' : `newest ${newest}`].join(' · '),
 			mark: 'book',
 			command: 'temcoLearn.preview',
@@ -330,7 +331,7 @@ function outputs(state: Snapshot): string {
 		const bytes = project.artifacts.reduce((total, artifact) => total + (artifact.size ?? 0), 0);
 		const folder = folderOf(project);
 		return entryRow({
-			title: project.title,
+			title: shortName(project.title),
 			meta: [plural(project.artifacts.length, 'file'), bytes === 0 ? '' : formatSize(bytes), folder].filter((part) => part !== '').join(' · '),
 			mark: 'folder',
 			command: 'temcoLearn.revealArtifact',

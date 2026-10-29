@@ -21,7 +21,7 @@ import { Server } from './server';
 import { addVersion, appFolder, installSite, readSite, siteFolder } from './site';
 import { Snapshot } from './snapshot';
 import { readPublishedState } from './state';
-import { ArtifactsTree, OverviewTree, ProjectsTree, Reads, registerCounts, TodoTree, VIEWS } from './tree';
+import { BrowseTree, DownloadTree, OverviewTree, Reads, TodoTree, VIEWS } from './tree';
 
 const plural = (count: number, one: string, many?: string): string =>
 	`${count} ${count === 1 ? one : many === undefined ? `${one}s` : many}`;
@@ -41,21 +41,18 @@ export function activate(context: vscode.ExtensionContext): void {
 			published: await readPublishedState(root)
 		};
 	};
-	registerCounts(context);
 	const reads = new Reads(readSnapshot);
 	const overview = new OverviewPage(readSnapshot);
-	const overviewTree = new OverviewTree(reads);
-	const projectsTree = new ProjectsTree(reads);
-	const previewTree = new ArtifactsTree(reads, 'preview');
-	const downloadTree = new ArtifactsTree(reads, 'download');
+	const overviewTree = new OverviewTree();
+	const browseTree = new BrowseTree(reads);
+	const downloadTree = new DownloadTree(reads);
 	const todoTree = new TodoTree(reads);
 	// One view per group: VS Code draws the header, the separator and the collapse state, which is the grouping a
 	// person already knows from the Explorer.
 	const todoView = vscode.window.createTreeView(VIEWS.todo, { treeDataProvider: todoTree });
 	const views = [
 		vscode.window.createTreeView(VIEWS.overview, { treeDataProvider: overviewTree }),
-		vscode.window.createTreeView(VIEWS.projects, { treeDataProvider: projectsTree }),
-		vscode.window.createTreeView(VIEWS.preview, { treeDataProvider: previewTree }),
+		vscode.window.createTreeView(VIEWS.browse, { treeDataProvider: browseTree }),
 		vscode.window.createTreeView(VIEWS.download, { treeDataProvider: downloadTree }),
 		todoView
 	];
@@ -64,8 +61,7 @@ export function activate(context: vscode.ExtensionContext): void {
 	const refresh = (): void => {
 		reads.forget();
 		overviewTree.refresh();
-		projectsTree.refresh();
-		previewTree.refresh();
+		browseTree.refresh();
 		downloadTree.refresh();
 		todoTree.refresh();
 		overview.refresh();

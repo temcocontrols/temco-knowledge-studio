@@ -161,19 +161,31 @@ a project with no `.chm` simply has no `.chm` row, and a file in a shared `HelpD
 after. Each artifact is either something to look at (`site`, `chm`, `pdf`, a single page) or something to take away (`zip`, `docx`),
 which is the divide the panel draws.
 
-The panel is **five views in the container**, the way Home is three — VS Code draws the header, the separator and the
+The panel is **four views in the container**, the way Home is three — VS Code draws the header, the separator and the
 collapse state, so the grouping is the one a person already knows from the Explorer, and each section carries its own
-title-bar actions. A row is a name and a glyph; the one thing a row shows besides its name is a **number, at the row's right
-edge, as a badge** (`FileDecoration` through a `temco-learn-count` scheme, the same device `temco-workbench` uses). Sentences
-live on the Overview page and in tooltips, never in a row.
+title-bar actions. A row is a name and a glyph, and what it holds is `TreeItem.description` — the grey words the Explorer
+writes beside a folder (`3 versions`), never a badge of our own. Sentences live on the Overview page and in tooltips, never in
+a row.
 
-| view | rows | the number |
+| view | rows | the grey words |
 |---|---|---|
-| **Overview** | one row, `Temco Learn` (opens the page), expanded onto the six facts that are numbers: Projects · Versions · Pages · Waiting to be added · Not published · Last publish | the fact itself |
-| **Projects** | a project, then its versions — the project-name-as-category the website itself uses | versions per project, pages per version |
-| **Preview** | a project, then what a build wrote that can be looked at: the website, the offline help, a pdf, a single page | outputs per project |
-| **Download** | the same projects, the files a build wrote | files per project, then their size |
-| **What Needs Doing** | Waiting to be added (each build under it), Not published (with *Publish the website*), Build a project | how many things each act clears |
+| **Overview** | one row, `Temco Learn`, which opens the page | — |
+| **Browse** | `Preview the site` (the whole site at one address), **Preview by project** (a project, then its versions) | projects, versions |
+| **Download** | a project, then the files its build wrote (this view starts small: `initialSize: 2`) | files per project, then their size |
+| **Next steps** | Waiting to be added (each build under it), `Publish`, Build a project | builds waiting, changes waiting |
+
+**Browse** separates the two questions a person asks of a site. **Preview the site** is the thing readers open — the six
+sections over every published project, at one address — and it carries no count: a page total beside it is noise. **Preview by
+project** (a library of projects) is the same content one project at a time (project → version → pages), which is how you check
+whether one page is out; the first project is open by default, so the view never reads as a list of shut doors, and neither a
+version nor the site row carries a page count. A project row writes the project's **name**, without the "docs" a build's own
+page title usually ends with (`Test1 docs` reads as `Test1`); the title itself is never rewritten, because the site is keyed by
+it. There is deliberately no group of `dist` builds: the build as written is a file on disk, which is the page's *Build
+outputs* and the Download view's business, not something to read here.
+
+**Next steps** is where the acts live, and publishing is one of them: `Publish` pushes the site folder to `gh-pages` the first
+time and again after a change, and the words beside it are how many changes are waiting (`up to date` when none are). It is an
+act, so it belongs with the other acts, not with the site it publishes.
 
 Nothing is invented: a project with no `.chm` has no `.chm` row, an empty view says so in one row, and "Nothing to do"
 appears only when every build is on the website and everything is published. Publishing state is read from git
@@ -256,11 +268,11 @@ a project with no `.chm` simply has no `.chm` row, and a file in a shared `HelpD
 after. Each artifact is either something to look at (`site`, `chm`, `pdf`, a single page) or something to take away (`zip`, `docx`,
 and the files that are both), which is the divide the panel draws.
 
-The panel (`src/tree.ts`) is five views in the order the questions are asked — **Overview** (one row: the page above),
-**Projects** (`3 projects` — a row per project, its versions under it), **Preview** (`2 projects` — what can be looked at now,
-the project name as the category inside it), **Download** (`5 files` — the same projects, the files a build wrote, with their
-sizes; a row saves a copy and offers *Show in the Folder* inline), and **What Needs Doing** (`3 things` — the builds newer than
-what the website holds, opening onto the build to add, the unpublished changes, and where building happens: in Temco Docs). The
-number a view earns is a `FileDecoration` badge at the row's right edge, never a second column. A row has no sentence under it:
-what a view is *for* is its tooltip and, written out, the Overview page.
+The panel (`src/tree.ts`) is four views in the order the questions are asked — **Overview** (one row: the page above),
+**Browse** (`Preview the site` with the page count, **Preview by project** with a row per project — the first one open — and
+its versions under it), **Download** (`2 files` — a project, the files its build wrote, with their sizes; a row saves a copy
+and offers *Show in the Folder* inline), and **Next steps** (`1 build` — the builds newer than what the website holds, opening
+onto the build to add, `Publish` with the changes waiting, and where building happens: in Temco Docs). What a row holds is its
+`description`: the grey words beside a name, as the Explorer writes them. A row has no sentence under it: what a view is *for*
+is its tooltip and, written out, the Overview page.
 

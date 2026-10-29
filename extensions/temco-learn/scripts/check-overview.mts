@@ -249,8 +249,9 @@ test('with nothing built and nothing published, every part says so and still off
 	assert.match(last, /Publish/u);
 });
 
-test('the brand bar is a short rule, and the cards sit four in a row', () => {
-	assert.match(overview.PAGE_STYLE, /\.az-section__title \{ border-left: 2px solid var\(--az-blue/u);
+test('the brand bar is a short rule beside the title, and the cards sit four in a row', () => {
+	assert.match(overview.PAGE_STYLE, /\.az-section__title::before \{[^}]*height: 12px/u);
+	assert.match(overview.PAGE_STYLE, /\.az-section__title::before \{[^}]*width: 2px[^}]*background: var\(--az-blue/u);
 	assert.match(overview.PAGE_STYLE, /\.az-options \{ grid-template-columns: repeat\(auto-fit, minmax\(215px, 1fr\)\)/u);
 	assert.match(overview.PAGE_STYLE, /\.az-block__foot \{[^}]*border-top: 1px solid var\(--border\)/u);
 });

@@ -395,6 +395,15 @@ function unescapeText(text: string): string {
 		.replace(/&amp;/g, '&');
 }
 
+/**
+ * The name a row writes for a project: its title without the "docs" a build's own page title usually ends with.
+ *
+ * The title comes from the build's `index.html` (`Test1 docs`) and is what the site is keyed by, so it is never rewritten —
+ * only the words a person reads are shortened.
+ */
+export function shortName(title: string): string {
+	return title.replace(/\s+docs?$/iu, '').trim() || title;
+}
 /** A folder name from a title: lowercase, and nothing that needs escaping in an address. */
 export function slugOf(title: string): string {
 	const slug = title
@@ -404,8 +413,7 @@ export function slugOf(title: string): string {
 	return slug === '' ? 'project' : slug;
 }
 
-/** `13.0` after `12.9`: the numbers compared as numbers, so `9` does not sort after `10`. */
-export function compareVersions(one: string, other: string): number {
+/** `13.0` after `12.9`: the numbers compared as numbers, so `9` does not sort after `10`. */export function compareVersions(one: string, other: string): number {
 	const left = one.split(/[.\-+]/).map((part) => Number.parseInt(part, 10));
 	const right = other.split(/[.\-+]/).map((part) => Number.parseInt(part, 10));
 	for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
