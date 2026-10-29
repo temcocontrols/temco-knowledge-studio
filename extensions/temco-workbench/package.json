@@ -61,36 +61,13 @@
           "id": "temcoWorkbench.settingsPlatform",
           "name": "Platform"
         }
-      ],
-      "temcoLearn": [
-        {
-          "id": "temcoLearn.panel",
-          "name": "Overview"
-        }
       ]
     },
     "commands": [
       {
-        "command": "temcoLearn.page",
-        "title": "Temco Learn — Preview",
-        "icon": "$(eye)",
-        "category": "Temco Learn"
-      },
-      {
-        "command": "temcoLearn.refresh",
-        "title": "Refresh",
-        "icon": "$(refresh)",
-        "category": "Temco Learn"
-      },
-      {
         "command": "temcoWorkbench.learn.home",
         "title": "Temco Learn",
         "icon": "$(home)"
-      },
-      {
-        "command": "temcoWorkbench.learn.t3000",
-        "title": "T3000",
-        "icon": "$(book)"
       },
       {
         "command": "temcoWorkbench.learn.article",
@@ -101,11 +78,6 @@
         "command": "temcoWorkbench.learn.downloads",
         "title": "Downloads",
         "icon": "$(cloud-download)"
-      },
-      {
-        "command": "temcoWorkbench.learn.paths",
-        "title": "Learning Paths",
-        "icon": "$(mortar-board)"
       },
       {
         "command": "temcoWorkbench.home",
@@ -303,11 +275,6 @@
           "icon": "media/ai.svg"
         },
         {
-          "id": "temcoLearn",
-          "title": "Temco Learn",
-          "icon": "$(cloud-upload)"
-        },
-        {
           "id": "temcoForum",
           "title": "Forum",
           "icon": "media/forum.svg"
@@ -321,25 +288,6 @@
           "id": "temcoSettings",
           "title": "Settings",
           "icon": "media/settings.svg"
-        }
-      ]
-    },
-    "menus": {
-      "view/title": [
-        {
-          "command": "temcoDocs.buildSite",
-          "when": "view == temcoLearn.panel",
-          "group": "navigation@1"
-        },
-        {
-          "command": "temcoDocs.previewSite",
-          "when": "view == temcoLearn.panel",
-          "group": "navigation@2"
-        },
-        {
-          "command": "temcoLearn.refresh",
-          "when": "view == temcoLearn.panel",
-          "group": "navigation@3"
         }
       ]
     }

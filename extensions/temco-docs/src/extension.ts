@@ -24,7 +24,6 @@ import { registerFormatCommands } from './format';
 import { registerImportCommand } from './importer';
 import { looseByRoot } from './loose';
 import { pagesTarget } from './pages';
-import { registerPublishCommands } from './publish';
 import { generateSite } from './site';
 import { rowSlug } from './ui';
 import { DocsPages } from './docsPages';
@@ -36,7 +35,6 @@ import { PANEL_VIEW_TYPE, DocsPanel, DocsPanelState } from './panelView';
 import { statusLine } from './statusLine';
 import { OverviewPage } from './overview';
 import { AREA_CHAPTER, KINDS, PageDeps, PageOperations, registerPageCommands, sourceAt, writePage } from './pageOps';
-import { writePortal, writeReader } from './learnPortal';
 import { projects } from './projects';
 import { PreviewPanels } from './previewPanel';
 import { openSource } from './webview';
@@ -46,7 +44,6 @@ import { registerReportCommands } from './report';
 import { registerRowCommands } from './rowOps';
 import { registerScaffoldCommands } from './scaffold';
 import { registerSectionViews, SidebarModel } from './sections';
-import { PublishedSite } from './siteServer';
 import { Catalog, DraftRow, Selection, selection, slugOf } from './store';
 import { fileColumn, pageColumn } from './surface';
 import { DocsRoot, DeclaredPage, PageEntry, RegistryError, collectPages, countStale, fileExists, folderForPath, loadDocsRoot, pageForUri, registryUriFor, rootFromDeclared, totals } from './registry';
@@ -108,21 +105,6 @@ async function openPublished(destination: string): Promise<void> {
   await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(destination));
 }
 
-/** The newest published version of the project the window is on — what "the site" means without a name. */
-async function newestPublished(context: vscode.ExtensionContext): Promise<string | undefined> {
-  let catalog: Catalog | undefined;
-  try {
-    catalog = await Catalog.open(context);
-    const documents = catalog.documents();
-    const project = selection.project() ?? (documents.length === 1 ? documents[0].slug : undefined);
-    return project === undefined ? undefined : catalog.releases(project)[0]?.destination;
-  } catch {
-    return undefined;
-  } finally {
-    catalog?.close();
-  }
-}
-
 interface BrokenRegistry {
   uri: vscode.Uri;
   message: string;
@@ -153,8 +135,6 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
   const docsPages = new DocsPages(context, () => roots);
   context.subscriptions.push(docsPages);
   // A published release, served on loopback while somebody looks at it. One per window: one address in the bar.
-  const site = new PublishedSite();
-  context.subscriptions.push(site);
   // The documentation itself, as a page: counts, areas, what is behind its source, and the checks.
   const overviewPage = new OverviewPage(context, () => roots);
   context.subscriptions.push(overviewPage);
@@ -764,7 +744,6 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
         title: catalog.document(project)?.name ?? project,
         version,
       });
-      await writePortal(vscode.Uri.joinPath(context.globalStorageUri, 'published'));
       catalog.publishRelease(project, {
         version,
         destination: destination.fsPath,
@@ -894,21 +873,13 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     // place the two meet — a command, which may be missing, never an import.
     vscode.commands.registerCommand('temcoDocs.page.open', (target?: unknown) => openInEditor(uriFrom(target) ?? frontUri())),
 
-    // The reader: the published version, laid out the way MSDN lays one out, served from this machine. Written beside
-    // the generated site and never over it, so a rebuild of the site does not remove it.
+    // The reader is the `temco-learn` module's: it owns the shell, the portal and the loopback server. What is kept
+    // here is the entry point — a command that may be missing, never an import — so every button and menu item that
+    // has always pointed at the reader still lands somewhere.
     vscode.commands.registerCommand('temcoDocs.openReader', async (destination?: unknown) => {
-      const where = typeof destination === 'string' && destination.length > 0
-        ? destination
-        : await newestPublished(context);
-      if (where === undefined) {
-        void vscode.window.showWarningMessage(
-          'Temco Docs: nothing has been published yet, so there is nothing to read. Build and publish a version first.'
-        );
-        return;
-      }
-      const page = await writeReader(vscode.Uri.file(where));
-      const address = await site.serve(where);
-      await vscode.env.openExternal(vscode.Uri.parse(`${address}/${path.basename(page.fsPath)}`));
+      await vscode.commands.executeCommand('temcoLearn.preview', {
+        page: typeof destination === 'string' && destination.length > 0 ? destination : undefined
+      });
     }),
     // Importing a document set: the conversion the project wizard calls after it has a destination.
     registerImportCommand(),
@@ -1097,59 +1068,17 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
         await openPublished(destination);
       }
     }),
-    // Serving, rather than opening a file: a generator's links and directory indexes only resolve over a host.
+    // Serving is the `temco-learn` module's job now: it owns the loopback server, the reader and the portal. What is
+    // kept here are the entry points the rest of the application has always called, as redirects.
     vscode.commands.registerCommand('temcoDocs.servePublished', async (destination?: unknown) => {
-      // Preview passes the folder *and* the page to open: a preview that needs a second click is not a preview.
-      const asked = typeof destination === 'object' && destination !== null
-        ? destination as { where?: unknown; entry?: unknown }
-        : undefined;
-      const named = typeof asked?.where === 'string' ? asked.where : undefined;
-      const where = named !== undefined && named.length > 0
-        ? named
-        : typeof destination === 'string' && destination.length > 0
-        ? destination
-        : await newestPublished(context);
-      if (where === undefined) {
-        void vscode.window.showWarningMessage(
-          'Temco Docs: nothing has been published yet, so there is no site to serve. Build and publish one first.'
-        );
-        return;
-      }
-      try {
-        const url = await site.serve(where);
-        const entry = typeof asked?.entry === 'string' && asked.entry.length > 0 ? asked.entry : undefined;
-        if (entry !== undefined) {
-          await vscode.env.openExternal(vscode.Uri.parse(`${url}${entry}`));
-        }
-        const answer = await vscode.window.showInformationMessage(
-          `Temco Docs: serving ${where} at ${url}`,
-          'Open in Browser',
-          'Stop Serving'
-        );
-        if (answer === 'Open in Browser') {
-          await vscode.env.openExternal(vscode.Uri.parse(entry === undefined ? url : `${url}${entry}`));
-        } else if (answer === 'Stop Serving') {
-          site.stop();
-        }
-      } catch (error) {
-        void vscode.window.showErrorMessage(
-          `Temco Docs: the site could not be served — ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
+      const asked = typeof destination === 'object' && destination !== null ? destination as { entry?: unknown } : undefined;
+      await vscode.commands.executeCommand('temcoLearn.preview', {
+        page: typeof asked?.entry === 'string' && asked.entry.length > 0 ? asked.entry : undefined
+      });
     }),
-    vscode.commands.registerCommand('temcoDocs.stopServing', () => site.stop()),
-    // The Temco Learn portal: every published product, served from the folder that holds them all.
-    vscode.commands.registerCommand('temcoDocs.openLearn', async () => {
-      const root = vscode.Uri.joinPath(context.globalStorageUri, 'published');
-      await writePortal(root);
-      try {
-        await vscode.env.openExternal(vscode.Uri.parse(await site.serve(root.fsPath)));
-      } catch (error) {
-        void vscode.window.showErrorMessage(
-          `Temco Docs: the Learn portal could not be served — ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    }),
+    vscode.commands.registerCommand('temcoDocs.stopServing', () => vscode.commands.executeCommand('temcoLearn.stop')),
+    // The Temco Learn portal: every product of the site, as a reader sees it.
+    vscode.commands.registerCommand('temcoDocs.openLearn', () => vscode.commands.executeCommand('temcoLearn.preview')),
     // An artifact is a file the build wrote, so opening one is opening a file — not a copy the platform keeps.
     vscode.commands.registerCommand('temcoDocs.openArtifact', async (file?: unknown) => {
       if (typeof file !== 'string' || file.length === 0) {
@@ -1292,8 +1221,9 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
       return undefined;
     }
   });
-  // Publishing: the built site, committed to the branch GitHub Pages serves.
-  registerPublishCommands(context, () => roots, output);
+  // Publishing: the built site, committed to the branch GitHub Pages serves. The act itself is the `temco-learn`
+  // module's — it owns the site folder — so this entry point is a redirect.
+  vscode.commands.registerCommand('temcoDocs.publishSite', () => vscode.commands.executeCommand('temcoLearn.publish'));
   // Export: the site, a page, or the sources, as something another person can open.
   registerExportCommands(context, () => roots, output);
   // The repository's own maintenance scripts — the generator, the gates, the media audit, the owed check.

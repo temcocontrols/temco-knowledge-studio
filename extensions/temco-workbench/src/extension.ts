@@ -17,8 +17,6 @@ import { roots, onDidChange, refresh as reread, totals } from './docs';
 import { DashboardPages } from './dashboard';
 import { HelpPages } from './helpPages';
 import { LearnPages } from './learnPages';
-import { LearnPage } from './learnPanel';
-import { LEARN_VIEW_ID, LearnTree } from './learnTree';
 import { NeedsPage } from './needsPage';
 import { registerSettings } from './settingsPages';
 import { registerSidebarViews } from './sidebar';
@@ -72,28 +70,6 @@ export function activate(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(dashboard);
 	// Temco Learn: the published site as a reader sees it — Home, T3000, an article, Downloads, Learning Paths.
 	const learn = new LearnPages(context);
-	// Temco Learn's own container: a native tree — preview, output, the reader's surfaces, coverage, and publishing.
-	const learnPanel = new LearnTree(context);
-	const learnSurface = new LearnPage(context);
-	const learnView = vscode.window.createTreeView(LEARN_VIEW_ID, { treeDataProvider: learnPanel, showCollapseAll: true });
-	// The panel is a list of places; the first time it is opened it also opens the page that explains the list, the way a
-	// home page does. Only from the second click onwards — a container that is already open at startup opens nothing.
-	let learnHomeShown = false;
-	context.subscriptions.push(
-		learnPanel,
-		learnView,
-		learnView.onDidChangeVisibility(() => {
-			if (learnView.visible && !learnHomeShown) {
-				learnHomeShown = true;
-				void vscode.commands.executeCommand('temcoWorkbench.learn.home');
-			}
-		}),
-		vscode.commands.registerCommand('temcoLearn.refresh', async () => {
-			await reread();
-			learnPanel.refresh();
-		})
-	);
-
 	context.subscriptions.push(
 		help,
 		settings.pages,
@@ -101,8 +77,6 @@ export function activate(context: vscode.ExtensionContext): void {
 		learn,
 		vscode.commands.registerCommand('temcoWorkbench.home', () => dashboard.open('overview')),
 		vscode.commands.registerCommand('temcoWorkbench.openNeeds', () => needs.open()),
-		vscode.commands.registerCommand('temcoLearn.page', () => void learnSurface.open()),
-		{ dispose: () => learnSurface.dispose() },
 		vscode.commands.registerCommand('temcoWorkbench.welcome', () => help.welcome()),
 		vscode.commands.registerCommand('temcoWorkbench.help', () => help.home()),
 		vscode.commands.registerCommand('temcoWorkbench.help.welcome', () => help.welcome()),
@@ -139,10 +113,8 @@ export function activate(context: vscode.ExtensionContext): void {
 			vscode.window.setStatusBarMessage('Diagnostics copied.', 3000);
 		}),
 		vscode.commands.registerCommand('temcoWorkbench.learn.home', () => learn.home()),
-		vscode.commands.registerCommand('temcoWorkbench.learn.t3000', () => learn.product()),
 		vscode.commands.registerCommand('temcoWorkbench.learn.article', () => learn.article()),
 		vscode.commands.registerCommand('temcoWorkbench.learn.downloads', () => learn.downloads()),
-		vscode.commands.registerCommand('temcoWorkbench.learn.paths', () => learn.paths()),
 		vscode.commands.registerCommand('temcoWorkbench.setStartOpen', async (open?: unknown) => {
 			const value = typeof open === 'string' ? open : undefined;
 			if (value === undefined || !START_OPTIONS.includes(value)) {

@@ -46,7 +46,7 @@ const MIME: { [extension: string]: string } = {
  * A second `serve` replaces the first: two sites on two ports is a question nobody asked, and the status bar has
  * room for one address.
  */
-export class PublishedSite implements vscode.Disposable {
+export class Server implements vscode.Disposable {
 	private server: http.Server | undefined;
 	/** The folder being served, when one is. */
 	private serving: string | undefined;

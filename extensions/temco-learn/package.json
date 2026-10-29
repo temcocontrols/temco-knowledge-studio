@@ -1,0 +1,138 @@
+{
+  "name": "temco-learn",
+  "displayName": "Temco Learn",
+  "description": "The Temco documentation site: its products, their versions, and the reader a visitor sees.",
+  "version": "0.0.1",
+  "publisher": "temcocontrols",
+  "private": true,
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/temcocontrols/temco-platform.git"
+  },
+  "bugs": {
+    "url": "https://github.com/temcocontrols/temco-platform/issues"
+  },
+  "engines": {
+    "vscode": "^1.143.0"
+  },
+  "type": "commonjs",
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:temcoLearn.panel"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "temcoLearn",
+          "title": "Temco Learn",
+          "icon": "$(cloud-upload)"
+        }
+      ]
+    },
+    "views": {
+      "temcoLearn": [
+        {
+          "id": "temcoLearn.panel",
+          "name": "Site"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "temcoLearn.preview",
+        "title": "Preview the Site",
+        "icon": "$(eye)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.assemble",
+        "title": "Add a Build to the Site",
+        "icon": "$(add)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.build",
+        "title": "Build the Documentation",
+        "icon": "$(play)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.open",
+        "title": "Open in the Browser",
+        "icon": "$(link-external)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.chooseSite",
+        "title": "Choose the Site Folder",
+        "icon": "$(folder-opened)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.publish",
+        "title": "Publish the Site",
+        "icon": "$(cloud-upload)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.stop",
+        "title": "Stop Serving the Site",
+        "icon": "$(debug-stop)",
+        "category": "Temco Learn"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "temcoLearn.preview",
+          "when": "view == temcoLearn.panel",
+          "group": "navigation@1"
+        },
+        {
+          "command": "temcoLearn.assemble",
+          "when": "view == temcoLearn.panel",
+          "group": "navigation@2"
+        },
+        {
+          "command": "temcoLearn.publish",
+          "when": "view == temcoLearn.panel",
+          "group": "navigation@3"
+        },
+        {
+          "command": "temcoLearn.refresh",
+          "when": "view == temcoLearn.panel",
+          "group": "navigation@4"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Temco Learn",
+      "properties": {
+        "temcoLearn.site": {
+          "type": "string",
+          "default": "",
+          "description": "The folder that holds the published site: its index.html, and one folder per product."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "check-commands": "node --experimental-strip-types scripts/check-commands.mts",
+    "check-site": "node --experimental-strip-types scripts/check-site.mts",
+    "check-reader": "node --experimental-strip-types scripts/check-reader.mts",
+    "check-publish": "node --experimental-strip-types scripts/check-publish.mts"
+  }
+}

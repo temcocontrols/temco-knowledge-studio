@@ -12,10 +12,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { readerPage } from './learnReader';
 import { DocsRoot } from './registry';
 import { OFFERED_SCRIPTS } from './repositories';
-import { siteDestination } from './site';
 import { Catalog, selection } from './store';
 
 /** Folders never worth walking: build caches and clones, not artifacts. */
@@ -41,27 +39,15 @@ export function registerBuildCommands(
       await buildSiteFor(context, root, output, site);
     }),
 
-    // Preview is the whole loop a person actually wants: build, then serve what was built on this machine and open it.
-    // Serving is the existing command rather than a second server, so the port, the status item and *Stop Serving* are
-    // the same ones the published site uses.
+    // Preview is the site module's: it owns the reader, the server and the page the reader looks at it in. What stays
+    // here is the build, and the entry point every menu item has always used.
     vscode.commands.registerCommand('temcoDocs.previewSite', async () => {
       const root = await pickRoot(roots(), 'preview the site for');
       if (!root) {
         return;
       }
       await buildSiteFor(context, root, output, site);
-      const where = builtSite(root);
-      if (where === undefined) {
-        void vscode.window.showWarningMessage(
-          'Temco Docs: the build wrote no site, so there is nothing to preview. The output channel has the reason.'
-        );
-        return;
-      }
-      // The reader is what a preview is for: the pages framed by the shell a reader actually gets, rather than a
-      // folder of files. `generateSite` writes one; a docfx or MkDocs build does not, so it is written here from
-      // whatever pages the build left behind.
-      const entry = readerFor(where, path.basename(root.folder.uri.fsPath));
-      await vscode.commands.executeCommand('temcoDocs.servePublished', { where, entry });
+      await vscode.commands.executeCommand('temcoLearn.preview');
     }),
 
     vscode.commands.registerCommand('temcoDocs.buildHelp', async () => {
@@ -119,85 +105,6 @@ async function buildSiteFor(
   });
 }
 
-/**
- * Where the build actually put the site.
- *
- * The generated site lands in `dist/site`; a docfx project writes `dist/docs` — the same two folders the recipe
- * searches. A folder with an `index.html` is a site, so it wins over one without.
- */
-function builtSite(root: DocsRoot): string | undefined {
-  const candidates = [siteDestination(root).fsPath, path.join(root.folder.uri.fsPath, 'dist', 'docs')];
-  return (
-    candidates.find((candidate) => fs.existsSync(path.join(candidate, 'index.html'))) ??
-    candidates.find((candidate) => fs.existsSync(candidate))
-  );
-}
-
-/** The reader's file name, in the folder it frames. */
-const READER = 'temco-reader.html';
-
-/**
- * The reader for a built folder: the MSDN-shaped shell around the pages the build left.
- *
- * `generateSite` writes its own reader, so the common case finds one and does nothing. A project whose site comes
- * from docfx, MkDocs or Docusaurus has only pages, and the shell is written here from what is on disk: the pages in
- * reading order, each titled by the `<title>` it already carries. Nothing is guessed beyond that — a page that names
- * no title is listed by its file name.
- *
- * Returns the file name to open, relative to the served folder.
- */
-function readerFor(where: string, product: string): string {
-  const reader = path.join(where, READER);
-  const pages = htmlPages(where).map((file) => ({
-    href: file,
-    title: titleOf(path.join(where, ...file.split('/'))) ?? titleFromHref(file)
-  }));
-  if (!fs.existsSync(reader) && pages.length > 0) {
-    const version = 'local build';
-    fs.writeFileSync(reader, readerPage({ product, version, versions: [version], pages }), 'utf8');
-  }
-  return fs.existsSync(reader) ? READER : 'index.html';
-}
-
-/** Every `.html` in the folder, as a sorted relative path: the index first, then the pages as a reader reads them. */
-function htmlPages(where: string, under = ''): string[] {
-  let found: string[] = [];
-  for (const item of fs.readdirSync(path.join(where, under), { withFileTypes: true })) {
-    const relative = under === '' ? item.name : `${under}/${item.name}`;
-    if (item.isDirectory()) {
-      found = found.concat(htmlPages(where, relative));
-    } else if (/\.html?$/i.test(item.name) && item.name.toLowerCase() !== READER) {
-      found.push(relative);
-    }
-  }
-  return found.sort((a, b) => (a === 'index.html' ? -1 : b === 'index.html' ? 1 : a.localeCompare(b)));
-}
-
-/** The page's own title, without the ` · Project` suffix the generator adds. */
-function titleOf(file: string): string | undefined {
-  try {
-    const html = fs.readFileSync(file, 'utf8');
-    const held = /<title>([\s\S]*?)<\/title>/i.exec(html)?.[1];
-    const text = held === undefined ? '' : unescapeText(held).split(' · ')[0].trim();
-    return text === '' ? undefined : text;
-  } catch {
-    return undefined;
-  }
-}
-
-function titleFromHref(href: string): string {
-  const stem = href.replace(/\.html?$/i, '').split('/').pop() ?? href;
-  return stem === 'index' ? 'Overview' : stem.replace(/[-_]+/g, ' ');
-}
-
-function unescapeText(text: string): string {
-  return text
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, '&');
-}
 
 interface Recipe {
   label: string;

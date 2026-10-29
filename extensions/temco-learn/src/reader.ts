@@ -138,7 +138,7 @@ export function readerPage(model: ReaderModel): string {
 </head>
 <body>
 <header class="bar">
-	<div class="brand"><a href="./">Temco Learn</a></div>
+	<div class="brand"><a href="../../index.html">Temco Learn</a></div>
 	<div class="product" id="product">${escape(model.product)}</div>
 	<span class="spacer"></span>
 	<label for="version" class="sr-only" hidden>Version</label>

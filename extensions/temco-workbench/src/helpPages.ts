@@ -386,7 +386,7 @@ function homeBody(): string {
 <div class="learn-hero__search mt-24" style="max-width:none" data-command="workbench.action.quickOpen">${icon('search')}<span>Search the help, the documentation and the shortcuts…</span><span class="cell-mono" style="margin-left:auto">Ctrl+K</span></div>
 <div class="mt-24">
 	${rule({ label: 'Start Here', count: '4 pages', note: 'The documentation is a project like any other: its pages are in the Documents tree, and the site they build is Temco Learn.' })}
-	${actionRow('graduation', 'Getting started with T3000', 'install, connect, and a first point that answers', 'temcoWorkbench.learn.t3000')}
+	${actionRow('graduation', 'Getting started with T3000', 'install, connect, and a first point that answers', 'temcoDocs.documents')}
 	${actionRow('key', 'Keyboard shortcuts', 'the keys this window binds, by group', 'temcoWorkbench.help.keys')}
 	${actionRow('output', 'Where the logs are', 'this profile’s log folder, and how to read one', 'temcoWorkbench.help.logs')}
 	${actionRow('upload', 'What changed in 13.0', 'the release notes for the version in this workspace', 'temcoDocs.releases')}

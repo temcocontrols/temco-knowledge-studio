@@ -82,6 +82,7 @@ const compilations = [
 	'extensions/temco-repositories/tsconfig.json',
 	'extensions/temco-projects/tsconfig.json',
 	'extensions/temco-workbench/tsconfig.json',
+	'extensions/temco-learn/tsconfig.json',
 	'extensions/temco-tools/tsconfig.json',
 	'extensions/tunnel-forwarding/tsconfig.json',
 	'extensions/typescript-language-features/web/tsconfig.json',

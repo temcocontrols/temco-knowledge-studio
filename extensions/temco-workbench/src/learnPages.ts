@@ -8,7 +8,18 @@
 import * as vscode from 'vscode';
 import { roots as readRoots, totals } from './docs';
 import { Catalog, ReleaseRow, selection } from './store';
-import { commandScript, escapeHtml as esc, icon, page, pageColumn, runCommand } from './ui';
+import {
+	callout as azCallout,
+	commandScript,
+	entryRow,
+	escapeHtml as esc,
+	hero as azHero,
+	icon,
+	page,
+	pageColumn,
+	runCommand,
+	section
+} from './ui';
 
 /** What the Learn pages read: the registries on this machine, and what the catalog has published. */
 interface LearnFacts {
@@ -74,10 +85,8 @@ const artifactName = (kind: string): string =>
 	kind === 'chm' ? 'Offline help (CHM)' : kind === 'pdf' ? 'PDF' : kind === 'site' ? 'Website' : kind === 'search' ? 'Search index' : kind;
 
 export const LEARN_HOME_VIEW_TYPE = 'temcoWorkbench.learn.home';
-export const LEARN_PRODUCT_VIEW_TYPE = 'temcoWorkbench.learn.t3000';
 export const LEARN_ARTICLE_VIEW_TYPE = 'temcoWorkbench.learn.article';
 export const LEARN_DOWNLOADS_VIEW_TYPE = 'temcoWorkbench.learn.downloads';
-export const LEARN_PATHS_VIEW_TYPE = 'temcoWorkbench.learn.paths';
 
 interface ActionOptions {
 	kind?: 'primary' | 'ghost';
@@ -91,12 +100,6 @@ const button = (label: string, command: string, options: ActionOptions = {}): st
 
 const badge = (text: string, tone?: string): string =>
 	`<span class="badge${tone && tone !== 'neutral' ? ` badge--${tone}` : ''}">${esc(text)}</span>`;
-
-const card = (options: { title: string; mark?: string; actions?: string; desc?: string; body?: string; foot?: string }): string =>
-	`<div class="card card--plain"><div class="card__head">${options.mark ? `<span class="card__icon">${icon(options.mark)}</span>` : ''}<div class="card__title">${esc(options.title)}</div>${options.actions ? `<div class="card__actions">${options.actions}</div>` : ''}</div>${options.desc ? `<p class="card__desc">${options.desc}</p>` : ''}${options.body ?? ''}${options.foot ? `<div class="card__foot">${options.foot}</div>` : ''}</div>`;
-
-const list = (items: { mark: string; title: string; sub?: string; meta?: string }[]): string =>
-	`<div class="list">${items.map((item) => `<div class="list__item">${icon(item.mark)}<div class="list__main"><div class="list__title">${esc(item.title)}</div>${item.sub ? `<div class="list__sub">${item.sub}</div>` : ''}</div>${item.meta ? `<div class="list__meta">${item.meta}</div>` : ''}</div>`).join('')}</div>`;
 
 const hero = (options: { tone?: string; eyebrow?: string; title: string; desc?: string; actions?: string }): string =>
 	`<div class="hero-panel${options.tone && options.tone !== 'accent' ? ` hero-panel--${options.tone}` : ''}">${options.eyebrow ? `<div class="eyebrow">${esc(options.eyebrow)}</div>` : ''}<div class="hero-panel__title">${esc(options.title)}</div>${options.desc ? `<p class="hero-panel__desc">${options.desc}</p>` : ''}${options.actions ? `<div class="hero-panel__actions">${options.actions}</div>` : ''}</div>`;
@@ -115,10 +118,6 @@ export class LearnPages {
 
 	async home(): Promise<void> {
 		this.open('home', LEARN_HOME_VIEW_TYPE, 'Temco Learn', homeBody(await readLearnFacts(this.context)));
-	}
-
-	async product(): Promise<void> {
-		this.open('t3000', LEARN_PRODUCT_VIEW_TYPE, 'T3000', productBody(await readLearnFacts(this.context)));
 	}
 
 	/**
@@ -144,10 +143,6 @@ export class LearnPages {
 
 	async downloads(): Promise<void> {
 		this.open('downloads', LEARN_DOWNLOADS_VIEW_TYPE, 'Downloads', downloadsBody(await readLearnFacts(this.context)));
-	}
-
-	paths(): void {
-		this.open('paths', LEARN_PATHS_VIEW_TYPE, 'Learning Paths', pathsBody());
 	}
 
 	dispose(): void {
@@ -198,88 +193,150 @@ function since(iso: string): string {
 	return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
-/** *Home* — what is published, and what the documentation is made of. */
+/** *Home* — what the documentation is made of, what the builds wrote, and the one thing worth doing next. */
 function homeBody(facts: LearnFacts): string {
 	const newest = facts.releases[0];
-	const areas = facts.areas.map((area) =>
-		`<button type="button" class="learn-card" data-command="temcoWorkbench.learn.t3000"><span class="learn-card__title">${esc(area.name)}</span><span class="learn-card__desc">${area.pages} ${area.pages === 1 ? 'page' : 'pages'}${area.stale > 0 ? ` · ${area.stale} behind their source` : ''}</span><span class="row" style="gap:10px;font-size:11px;color:var(--fg-subtle)"><span>${area.neverReviewed} never reviewed</span></span></button>`
-	).join('');
+	const stale = facts.areas.reduce((total, area) => total + area.stale, 0);
+	const unread = facts.areas.reduce((total, area) => total + area.neverReviewed, 0);
+	const built = [...facts.artifacts].sort((one, other) => String(other.builtAt).localeCompare(String(one.builtAt)));
+	const next = nextStep(facts, newest, stale, unread);
 
-	const downloads = facts.artifacts.slice(0, 3).map((artifact) => ({
-		mark: ARTIFACT_MARK[artifact.kind] ?? 'download',
-		title: artifact.path.split(/[\\/]/).pop() ?? artifact.path,
-		sub: `<span class="cell-muted">${esc(artifactName(artifact.kind))}</span>`,
-		meta: button('Open', 'temcoDocs.openArtifact', { small: true, kind: 'ghost', args: [artifact.path] })
-	}));
+	const areas = facts.areas
+		.slice(0, 8)
+		.map((area) =>
+			entryRow({
+				mark: 'folder',
+				title: area.name,
+				meta: [
+					`${area.pages} ${area.pages === 1 ? 'page' : 'pages'}`,
+					area.stale > 0 ? `${area.stale} ${area.stale === 1 ? 'page' : 'pages'} behind the code` : '',
+					area.neverReviewed > 0 ? `${area.neverReviewed} never read` : ''
+				].filter((part) => part !== '').join(' · '),
+				command: 'temcoDocs.openRegistry',
+				go: 'Open'
+			})
+		)
+		.join('');
 
-	return `<div class="learn-hero">
-	<div class="learn-hero__inner">
-		<div class="row" style="gap:10px;margin-bottom:10px">${badge('Temco Learn', 'accent')}<span class="cell-muted" style="font-size:12px">the published site, as a reader sees it</span></div>
-		<h1 class="learn-hero__title">Documentation for Temco Controls products</h1>
-		<p class="learn-hero__desc">Versioned, searchable, and available offline. This window reads the same pages a build ships, so what is listed here is what a reader gets.</p>
-		<div class="learn-hero__search">${icon('search')}<span>Search ${facts.areas.length === 0 ? 'the documentation' : facts.areas.slice(0, 3).map((area) => esc(area.name)).join(', ')}…</span><span style="margin-left:auto" class="cell-mono">Ctrl+K</span></div>
-	</div>
-</div>
-${rule('Published', `${facts.releases.length} ${facts.releases.length === 1 ? 'version' : 'versions'} · ${facts.artifacts.length} ${facts.artifacts.length === 1 ? 'file' : 'files'}`, newest === undefined
-		? '<b>Nothing is published yet.</b> A build writes the site; publishing copies it to a folder a reader can open. Until both have happened there is no version to point at.'
-		: `<b>${esc(newest.version)}</b> is live, published ${esc(since(newest.publishedAt))} with ${newest.files} file(s).`)}
-${facts.areas.length === 0
-			? '<p class="group-note">Nothing is being read yet, so there is no product to show. Choose the project you are working on and its areas appear here.</p>'
-			: `<div class="grid grid--4">${areas}</div>`}
-<div class="mt-24 grid grid--2">
-${card({
-		title: 'Learning Paths',
-		mark: 'graduation',
-		actions: button('All Paths', 'temcoWorkbench.learn.paths', { small: true, kind: 'ghost' }),
-		desc: 'Ordered reading for a job rather than for a product.',
-		body: '<p class="group-note">No path has been written yet. A path is a reading order over existing pages, and nothing stores one today — when the site defines them, they will be listed here.</p>'
+	const files = built
+		.slice(0, 3)
+		.map((artifact) =>
+			entryRow({
+				mark: ARTIFACT_MARK[artifact.kind] ?? 'download',
+				title: artifact.path.split(/[\\/]/).pop() ?? artifact.path,
+				meta: `${artifactName(artifact.kind)} · built ${since(artifact.builtAt)}`,
+				command: 'temcoDocs.openArtifact',
+				args: [artifact.path],
+				go: 'Open'
+			})
+		)
+		.join('');
+
+	// The state of the set, said once and in words: a reader of this page is asking "am I looking at something
+	// finished?", not "how many rows are in each table".
+	const state = [
+		`${facts.pages.toLocaleString('en-US')} ${facts.pages === 1 ? 'page' : 'pages'} in ${facts.areas.length} ${facts.areas.length === 1 ? 'area' : 'areas'}`,
+		stale > 0 ? `${stale} behind the code` : '',
+		unread > 0 ? `${unread} never read` : '',
+		newest === undefined ? 'nothing published yet' : `${newest.version} published ${since(newest.publishedAt)}`
+	].filter((part) => part !== '').join(' · ');
+
+	return `${azHero({
+		eyebrow: 'Temco Learn',
+		title: facts.project === undefined ? 'Documentation for Temco Controls products' : facts.project,
+		desc: 'This window reads one documentation set: the pages in the project it has open, the files its builds wrote, and the versions it published. Everything below is measured from those, never typed in.',
+		descWide: true,
+		hero: true,
+		note: {
+			text: state,
+			mark: newest === undefined ? 'info' : 'cloud-upload',
+			link: { command: newest === undefined ? 'temcoDocs.buildSite' : 'temcoDocs.releases' }
+		},
+		actions: [
+			{ label: 'Preview the site', command: 'temcoDocs.previewSite', mark: 'play', kind: 'primary' },
+			{ label: 'All pages', command: 'temcoDocs.openRegistry', kind: 'link' }
+		]
 	})}
-${card({
-		title: 'Downloads',
-		mark: 'download',
-		actions: button('All', 'temcoWorkbench.learn.downloads', { small: true, kind: 'ghost' }),
-		desc: 'The offline artifacts the builds left.',
-		body: downloads.length === 0
-			? '<p class="group-note">Nothing has been built yet. The CHM and the PDF are files a build writes; this list is those files.</p>'
-			: list(downloads)
+${azCallout(next)}
+${section({
+		title: 'Pages',
+		desc: facts.areas.length === 0
+			? 'No area is being read yet — open a project and its areas appear here.'
+			: `The areas this set is organised into${stale > 0 || unread > 0 ? ', with what needs attention' : ''}. A row opens the page list.`,
+		actions: button('All pages', 'temcoDocs.openRegistry', { small: true, kind: 'ghost' })
 	})}
-</div>
-<div class="mt-24"><div class="callout">${icon('info')}<div>These pages read the platform, not a copy of it. A reader\u2019s page is the file a release put on disk, and the artifact list is what the build wrote — so a layout decision made here is not a second design to keep in sync.</div></div></div>`;
+${areas === ''
+			? entryRow({ mark: 'book', title: 'Nothing is being read yet', meta: 'Open a documentation project and its areas appear here.' })
+			: areas}
+${section({
+		title: 'Files',
+		desc: built.length <= 3 ? 'What the builds wrote, newest first — these are the files a reader can be given.' : `The newest 3 of ${built.length} files a reader can be given.`,
+		actions: button('Build the site', 'temcoDocs.buildSite', { small: true, kind: 'ghost' })
+	})}
+${files === ''
+			? entryRow({ mark: 'download', title: 'No file yet', meta: 'Preview the site builds it and opens it in the reader; the offline help is a separate build.' })
+			: files}`;
 }
 
-/** *The T3000 product page* — the areas the registries declare. */
-function productBody(facts: LearnFacts): string {
-	const newest = facts.releases[0];
-
-	const areas = facts.areas.map((area) =>
-		`<button type="button" class="learn-card" data-command="temcoWorkbench.learn.t3000"><span class="learn-card__title">${esc(area.name)}</span><span class="learn-card__desc">${area.pages} ${area.pages === 1 ? 'page' : 'pages'}</span><span class="row" style="gap:8px;font-size:11px;color:var(--fg-subtle)"><span>${area.neverReviewed} never reviewed</span>${area.stale ? `<span>·</span><span>${area.stale} behind their source</span>` : ''}</span></button>`
-	).join('');
-
-	return `<div class="learn-hero">
-	<div class="learn-hero__inner">
-		<div class="eyebrow">Product documentation</div>
-		<h1 class="learn-hero__title">${esc(facts.areas.length === 0 ? 'Nothing is being read' : 'T3000')}</h1>
-		<p class="learn-hero__desc">${facts.pages.toLocaleString('en-US')} pages across ${facts.areas.length} ${facts.areas.length === 1 ? 'area' : 'areas'}, as this window is reading them.</p>
-		<div class="row" style="margin-top:14px">${newest === undefined ? badge('not published', 'info') : badge(`${newest.version} · live`, 'ok')}<span class="cell-muted" style="font-size:12px">${newest === undefined ? 'no version has been published' : `last published ${esc(since(newest.publishedAt))}`}</span></div>
-	</div>
-</div>
-<div style="margin-bottom:20px">
-${hero({
-		tone: newest === undefined ? 'warn' : undefined,
-		eyebrow: 'Release state',
-		title: newest === undefined ? 'Nothing has been published yet' : `${newest.version} is live`,
-		desc: newest === undefined
-			? 'The build writes the site and the offline help; publishing copies them where a reader can open them. Until then a reader has nothing to read.'
-			: `Published ${esc(since(newest.publishedAt))} — ${newest.files} file(s). The CHM and the PDF are on Downloads, and the site opens from the release itself.`,
-		actions: newest === undefined
-			? button('Open Build Center', 'temcoDocs.builds', { kind: 'primary', mark: 'play' }) + button('Publish', 'temcoDocs.publishRelease', { mark: 'upload' })
-			: button('Open the Site', 'temcoDocs.openPublished', { kind: 'primary', mark: 'globe', args: [newest.destination] }) + button('Downloads', 'temcoWorkbench.learn.downloads', { mark: 'download' })
-	})}
-</div>
-${rule('Areas', `${facts.areas.length} ${facts.areas.length === 1 ? 'area' : 'areas'} · ${facts.pages.toLocaleString('en-US')} pages`, 'The site is organised the way the documentation is written, so a reader and an author see the same areas.')}
-${facts.areas.length === 0
-			? '<p class="group-note">Nothing is being read yet: choose the project you are working on, and its areas will be listed here.</p>'
-			: `<div class="grid grid--3">${areas}</div>`}`;
+/**
+ * The one thing worth doing next, decided from the state rather than promised by a slogan.
+ *
+ * The order is the order a person would fix them in: there has to be something to read before there is something to
+ * build, something built before something published, and a published version is what a reader opens. Only when all of
+ * that is true is there anything to say about the pages themselves.
+ */
+function nextStep(
+	facts: LearnFacts,
+	newest: ReleaseRow | undefined,
+	stale: number,
+	unread: number
+): { mark: string; title: string; desc: string; actions: string } {
+	if (facts.pages === 0) {
+		return {
+			mark: 'info',
+			title: 'Nothing is being read yet',
+			desc: 'Temco Learn reads the documentation registry of the project this window has open. Pick a project, and its areas, pages and their state appear here.',
+			actions: button('Open the registry', 'temcoDocs.openRegistry', { kind: 'primary' })
+		};
+	}
+	if (facts.artifacts.length === 0) {
+		return {
+			mark: 'play',
+			title: 'The pages exist; nothing has been built yet',
+			desc: 'A build turns these pages into the site, the offline help and the search index. Preview does the build and opens the result in the reader in one step.',
+			actions: button('Preview the site', 'temcoDocs.previewSite', { kind: 'primary' })
+		};
+	}
+	if (newest === undefined) {
+		return {
+			mark: 'cloud-upload',
+			title: 'Built, but never published',
+			desc: 'Publishing copies a build into a folder a reader can open. Until a version is published there is nothing to point a reader at.',
+			actions: button('Publish a version', 'temcoDocs.releases', { kind: 'primary' })
+		};
+	}
+	if (stale > 0) {
+		return {
+			mark: 'warning',
+			title: `${stale} ${stale === 1 ? 'page is' : 'pages are'} behind ${stale === 1 ? 'its' : 'their'} code`,
+			desc: `These pages cite code that has changed since they were written, so the words may describe something that no longer exists. ${newest.version} is the last version published, ${since(newest.publishedAt)}.`,
+			actions: button('Review them', 'temcoDocs.stalenessReport', { kind: 'primary' })
+		};
+	}
+	if (unread > 0) {
+		return {
+			mark: 'history',
+			title: `${unread} ${unread === 1 ? 'page has' : 'pages have'} never been read`,
+			desc: `Nothing is behind its code. ${newest.version} was published ${since(newest.publishedAt)}; the pages nobody has opened are the ones most likely to be wrong.`,
+			actions: button('See them', 'temcoDocs.overview', { kind: 'primary' })
+		};
+	}
+	return {
+		mark: 'check',
+		title: 'Everything is current',
+		desc: `${facts.pages} ${facts.pages === 1 ? 'page' : 'pages'} across ${facts.areas.length} ${facts.areas.length === 1 ? 'area' : 'areas'}, none behind its code and none unread. ${newest.version} was published ${since(newest.publishedAt)}.`,
+		actions: button('Open the site', 'temcoDocs.openPublished', { kind: 'primary' })
+	};
 }
 
 /** *Downloads* — the files the builds left, which is what a reader can have offline. */
@@ -294,31 +351,15 @@ function downloadsBody(facts: LearnFacts): string {
 		return `<div class="mt-24">${rule(artifactName(kind), `${files.length} ${files.length === 1 ? 'file' : 'files'}`, 'The file stays where the build wrote it. A downloadable CHM or PDF needs nothing else.')}<div class="record-list">${files.map(fileRow).join('')}</div></div>`;
 	}).join('');
 
-	const versions = facts.releases.length === 0
-		? ''
-		: `<div class="mt-24">${rule('Published Versions', `${facts.releases.length} ${facts.releases.length === 1 ? 'version' : 'versions'}`, 'A published version is a copy of a build in a folder the platform owns. The newest is what a reader gets.')}<div class="record-list">${facts.releases.map((release) =>
-			`<div class="record-row">${toneMarkOf('upload', 'ok')}<div class="record-row__main"><div class="record-row__title"><span class="record-row__name cell-mono">${esc(release.version)}</span>${release.buildId === undefined ? '' : `<span class="tag">build #${release.buildId}</span>`}</div><div class="record-row__meta"><span>published ${esc(since(release.publishedAt))}</span> · <span>${release.files} file(s)</span> · <span class="cell-mono">${esc(release.destination)}</span></div></div><div class="record-row__state">${badge('Published', 'ok')}</div>${button('Open the Site', 'temcoDocs.openPublished', { small: true, kind: 'ghost', mark: 'globe', args: [release.destination] })}</div>`).join('')}</div></div>`;
-
 	return `${pageHead({
 		title: 'Downloads',
 		mark: 'download',
-		desc: 'The offline artifacts the builds left, and the versions that were published from them. A version stays downloadable after a newer one ships.',
-		actions: button('Build the Site', 'temcoDocs.buildSite', { kind: 'primary', mark: 'play' }) + button('Build the Offline Help', 'temcoDocs.buildHelp', { mark: 'package' }) + button('Publish', 'temcoDocs.publishRelease', { mark: 'upload' })
+		desc: 'The offline files the builds left. A version stays openable after a newer one ships — and which versions were published is on Releases, so the list here is files only.',
+		actions: button('Build the Site', 'temcoDocs.buildSite', { kind: 'primary', mark: 'play' }) + button('Build the Offline Help', 'temcoDocs.buildHelp', { mark: 'package' }) + button('Releases', 'temcoDocs.releases', { mark: 'cloud-upload' })
 	})}
 ${facts.artifacts.length === 0
 			? `<div class="mt-16"><div class="callout">${icon('info')}<div><b>Nothing has been built yet.</b> The CHM and the PDF are files a build writes — the build runs the repository\u2019s own script and then looks for the file it should have left. Build one, and it is listed here.</div></div></div>`
-			: `${sections}${versions}`}`;
-}
-
-/** *Learning Paths* — a reading order over pages; nothing stores one yet, and this says so. */
-function pathsBody(): string {
-	return `${pageHead({
-		title: 'Learning Paths',
-		mark: 'graduation',
-		desc: 'Ordered reading for a job, not for a product. Each step names the page and what it assumes you already know.',
-		actions: button('Open the Documents', 'temcoDocs.documents', { kind: 'primary', mark: 'book' })
-	})}
-<div class="mt-16"><div class="callout">${icon('info')}<div><b>No path has been written yet.</b> A path is a reading order over existing pages — every step an existing page with an owner and a review date, so a stale step shows up as a stale page. Nothing stores one today; these pages read the platform, and the platform has no paths in it yet.</div></div></div>`;
+			: sections}`;
 }
 
 /** A tone mark, since this module's UI copy does not export one. */
