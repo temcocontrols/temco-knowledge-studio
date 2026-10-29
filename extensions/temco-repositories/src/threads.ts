@@ -41,6 +41,8 @@ export interface ThreadsAnswer {
 	threads: Thread[];
 	/** Why there is nothing to show, when it is worth saying: no remote, no token, a rate limit, a refusal. */
 	note?: string;
+	/** The next page's address, when GitHub says there is one — what "load more" asks for. */
+	next?: string;
 }
 
 /** The fields of an issue this module reads. Anything else GitHub sends is ignored rather than guessed at. */
@@ -62,11 +64,15 @@ interface IssueJson {
  * The labeled issues of one repository, newest activity first.
  *
  * The endpoint returns pull requests as issues; they are dropped, because a review is not a thread a reader opened.
+ *
+ * `after` is the next page's address, as GitHub handed it over. A busy repository has more threads than one answer
+ * carries, and asking for the next page is GitHub's own contract — not an offset this module invents.
  */
 export async function threads(
 	context: vscode.ExtensionContext,
 	source: { name: string; remoteUrl?: string; branch?: string },
-	label: string
+	label: string,
+	after?: string
 ): Promise<ThreadsAnswer> {
 	if (source.remoteUrl === undefined || source.remoteUrl.trim().length === 0) {
 		return { threads: [], note: `${source.name} has no GitHub address, so there is no forum to read` };
@@ -76,9 +82,12 @@ export async function threads(
 		return { threads: [], note: `${source.name} is not a GitHub repository the issues API can read` };
 	}
 	const repository = `${coordinates.owner}/${coordinates.repo}`;
+	if (after !== undefined && !/^https:\/\/api\.github\.com\//i.test(after)) {
+		return { repository, threads: [], note: 'the next page is not a GitHub address, so it was not read' };
+	}
 	const token = await tokenOf(context);
 	// Open and closed together: a triager needs to see what a decision looks like after it was made, not only a backlog.
-	const url = `https://api.github.com/repos/${repository}/issues?state=all&labels=${encodeURIComponent(label)}&sort=updated&direction=desc&per_page=50`;
+	const url = after ?? `https://api.github.com/repos/${repository}/issues?state=all&labels=${encodeURIComponent(label)}&sort=updated&direction=desc&per_page=50`;
 
 	let response: Response;
 	try {
@@ -118,10 +127,25 @@ export async function threads(
 	}
 
 	const rows = issues.filter((issue) => issue.pull_request === undefined).map(toThread);
+	const next = nextLink(response.headers.get('link'));
 	if (rows.length === 0) {
 		return { repository, threads: [], note: `nothing in ${repository} carries the ${label} label yet` };
 	}
-	return { repository, threads: rows };
+	return { repository, threads: rows, next };
+}
+
+/** The `rel="next"` address out of GitHub's `Link` header, when it sent one. */
+function nextLink(header: string | null): string | undefined {
+	if (header === null) {
+		return undefined;
+	}
+	for (const part of header.split(',')) {
+		const match = part.match(/<([^>]+)>\s*;\s*rel="?next"?/i);
+		if (match !== null) {
+			return match[1];
+		}
+	}
+	return undefined;
 }
 
 function toThread(issue: IssueJson): Thread {

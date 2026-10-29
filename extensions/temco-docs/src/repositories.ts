@@ -65,6 +65,8 @@ export interface ThreadsAnswer {
 	repository?: string;
 	threads: Thread[];
 	note?: string;
+	/** The next page's address, when there is one. */
+	next?: string;
 }
 
 /** The repositories module's exports — the copy of `extensions/temco-repositories/src/extension.ts`. */
@@ -72,7 +74,7 @@ interface TemcoRepositoriesApi {
 	onDidChange(listener: () => void): vscode.Disposable;
 	codeFiles(source: RepositorySource): Promise<{ files: CodeFile[]; note?: string }>;
 	readMaterials(source: RepositorySource, files: readonly string[], limit?: number): Promise<Material>;
-	threads(source: RepositorySource, label: string): Promise<ThreadsAnswer>;
+	threads(source: RepositorySource, label: string, after?: string): Promise<ThreadsAnswer>;
 	readonly offeredScripts: readonly OfferedScript[];
 }
 
@@ -103,6 +105,6 @@ export function readMaterials(
 }
 
 /** The labeled issues of a source's repository — the forum's threads. Read only: nothing is labelled or commented. */
-export function threads(source: RepositorySource, label: string): Promise<ThreadsAnswer> {
-	return repositories().threads(source, label);
+export function threads(source: RepositorySource, label: string, after?: string): Promise<ThreadsAnswer> {
+	return repositories().threads(source, label, after);
 }

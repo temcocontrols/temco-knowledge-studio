@@ -7,7 +7,8 @@
   opened *beside* the conversation: the thread, the page it names (longest id first, then by title), whether that
   page's code moved since its last review, and the acts that follow — open the page, draft the fix (the page opens and
   the AI panel takes it), decide on the thread. Read only: nothing is labelled, commented or closed from here, and a
-  thread's link is checked for `http(s)` before it is handed to the browser.
+  thread's link is checked for `http(s)` before it is handed to the browser, and a repository with more threads than one
+  answer carries gets a **Load more** that asks for the next page GitHub pointed at, appending rather than replacing.
 - **Applying a draft says where it goes.** *Apply* now lands through `temcoRepositories.applyToSource`: a modal
   question naming the clone and the file, a `git apply` in that clone's working tree, the words *not committed*, and
   an Undo that reverses the same patch. A page in the window's own tree still takes the editor's edit and its

@@ -46,10 +46,12 @@ interface ForumState {
 	source?: string;
 	threads: Thread[];
 	note?: string;
+	/** The next page's address, when GitHub says the list goes on. */
+	next?: string;
 }
 
-/** Reads the threads of the repository this project cites. */
-async function read(context: vscode.ExtensionContext): Promise<ForumState> {
+/** Reads the threads of the repository this project cites. `after` asks for the page GitHub pointed at. */
+async function read(context: vscode.ExtensionContext, after?: string): Promise<ForumState> {
 	const project = selection.project();
 	if (project === undefined) {
 		return { threads: [], note: 'No project is open. Open one in Documentation and this list reads the repository it cites.' };
@@ -65,9 +67,17 @@ async function read(context: vscode.ExtensionContext): Promise<ForumState> {
 			}
 			const answer = await readThreads(
 				{ name: source.name, remoteUrl: source.remoteUrl, branch: source.branch },
-				LABEL
+				LABEL,
+				after
 			);
-			return { project, repository: answer.repository, source: source.name, threads: answer.threads, note: answer.note };
+			return {
+				project,
+				repository: answer.repository,
+				source: source.name,
+				threads: answer.threads,
+				note: answer.note,
+				next: answer.next
+			};
 		}
 		return {
 			project,
@@ -93,6 +103,8 @@ export class ForumPanel implements vscode.WebviewViewProvider {
 	private state: ForumState = { threads: [] };
 	/** How many reads have started: the newest alone may paint. */
 	private reads = 0;
+	/** A page is already being fetched, so a second click on "load more" asks for nothing. */
+	private loadingMore = false;
 
 	constructor(private readonly context: vscode.ExtensionContext, private readonly triage: TriagePage) { }
 
@@ -119,11 +131,47 @@ export class ForumPanel implements vscode.WebviewViewProvider {
 				return;
 			}
 			this.state = next;
-			const view = this.view;
-			if (view !== undefined) {
-				view.webview.html = forumHtml(this.state, nonce());
-			}
+			this.paint();
 		})();
+	}
+
+	/**
+	 * The page after this one, appended rather than replacing what is already read.
+	 *
+	 * A busy repository has more threads than one answer carries. What arrives is added, so a row someone was reading
+	 * does not move under them; the note that came with it — a rate limit, a refusal — is shown beside the list rather
+	 * than in place of it, and the next page is dropped so a click cannot loop.
+	 */
+	private async loadMore(): Promise<void> {
+		const after = this.state.next;
+		if (after === undefined || this.loadingMore) {
+			return;
+		}
+		this.loadingMore = true;
+		try {
+			const run = this.reads;
+			const more = await read(this.context, after);
+			// A refresh started while this page was loading: its answer is the newer one, and this page is already old.
+			if (run !== this.reads) {
+				return;
+			}
+			this.state = {
+				...this.state,
+				threads: more.threads.length === 0 ? this.state.threads : [...this.state.threads, ...more.threads],
+				next: more.threads.length === 0 ? undefined : more.next,
+				note: more.note
+			};
+			this.paint();
+		} finally {
+			this.loadingMore = false;
+		}
+	}
+
+	private paint(): void {
+		const view = this.view;
+		if (view !== undefined) {
+			view.webview.html = forumHtml(this.state, nonce());
+		}
 	}
 
 	/**
@@ -142,6 +190,10 @@ export class ForumPanel implements vscode.WebviewViewProvider {
 	private async receive(message: { type?: unknown; number?: unknown }): Promise<void> {
 		if (message.type === 'refresh') {
 			this.refresh();
+			return;
+		}
+		if (message.type === 'more') {
+			await this.loadMore();
 			return;
 		}
 		if (message.type === 'triage' && typeof message.number === 'number') {
@@ -275,7 +327,7 @@ export function forumHtml(state: ForumState, nonceValue: string): string {
 
 	const list = state.threads.length === 0
 		? `<p class="note">${esc(state.note ?? 'Nothing carries the feedback label yet.')}</p>`
-		: `<ul class="threads">${rows}</ul>${state.note === undefined ? '' : `<p class="note">${esc(state.note)}</p>`}`;
+		: `<ul class="threads">${rows}</ul>${state.note === undefined ? '' : `<p class="note">${esc(state.note)}</p>`}${state.next === undefined ? '' : '<button type="button" class="more" data-type="more">Load more threads</button>'}`;
 
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -298,6 +350,9 @@ export function forumHtml(state: ForumState, nonceValue: string): string {
 	.thread__meta { color: var(--vscode-descriptionForeground); font-size: 11px; }
 	.thread__number { font-variant-numeric: tabular-nums; }
 	.note { margin: 8px 2px 0; color: var(--vscode-descriptionForeground); }
+	.more { margin-top: 8px; width: 100%; padding: 4px 6px; background: none; border: 1px solid var(--vscode-panel-border); border-radius: 4px; color: inherit; font: inherit; cursor: pointer; }
+	.more:hover { background: var(--vscode-list-hoverBackground); }
+	.more:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
 	.glyph { width: 14px; height: 14px; flex: none; }
 </style>
 </head>
@@ -314,7 +369,7 @@ ${list}
 			api.postMessage({ type: 'triage', number: Number(target.dataset.number) });
 			return;
 		}
-		api.postMessage({ type: 'refresh' });
+		api.postMessage({ type: target.dataset.type === 'more' ? 'more' : 'refresh' });
 	});
 })();
 </script>
