@@ -27,7 +27,7 @@
     "compile-client": "npm run gulp compile",
     "compile-copilot": "npm --prefix extensions/copilot run compile",
     "compile-temco": "npm run gulp compile-extensions && npm run build-webviews",
-    "build-webviews": "npm --prefix extensions/temco-docs run build-webview && npm --prefix extensions/temco-editor run build-webview && npm --prefix extensions/temco-learn run build-webview",
+    "build-webviews": "npm --prefix extensions/temco-docs run build-webview && npm --prefix extensions/temco-editor run build-webview",
 		"check-temco": "node --experimental-strip-types build/check-temco-modules.ts && npm run check-temco-commands && npm --prefix extensions/temco-ui run check-components && npm --prefix extensions/temco-docs run check-translate",
 		"check-temco-modules": "node --experimental-strip-types build/check-temco-modules.ts",
 		"check-temco-commands": "npm --prefix extensions/temco-docs run check-commands && npm --prefix extensions/temco-editor run check-commands && npm --prefix extensions/temco-ai run check-commands && npm --prefix extensions/temco-store run check-commands && npm --prefix extensions/temco-ui run check-commands && npm --prefix extensions/temco-repositories run check-commands && npm --prefix extensions/temco-projects run check-commands && npm --prefix extensions/temco-learn run check-commands && npm --prefix extensions/temco-workbench run check-commands",

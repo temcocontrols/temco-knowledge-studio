@@ -39,20 +39,33 @@ function noteMessage(note: Note | undefined): NoteMessage | undefined {
 	return note === undefined ? undefined : { level: note.level, text: note.text, action: note.action?.label };
 }
 
-/** The panel's own document: an address bar, the answer strip, and the site below them. */
-function document(url: string | undefined, note: Note | undefined, nonce: string, title: string): string {
+/** What the bar says about the server: the colour of the dot, and the words beside it. */
+export interface Status {
+	/** `running`, `starting`, `failed` or `stopped` — also the class of the dot. */
+	tone: string;
+	/** The words: `running · 1011`. */
+	text: string;
+}
+
+/** The panel's own document: what is running, the answer strip, and the site below them. */
+function document(url: string | undefined, note: Note | undefined, nonce: string, title: string, status: Status): string {
 	const escape = (value: string) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 	const address = url === undefined ? '' : escape(url);
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; frame-src http://127.0.0.1:*; script-src 'nonce-${nonce}';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; frame-src http://localhost:* http://127.0.0.1:*; script-src 'nonce-${nonce}';">
 <style>
 * { box-sizing: border-box; }
 body { margin: 0; height: 100vh; display: flex; flex-direction: column; background: var(--vscode-editor-background); color: var(--vscode-foreground); font: 13px var(--vscode-font-family); }
 .bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--vscode-panel-border); background: var(--vscode-panel-background); }
-.addr { flex: 1; min-width: 0; padding: 4px 8px; font: 12px var(--vscode-editor-font-family); color: var(--vscode-input-foreground, var(--vscode-foreground)); background: var(--vscode-input-background, transparent); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); border-radius: 2px; }
+.addr { flex: 1; min-width: 0; font: 12px var(--vscode-editor-font-family); color: var(--vscode-descriptionForeground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.state { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--vscode-descriptionForeground); }
+.state::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--vscode-descriptionForeground); }
+.state--running::before { background: var(--vscode-testing-iconPassed, #388a34); }
+.state--starting::before { background: var(--vscode-charts-yellow, #cca700); }
+.state--failed::before { background: var(--vscode-testing-iconFailed, #f14c4c); }
 button { padding: 4px 10px; color: var(--vscode-button-secondaryForeground, var(--vscode-foreground)); background: var(--vscode-button-secondaryBackground, transparent); border: 1px solid var(--vscode-panel-border); border-radius: 2px; cursor: pointer; font: inherit; }
 button:hover { background: var(--vscode-button-secondaryHoverBackground, var(--vscode-list-hoverBackground)); }
 button[disabled] { opacity: .5; cursor: default; }
@@ -74,9 +87,10 @@ iframe { flex: 1; border: 0; width: 100%; background: #fff; }
 </head>
 <body>
 <div class="bar">
-	<input class="addr" id="addr" readonly value="${address}" aria-label="Address"${url === undefined ? ' placeholder="Nothing is being served yet"' : ''}>
+	<span class="state state--${escape(status.tone)}" id="state">${escape(status.text)}</span>
+	<span class="addr" id="addr" title="${address}">${address}</span>
 	<button id="reload" type="button"${url === undefined ? ' disabled' : ''}>Reload</button>
-	<button id="open" type="button"${url === undefined ? ' disabled' : ''}>Open in browser</button>
+	<button id="open" type="button"${url === undefined ? ' disabled' : ''}>Browser</button>
 	<button id="stop" type="button">Stop</button>
 </div>
 <div class="note" id="note" hidden role="status" aria-live="polite">
@@ -85,7 +99,7 @@ iframe { flex: 1; border: 0; width: 100%; background: #fff; }
 	<button id="note-action" type="button" hidden></button>
 	<button class="note__x" id="note-close" type="button" title="Dismiss" aria-label="Dismiss">✕</button>
 </div>
-${url === undefined ? '<div class="nothing">Nothing is being served yet.</div>' : `<iframe id="page" title="${escape(title)}" src="${address}"></iframe>`}
+${url === undefined ? '<div class="nothing">The site is not running. Start it from the Temco Learn panel, or choose a project and version.</div>' : `<iframe id="page" title="${escape(title)}" src="${address}"></iframe>`}
 <script nonce="${nonce}">
 (function () {
 	const api = acquireVsCodeApi();
@@ -94,7 +108,14 @@ ${url === undefined ? '<div class="nothing">Nothing is being served yet.</div>' 
 	const text = document.getElementById('note-text');
 	const mark = document.getElementById('note-mark');
 	const action = document.getElementById('note-action');
+	const state = document.getElementById('state');
 	const frame = document.getElementById('page');
+
+	function setState(found) {
+		if (!found || !state) { return; }
+		state.className = 'state state--' + found.tone;
+		state.textContent = found.text;
+	}
 
 	function draw(found) {
 		if (!found) {
@@ -123,12 +144,14 @@ ${url === undefined ? '<div class="nothing">Nothing is being served yet.</div>' 
 			draw(message.note);
 		} else if (message.type === 'clear') {
 			draw(undefined);
+		} else if (message.type === 'state') {
+			setState(message.status);
 		}
 	});
 
 	document.getElementById('reload').addEventListener('click', () => {
 		if (!frame) { return; }
-		const src = frame.getAttribute('src').split('?')[0];
+		const src = frame.getAttribute('src');
 		frame.setAttribute('src', 'about:blank');
 		setTimeout(() => frame.setAttribute('src', src), 20);
 	});
@@ -149,13 +172,24 @@ ${url === undefined ? '<div class="nothing">Nothing is being served yet.</div>' 
  * One preview at a time.
  *
  * A second address replaces the first — the site is one thing, and two panels showing two versions of it is a
- * confusion nobody asked for. Closing the panel stops the server, because a loopback port left open is a surprise.
+ * confusion nobody asked for. Closing the panel does not stop the server for the site (a browser tab does not stop a
+ * website); a build output served for a look does stop its own.
  */
 export class Preview implements vscode.Disposable {
 	private panel: vscode.WebviewPanel | undefined;
 	private url: string | undefined;
 	private strip: Note | undefined;
 	private onClose: (() => void) | undefined;
+	private state: Status = { tone: 'stopped', text: 'stopped' };
+
+	/** `onStop` is what the bar's Stop button does. Without one, Stop closes the panel. */
+	constructor(private readonly onStop?: () => void | Thenable<unknown>) { }
+
+	/** What the bar says about the server. Sent to the page, which only repaints the dot and the words. */
+	setStatus(status: Status): void {
+		this.state = status;
+		void this.panel?.webview.postMessage({ type: 'state', status });
+	}
 
 	/** Show `url`, opening the panel if it is not already up. The strip keeps whatever it was last told. */
 	show(url: string, title: string, options: { onClose?: () => void } = {}): void {
@@ -208,7 +242,11 @@ export class Preview implements vscode.Disposable {
 						void this.openExternally();
 						break;
 					case 'stop':
-						this.panel?.dispose();
+						if (this.onStop === undefined) {
+							this.panel?.dispose();
+						} else {
+							void this.onStop();
+						}
 						break;
 					case 'action':
 						void this.strip?.action?.run();
@@ -232,7 +270,7 @@ export class Preview implements vscode.Disposable {
 			this.panel.reveal(vscode.ViewColumn.Active, false);
 		}
 		const nonce = Array.from({ length: 16 }, () => Math.floor(Math.random() * 36).toString(36)).join('');
-		this.panel.webview.html = document(this.url, this.strip, nonce, title);
+		this.panel.webview.html = document(this.url, this.strip, nonce, title, this.state);
 	}
 
 	private async openExternally(): Promise<void> {

@@ -4,7 +4,7 @@
 // row pretending to be a heading. A row is a name and a glyph, and what it holds is `description`: the grey words the
 // Explorer writes beside a folder, never a badge of our own. Sentences belong on the Overview page, never in a row.
 //
-// Four views: the module's page as one row, **Browse** (the site as a whole, and the same pages project by project),
+// Four views: the module's page as one row, **Browse** (the site's own servers, and the projects on the site),
 // **Download** (the files a build wrote) and **Next steps** (the acts, publishing among them).
 
 import * as path from 'path';
@@ -12,6 +12,8 @@ import * as vscode from 'vscode';
 import { Artifact, ArtifactKind, formatSize, isDownloadable, isPreviewable, nameOf } from './artifacts';
 import { Build } from './builds';
 import { shortName, SiteProject } from './site';
+import { repoReady, siteRepo } from './siteRepo';
+import { describe, SiteStatus } from './siteRunner';
 import { Snapshot } from './snapshot';
 import { ago } from './state';
 
@@ -148,13 +150,13 @@ export class OverviewTree implements vscode.TreeDataProvider<Row> {
 	}
 }
 
-/* ---- Browse: the whole site, the pages by project, and the dist sites ------------------------------------------ */
+/* ---- Browse: the site's own processes, and the projects on it ------------------------------------------------- */
 
 export class BrowseTree implements vscode.TreeDataProvider<Row> {
 	private readonly changed = new vscode.EventEmitter<void>();
 	readonly onDidChangeTreeData = this.changed.event;
 
-	constructor(private readonly reads: Reads) { }
+	constructor(private readonly reads: Reads, private readonly site: () => SiteStatus) { }
 
 	refresh(): void {
 		this.changed.fire();
@@ -169,29 +171,98 @@ export class BrowseTree implements vscode.TreeDataProvider<Row> {
 			return item.kids ?? [];
 		}
 		const data = await this.reads.data();
-		return [this.theSite(), this.byProject(data)];
+		return [this.theSite(), this.projects(data)];
 	}
 
-	/** The site as a reader gets it: six sections over every published project, at one address. */
+	/** The site itself: the two ways of running it, the acts that keep it up to date, and where the source is. */
 	private theSite(): Row {
-		const entry = row('Preview the site', 'globe', {
-			tooltip: 'The site readers open — Documentation, Training & Labs, Tests, Products, Q&A and Topics',
-			command: { command: 'temcoLearn.preview', title: 'Preview the Site' }
+		const status = this.site();
+		const ready = repoReady(siteRepo());
+		const entry = group('Site', 'library', {
+			description: ready ? describe(status) : 'not configured',
+			tooltip: ready
+				? status.reason ?? 'The site repository: run it, build it, and open the folder it lives in'
+				: siteRepo() + ' is not the clone of temcocontrols/temco-learn',
+			state: vscode.TreeItemCollapsibleState.Expanded,
+			kids: this.rows()
 		});
 		entry.id = 'temcoLearn.browse.site';
-		entry.contextValue = 'temcoLearn.browse.site';
 		return entry;
 	}
 
-	/** The same pages, one project at a time. */
-	private byProject(data: Snapshot): Row {
+	/** The rows of the Site group: one way of running the site here, one for editing it, then the acts. */
+	private rows(): Row[] {
+		const status = this.site();
+		const running = status.state === 'running' || status.state === 'starting';
+
+		if (!repoReady(siteRepo())) {
+			const choose = row('Choose the Site Folder…', 'folder-library', {
+				tooltip: 'Point Temco Learn at the clone of temcocontrols/temco-learn',
+				command: { command: 'temcoLearn.site.choose', title: 'Choose the Site Folder' }
+			});
+			choose.id = 'temcoLearn.browse.site.choose';
+			return [choose];
+		}
+
+		const preview = row('Preview', 'globe', {
+			description: 'localhost:1011',
+			tooltip: 'Run the built site and show it here — the site readers get, at the address it is served from',
+			command: { command: 'temcoLearn.site.preview', title: 'Preview the Site' }
+		});
+		preview.id = 'temcoLearn.browse.site.preview';
+
+		const development = row('Development', 'code', {
+			description: 'localhost:3003',
+			tooltip: 'Run the development server, for editing the site repository itself',
+			command: { command: 'temcoLearn.site.dev', title: 'Start the Development Server' }
+		});
+		development.id = 'temcoLearn.browse.site.dev';
+
+		const browser = row('Open in Browser', 'link-external', {
+			description: 'localhost:1011',
+			tooltip: 'Open the running site in the browser rather than in the editor',
+			command: { command: 'temcoLearn.site.open', title: 'Open the Site in the Browser' }
+		});
+		browser.id = 'temcoLearn.browse.site.open';
+
+		const build = row('Build', 'tools', {
+			tooltip: 'Build the site: the catalog, the search index, then the bundle Vite writes to dist/',
+			command: { command: 'temcoLearn.site.build', title: 'Build the Site' }
+		});
+		build.id = 'temcoLearn.browse.site.build';
+
+		const install = row('Install Dependencies', 'package', {
+			tooltip: 'Run npm install in the site repository, when a clone is new',
+			command: { command: 'temcoLearn.site.install', title: 'Install the Site Dependencies' }
+		});
+		install.id = 'temcoLearn.browse.site.install';
+
+		const stop = row('Stop', 'debug-stop', {
+			description: running ? 'running' : 'not running',
+			tooltip: 'Stop the server, whichever of the two is running',
+			command: { command: 'temcoLearn.site.stop', title: 'Stop the Site' }
+		});
+		stop.id = 'temcoLearn.browse.site.stop';
+
+		const folder = row('Source Folder', 'folder-opened', {
+			description: path.basename(siteRepo()),
+			tooltip: siteRepo(),
+			command: { command: 'temcoLearn.site.folder', title: 'Open the Site Folder' }
+		});
+		folder.id = 'temcoLearn.browse.site.folder';
+
+		return [preview, development, browser, build, install, stop, folder];
+	}
+
+	/** The projects on the site, with every version each one keeps. */
+	private projects(data: Snapshot): Row {
 		const kids =
 			data.site.projects.length === 0
-				? [row('Nothing yet', 'info', { tooltip: 'Build a project in Temco Docs, then add the build here.' })]
+				? [row('Nothing on the site yet', 'info', { tooltip: 'Add a build, or write a page under content/ in the site repository.' })]
 				: data.site.projects.map((project, index) => this.project(project, index === 0));
-		const entry = group('Preview by project', 'library', {
+		const entry = group('Projects', 'file-directory', {
 			description: plural(data.site.projects.length, 'project'),
-			tooltip: 'The projects on the website, with every version they keep',
+			tooltip: 'The projects the site serves, with every version each one keeps',
 			kids,
 			state: vscode.TreeItemCollapsibleState.Expanded
 		});
@@ -199,33 +270,34 @@ export class BrowseTree implements vscode.TreeDataProvider<Row> {
 		return entry;
 	}
 
-	/** One project: its versions, each with what it holds. The first project opens, so the view never reads as shut doors. */
+	/** One project: its versions. The first project opens, so the view never reads as shut doors. */
 	private project(project: SiteProject, open: boolean): Row {
 		const kids = project.versions.map((version) => {
 			const entry = row(version.version, 'tag', {
-				tooltip: `Published ${version.builtAt === undefined ? 'at an unknown time' : ago(version.builtAt)}`,
+				description: plural(version.pages.length, 'page'),
+				tooltip: 'Written ' + (version.builtAt === undefined ? 'at an unknown time' : ago(version.builtAt)),
 				command: {
-					command: 'temcoLearn.preview',
-					title: version.version,
-					arguments: [{ page: `reader.html?id=${encodeURIComponent(project.id)}&version=${encodeURIComponent(version.version)}` }]
+					command: 'temcoLearn.site.preview',
+					title: project.title + ' ' + version.version,
+					arguments: [{ project: project.id, version: version.version }]
 				}
 			});
-			entry.id = `temcoLearn.browse.version.${project.id}.${version.version}`;
+			entry.id = 'temcoLearn.browse.version.' + project.id + '.' + version.version;
 			entry.contextValue = 'temcoLearn.version';
 			return entry;
 		});
-		const entry = group(shortName(project.title), 'file-directory', {
+		const entry = group(shortName(project.title), 'book', {
 			description: plural(kids.length, 'version'),
-			tooltip: `Read ${shortName(project.title)} on the website`,
+			tooltip: 'Read ' + shortName(project.title) + ' on the site',
 			kids,
 			state: open ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
 			command: {
-				command: 'temcoLearn.preview',
+				command: 'temcoLearn.site.preview',
 				title: project.title,
-				arguments: [{ page: `project.html?id=${encodeURIComponent(project.id)}` }]
+				arguments: [{ project: project.id }]
 			}
 		});
-		entry.id = `temcoLearn.browse.project.${project.id}`;
+		entry.id = 'temcoLearn.browse.project.' + project.id;
 		entry.contextValue = 'temcoLearn.project';
 		return entry;
 	}

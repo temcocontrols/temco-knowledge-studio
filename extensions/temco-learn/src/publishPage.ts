@@ -6,7 +6,7 @@
 
 import * as vscode from 'vscode';
 import { PublishLog } from './publishLog';
-import { siteFolder } from './site';
+import { siteRepo } from './siteRepo';
 import { ago } from './state';
 import { callout, cards, code, commandScript, escapeHtml, hero, icon, page, pageColumn, runCommand, section } from './ui';
 
@@ -88,14 +88,14 @@ function steps(pending: number): string {
 		},
 		{
 			title: 'Add',
-			desc: 'The build is copied into the site folder as one version of one project.',
+			desc: 'The build is copied into the site repository as one version of one project.',
 			mark: 'plus',
 			command: 'temcoLearn.addBuilds',
 			go: 'Choose a build'
 		},
 		{
 			title: 'Publish',
-			desc: 'The site folder is committed, and the commit is pushed at the gh-pages branch.',
+			desc: 'The clone is committed, and the commit is pushed at the main branch.',
 			mark: 'upload',
 			command: 'temcoLearn.publish',
 			go: pending === 0 ? 'Publish again' : `Publish ${plural(pending, 'change')}`,
@@ -120,7 +120,7 @@ function facts(state: PublishFacts): string {
 	const at = state.commit === undefined ? 'never' : `${state.commit}, ${ago(state.at)}`;
 	return `<div class="az-facts">${cell('Address', state.base ?? 'none yet', 'globe', true)}${cell(
 		'Branch',
-		'gh-pages · served from / by GitHub Pages',
+		'main · served from / by GitHub Pages',
 		'repo'
 	)}${cell('Last publish', at, 'clock')}${cell('Waiting', state.pending === 0 ? 'nothing' : plural(state.pending, 'change'), 'sync')}</div>`;
 }
@@ -140,8 +140,8 @@ function log(state: PublishFacts): string {
 export function html(state: PublishFacts): string {
 	const published = state.commit !== undefined;
 	const desc = published
-		? `Publishing copies the site folder to the gh-pages branch of ${state.where ?? 'the site repository'}, and GitHub Pages serves that branch at its root — so the address never changes, and nothing is forced.`
-		: 'The site folder points at no GitHub repository yet, so there is nowhere to publish to. Publishing makes the repository and pushes the site to its gh-pages branch.';
+		? `Publishing commits the clone and pushes it at the main branch of ${state.where ?? 'the site repository'}. GitHub Actions then builds the site and hands the result to Pages, at the same address every time — and nothing is forced.`
+		: 'The clone points at no GitHub repository, so there is nowhere to publish to: a publish would push an empty history at a real site.';
 	const note = published
 		? { text: `Last publish ${state.commit} · ${ago(state.at)}`, mark: 'clock', link: { command: 'temcoLearn.openPublished' } }
 		: { text: 'Never published', mark: 'clock' };
@@ -149,12 +149,12 @@ export function html(state: PublishFacts): string {
 		state.pending === 0
 			? callout({
 					title: 'Nothing is waiting',
-					desc: 'The site folder matches the last publish. Publishing again is safe: it commits nothing and pushes the same commit.',
+					desc: 'The clone matches the last publish. Publishing again is safe: it commits nothing and pushes the same commit.',
 					mark: 'check'
 				})
 			: callout({
 					title: `${plural(state.pending, 'change')} waiting to be published`,
-					desc: 'The site folder has changes the gh-pages branch does not. One press commits them and pushes the commit.',
+					desc: 'The clone has changes the main branch does not. One press commits them and pushes the commit.',
 					mark: 'warning',
 					actions: `<button type="button" class="az-btn az-btn--primary" data-command="temcoLearn.publish"><span>Publish ${plural(state.pending, 'change')}</span></button>`
 				});
@@ -176,6 +176,6 @@ export function html(state: PublishFacts): string {
 		facts(state),
 		section({ title: 'The last attempt' }),
 		log(state),
-		`<p class="az-block__note">The site folder is ${escapeHtml(siteFolder())}. The preview serves that same folder, so what reads there is what gets published.</p>`
+		`<p class="az-block__note">The site is the clone at ${escapeHtml(siteRepo())}. The preview runs that same clone, so what reads there is what gets published.</p>`
 	].join('\n');
 }

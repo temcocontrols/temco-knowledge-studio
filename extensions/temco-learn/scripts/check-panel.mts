@@ -5,6 +5,9 @@
 // promise, per view, against one snapshot.
 
 import assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { createRequire, Module } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
@@ -22,7 +25,7 @@ interface Row {
 interface Views {
 	Reads: new (read: () => Promise<unknown>) => unknown;
 	OverviewTree: new () => { getChildren(item?: Row): Promise<Row[]> };
-	BrowseTree: new (reads: unknown) => { getChildren(item?: Row): Promise<Row[]> };
+	BrowseTree: new (reads: unknown, site: () => { state: string; mode?: string; url?: string; reason?: string }) => { getChildren(item?: Row): Promise<Row[]> };
 	DownloadTree: new (reads: unknown) => { getChildren(item?: Row): Promise<Row[]> };
 	TodoTree: new (reads: unknown) => { getChildren(item?: Row): Promise<Row[]> };
 	VIEWS: Record<string, string>;
@@ -42,6 +45,15 @@ class TreeItem {
 		this.collapsibleState = collapsibleState;
 	}
 }
+
+/** A clone of the site repository that `repoReady` accepts, without a git history behind it. */
+const siteClone = fs.mkdtempSync(path.join(os.tmpdir(), 'temco-learn-clone-'));
+fs.writeFileSync(path.join(siteClone, 'package.json'), '{}');
+fs.mkdirSync(path.join(siteClone, 'content'), { recursive: true });
+fs.writeFileSync(path.join(siteClone, 'content', 'sections.json'), '[]');
+
+/** Where the module is told the clone is; one case moves it somewhere that is not the site. */
+let repoSetting = siteClone;
 
 const vscode = {
 	TreeItem,
@@ -63,7 +75,12 @@ const vscode = {
 			toString: () => value
 		})
 	},
-	workspace: { workspaceFolders: [], getConfiguration: () => ({ get: () => undefined }) },
+	workspace: {
+		workspaceFolders: [],
+		getConfiguration: (section?: string) => ({
+			get: (key: string) => (section === 'temcoLearn' && key === 'siteRepo' ? repoSetting : undefined)
+		})
+	},
 	extensions: { getExtension: () => ({ isActive: true, exports: {} }) },
 	window: { registerFileDecorationProvider: () => ({ dispose() { } }) }
 };
@@ -122,40 +139,87 @@ test('the Overview view is one row, and it opens the page', async () => {
 	assert.deepEqual(await provider.getChildren(root), [], 'the Overview view still lists facts');
 });
 
-test('the Browse view answers the whole site first, then one project at a time', async () => {
-	const provider = new views.BrowseTree(newReads(snapshot));
+const stopped = { state: 'stopped' };
+const running = { state: 'running', mode: 'preview', url: 'http://localhost:1011/' };
+
+test('the Browse view answers the site first, then the projects on it', async () => {
+	const provider = new views.BrowseTree(newReads(snapshot), () => stopped);
 	const roots = await provider.getChildren();
 	assert.deepEqual(
 		roots.map((row) => [row.label, count(row), row.command?.command ?? '']),
 		[
-			['Preview the site', '', 'temcoLearn.preview'],
-			['Preview by project', '2 projects', '']
+			['Site', 'stopped', ''],
+			['Projects', '2 projects', '']
 		]
 	);
 });
 
-test('Preview by project lists the projects, opens the first, and counts versions and pages', async () => {
-	const provider = new views.BrowseTree(newReads(snapshot));
-	const [, byProject] = await provider.getChildren();
-	const [t3000, bacnet] = await provider.getChildren(byProject);
+test('the Site group runs the site two ways, and says what it is doing', async () => {
+	const provider = new views.BrowseTree(newReads(snapshot), () => running);
+	const [site] = await provider.getChildren();
+	assert.equal(site.iconPath?.id, 'library', 'the group lost its own glyph');
+	assert.equal(count(site), 'running · 1011', 'the group does not say the server is up');
+	const rows = await provider.getChildren(site);
+	assert.deepEqual(
+		rows.map((row) => [row.label, count(row), row.command?.command]),
+		[
+			['Preview', 'localhost:1011', 'temcoLearn.site.preview'],
+			['Development', 'localhost:3003', 'temcoLearn.site.dev'],
+			['Open in Browser', 'localhost:1011', 'temcoLearn.site.open'],
+			['Build', '', 'temcoLearn.site.build'],
+			['Install Dependencies', '', 'temcoLearn.site.install'],
+			['Stop', 'running', 'temcoLearn.site.stop'],
+			['Source Folder', path.basename(siteClone), 'temcoLearn.site.folder']
+		]
+	);
+});
+
+test('a server that failed says why, and a stopped one says stopped', async () => {
+	const [failed] = await new views.BrowseTree(newReads(snapshot), () => ({ state: 'failed', reason: 'no answer at 1011' })).getChildren();
+	assert.equal(count(failed), 'failed', 'a failure reads as anything but a failure');
+	assert.equal(failed.tooltip, 'no answer at 1011', 'the reason is not the tooltip');
+
+	const [stoppedSite] = await new views.BrowseTree(newReads(snapshot), () => stopped).getChildren();
+	assert.equal(count(stoppedSite), 'stopped', 'a stopped server is not called stopped');
+});
+
+test('a clone that is not there is one row that asks for it', async () => {
+	repoSetting = path.join(siteClone, 'gone');
+	try {
+		const provider = new views.BrowseTree(newReads(snapshot), () => stopped);
+		const [site] = await provider.getChildren();
+		assert.equal(count(site), 'not configured', 'a clone that is not there reads as anything but not configured');
+		assert.deepEqual(
+			(await provider.getChildren(site)).map((row) => [row.label, row.command?.command]),
+			[['Choose the Site Folder…', 'temcoLearn.site.choose']]
+		);
+	} finally {
+		repoSetting = siteClone;
+	}
+});
+
+test('Projects lists the projects, opens the first, and counts versions and pages', async () => {
+	const provider = new views.BrowseTree(newReads(snapshot), () => stopped);
+	const [, projects] = await provider.getChildren();
+	const [t3000, bacnet] = await provider.getChildren(projects);
 	assert.deepEqual([t3000.label, count(t3000)], ['T3000', '2 versions']);
-	assert.equal(byProject.iconPath?.id, 'library', 'the group lost its own glyph');
-	assert.equal(t3000.iconPath?.id, 'file-directory', 'a project wears the group glyph');
+	assert.equal(t3000.iconPath?.id, 'book', 'a project lost its own glyph');
 	assert.deepEqual([bacnet.label, count(bacnet)], ['BACnet', '1 version']);
 	assert.equal(t3000.collapsibleState, 2, 'the first project is not open');
 	assert.equal(bacnet.collapsibleState, 1, 'every project opens at once');
-	assert.equal(t3000.command?.command, 'temcoLearn.preview', 'a project row does not open its page on the website');
+	assert.equal(t3000.command?.command, 'temcoLearn.site.preview', 'a project row does not open its page on the site');
+	assert.deepEqual(t3000.command?.arguments, [{ project: 't3000' }], 'a project row does not say which project');
 	const versions = await provider.getChildren(t3000);
-	assert.deepEqual(versions.map((row) => [row.label, count(row)]), [['13.0', ''], ['12.9', '']], 'a version still carries a page count');
-	assert.ok(versions.every((row) => row.command?.command === 'temcoLearn.preview'));
+	assert.deepEqual(versions.map((row) => [row.label, count(row)]), [['13.0', '2 pages'], ['12.9', '1 page']], 'a version does not count its pages');
+	assert.ok(versions.every((row) => row.command?.command === 'temcoLearn.site.preview'));
+	assert.deepEqual(versions[0].command?.arguments, [{ project: 't3000', version: '13.0' }], 'a version row does not say which version');
 });
 
-test('a website with no build says so instead of showing an empty group', async () => {
-	const provider = new views.BrowseTree(newReads({ ...snapshot, site: { projects: [] } }));
-	const roots = await provider.getChildren();
-	const [, byProject] = roots;
-	assert.deepEqual((await provider.getChildren(byProject)).map((row) => row.label), ['Nothing yet']);
-	assert.deepEqual([roots[0].label, count(roots[0])], ['Preview the site', '']);
+test('a site with nothing on it says so instead of showing an empty group', async () => {
+	const provider = new views.BrowseTree(newReads({ ...snapshot, site: { projects: [] } }), () => stopped);
+	const [, projects] = await provider.getChildren();
+	assert.deepEqual((await provider.getChildren(projects)).map((row) => row.label), ['Nothing on the site yet']);
+	assert.equal(count(projects), '0 projects');
 });
 
 test('Download is the project name as the category, and its rows carry the size', async () => {
@@ -234,7 +298,7 @@ test('a project is written by its name, without the "docs" its page title ends w
 		site: { projects: [{ id: 'test1-docs', title: 'Test1 docs', section: 'documentation', versions: [{ version: '1.0', pages: [{ href: 'a', title: 'A' }] }] }] },
 		artifacts: [{ title: 'Test1 docs', id: 'test1-docs', folder: 'C:/Temco/test1', artifacts: [{ kind: 'zip', file: 'C:/Temco/test1/dist/Test1.zip', label: 'an archive', opens: undefined, size: 1024, at: Date.now() }] }]
 	};
-	const browse = new views.BrowseTree(newReads(named));
+	const browse = new views.BrowseTree(newReads(named), () => stopped);
 	const [, byProject] = await browse.getChildren();
 	assert.deepEqual((await browse.getChildren(byProject)).map((row) => row.label), ['Test1']);
 	const download = new views.DownloadTree(newReads(named));

@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 interface Publish {
 	publishingTarget(root: string): Promise<{ owner: string; repo: string; base: string } | undefined>;
-	ensureRepo(root: string, output: { appendLine(text: string): void }): Promise<void>;
+	ensureRepo(root: string): Promise<{ owner: string; repo: string; base: string }>;
 	publishSite(root: string, output: { appendLine(text: string): void }): Promise<unknown>;
 }
 
@@ -69,16 +69,25 @@ test('an owner site publishes at the domain root', async () => {
 	}
 });
 
-test('a folder that is not a repository is made one, with the site’s origin', async () => {
+test('a folder that is not a clone is refused, because publishing it would push an empty history', async () => {
 	const folder = mkdtempSync(join(tmpdir(), 'temco-plain-'));
 	try {
 		assert.equal(await publishingTarget(folder), undefined);
-		const said: string[] = [];
-		await ensureRepo(folder, { appendLine: (text: string) => said.push(text) });
-		const target = await publishingTarget(folder);
-		assert.equal(target?.owner, 'temcocontrols');
-		assert.equal(target?.repo, 'docs');
-		assert.equal(said.length, 2, 'the first publish should say what it started and where it points');
+		await assert.rejects(() => ensureRepo(folder), /is not a git clone/u);
+		await assert.rejects(
+			() => publishSite(folder, { appendLine: () => undefined }),
+			/is not a git clone/u
+		);
+	} finally {
+		rmSync(folder, { recursive: true, force: true });
+	}
+});
+
+test('the branch Pages builds from is the one a publish pushes at', async () => {
+	const folder = repository('https://github.com/temcocontrols/temco-learn.git');
+	try {
+		const target = await ensureRepo(folder);
+		assert.equal(target.base, 'https://temcocontrols.github.io/temco-learn/');
 	} finally {
 		rmSync(folder, { recursive: true, force: true });
 	}

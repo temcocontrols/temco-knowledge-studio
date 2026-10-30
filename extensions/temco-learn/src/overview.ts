@@ -8,7 +8,8 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { formatSize, ProjectArtifacts } from './artifacts';
-import { latestOf, sectionTitle, shortName, siteFolder, workRoot } from './site';
+import { latestOf, sectionTitle, shortName, workRoot } from './site';
+import { siteRepo } from './siteRepo';
 import { Snapshot } from './snapshot';
 import { ago } from './state';
 import { callout, commandScript, entryRow, escapeHtml, hero, icon, page, pageColumn, runCommand, section } from './ui';
@@ -80,7 +81,8 @@ const plural = (count: number, one: string, many?: string): string =>
 
 /** The commands a page of this module may draw: a typo is a compile error, not a dead button. */
 type PageCommand =
-	| 'temcoLearn.preview'
+	| 'temcoLearn.site.preview'
+	| 'temcoLearn.site.folder'
 	| 'temcoLearn.previewArtifact'
 	| 'temcoLearn.downloadArtifact'
 	| 'temcoLearn.addBuilds'
@@ -143,8 +145,8 @@ function head(state: Snapshot): string {
 	const published = state.published;
 	const desc =
 		projects === 0
-			? 'Temco Learn publishes the documentation website. Every project that produces a documentation build can be put on it as one of its versions. Nothing is published yet. This page says what is published, what is waiting, and where it lives.'
-			: `Temco Learn publishes the documentation website. Every project that produces a documentation build can be put on it as one of its versions — ${plural(projects, 'project')} ${projects === 1 ? 'is' : 'are'} published today, ${plural(versions, 'version')} and ${plural(pages, 'page')} between them. This page says what is published, what is waiting, and where it lives.`;
+			? "Temco Learn is the documentation website. It is built from its own repository — Markdown pages under six sections, one folder per project and version — and this module runs, builds, previews and publishes that repository. Nothing is on the site yet: add a build, or write a page in it."
+			: `Temco Learn is the documentation website. It is built from its own repository — Markdown pages under six sections, one folder per project and version — and this module runs, builds, previews and publishes that repository. It holds ${plural(projects, 'project')}, ${plural(versions, 'version')} and ${plural(pages, 'page')} today; this page says what is on it, what is waiting, and where it is published.`;
 	const note =
 		published.commit === undefined
 			? { text: 'Never published — the website is not on the internet yet', mark: 'clock' }
@@ -157,7 +159,7 @@ function head(state: Snapshot): string {
 		descWide: true,
 		note,
 		actions: [
-			{ label: 'Preview the Website', command: 'temcoLearn.preview', mark: 'globe', kind: 'primary' },
+			{ label: 'Preview the Website', command: 'temcoLearn.site.preview', mark: 'globe', kind: 'primary' },
 			{ label: 'Publish', command: 'temcoLearn.publish', mark: 'upload' }
 		]
 	});
@@ -298,8 +300,8 @@ function published(state: Snapshot): string {
 			title: shortName(project.title),
 			meta: [plural(project.versions.length, 'version'), plural(pages, 'page'), newest === undefined ? 'not built yet' : `newest ${newest}`].join(' · '),
 			mark: 'book',
-			command: 'temcoLearn.preview',
-			args: { page: `project.html?id=${project.id}` },
+			command: 'temcoLearn.site.preview',
+			args: { project: project.id },
 			go: ''
 		});
 	});
@@ -307,7 +309,7 @@ function published(state: Snapshot): string {
 		title: 'Published projects',
 		desc,
 		rows,
-		acts: link('Open the website', 'temcoLearn.preview', { mark: 'globe' }),
+		acts: link('Open the website', 'temcoLearn.site.preview', { mark: 'globe' }),
 		note: 'A row opens that project on the website.'
 	});
 }
@@ -354,10 +356,10 @@ function publication(state: Snapshot): string {
 	if (published.base === undefined) {
 		return block({
 			title: 'Publication',
-			desc: `The site folder (${siteFolder()}) points at no GitHub repository, so there is nowhere to publish to yet. Publishing makes the repository and pushes the site to its gh-pages branch.`,
+			desc: `The clone (${siteRepo()}) has no GitHub origin, so there is nothing to publish at yet. A publish pushes the site's own repository; it never makes one, because an empty history pushed at a real site is worse than a refusal.`,
 			facts: factsBand([
 				{ title: 'Address', value: 'none yet', mark: 'globe' },
-				{ title: 'Branch', value: 'gh-pages', mark: 'repo' },
+				{ title: 'Branch', value: 'main', mark: 'repo' },
 				{ title: 'Last publish', value: 'never', mark: 'clock' }
 			]),
 			acts: link('Publish', 'temcoLearn.publish', { mark: 'upload' })
@@ -368,15 +370,15 @@ function publication(state: Snapshot): string {
 		published.pending === 0 ? 'nothing — the website matches the last publish' : `${plural(published.pending, 'change')} waiting to be published`;
 	return block({
 		title: 'Publication',
-		desc: `Publishing copies the site folder to the gh-pages branch of ${published.where}, and GitHub Pages serves that branch from its root — so the address never changes. Nothing is forced: every publish is one commit on top of the last, and an earlier one can be restored.`,
+		desc: `Publishing commits the clone and pushes it at main to ${published.where}. GitHub Actions then builds the site from that commit and hands the result to Pages, so the built site is never what is committed — and the address never changes. Nothing is forced: every publish is one commit on top of the last, and an earlier one can be restored.`,
 		facts: factsBand([
 			{ title: 'Address', value: published.base, mark: 'globe', mono: true },
-			{ title: 'Branch', value: 'gh-pages · served from / by GitHub Pages', mark: 'repo' },
+			{ title: 'Branch', value: 'main · built and served by GitHub Actions', mark: 'repo' },
 			{ title: 'Last publish', value: at, mark: 'clock' }
 		]),
 		rows: [fact('Waiting', waiting, 'sync')],
 		acts: [link('Open in browser', 'temcoLearn.openPublished', { mark: 'external' }), link('Publish', 'temcoLearn.publish', { mark: 'upload' })].join(''),
-		note: `The site folder is ${siteFolder()}. The preview serves that same folder, so what reads here is what gets published.`
+		note: `The site is the clone at ${siteRepo()}. The preview runs that same clone, so what reads here is what gets published.`
 	});
 }
 /** The page: what it is, what to do, the workflow, what is published, what a build writes, and where it goes. */

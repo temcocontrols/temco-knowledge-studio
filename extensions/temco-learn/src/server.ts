@@ -54,7 +54,7 @@ export class Server implements vscode.Disposable {
 
 	constructor() {
 		this.status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
-		this.status.command = 'temcoLearn.stop';
+		this.status.command = 'temcoLearn.stopArtifact';
 		this.status.name = 'Temco Learn';
 	}
 

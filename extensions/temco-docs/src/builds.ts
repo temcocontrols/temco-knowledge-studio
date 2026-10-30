@@ -39,7 +39,7 @@ export function registerBuildCommands(
       await buildSiteFor(context, root, output, site);
     }),
 
-    // Preview is the site module's: it owns the reader, the server and the page the reader looks at it in. What stays
+    // Previewing is the site module's: the site is its own repository, and that module runs and shows it. What stays
     // here is the build, and the entry point every menu item has always used.
     vscode.commands.registerCommand('temcoDocs.previewSite', async () => {
       const root = await pickRoot(roots(), 'preview the site for');
@@ -47,7 +47,7 @@ export function registerBuildCommands(
         return;
       }
       await buildSiteFor(context, root, output, site);
-      await vscode.commands.executeCommand('temcoLearn.preview');
+      await vscode.commands.executeCommand('temcoLearn.site.preview');
     }),
 
     vscode.commands.registerCommand('temcoDocs.buildHelp', async () => {

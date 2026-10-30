@@ -123,36 +123,49 @@ create project ─▶ add source ─▶ registry ─▶ write ─▶ validate �
 ## Temco Learn
 
 Temco Learn is its own module (`extensions/temco-learn`, the tenth), because a reader-facing website is not the same job as
-keeping a page in step with the code. One working area — `temcoRepositories.workspaceFolder`, `~/Temco` when unset — holds a
-`site/` folder, and that folder is the whole website a reader opens:
+keeping a page in step with the code. **The website itself is a separate repository** — `temcocontrols/temco-learn`, Vite ·
+React 19 · Fluent UI v9 · Markdown — and this module is a *client* of that checkout: it runs the site's own servers, builds it,
+shows it, writes new builds into it, and commits the result. Nothing about rendering the site lives here any more, so the site
+can be worked on, built and published by someone who never opens the editor.
 
-- the site: `index.html` (one section), `project.html` (one project and its versions), `reader.html` (one version), plus
-  `assets/site.css`, `assets/reader.css` and `assets/site.js`. The shell and styles are copied in from the module on every
-  refresh, so the site can be updated without losing data; the script is `src/siteApp.ts` — TypeScript, because the repository
-  keeps no JavaScript of its own — compiled to `out/siteApp.js` and written in as `assets/site.js`, which is why
-  `site/assets/` holds no script in the repository;
-- `projects.json`: every project with its section, its versions and each version's pages in reading order;
-- one folder per project and version holding a build exactly as it came out (`dist/site`).
+`temcoLearn.siteRepo` names the clone (empty means `~/Temco/temco-learn`). Everything below is a fact about that folder:
 
-**The website carries nothing about running it.** No overview, no management page, no status: a reader sees the six sections,
-a project and its versions, and the pages. Everything about operating the module is an application page or the panel, and the
-brand on every page of the website goes back to Documentation.
+- `content/<project>/site.json` — the project's title, section and summary; `content/<project>/<version>/*.md` — the pages a
+  person writes, with front matter for the title;
+- `public/imported/<project>/<version>/` — a project's own build HTML, copied in as it came out;
+- `public/catalog.json` — the one file both the website and this module read. `npm run catalog` folds the two sources above
+  into it (order, titles, versions, `builtAt`), so the panel cannot list a page the site does not have. A second reader of a
+  second shape is how a panel and a page start disagreeing;
+- `package.json` scripts — `client-dev` (Vite at 3003), `build` (catalog + search index + `tsc` + `vite build`), `serve`
+  (the built site at 1011), `catalog`, `search`, `check`;
+- `.github/workflows/pages.yml` — a push at `main` builds the site and hands `dist` to GitHub Pages. The built site is never
+  committed: what is published is the source and the catalog it generates.
 
-`Add to Site` copies a build in, takes the project name from the build's own `<title>`, and records its pages in the order the
-build's `index.html` links them; only the version is asked. `Preview` serves that folder on loopback and shows it as a page —
-the website a reader would see, with the same URLs the published site will have. `Publish` commits the folder and pushes
-`gh-pages`.
+**The module runs the site, it does not re-implement it.** `src/siteRunner.ts` spawns the repository's own scripts through
+`npm`, tracks one server at a time (`preview` = `serve`, `development` = `client-dev`), and treats "starting" as distinct from
+"running": it polls the address until it answers, so a frame is never pointed at a port with nothing behind it. `Stop` kills
+the process tree and waits for the port to go quiet, because `npm` hands the server to a child that can outlive the kill. A
+`dist` that was never built is built before the first preview, rather than served as an empty folder.
+
+**`Preview` is a panel framing the running site** (`src/preview.ts`, `temcoLearn.site.preview`), with a bar that says what is
+running (`running · 1011`), then `Reload · Browser · Stop` — no address bar, because the address is not a question: the site's
+own scripts own their ports, and a person who wants the site is not choosing a URL. Closing the panel does not stop the
+server, the way closing a browser tab does not stop a website; `Stop` does. `Add to Site` copies a build into
+`public/imported/<project>/<version>/`, writes the `site.json` the catalog needs (the title comes from the build's own
+`<title>`), runs `npm run catalog`, and shows the new version — only the version is asked, and it is asked once, in the
+version box, never in a notification. `Publish` commits the clone and pushes it at `main`; it refuses a folder that is not a
+clone instead of initialising one, because an empty history pushed at a real site is worse than a refusal.
 
 **Overview is an application page** (`src/overview.ts`, view type `temcoLearn.overview`), drawn with `temco-ui` the way
-every other page of ours is, and it is never published. It opens by saying what the module is, in three sentences — the
-website, the projects that feed it, and what a reader opens — with one note line for the publish state and the two ways in.
-There is deliberately **no figures row**: a number without a sentence around it was the thing nobody could read. Then, in
-this order: the page's single callout (what needs doing, or that nothing does, or that nothing has been built yet); the flow
-as three numbered option cards — *Build a project · Add it to the website · Publish the website* — each with what it writes,
-its live count on the button, and the recommended step drawn on the brand tint; **Projects on the website**, one row per
-project ending in *All versions*; **What each build wrote**, one row per project listing every output with its size and the two
-acts (*Look at it · Save a copy*); and **Where it goes**, the address, the branch and the last publish. The module therefore
-depends on `temcocontrols.temco-ui`, exactly as `temco-docs` does.
+every other page of ours is, and it is never published. It opens by saying what the module is — the documentation website,
+built from its own repository, Markdown under six sections, one folder per project and version — then counts what is on it
+today. There is deliberately **no figures row**: a number without a sentence around it was the thing nobody could read.
+Then, in this order: the page's single callout (what needs doing, or that nothing does, or that nothing has been built yet);
+the flow as four numbered option cards — *Build · Add · Publish · Download* — each ending in a link that performs it;
+**Published projects**, one row per project ending in a link to the site; **Build outputs**, one row per project that jumps to
+the folder its build wrote; and **Publication**, the address, the branch (`main · built and served by GitHub Actions`) and
+the last publish on one line, with what is waiting under them. The module therefore depends on `temcocontrols.temco-ui`,
+exactly as `temco-docs` does.
 
 A build is not one thing. `temco-docs` writes the site (`dist/docs` or `dist/site`), an offline help file (`.chm`, inside the
 repository or in a `HelpDocs` folder beside it), often a `.pdf`, and the exports it keeps in `dist/` — a zip of the site, a Word
@@ -170,50 +183,37 @@ a row.
 | view | rows | the grey words |
 |---|---|---|
 | **Overview** | one row, `Temco Learn`, which opens the page | — |
-| **Browse** | `Preview the site` (the whole site at one address), **Preview by project** (a project, then its versions) | projects, versions |
+| **Browse** | **Site** (`Preview`, `Development`, `Open in Browser`, `Build`, `Install Dependencies`, `Stop`, `Source Folder`), then **Projects** (a project, then its versions) | what the server is doing, or the folder's name; versions per project, pages per version |
 | **Download** | a project, then the files its build wrote (this view starts small: `initialSize: 2`) | files per project, then their size |
 | **Next steps** | Waiting to be added (each build under it), `Publish`, Build a project | builds waiting, changes waiting |
 
-**Browse** separates the two questions a person asks of a site. **Preview the site** is the thing readers open — the six
-sections over every published project, at one address — and it carries no count: a page total beside it is noise. **Preview by
-project** (a library of projects) is the same content one project at a time (project → version → pages), which is how you check
-whether one page is out; the first project is open by default, so the view never reads as a list of shut doors, and neither a
-version nor the site row carries a page count. A project row writes the project's **name**, without the "docs" a build's own
-page title usually ends with (`Test1 docs` reads as `Test1`); the title itself is never rewritten, because the site is keyed by
-it. There is deliberately no group of `dist` builds: the build as written is a file on disk, which is the page's *Build
-outputs* and the Download view's business, not something to read here.
-
-**The site itself** is read by people who never see this application, so it follows Microsoft Learn rather than the editor: every
-page runs the reader's full width (`--gutter` is the only side margin), the title band bleeds past it, cards and rows are
-surfaces with no frame around them, and a section title is a small upper-case label (`RECENTLY UPDATED`), not a headline. A
-section lists its projects as a category of cards with no "Projects" heading above them: the cards are the category.
-
-**The project page is a real application** (`webview/preview/`, React + Fluent UI), not a page drawn by string concatenation.
-`scripts/build-webview.mts` bundles it with esbuild into `out/webview/preview/preview.js|css` (built output, never committed),
-and `installSite` copies those two files into `<site>/assets/` beside `site.js`. `out/` is build output that `compile-extension` cleans,
-so the root `npm run build-webviews` builds this bundle with the others, packaging builds it through `vscode:prepublish`, and
-`installSite` builds it once itself when it is missing — a source tree compiled after the last bundle still opens the page. The theme is Fluent's neutral theme seeded with
-Azure's blue and a Segoe face, and the page keeps the bundle's own accessibility: a real `h1`, a breadcrumb nav, buttons that
-are anchors, and a page that says so when the project is not on the site. The reader (`reader.html`) stays a classic script,
-because it only moves an iframe and reads headings out of it.
+**Browse** answers two questions, in that order. **Site** is the repository itself, and its description is the answer to
+"is it running?": `running · 1011`, `starting…`, `stopped`, `failed` (with the reason in the tooltip). A clone that is not
+there collapses to one row — `Choose the Site Folder…` — because a fresh machine has exactly one question to answer. **Projects**
+is the site as a reader gets it, one project at a time: a project row opens its newest version and a version row opens that
+version, both at `#/<project>/<version>/` on the running server, starting it first if it is stopped. The first project is open
+by default, so the view never reads as a list of shut doors, and a project writes the project's **name**, without the "docs" a
+build's own page title usually ends with (`Test1 docs` reads as `Test1`). There is deliberately no group of `dist` builds: the
+build as written is a file on disk, which is the page's *Build outputs* and the Download view's business, not something to read
+here.
 
 **Publishing has a page** (`src/publishPage.ts`, `temcoLearn.publishing`), opened by the `Publish` row: the branch and the
-address, the four steps of a publish with the act that performs each, how much is waiting, and the lines the last attempt
+address, the steps of a publish with the act that performs each, how much is waiting, and the lines the last attempt
 printed — `src/publishLog.ts` keeps them for the window, and `publishSite` writes to a sink that feeds both the output channel
 and that log. **Downloads has a page** (`src/downloadPage.ts`, `temcoLearn.downloads`), opened by the Download view's empty row
 and by its title bar: what a build writes, where each kind lands, and the files that are on this machine.
-**Next steps** is where the acts live, and publishing is one of them: `Publish` pushes the site folder to `gh-pages` the first
-time and again after a change, and the words beside it are how many changes are waiting (`up to date` when none are). It is an
-act, so it belongs with the other acts, not with the site it publishes.
+**Next steps** is where the acts live; `Publish` sits there first and again after every change, and the words beside it are how
+many changes are waiting (`up to date` when none are). It is an act, so it belongs with the other acts, not with the site it
+publishes.
 
 Nothing is invented: a project with no `.chm` has no `.chm` row, an empty view says so in one row, and "Nothing to do"
-appears only when every build is on the website and everything is published. Publishing state is read from git
-(`src/state.ts`), so two machines never disagree about what is out, and the panel never asks for a folder: the folder is
-the convention, not a question.
+appears only when every build is on the site and everything is published. Publishing state is read from git
+(`src/state.ts`) in the clone, so two machines never disagree about what is out.
 
-Answers appear in the **preview's own strip**, under its address bar, and never in a notification: adding a build, building,
+Answers appear in the **preview's own strip**, under its bar, and never in a notification: adding a build, building,
 publishing, and every failure say what happened there, with at most one thing to do next. Only the *inputs* stay native — the
-version box, and the build picker when a row did not name its build.
+version box, and the build picker when a row did not name its build, and the folder dialog for a clone that has not been
+chosen yet.
 
 ## Design system
 
@@ -240,8 +240,9 @@ version box, and the build picker when a row did not name its build.
 1. **Generator** ✅ — `src/siteRender.ts` (pure: slugs, page shell, index, sitemap, one stylesheet), `src/site.ts` (host:
    read, render, write, copy media), `scripts/check-site.mts` (10 cases); `Build the Site` falls back to it.
 2. **Deploy** ✅ — `src/pages.ts` (the remote decides the sitemap's address) and `src/git.ts` shared with the diff command.
-   The push itself lives in `temco-learn` (`src/publish.ts`: `ensureRepo` for a folder that is not a repository yet, then a
-   plain, never-forced `git push origin HEAD:gh-pages`; `scripts/check-publish.mts`, 4 cases against a real bare repository);
+   The push of a site lives in `temco-learn` (`src/publish.ts`: `ensureRepo` refuses a folder that is not a clone, then a
+   plain, never-forced `git push origin HEAD:main`; `scripts/check-publish.mts`, 5 cases against real throwaway
+   repositories);
    `temcoDocs.publishSite` stays behind as a redirect. Still owed: the status-bar state and the confirmation screen S12.
 3. **Export** ✅ — `src/zip.ts` (a real archive writer: store, deflate, CRC32), `src/export.ts` (site zip, single-file
    page, Markdown bundle; `temcoDocs.export` + three commands), `scripts/check-export.mts` (5 cases that read the archive

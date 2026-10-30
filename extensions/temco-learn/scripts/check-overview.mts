@@ -143,8 +143,9 @@ const feet = (html: string): string[] => [...html.matchAll(/<div class="az-block
 
 test('the page opens by saying what this module is, counting from the data and naming no project in its prose', () => {
 	const html = overview.html(state());
-	assert.match(html, /Temco Learn publishes the documentation website\./u);
-	assert.match(html, /2 projects are published today, 3 versions and 4 pages between them\./u);
+	assert.match(html, /Temco Learn is the documentation website\./u);
+	assert.match(html, /It is built from its own repository/u);
+	assert.match(html, /It holds 2 projects, 3 versions and 4 pages today/u);
 	assert.equal(html.includes('az-lead__stats'), false, 'the page opens on a row of figures');
 	assert.equal(html.includes('az-numbers'), false, 'the page draws a row of numbers');
 	const prose = html.slice(0, html.indexOf('az-callout'));
@@ -181,13 +182,13 @@ test('Published projects lists every project, and a row opens that project on th
 	assert.match(html, /2 projects are published in Documentation, 3 versions and 4 pages between them\./u);
 	const rows = rowsOf(html);
 	assert.deepEqual(
-		rows.filter((row) => row.command === 'temcoLearn.preview').map((row) => [row.title, row.meta]),
+		rows.filter((row) => row.command === 'temcoLearn.site.preview').map((row) => [row.title, row.meta]),
 		[
 			['T3000', '2 versions · 3 pages · newest 13.0'],
 			['BACnet', '1 version · 1 page · newest 4.2']
 		]
 	);
-	assert.match(html, /data-args="\{&quot;page&quot;:&quot;project\.html\?id=t3000&quot;\}"/u);
+	assert.match(html, /data-args="\{&quot;project&quot;:&quot;t3000&quot;\}"/u);
 	assert.match(html, /A row opens that project on the website\./u);
 });
 
@@ -207,7 +208,8 @@ test('Build outputs lists the projects, and a row opens that project’s build f
 
 test('Publication puts the address, the branch and the last publish on one line, and keeps the rest', () => {
 	const html = overview.html(state());
-	assert.match(html, /Publishing copies the site folder to the gh-pages branch of temcocontrols\/docs/u);
+	assert.match(html, /Publishing commits the clone and pushes it at main to temcocontrols\/docs/u);
+	assert.match(html, /GitHub Actions then builds the site from that commit/u);
 	assert.match(html, /Nothing is forced: every publish is one commit on top of the last/u);
 	const cells = [...html.matchAll(/<span class="az-fact__title">(?:\[[a-z-]+\])?([^<]*)<\/span><span class="az-fact__value[^"]*">([^<]*)</gu)].map((match) => [
 		match[1],
@@ -215,12 +217,12 @@ test('Publication puts the address, the branch and the last publish on one line,
 	]);
 	assert.deepEqual(cells, [
 		['Address', 'https://temcocontrols.github.io/docs/'],
-		['Branch', 'gh-pages · served from / by GitHub Pages'],
+		['Branch', 'main · built and served by GitHub Actions'],
 		['Last publish', '6f2c1ab, 12 min ago']
 	]);
 	assert.equal(feet(html).at(-1)?.includes('Open in browser'), true);
 	assert.match(html, /Waiting.*3 changes waiting to be published/su);
-	assert.match(html, /The site folder is .*site.* The preview serves that same folder/u);
+	assert.match(html, /The site is the clone at .* The preview runs that same clone/u);
 });
 test('the callout says what needs doing, or that nothing does, or that nothing exists yet', () => {
 	assert.match(overview.html(state()), /What needs doing/u);
@@ -233,7 +235,7 @@ test('with nothing built and nothing published, every part says so and still off
 	assert.match(html, /Nothing has been built yet/u);
 	assert.match(html, /Nothing is published yet\. A project appears here/u);
 	assert.match(html, /No build output was found\./u);
-	assert.match(html, /there is nowhere to publish to yet/u);
+	assert.match(html, /there is nothing to publish at yet/u);
 	assert.match(html, /Address.*none yet/su);
 	assert.deepEqual(rowsOf(html).map((row) => row.title), [], 'an empty part still drew a row');
 	const cells = [...html.matchAll(/<span class="az-fact__title">(?:\[[a-z-]+\])?([^<]*)<\/span><span class="az-fact__value[^"]*">([^<]*)</gu)].map((match) => [
@@ -242,7 +244,7 @@ test('with nothing built and nothing published, every part says so and still off
 	]);
 	assert.deepEqual(cells, [
 		['Address', 'none yet'],
-		['Branch', 'gh-pages'],
+		['Branch', 'main'],
 		['Last publish', 'never']
 	]);
 	const last = feet(html).at(-1) ?? '';

@@ -67,9 +67,51 @@
         "category": "Temco Learn"
       },
       {
-        "command": "temcoLearn.preview",
-        "title": "Preview",
+        "command": "temcoLearn.site.preview",
+        "title": "Preview the Site",
         "icon": "$(open-preview)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.site.dev",
+        "title": "Start the Development Server",
+        "icon": "$(code)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.site.build",
+        "title": "Build the Site",
+        "icon": "$(tools)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.site.install",
+        "title": "Install the Site Dependencies",
+        "icon": "$(package)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.site.stop",
+        "title": "Stop the Site",
+        "icon": "$(debug-stop)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.stopArtifact",
+        "title": "Stop Serving This Build Output",
+        "icon": "$(debug-stop)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.site.folder",
+        "title": "Open the Site Folder",
+        "icon": "$(folder-opened)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.site.choose",
+        "title": "Choose the Site Folder",
+        "icon": "$(folder-library)",
         "category": "Temco Learn"
       },
       {
@@ -115,15 +157,9 @@
         "category": "Temco Learn"
       },
       {
-        "command": "temcoLearn.open",
-        "title": "Open in Browser",
+        "command": "temcoLearn.site.open",
+        "title": "Open the Site in the Browser",
         "icon": "$(link-external)",
-        "category": "Temco Learn"
-      },
-      {
-        "command": "temcoLearn.stop",
-        "title": "Stop the Preview",
-        "icon": "$(debug-stop)",
         "category": "Temco Learn"
       },
       {
@@ -221,37 +257,24 @@
     "configuration": {
       "title": "Temco Learn",
       "properties": {
-        "temcoLearn.site": {
+        "temcoLearn.siteRepo": {
           "type": "string",
           "default": "",
-          "description": "The folder the site lives in. Empty means `site` beside the projects, in the working area (`temcoRepositories.workspaceFolder`, or `~/Temco`)."
+          "description": "The clone of the site repository (temcocontrols/temco-learn): React, Fluent UI and Markdown, built by Vite. Empty means `~/Temco/temco-learn`."
         }
       }
     }
   },
   "scripts": {
     "compile": "tsc -p .",
-    "vscode:prepublish": "npm run build-webview",
-    "build-webview": "node --experimental-strip-types scripts/build-webview.mts",
     "check-commands": "node --experimental-strip-types scripts/check-commands.mts",
-    "check-site": "node --experimental-strip-types scripts/check-site.mts",
-    "check-app": "node --experimental-strip-types scripts/check-app.mts",
     "check-state": "node --experimental-strip-types scripts/check-state.mts",
     "check-publish": "node --experimental-strip-types scripts/check-publish.mts",
     "check-overview": "node --experimental-strip-types scripts/check-overview.mts",
-    "check-details": "node --experimental-strip-types scripts/check-details.mts",
     "check-artifacts": "node --experimental-strip-types scripts/check-artifacts.mts",
     "check-panel": "node --experimental-strip-types scripts/check-panel.mts"
   },
   "extensionDependencies": [
     "temcocontrols.temco-ui"
-  ],
-  "devDependencies": {
-    "@fluentui/react-components": "^9.74.11",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "esbuild": "0.28.2",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
-  }
+  ]
 }

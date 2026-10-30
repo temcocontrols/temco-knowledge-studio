@@ -873,13 +873,11 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
     // place the two meet — a command, which may be missing, never an import.
     vscode.commands.registerCommand('temcoDocs.page.open', (target?: unknown) => openInEditor(uriFrom(target) ?? frontUri())),
 
-    // The reader is the `temco-learn` module's: it owns the shell, the portal and the loopback server. What is kept
-    // here is the entry point — a command that may be missing, never an import — so every button and menu item that
-    // has always pointed at the reader still lands somewhere.
-    vscode.commands.registerCommand('temcoDocs.openReader', async (destination?: unknown) => {
-      await vscode.commands.executeCommand('temcoLearn.preview', {
-        page: typeof destination === 'string' && destination.length > 0 ? destination : undefined
-      });
+    // The reader is the `temco-learn` module's: the site is its own repository, and that module runs it and shows it.
+    // What is kept here is the entry point — a command that may be missing, never an import — so every button and menu
+    // item that has always pointed at the reader still lands somewhere.
+    vscode.commands.registerCommand('temcoDocs.openReader', async () => {
+      await vscode.commands.executeCommand('temcoLearn.site.preview');
     }),
     // Importing a document set: the conversion the project wizard calls after it has a destination.
     registerImportCommand(),
@@ -1068,17 +1066,14 @@ export function activate(context: vscode.ExtensionContext): TemcoDocsApi {
         await openPublished(destination);
       }
     }),
-    // Serving is the `temco-learn` module's job now: it owns the loopback server, the reader and the portal. What is
+    // Serving is the `temco-learn` module's job now: the site is its own repository, and that module runs it. What is
     // kept here are the entry points the rest of the application has always called, as redirects.
-    vscode.commands.registerCommand('temcoDocs.servePublished', async (destination?: unknown) => {
-      const asked = typeof destination === 'object' && destination !== null ? destination as { entry?: unknown } : undefined;
-      await vscode.commands.executeCommand('temcoLearn.preview', {
-        page: typeof asked?.entry === 'string' && asked.entry.length > 0 ? asked.entry : undefined
-      });
+    vscode.commands.registerCommand('temcoDocs.servePublished', async () => {
+      await vscode.commands.executeCommand('temcoLearn.site.preview');
     }),
-    vscode.commands.registerCommand('temcoDocs.stopServing', () => vscode.commands.executeCommand('temcoLearn.stop')),
-    // The Temco Learn portal: every product of the site, as a reader sees it.
-    vscode.commands.registerCommand('temcoDocs.openLearn', () => vscode.commands.executeCommand('temcoLearn.preview')),
+    vscode.commands.registerCommand('temcoDocs.stopServing', () => vscode.commands.executeCommand('temcoLearn.site.stop')),
+    // The Temco Learn site: every product on it, as a reader sees it.
+    vscode.commands.registerCommand('temcoDocs.openLearn', () => vscode.commands.executeCommand('temcoLearn.site.preview')),
     // An artifact is a file the build wrote, so opening one is opening a file — not a copy the platform keeps.
     vscode.commands.registerCommand('temcoDocs.openArtifact', async (file?: unknown) => {
       if (typeof file !== 'string' || file.length === 0) {

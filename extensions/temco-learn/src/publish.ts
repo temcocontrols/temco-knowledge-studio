@@ -1,31 +1,25 @@
-// Publishing the site: one folder, one commit, one push.
+﻿// Publishing the site: one commit, one push.
 //
-// The site folder *is* the site — the app at its root, one folder per project beside it — and the repository that
-// GitHub Pages serves is that folder (`temcocontrols/docs`). So publishing is a git operation and nothing else: commit
-// what changed, and push `HEAD` at `gh-pages`.
+// The site is its own repository (`temcocontrols/temco-learn`), and the branch is the one the two of us work on. What
+// gets published is the *source*: content, the catalog it generates, and the code that renders it. GitHub Actions builds
+// the site from that commit and hands the result to Pages, so publishing is a commit and a push and the build stays
+// where it already is - in CI, with its own log.
 //
-// The first publish arranges what a first publish always needs: a repository in the folder, and the remote the account
-// serves Pages from. Nothing is cloned, because the folder already holds the site — a clone would have to be merged
-// into it, and the site folder is the truth here rather than a copy of one.
-//
-// Never a forced push. If the branch carries work this clone does not know about, that is a fact to report — the
-// commit is in the repository either way, and the next publish will be a fast-forward.
+// Never a forced push. If the branch carries work this clone does not know about, that is a fact to report - the commit
+// is local either way, and the next publish is a fast-forward after a pull.
 
 import { git } from './git';
 
 /**
- * Where a publish says what it is doing: the output channel, and — because a page shows it — whatever else is listening.
+ * Where a publish says what it is doing: the output channel, and - because a page shows it - whatever else is listening.
  * The narrow shape is deliberate: publishing knows about lines, not about the editor.
  */
 export interface PublishSink {
 	appendLine(line: string): void;
 }
 
-/** The branch GitHub Pages serves for a project repository. */
-const BRANCH = 'gh-pages';
-
-/** Where the site belongs when the folder is not a repository yet: the account Pages serves it from. */
-const REMOTE = 'https://github.com/temcocontrols/docs.git';
+/** The branch Pages builds from, and the one the repository is worked on. */
+const BRANCH = 'main';
 
 /** Where the folder publishes to, and what to call it. */
 export interface PublishingTarget {
@@ -53,9 +47,9 @@ export async function publishingTarget(root: string): Promise<PublishingTarget |
 		const owner = match[1];
 		const repo = match[2];
 		const base =
-			repo.toLowerCase() === `${owner.toLowerCase()}.github.io`
-				? `https://${owner.toLowerCase()}.github.io/`
-				: `https://${owner.toLowerCase()}.github.io/${repo}/`;
+			repo.toLowerCase() === (owner + '.github.io').toLowerCase()
+				? 'https://' + owner.toLowerCase() + '.github.io/'
+				: 'https://' + owner.toLowerCase() + '.github.io/' + repo + '/';
 		return { root: top, owner, repo, base };
 	} catch {
 		// Not a repository, no `origin`, or no `git` on the path: publishing is simply not configured yet.
@@ -73,53 +67,50 @@ export interface Published {
 }
 
 /**
- * The site folder as a publishing clone: a repository with an `origin`.
+ * The site repository, checked before anything is committed.
  *
- * A folder that is already a repository is left alone — its remote is the account's decision, not this module's. A
- * folder that is not gets one, because the alternative is a publish that fails with "there is nowhere to publish to"
- * on the one machine that has never published before.
+ * Nothing is initialised here: the repository exists, and a publish that `git init`s a fresh one in a folder which only
+ * looks similar would push an empty history at a real site. Saying so is the useful answer.
  */
-export async function ensureRepo(root: string, output: PublishSink): Promise<void> {
+export async function ensureRepo(root: string): Promise<PublishingTarget> {
 	try {
 		await git(root, ['rev-parse', '--git-dir']);
 	} catch {
-		output.appendLine('[publish] the site folder was not a repository; starting one');
-		await git(root, ['init']);
+		throw new Error(root + ' is not a git clone. Clone temcocontrols/temco-learn there first.');
 	}
-	try {
-		await git(root, ['remote', 'get-url', 'origin']);
-	} catch {
-		output.appendLine(`[publish] no origin; publishing to ${REMOTE}`);
-		await git(root, ['remote', 'add', 'origin', REMOTE]);
+	const target = await publishingTarget(root);
+	if (target === undefined) {
+		throw new Error('this clone has no GitHub `origin`, so there is nowhere to publish to');
 	}
+	return target;
 }
 
 /**
- * Commit the site folder and push it at `gh-pages`.
+ * Commit what changed and push it at the branch Pages builds from.
  *
- * The commit message names the date rather than a version: the folder holds several projects, each with its own
+ * The commit message names the date rather than a version: the repository holds several projects, each with its own
  * versions, and a message that claims one of them would be wrong about the others.
  */
 export async function publishSite(root: string, output: PublishSink): Promise<Published> {
-	await ensureRepo(root, output);
-	const target = await publishingTarget(root);
-	if (target === undefined) {
-		throw new Error('this folder has no GitHub `origin`, so there is nowhere to publish to');
-	}
+	const target = await ensureRepo(root);
 
 	const changed = (await git(target.root, ['status', '--porcelain'])).trim();
 	let commit = '';
 	if (changed === '') {
 		commit = (await git(target.root, ['rev-parse', '--short', 'HEAD']).catch(() => '')).trim();
 	} else {
-		output.appendLine(`[publish] ${changed.split('\n').length} path(s) to commit`);
+		output.appendLine('[publish] ' + String(changed.split('\n').length) + ' path(s) to commit');
 		await git(target.root, ['add', '--all']);
-		await git(target.root, ['-c', 'user.name=Temco Learn', '-c', 'user.email=learn@temcocontrols.com', 'commit', '-m', `docs: publish the site (${new Date().toISOString().slice(0, 10)})`]);
+		await git(target.root, [
+			'-c', 'user.name=Temco Learn',
+			'-c', 'user.email=learn@temcocontrols.com',
+			'commit', '-m', 'docs: publish the site (' + new Date().toISOString().slice(0, 10) + ')'
+		]);
 		commit = (await git(target.root, ['rev-parse', '--short', 'HEAD'])).trim();
 	}
 
-	output.appendLine(`[publish] pushing ${commit} to ${target.owner}/${target.repo}@${BRANCH}`);
-	await git(target.root, ['push', 'origin', `HEAD:${BRANCH}`]);
+	output.appendLine('[publish] pushing ' + commit + ' to ' + target.owner + '/' + target.repo + '@' + BRANCH);
+	await git(target.root, ['push', 'origin', 'HEAD:' + BRANCH]);
 
 	return { base: target.base, commit, files: changed === '' ? 0 : changed.split('\n').length, unchanged: changed === '' };
 }
