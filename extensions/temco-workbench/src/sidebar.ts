@@ -34,21 +34,18 @@ interface Group {
 
 const GROUPS: Group[] = [
 	{
-		id: 'temcoWorkbench.settingsProfile',
-		title: 'Profile',
+		// One group, ordered from the window outward: the window itself, the work it keeps, what runs inside it, what
+		// drafts, what ships, and last how the product presents itself. A row is a name and nothing else — the sentence
+		// that says what it changes is the tooltip, so the list reads as six words rather than six paragraphs.
+		id: 'temcoWorkbench.settings',
+		title: 'Settings',
 		rows: [
-			{ label: 'General', note: 'the window, its working folder, diagnostics and updates', icon: 'gear', command: 'temcoWorkbench.settings.general' },
+			{ label: 'General', note: 'its look, what it opens with, where work is kept, what it reports', icon: 'gear', command: 'temcoWorkbench.settings.general' },
 			{ label: 'Repositories', note: 'the default enterprise, where copies are cloned, and the GitHub token', icon: 'repo', command: 'temcoRepositories.settings' },
-			{ label: 'AI Models', note: 'what this profile loads, and what it may read', icon: 'sparkle', command: 'temcoWorkbench.settings.ai' }
-		]
-	},
-	{
-		id: 'temcoWorkbench.settingsPlatform',
-		title: 'Platform',
-		rows: [
-			{ label: 'Modules', note: 'the built-in extensions that ship with the platform', icon: 'package', command: 'temcoWorkbench.settings.modules', countKey: 'modules' },
-			{ label: 'Branding', note: 'the mark, the theme and the identity', icon: 'paintcan', command: 'temcoWorkbench.settings.branding' },
-			{ label: 'Publishing', note: 'where a release goes and what it may overwrite', icon: 'cloud-upload', command: 'temcoWorkbench.settings.publishing' }
+			{ label: 'Modules', note: 'the modules loaded into this window, and what each owns', icon: 'package', command: 'temcoWorkbench.settings.modules' },
+			{ label: 'AI Models', note: 'what drafts, how much it reads, and what may leave the machine', icon: 'sparkle', command: 'temcoWorkbench.settings.ai' },
+			{ label: 'Publishing', note: 'where a release goes and what it may overwrite', icon: 'cloud-upload', command: 'temcoWorkbench.settings.publishing' },
+			{ label: 'Branding', note: 'the mark, the colour roles and the identity', icon: 'paintcan', command: 'temcoWorkbench.settings.branding' }
 		]
 	}
 ];

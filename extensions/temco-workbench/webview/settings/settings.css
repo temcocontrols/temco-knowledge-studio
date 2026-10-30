@@ -168,6 +168,58 @@ body,
 	border-top: 1px solid var(--border);
 }
 
+/* A row's own aside: the namespace and state of a module, beside its name rather than in a column of its own. */
+.setting-badge {
+	margin-left: 8px;
+	color: var(--ink-3);
+	font-size: 11px;
+	font-weight: 400;
+	white-space: nowrap;
+}
+
+/* The application mark at three sizes: the same drawing, scaled, in the identity's own blue. */
+.brand-mark {
+	display: inline-grid;
+	place-items: center;
+	background: #224e7a;
+	color: #fff;
+	font-weight: 700;
+	font-family: var(--font-ui);
+}
+
+/* The five colour roles, as swatches: a theme is these five and nothing else. */
+.brand-roles {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: var(--sp-3);
+	justify-content: flex-end;
+}
+
+.brand-role {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--ink-3);
+	font-size: 11.5px;
+	white-space: nowrap;
+}
+
+.brand-role__chip {
+	width: 14px;
+	height: 14px;
+	border-radius: 3px;
+}
+
+/* The one callout that is a warning rather than a note. */
+.az-callout--warn {
+	border-color: var(--warn-ink);
+	background: color-mix(in srgb, var(--warn-ink) 8%, transparent);
+}
+
+.az-callout--warn .az-callout__icon {
+	color: var(--warn-ink);
+}
+
 @media (max-width: 640px) {
 	.az-entry {
 		grid-template-columns: 26px minmax(0, 1fr);

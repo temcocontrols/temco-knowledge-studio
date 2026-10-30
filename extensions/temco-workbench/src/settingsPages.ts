@@ -1,13 +1,13 @@
-// Settings — the five surfaces the mock draws, on the shared page kit.
+// Settings — five pages, one bundle.
 //
-// Rebuilt from `docs/mock/js/views.platform.js` (`settings/general`, `settings/modules`, `settings/branding`,
-// `settings/ai`, `settings/publishing`).
+// The pages are Fluent UI in a webview (`webview/settings/`), drawn in the house page language, so the host's half is narrow:
+// read the facts a page needs, hand the webview one state, and answer its three messages. A write is a message; the answer is
+// a new state and never a new document, so a colour that moves does not throw away the reader's scroll or focus.
 //
-// **A control writes.** Two kinds of row sit on these pages and each is honest about which it is: a row backed by a
-// real editor setting writes that setting through the configuration API, so the window obeys it at once; a row this
-// build has no setting for keeps its value in `settingsStore.ts` and the page's foot says so. A form whose checkbox
-// springs back would be worse than no form, and a form that claimed to have changed the theme when it had not would be
-// worse still.
+// A control writes. Two kinds of row sit on these pages and each is honest about which it is: a row backed by a real editor
+// setting writes that setting through the configuration API, so the window obeys it at once; a row this build has no setting
+// for keeps its value in `settingsStore.ts` and the page's own band says so. A form whose checkbox springs back would be worse
+// than no form, and a form that claimed to have changed the theme when it had not would be worse still.
 
 import { execFile } from 'child_process';
 import * as path from 'path';
@@ -16,7 +16,7 @@ import { ARTIFACTS, MODULES, ModuleRow, ROLES } from './settingsSample';
 import {
 	ContextWindow, publishedArtifacts, resetKeys, set, setArtifact, SettingsRegister, UpdateChannel, values
 } from './settingsStore';
-import { commandScript, escapeHtml as esc, icon, page, pageColumn } from './ui';
+import { pageColumn } from './ui';
 
 export const SETTINGS_GENERAL_VIEW_TYPE = 'temcoWorkbench.settings.general';
 export const SETTINGS_MODULES_VIEW_TYPE = 'temcoWorkbench.settings.modules';
@@ -24,50 +24,193 @@ export const SETTINGS_BRANDING_VIEW_TYPE = 'temcoWorkbench.settings.branding';
 export const SETTINGS_AI_VIEW_TYPE = 'temcoWorkbench.settings.ai';
 export const SETTINGS_PUBLISHING_VIEW_TYPE = 'temcoWorkbench.settings.publishing';
 
-// The General page's bundle, and the one state it draws.
-//
-// The page is Fluent UI in a webview, so the extension host's job is narrow: build the bundle when a source tree has none,
-// hand the webview the two files, and answer every message with a state read from the configuration. Nothing here draws a
-// control; `webview/settings/` does that.
+/** The five pages the one bundle draws. The id is also the key the page's state arrives under. */
+type SettingsPage = 'general' | 'modules' | 'branding' | 'ai' | 'publishing';
 
 /** The bundle's name, under `out/webview/settings/`. `scripts/build-webview.mts` writes these two files. */
 const BUNDLE_FOLDER = ['out', 'webview', 'settings'];
 const BUNDLE = 'settings';
 
-/** The one page the bundle draws. A second bundled page would be a second entry point, not a flag. */
-const BUNDLED = 'general';
+/** The pages, in the order the side bar lists them. */
+const PAGES: { id: SettingsPage; viewType: string; title: string }[] = [
+	{ id: 'general', viewType: SETTINGS_GENERAL_VIEW_TYPE, title: 'General' },
+	{ id: 'modules', viewType: SETTINGS_MODULES_VIEW_TYPE, title: 'Modules' },
+	{ id: 'branding', viewType: SETTINGS_BRANDING_VIEW_TYPE, title: 'Branding' },
+	{ id: 'ai', viewType: SETTINGS_AI_VIEW_TYPE, title: 'AI Models' },
+	{ id: 'publishing', viewType: SETTINGS_PUBLISHING_VIEW_TYPE, title: 'Publishing' }
+];
 
-/** Every row on the page, and which of them write an editor setting. The two counts in the strip come from here. */
-const ROWS = ['theme', 'start', 'breadcrumbs', 'workingFolder', 'telemetry', 'updateChannel'] as const;
+/* ------------------------------------------------------------------ what each page is told */
+
+/** Every row on the General page, and which of them write an editor setting. The two counts come from here. */
+const GENERAL_ROWS = ['theme', 'start', 'breadcrumbs', 'workingFolder', 'telemetry', 'updateChannel'] as const;
 const EDITOR_SETTINGS = new Set(['theme', 'start', 'breadcrumbs', 'telemetry']);
 
-/** What the bundled page draws. Its own shape, because the webview is a separate compilation with its own tsconfig. */
-interface GeneralView {
-	theme: string;
-	start: string;
-	breadcrumbs: boolean;
-	telemetry: boolean;
-	workingFolder: string;
-	channel: string;
-	lastChanged: string;
-	realSettings: number;
-	totalSettings: number;
+/** The startup views the manifest declares, in the order a person meets them. */
+const START_OPTIONS = [
+	{ value: 'welcome', label: 'Welcome' },
+	{ value: 'project', label: 'The project' },
+	{ value: 'page', label: 'The last page' },
+	{ value: 'home', label: 'Overview' },
+	{ value: 'none', label: 'Nothing' }
+];
+
+const configuration = (section: string): vscode.WorkspaceConfiguration => vscode.workspace.getConfiguration(section);
+
+/** Which of the three theme choices the window is on. System means the OS decides, so no theme is pinned. */
+function themeChoice(): string {
+	if (configuration('window').get<boolean>('autoDetectColorScheme', false)) {
+		return 'System';
+	}
+	const theme = configuration('workbench').get<string>('colorTheme', '');
+	return /light/i.test(theme) ? 'Light' : 'Dark';
 }
 
-/** The state the page draws, read from the same places the control rows write. */
-function generalView(): GeneralView {
+function startChoice(): string {
+	return configuration('temcoWorkbench').get<string>('start.open', 'welcome');
+}
+
+function breadcrumbsOn(): boolean {
+	return configuration('workbench').get<boolean>('breadcrumbs.enabled', false);
+}
+
+function telemetryOn(): boolean {
+	return configuration('telemetry').get<string>('telemetryLevel', 'all') !== 'off';
+}
+
+/** The command that opens the surface a module draws, for the rows that name one. */
+const SURFACE_COMMANDS: { [surface: string]: string } = {
+	overview: 'temcoWorkbench.overview',
+	documents: 'temcoDocs.documents',
+	sources: 'temcoProjects.editProject',
+	projects: 'temcoDocs.projects',
+	chat: 'temcoAi.chat'
+};
+
+/**
+ * Every module this window really has.
+ *
+ * The rows come from the extension host, not from a table: a module is present because it is loaded, and its state is
+ * whether it has activated yet. What the sample's table adds is only what a manifest cannot say — the sentence naming what
+ * the module owns, and the surface it opens.
+ */
+function moduleRows(): { loaded: ModuleRow[]; reserved: ModuleRow[] } {
+	const described = new Map(MODULES.map((row) => [row.id, row]));
+	const loaded = vscode.extensions.all.filter((extension) => extension.packageJSON.publisher === 'temcocontrols');
+	const rows: (ModuleRow & { command?: string })[] = loaded
+		.map((extension) => {
+			const known = described.get(extension.id);
+			const manifest = extension.packageJSON as { description?: unknown; displayName?: unknown };
+			const name =
+				known?.name ?? (typeof manifest.displayName === 'string' ? manifest.displayName : extension.id.replace('temcocontrols.', ''));
+			const owns =
+				known?.owns ??
+				(typeof manifest.description === 'string' ? manifest.description : 'its manifest says nothing about what it owns');
+			const surface = known?.surface;
+			return {
+				id: extension.id,
+				name,
+				namespace: known?.namespace ?? '',
+				owns,
+				surface,
+				state: extension.isActive ? 'Active' : 'Loaded',
+				command: surface === undefined ? undefined : SURFACE_COMMANDS[surface]
+			};
+		})
+		.sort((one, other) => one.name.localeCompare(other.name));
+
+	const present = new Set(rows.map((row) => row.id));
+	return { loaded: rows, reserved: MODULES.filter((row) => !present.has(row.id)) };
+}
+
+/** The state a page draws, read from the same places its controls write. Only the section for `page` is filled. */
+function stateFor(page: SettingsPage): unknown {
 	const settings = values();
-	return {
-		theme: themeChoice(),
-		start: startChoice(),
-		breadcrumbs: breadcrumbsOn(),
-		telemetry: telemetryOn(),
-		workingFolder: settings.workingFolder,
-		channel: settings.updateChannel,
-		lastChanged: settings.lastChanged,
-		realSettings: ROWS.filter((row) => EDITOR_SETTINGS.has(row)).length,
-		totalSettings: ROWS.length
-	};
+	switch (page) {
+		case 'modules': {
+			const rows = moduleRows();
+			const clean = (row: ModuleRow & { command?: string }): unknown => ({
+				id: row.id,
+				name: row.name,
+				namespace: row.namespace,
+				owns: row.owns,
+				state: row.state,
+				open: row.command
+			});
+			return {
+				page,
+				modules: {
+					version: vscode.version,
+					loaded: rows.loaded.map(clean),
+					reserved: rows.reserved.map((row) => clean({ ...row, command: undefined }))
+				}
+			};
+		}
+		case 'branding':
+			return {
+				page,
+				branding: {
+					productName: settings.productName,
+					accent: settings.accent,
+					welcomePage: settings.welcomePage,
+					theme: themeChoice(),
+					roles: ROLES
+				}
+			};
+		case 'ai':
+			return {
+				page,
+				ai: {
+					chatModel: settings.chatModel,
+					contextWindow: settings.contextWindow,
+					requireCitations: settings.requireCitations,
+					embeddingModel: settings.embeddingModel,
+					drafts: settings.drafts,
+					offlineOnly: settings.offlineOnly
+				}
+			};
+		case 'publishing':
+			return {
+				page,
+				publishing: {
+					site: settings.site,
+					path: settings.path,
+					channel: settings.channel,
+					probe: settings.publishProbe,
+					artifacts: ARTIFACTS.map((artifact) => ({
+						name: artifact.name,
+						desc: artifact.desc,
+						on: settings.artifacts[artifact.name] ?? artifact.on
+					}))
+				}
+			};
+		default:
+			return {
+				page,
+				general: {
+					theme: themeChoice(),
+					start: startChoice(),
+					breadcrumbs: breadcrumbsOn(),
+					telemetry: telemetryOn(),
+					workingFolder: settings.workingFolder,
+					channel: settings.updateChannel,
+					lastChanged: settings.lastChanged,
+					realSettings: GENERAL_ROWS.filter((row) => EDITOR_SETTINGS.has(row)).length,
+					totalSettings: GENERAL_ROWS.length
+				}
+			};
+	}
+}
+
+/* ------------------------------------------------------------------ the bundle on disk */
+
+async function exists(uri: vscode.Uri): Promise<boolean> {
+	try {
+		await vscode.workspace.fs.stat(uri);
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 /**
@@ -79,17 +222,15 @@ function generalView(): GeneralView {
  */
 async function bundleFolder(context: vscode.ExtensionContext, output: vscode.OutputChannel): Promise<vscode.Uri> {
 	const folder = vscode.Uri.joinPath(context.extensionUri, ...BUNDLE_FOLDER);
-	const script = vscode.Uri.joinPath(folder, `${BUNDLE}.js`);
-	if (await exists(script)) {
+	if (await exists(vscode.Uri.joinPath(folder, `${BUNDLE}.js`))) {
 		return folder;
 	}
-	output.appendLine('[settings] the General page was not built; building it now');
-	const module = context.extensionUri.fsPath;
+	output.appendLine('[settings] the pages were not built; building them now');
 	await new Promise<void>((resolve) => {
 		execFile(
 			process.execPath,
 			['--experimental-strip-types', path.join('scripts', 'build-webview.mts')],
-			{ cwd: module, windowsHide: true },
+			{ cwd: context.extensionUri.fsPath, windowsHide: true },
 			(error, stdout, stderr) => {
 				if (stdout.trim() !== '') {
 					output.appendLine(stdout.trim());
@@ -107,17 +248,8 @@ async function bundleFolder(context: vscode.ExtensionContext, output: vscode.Out
 	return folder;
 }
 
-async function exists(uri: vscode.Uri): Promise<boolean> {
-	try {
-		await vscode.workspace.fs.stat(uri);
-		return true;
-	} catch {
-		return false;
-	}
-}
-
 /** The webview's own document: one empty root, the bundle, and a content-security policy that allows nothing else. */
-function bundleDocument(webview: vscode.Webview, folder: vscode.Uri): string {
+function bundleDocument(webview: vscode.Webview, folder: vscode.Uri, title: string): string {
 	const script = webview.asWebviewUri(vscode.Uri.joinPath(folder, `${BUNDLE}.js`));
 	const style = webview.asWebviewUri(vscode.Uri.joinPath(folder, `${BUNDLE}.css`));
 	const nonce = Array.from({ length: 16 }, () => Math.floor(Math.random() * 36).toString(36)).join('');
@@ -128,7 +260,7 @@ function bundleDocument(webview: vscode.Webview, folder: vscode.Uri): string {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${webview.cspSource};">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="${style.toString()}">
-<title>General</title>
+<title>${title}</title>
 </head>
 <body>
 <div id="root"></div>
@@ -137,88 +269,12 @@ function bundleDocument(webview: vscode.Webview, folder: vscode.Uri): string {
 </html>`;
 }
 
-/* ------------------------------------------------------------------ page vocabulary */
+/* ------------------------------------------------------------------ the pages */
 
-const button = (label: string, command: string, options: { kind?: 'primary' | 'ghost'; mark?: string; small?: boolean } = {}): string =>
-	`<button type="button" class="btn${options.small ? ' btn--sm' : ''}${options.kind ? ` btn--${options.kind}` : ''}" data-command="${command}">${options.mark ? icon(options.mark) : ''}<span>${esc(label)}</span></button>`;
-
-const pageHead = (options: { title: string; mark: string; desc: string; actions?: string }): string =>
-	`<div class="page-head"><div class="page-head__main"><h1 class="page-head__title">${icon(options.mark)}${esc(options.title)}</h1><p class="page-head__desc">${options.desc}</p></div>${options.actions ? `<div class="page-head__actions">${options.actions}</div>` : ''}</div>`;
-
-const rule = (label: string, count?: string, note?: string, actions?: string): string =>
-	`<div class="group-head"><span class="group-head__label">${esc(label)}</span><span class="group-head__rule"></span>${count ? `<span class="group-head__count">${esc(count)}</span>` : ''}${actions ? `<span class="group-head__actions">${actions}</span>` : ''}</div>${note ? `<p class="group-note">${note}</p>` : ''}`;
-
-const formRow = (label: string, desc: string, control: string, tag?: string): string =>
-	`<div class="form-row"><div class="form-row__main"><div class="form-row__label">${esc(label)}${tag ? ` <span class="tag">${esc(tag)}</span>` : ''}</div><div class="form-row__desc">${esc(desc)}</div></div><div class="form-row__control">${control}</div></div>`;
-
-/** A two-or-more-way choice. Each chip carries what it would write, so one script serves every page. */
-const segmented = (setting: string, choices: string[], current: string, label: string): string =>
-	`<div class="segmented" role="group" aria-label="${esc(label)}">${choices.map((choice) => `<button type="button" data-kind="segment" data-setting="${esc(setting)}" data-value="${esc(choice)}" aria-pressed="${choice === current}">${esc(choice)}</button>`).join('')}</div>`;
-
-const select = (setting: string, options: { value: string; label: string }[], current: string, label: string): string =>
-	`<select class="select" data-kind="select" data-setting="${esc(setting)}" aria-label="${esc(label)}">${options.map((option) => `<option value="${esc(option.value)}"${option.value === current ? ' selected' : ''}>${esc(option.label)}</option>`).join('')}</select>`;
-
-const check = (setting: string, on: boolean, caption: string, name?: string): string =>
-	`<label class="check"><input type="checkbox" data-kind="check" data-setting="${esc(setting)}"${name === undefined ? '' : ` data-name="${esc(name)}"`}${on ? ' checked' : ''}><span>${esc(caption)}</span></label>`;
-
-const text = (setting: string, value: string, label: string): string =>
-	`<input class="input" data-kind="text" data-setting="${esc(setting)}" value="${esc(value)}" aria-label="${esc(label)}">`;
-
-const callout = (html: string, kind?: 'warn' | 'ok'): string =>
-	`<div class="callout${kind ? ` callout--${kind}` : ''}">${icon(kind === 'warn' ? 'alert' : kind === 'ok' ? 'check' : 'info')}<div>${html}</div></div>`;
-
-const settingsStrip = (entries: [string, string, boolean?][]): string =>
-	`<div class="settings-strip">${entries.map(([label, value, mono]) => `<div><div class="settings-strip__label">${esc(label)}</div><div class="settings-strip__value${mono ? ' cell-mono' : ''}">${esc(value)}</div></div>`).join('')}</div>`;
-
-/** The command that opens the surface a module draws, for the rows that name one. */
-const SURFACE_COMMANDS: { [surface: string]: string } = {
-	overview: 'temcoWorkbench.overview',
-	documents: 'temcoDocs.documents',
-	sources: 'temcoProjects.editProject',
-	projects: 'temcoDocs.projects',
-	chat: 'temcoAi.chat'
-};
-
-/* ------------------------------------------------------------------ the editor's own settings */
-
-const configuration = (section: string): vscode.WorkspaceConfiguration => vscode.workspace.getConfiguration(section);
-
-/** Which of the three theme choices the window is on. System means the OS decides, so no theme is pinned. */
-function themeChoice(): string {
-	if (configuration('window').get<boolean>('autoDetectColorScheme', false)) {
-		return 'System';
-	}
-	const theme = configuration('workbench').get<string>('colorTheme', '');
-	return /light/i.test(theme) ? 'Light' : 'Dark';
-}
-
-/** The five startup choices the manifest declares, in the order a person meets them. */
-const START_OPTIONS = [
-	{ value: 'welcome', label: 'Welcome' },
-	{ value: 'project', label: 'The project' },
-	{ value: 'page', label: 'The last page' },
-	{ value: 'home', label: 'Overview' },
-	{ value: 'none', label: 'Nothing' }
-];
-
-function startChoice(): string {
-	return configuration('temcoWorkbench').get<string>('start.open', 'welcome');
-}
-
-function breadcrumbsOn(): boolean {
-	return configuration('workbench').get<boolean>('breadcrumbs.enabled', false);
-}
-
-function telemetryOn(): boolean {
-	return configuration('telemetry').get<string>('telemetryLevel', 'all') !== 'off';
-}
-
-/* ------------------------------------------------------------------ the pages themselves */
-
-/** The five settings surfaces, one panel each. */
+/** The five settings surfaces, one panel each, all drawn by the one bundle. */
 export class SettingsPages {
-	private readonly panels = new Map<string, vscode.WebviewPanel>();
-	/** What building the page said, when a source tree had no bundle: a silent failure here is a blank page. */
+	private readonly panels = new Map<SettingsPage, vscode.WebviewPanel>();
+	/** What building the bundle said, when a source tree had none: a silent failure here is a blank page. */
 	readonly output = vscode.window.createOutputChannel('Temco Settings');
 
 	constructor(private readonly context: vscode.ExtensionContext) {
@@ -226,37 +282,29 @@ export class SettingsPages {
 	}
 
 	general(): void {
-		void this.openBundled(BUNDLED, SETTINGS_GENERAL_VIEW_TYPE, 'General');
+		void this.open('general');
 	}
 
 	modules(): void {
-		this.open('modules', SETTINGS_MODULES_VIEW_TYPE, 'Modules', modulesBody);
+		void this.open('modules');
 	}
 
 	branding(): void {
-		this.open('branding', SETTINGS_BRANDING_VIEW_TYPE, 'Branding', brandingBody);
+		void this.open('branding');
 	}
 
 	ai(): void {
-		this.open('ai', SETTINGS_AI_VIEW_TYPE, 'AI Models', aiBody);
+		void this.open('ai');
 	}
 
 	publishing(): void {
-		this.open('publishing', SETTINGS_PUBLISHING_VIEW_TYPE, 'Publishing', publishingBody);
+		void this.open('publishing');
 	}
 
-	/** Re-draws every page that is open — one page's write is another page's fact. */
+	/** Re-draws every page that is open: one page's write is another page's fact, and a message is enough to say so. */
 	refresh(): void {
 		for (const [id, panel] of this.panels) {
-			if (id === BUNDLED) {
-				void this.postState(panel);
-				continue;
-			}
-			const body = BODIES[id];
-			const definition = PAGES.find((entry) => entry.id === id);
-			if (body && definition) {
-				panel.webview.html = document(definition, body);
-			}
+			void panel.webview.postMessage({ type: 'state', state: stateFor(id) });
 		}
 	}
 
@@ -268,264 +316,34 @@ export class SettingsPages {
 		this.output.dispose();
 	}
 
-	/** The state the bundled page draws, by message: a refresh here never rewrites the document. */
-	async postState(panel: vscode.WebviewPanel): Promise<void> {
-		await panel.webview.postMessage({ type: 'state', state: generalView() });
+	/** The state the panel draws, by message: a refresh here never rewrites the document. */
+	async postState(page: SettingsPage, panel: vscode.WebviewPanel): Promise<void> {
+		await panel.webview.postMessage({ type: 'state', state: stateFor(page) });
 	}
 
-	/**
-	 * A page drawn by the module's React bundle rather than by the shared page kit.
-	 *
-	 * The page asks for its state when it mounts and gets a new one after every write, so refreshing it is a message and
-	 * never a new document: rewriting the HTML would throw away the reader's scroll and focus for a colour that moved.
-	 */
-	private async openBundled(id: string, viewType: string, title: string): Promise<void> {
-		const existing = this.panels.get(id);
+	private async open(page: SettingsPage): Promise<void> {
+		const definition = PAGES.find((entry) => entry.id === page);
+		if (definition === undefined) {
+			return;
+		}
+		const existing = this.panels.get(page);
 		if (existing !== undefined) {
 			existing.reveal(pageColumn());
-			await this.postState(existing);
+			await this.postState(page, existing);
 			return;
 		}
 		const folder = await bundleFolder(this.context, this.output);
-		const panel = vscode.window.createWebviewPanel(viewType, title, pageColumn(), {
+		const panel = vscode.window.createWebviewPanel(definition.viewType, definition.title, pageColumn(), {
 			enableScripts: true,
 			retainContextWhenHidden: true,
 			localResourceRoots: [folder]
 		});
 		panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'settings.svg');
-		panel.webview.html = bundleDocument(panel.webview, folder);
-		panel.webview.onDidReceiveMessage((message: SettingsMessage) => void receiveBundled(this, panel, message));
-		this.panels.set(id, panel);
-		panel.onDidDispose(() => this.panels.delete(id));
+		panel.webview.html = bundleDocument(panel.webview, folder, definition.title);
+		panel.webview.onDidReceiveMessage((message: SettingsMessage) => void receive(this, page, panel, message));
+		this.panels.set(page, panel);
+		panel.onDidDispose(() => this.panels.delete(page));
 	}
-
-	private open(id: string, viewType: string, title: string, body: () => string): void {
-		const html = page(body(), { title, script: commandScript + SETTINGS_SCRIPT });
-		const existing = this.panels.get(id);
-		if (existing) {
-			existing.reveal(pageColumn());
-			existing.webview.html = html;
-			return;
-		}
-		const panel = vscode.window.createWebviewPanel(viewType, title, pageColumn(), {
-			enableScripts: true,
-			localResourceRoots: []
-		});
-		panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'settings.svg');
-		panel.webview.html = html;
-		panel.webview.onDidReceiveMessage((message: SettingsMessage) => void receive(this, message));
-		this.panels.set(id, panel);
-		panel.onDidDispose(() => this.panels.delete(id));
-	}
-}
-
-/** The pages, in the order the side bar lists them. */
-const PAGES: { id: string; title: string; body: () => string }[] = [
-	{ id: 'modules', title: 'Modules', body: modulesBody },
-	{ id: 'branding', title: 'Branding', body: brandingBody },
-	{ id: 'ai', title: 'AI Models', body: aiBody },
-	{ id: 'publishing', title: 'Publishing', body: publishingBody }
-];
-
-const BODIES: { [id: string]: () => string } = {
-	modules: modulesBody,
-	branding: brandingBody,
-	ai: aiBody,
-	publishing: publishingBody
-};
-
-function document(definition: { title: string }, body: () => string): string {
-	return page(body(), { title: definition.title, script: commandScript + SETTINGS_SCRIPT });
-}
-
-/**
- * The controls' script.
- *
- * Segments, selects, checkboxes and text fields all post the same message — the key they are bound to and the value
- * they now hold — so a page never decides what a setting means. The command script beside it handles the buttons.
- */
-const SETTINGS_SCRIPT = `
-(function () {
-	const api = acquireVsCodeApi();
-	function post(key, value, name) {
-		api.postMessage({ type: 'setting', key: key, value: value, name: name });
-	}
-	document.querySelectorAll('[data-kind="segment"]').forEach(function (chip) {
-		chip.addEventListener('click', function () { post(chip.dataset.setting, chip.dataset.value); });
-	});
-	document.querySelectorAll('[data-kind="select"]').forEach(function (field) {
-		field.addEventListener('change', function () { post(field.dataset.setting, field.value); });
-	});
-	document.querySelectorAll('[data-kind="check"]').forEach(function (field) {
-		field.addEventListener('change', function () { post(field.dataset.setting, field.checked, field.dataset.name); });
-	});
-	document.querySelectorAll('[data-kind="text"]').forEach(function (field) {
-		field.addEventListener('change', function () { post(field.dataset.setting, field.value); });
-	});
-})();
-`;
-
-/* ------------------------------------------------------------------ Modules */
-
-/**
- * Every module this window really has.
- *
- * The rows come from the extension host, not from a table: a module is present because it is loaded, and its state
- * is whether it has activated yet. What the sample's table adds is only what a manifest cannot say — the sentence
- * naming what the module owns, and the surface it opens.
- */
-function moduleRows(): { active: ModuleRow[]; reserved: ModuleRow[] } {
-	const described = new Map(MODULES.map((row) => [row.id, row]));
-	const loaded = vscode.extensions.all.filter(
-		(extension) => extension.packageJSON.publisher === 'temcocontrols'
-	);
-	const rows: ModuleRow[] = loaded
-		.map((extension) => {
-			const known = described.get(extension.id);
-			const manifest = extension.packageJSON as { description?: unknown; displayName?: unknown };
-			const name = known?.name
-				?? (typeof manifest.displayName === 'string' ? manifest.displayName : extension.id.replace('temcocontrols.', ''));
-			const owns = known?.owns
-				?? (typeof manifest.description === 'string' ? manifest.description : 'its manifest says nothing about what it owns');
-			return {
-				id: extension.id,
-				name,
-				namespace: known?.namespace ?? '',
-				owns,
-				surface: known?.surface,
-				state: extension.isActive ? 'Active' : 'Loaded',
-			};
-		})
-		.sort((one, other) => one.name.localeCompare(other.name));
-
-	const present = new Set(rows.map((row) => row.id));
-	return {
-		active: rows,
-		reserved: MODULES.filter((row) => !present.has(row.id)),
-	};
-}
-
-/** *Modules* — what this window loads, and what is only reserved. */
-function modulesBody(): string {
-	const { active, reserved } = moduleRows();
-
-	const table = (rows: ModuleRow[]): string =>
-		`<div class="table-wrap table-wrap--plain"><table class="table table--compact"><thead><tr><th>Module</th><th>Namespace</th><th>What It Owns</th><th></th></tr></thead><tbody>${rows.map((module) => `<tr><td><span class="cell-strong" style="white-space:nowrap">${esc(module.name)}</span><div class="cell-muted cell-mono" style="font-size:11px;white-space:nowrap">${esc(module.id.replace('temcocontrols.', ''))}</div></td><td><span class="cell-mono cell-muted">${esc(module.namespace === '' ? '—' : module.namespace)}</span></td><td>${esc(module.owns)}</td><td style="text-align:right">${module.surface && SURFACE_COMMANDS[module.surface] ? button('Open', SURFACE_COMMANDS[module.surface], { small: true, kind: 'ghost' }) : '<span class="cell-muted" style="white-space:nowrap">No surface</span>'}</td></tr>`).join('')}</tbody></table></div>`;
-
-	return `${pageHead({
-		title: 'Modules',
-		mark: 'package',
-		desc: 'A module is a built-in extension: it ships with the platform and is never installed, removed or updated from the window.',
-		actions: button('Show on Disk', 'temcoWorkbench.settings.showOnDisk', { mark: 'folder' })
-	})}
-${callout('<b>There is no marketplace.</b> The build refuses a <code>product.json</code> that configures an extension gallery, so this window loads the modules in <code>extensions/</code> and nothing else — there is nothing to install and nothing to update on its own.', 'warn')}
-${rule('Loaded', `${active.length} modules`, 'Read from the extension host: a module is here because it is loaded, and <b>Active</b> means it has activated. Ids all live under the <code>temcocontrols.</code> scope, so the table drops the prefix.')}
-<div class="mt-16">${table(active)}</div>
-${rule('Reserved', `${reserved.length} modules`, 'A folder with a README and a surface drawn in the mock, but not loaded in this window. The build ships nothing for them until each has a first real feature.')}
-<div class="mt-16">${reserved.length === 0 ? '<p class="group-note">Every reserved module is loaded in this window.</p>' : table(reserved)}</div>
-${rule('Platform Updates', `${vscode.version} · stable`, 'A module updates with the platform, never on its own — there is no optional module to add or remove.', button('Check for Updates', 'temcoWorkbench.settings.checkUpdates', { small: true, mark: 'refresh' }))}
-${settingsStrip([
-		['Version', vscode.version, true],
-		['Channel', 'Stable'],
-		['Optional modules', 'none']
-	])}`;
-}
-
-/* ------------------------------------------------------------------ Branding */
-
-/** *Branding* — the mock's `settings/branding`. */
-function brandingBody(): string {
-	const settings = values();
-	const theme = themeChoice();
-
-	const mark = (size: number): string =>
-		`<div style="display:grid;place-items:center;width:${size}px;height:${size}px;border-radius:${Math.round(size / 4.6)}px;background:#224E7A;color:#fff;font-size:${Math.round(size / 2.5)}px;font-weight:700">T</div>`;
-
-	const roles = ROLES.map((role) => `<span style="display:inline-flex;align-items:center;gap:6px" class="cell-muted"><span style="width:22px;height:22px;border-radius:5px;background:${role.colour}"></span>${esc(role.name)}</span>`).join('');
-
-	return `${pageHead({
-		title: 'Branding',
-		mark: 'palette',
-		desc: 'The identity the shell draws: the mark, the wordmark and the accent. The mock previews them in place rather than in a specimen sheet.',
-		actions: button('Reset', 'temcoWorkbench.settings.resetBranding', { mark: 'refresh' })
-	})}
-${rule('Application Mark', 'one drawing, three sizes', 'The window, the taskbar and the title bar draw the same file at 64, 32 and 16 pixels.', button('Replace', 'temcoWorkbench.settings.replaceIcon', { small: true, kind: 'ghost' }))}
-<div class="row" style="gap:18px;align-items:flex-end;margin-top:12px">${mark(64)}${mark(32)}${mark(16)}<span class="cell-mono cell-muted" style="margin-left:6px">resources/temco-icon.svg</span></div>
-${rule('Theme', '2 themes shipped', 'A theme changes colour roles, never layout: every surface here is drawn from the five roles below.')}
-<div class="settings-rows">
-${formRow('Shell theme', 'Dark ships by default; Light exists because a print shop and a projector are not dark rooms.', button('Dark', 'temcoWorkbench.settings.themeDark', { small: true, kind: theme === 'Dark' ? 'primary' : undefined }) + button('Light', 'temcoWorkbench.settings.themeLight', { small: true, kind: theme === 'Light' ? 'primary' : undefined }))}
-</div>
-<div class="row" style="gap:10px;align-items:center;margin-top:12px">${roles}</div>
-${rule('Identity', '3 settings')}
-<div class="settings-rows">
-${formRow('Product name', 'Drawn in the title bar and the About window.', text('productName', settings.productName, 'Product name'))}
-${formRow('Accent colour', 'Used for focus, selection and the active container indicator.', text('accent', settings.accent, 'Accent colour'))}
-${formRow('Welcome page', 'The walkthrough shown on a fresh profile.', select('welcomePage', [{ value: 'Temco Platform', label: 'Temco Platform' }, { value: 'None', label: 'None' }], settings.welcomePage, 'Welcome page'))}
-</div>
-<div class="mt-16">${callout('The shell theme is the editor’s colour theme, so this row and <em>Appearance</em> in the command palette are the same setting. The mark and the identity are this profile’s register: the window’s icon is compiled into the build and cannot be replaced from inside it.')}</div>`;
-}
-
-/* ------------------------------------------------------------------ AI Models */
-
-/** *AI Models* — the mock's `settings/ai`. */
-function aiBody(): string {
-	const settings = values();
-
-	return `${pageHead({
-		title: 'AI Models',
-		mark: 'sparkle',
-		desc: 'What this profile loads, how much it may read, and what it is allowed to touch. The AI Hub shows what is loaded right now; this page decides what loads next.',
-		actions: button('Open Models', 'temcoAi.localModels', { mark: 'chip' })
-	})}
-${rule('Answering', '3 settings', 'The model behind the AI panel and behind every Draft action.')}
-<div class="settings-rows">
-${formRow('Chat model', 'Both run on this machine; nothing here calls a service.', select('chatModel', [{ value: 'qwen2.5-3b-instruct', label: 'qwen2.5-3b-instruct' }, { value: 'phi-3-mini-4k', label: 'phi-3-mini-4k' }, { value: 'temco-docs-1.4b', label: 'temco-docs-1.4b' }], settings.chatModel, 'Chat model'))}
-${formRow('Context window', 'How much of a page, its area and the sources behind it the model may read at once.', segmented('contextWindow', ['8k', '16k', '32k'], settings.contextWindow, 'Context window'))}
-${formRow('Always cite', 'An answer without a citation is refused, not merely discouraged.', check('requireCitations', settings.requireCitations, 'Require citations'))}
-</div>
-${rule('Retrieval', '1 setting')}
-<div class="settings-rows">
-${formRow('Embedding model', 'Builds and queries the knowledge index. Changing it re-indexes every page this profile holds.', select('embeddingModel', [{ value: 'nomic-embed-text', label: 'nomic-embed-text' }], settings.embeddingModel, 'Embedding model'))}
-</div>
-${rule('Drafts and Network', '2 settings')}
-<div class="settings-rows">
-${formRow('Drafts', 'Where an AI change goes before it is written to a page. Nothing reaches a reader without passing Review Center.', select('drafts', [{ value: 'Review Center', label: 'Review Center' }, { value: 'Review Center, auto-reject after 7 days', label: 'Review Center, auto-reject after 7 days' }], settings.drafts, 'Drafts'))}
-${formRow('Offline only', 'Refuse every action that would call a network service.', check('offlineOnly', settings.offlineOnly, 'Keep prompts on this machine'))}
-</div>
-${rule('This Profile')}
-${settingsStrip([
-		['Model', settings.chatModel, true],
-		['Context', settings.contextWindow],
-		['Citations', settings.requireCitations ? 'required' : 'not required'],
-		['Network calls', settings.offlineOnly ? 'none — offline only is on' : 'allowed by the profile']
-	])}
-<div class="mt-16">${callout('These five choices are kept in this profile’s register: the AI module in this build has no model runtime, so nothing is loaded or unloaded by changing them. The AI Hub shows what is actually there.')}</div>`;
-}
-
-/* ------------------------------------------------------------------ Publishing */
-
-/** *Publishing* — the mock's `settings/publishing`. */
-function publishingBody(): string {
-	const settings = values();
-	const chosen = publishedArtifacts();
-
-	return `${pageHead({
-		title: 'Publishing',
-		mark: 'upload',
-		desc: 'Where a release goes and what it is allowed to overwrite. Publishing never edits a page; it copies artifacts that Build Center already built.'
-	})}
-${rule('Target', settings.publishProbe, undefined, button('Test Connection', 'temcoWorkbench.settings.testPublish', { small: true, mark: 'globe' }))}
-<div class="settings-rows">
-${formRow('Site', 'The origin every published version is served from.', text('site', settings.site, 'Site'))}
-${formRow('Path', 'Where under the site a version is written. The {version} token is replaced at publish time.', text('path', settings.path, 'Path'))}
-${formRow('Channel', 'Preview publishes with noindex, so a search engine never sees a draft.', segmented('publishChannel', ['Stable', 'Preview'], settings.channel, 'Channel'))}
-</div>
-${rule('Artifacts', `${chosen} of ${ARTIFACTS.length} published`, 'Each of these is built by Build Center; publishing copies what is already there.')}
-<div class="settings-rows">
-${ARTIFACTS.map((artifact) => formRow(artifact.name, artifact.desc, check('artifact', settings.artifacts[artifact.name], 'Publish', artifact.name))).join('')}
-</div>
-<div class="mt-16">${callout('A published version is frozen. To change a page a reader can reach, publish a new version — an edit does not reach the site until it does.', 'warn')}</div>
-<div class="mt-16">${callout('Test Connection checks this profile’s own record of the target and nothing else: this build has no network client, so no request leaves the window.')}</div>`;
 }
 
 /* ------------------------------------------------------------------ what a control writes */
@@ -539,10 +357,15 @@ interface SettingsMessage {
 	args?: unknown;
 }
 
-/** One message from the bundled page: it asks for its state, writes a setting, or runs a command. */
-async function receiveBundled(pages: SettingsPages, panel: vscode.WebviewPanel, message: SettingsMessage): Promise<void> {
+/** One message from a bundled page: it asks for its state, writes a setting, chooses a folder, or runs a command. */
+async function receive(
+	pages: SettingsPages,
+	page: SettingsPage,
+	panel: vscode.WebviewPanel,
+	message: SettingsMessage
+): Promise<void> {
 	if (message.type === 'ready') {
-		await pages.postState(panel);
+		await pages.postState(page, panel);
 		return;
 	}
 	if (message.type === 'command' && typeof message.command === 'string') {
@@ -571,25 +394,11 @@ async function receiveBundled(pages: SettingsPages, panel: vscode.WebviewPanel, 
 	}
 }
 
-/** Applies one control's message, then re-draws the pages so every one of them agrees. */
-async function receive(pages: SettingsPages, message: SettingsMessage): Promise<void> {
-	if (message.type === 'command' && typeof message.command === 'string') {
-		const args = Array.isArray(message.args) ? message.args : message.args === undefined ? [] : [message.args];
-		await vscode.commands.executeCommand(message.command, ...args);
-		return;
-	}
-	if (message.type !== 'setting' || typeof message.key !== 'string') {
-		return;
-	}
-	await applySetting(message.key, message.value, message.name);
-	pages.refresh();
-}
-
 /**
  * One row, written.
  *
- * A key that names an editor setting writes it through the configuration API; a key that names a register field writes
- * the register. The two are not interchangeable, and each page's foot says which rows are which.
+ * A key that names an editor setting writes it through the configuration API; a key that names a register field writes the
+ * register. The two are not interchangeable, and each page's band says which rows are which.
  */
 async function applySetting(key: string, value: unknown, name?: string): Promise<void> {
 	switch (key) {
@@ -691,8 +500,8 @@ async function applySetting(key: string, value: unknown, name?: string): Promise
 /**
  * Registers the five pages and everything their buttons run.
  *
- * The resets and the one-off actions are here rather than in the page bodies, because each of them has to write both
- * halves of the register — the editor's settings and this profile's own — and only the module can do that.
+ * The resets and the one-off actions are here rather than in the pages, because each of them has to write both halves of the
+ * register — the editor's settings and this profile's own — and only the module can do that.
  */
 export function registerSettings(context: vscode.ExtensionContext): { pages: SettingsPages; disposables: vscode.Disposable[] } {
 	const pages = new SettingsPages(context);
@@ -768,7 +577,7 @@ export function registerSettings(context: vscode.ExtensionContext): { pages: Set
 				detail: [
 					`Site ${settings.site}`,
 					`Path ${settings.path}`,
-					`Channel ${settings.channel} · ${publishedArtifacts()} of ${ARTIFACTS.length} artifacts`,
+					`Channel ${settings.channel} · ${String(publishedArtifacts())} of ${String(ARTIFACTS.length)} artifacts`,
 					'No request was sent: this build has no network client.'
 				].join('\n')
 			});

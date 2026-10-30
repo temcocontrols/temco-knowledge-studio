@@ -44,7 +44,7 @@ To **use** the application rather than design it, read [operating-manual.md](./o
 | ▤ | **Docs** | the workspace: pages, sources, publish | `temco` (pages, needs-you, sources, publish) + `temcoRepositories.list` |
 | ✦ | **AI** | chats, models, drafts | `temcoAiHub` + the `temcoAi` secondary sidebar |
 | ⚙ | **Tools** | SQL Studio, and the modules not written yet | `temcoSql` |
-| ⚙ | **Settings** | profile, platform, Help | `temcoSettings` + `temcoHelp` |
+| ⚙ | **Settings** | settings, Help | `temcoSettings` + `temcoHelp` |
 
 Eight icons became five: three are places to *be* (Home, Docs, AI), two are where you *configure* things. `Repositories`
 moved into Docs ▸ Sources, `Learn` into Home, `Help` under Settings. No view is deleted.

@@ -7,7 +7,7 @@ The application's own surfaces — and the only module that is not a domain.
 | Extension id | `temcocontrols.temco-workbench` |
 | Namespace | `temcoWorkbench` |
 | State | active |
-| Views | Four containers' worth of groups: **Dashboard** (Platform), **Workspaces**, **Temco Learn** (Site, Delivery), **Settings** (Profile, Platform), **Help** (Learn, Support) |
+| Views | **Dashboard** (Overview, Projects, What needs doing), **Workspaces**, **Temco Learn** (Site, Delivery), **Settings** (one group of six rows, ordered from the window outward), **Help** (Learn, Support) |
 | Pages | the **dashboard** (`temcoWorkbench.overview`, `.activity`, `.health`), the **needs page** (`temcoWorkbench.openNeeds`), **Workspaces** (five), **Temco Learn** (five), **Settings** (five), **Help** (six) |
 | Requires | `temcocontrols.temco-store`, `temcocontrols.temco-ui`, `temcocontrols.temco-repositories`, `temcocontrols.temco-docs` |
 | Settings | `temcoWorkbench.start.open` |

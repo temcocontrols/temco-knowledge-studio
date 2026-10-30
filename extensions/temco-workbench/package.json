@@ -30,8 +30,7 @@
   "activationEvents": [
     "onStartupFinished",
     "onView:temcoWorkbench.overviewView",
-    "onView:temcoWorkbench.settingsProfile",
-    "onView:temcoWorkbench.settingsPlatform",
+    "onView:temcoWorkbench.settings",
     "onView:temcoLearn.panel"
   ],
   "contributes": {
@@ -54,12 +53,9 @@
       ],
       "temcoSettings": [
         {
-          "id": "temcoWorkbench.settingsProfile",
-          "name": "Profile"
-        },
-        {
-          "id": "temcoWorkbench.settingsPlatform",
-          "name": "Platform"
+          "id": "temcoWorkbench.settings",
+          "name": "Settings",
+          "initialSize": 6
         }
       ]
     },
