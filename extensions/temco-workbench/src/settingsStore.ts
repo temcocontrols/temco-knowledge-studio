@@ -41,7 +41,7 @@ export interface SettingsRegister {
 }
 
 export const DEFAULTS: SettingsRegister = {
-	workingFolder: '~/Temco',
+	workingFolder: '~/temco',
 	updateChannel: 'Stable',
 	productName: 'Temco Platform',
 	accent: '#0078d4',

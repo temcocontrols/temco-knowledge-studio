@@ -11,6 +11,7 @@ The application's own surfaces — and the only module that is not a domain.
 | Pages | the **dashboard** (`temcoWorkbench.overview`, `.activity`, `.health`), the **needs page** (`temcoWorkbench.openNeeds`), **Workspaces** (five), **Temco Learn** (five), **Settings** (five), **Help** (six) |
 | Requires | `temcocontrols.temco-store`, `temcocontrols.temco-ui`, `temcocontrols.temco-repositories`, `temcocontrols.temco-docs` |
 | Settings | `temcoWorkbench.start.open` |
+| Builds | `npm run build-webview` writes `out/webview/settings/` — also run by `build-webviews` and `vscode:prepublish` |
 
 ## What it owns
 
@@ -22,7 +23,9 @@ src/home.ts           the dashboard summary the startup falls back to
 src/needsPage.ts      what wants a person, said in full
 src/workspaces.ts     All Workspaces, one workspace, New Workspace, Templates
 src/learnPages.ts     Temco Learn: Home, T3000, an article, Downloads, Learning Paths
-src/settingsPages.ts  General, Modules, Branding, AI Models, Publishing
+src/settingsPages.ts  General (a Fluent bundle), Modules, Branding, AI Models, Publishing
+webview/settings/     the General page: React, Fluent UI seeded with Azure, the kit's page language
+scripts/build-webview.mts  builds it into out/webview/settings/
 src/helpPages.ts      Welcome, Help, Keyboard Shortcuts, Logs, Report an Issue, About
 src/*Sample.ts        the mock's sample rows, one file per group of pages
 src/surface.ts        the page view types

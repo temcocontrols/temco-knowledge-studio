@@ -9,6 +9,8 @@
 // springs back would be worse than no form, and a form that claimed to have changed the theme when it had not would be
 // worse still.
 
+import { execFile } from 'child_process';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { ARTIFACTS, MODULES, ModuleRow, ROLES } from './settingsSample';
 import {
@@ -21,6 +23,119 @@ export const SETTINGS_MODULES_VIEW_TYPE = 'temcoWorkbench.settings.modules';
 export const SETTINGS_BRANDING_VIEW_TYPE = 'temcoWorkbench.settings.branding';
 export const SETTINGS_AI_VIEW_TYPE = 'temcoWorkbench.settings.ai';
 export const SETTINGS_PUBLISHING_VIEW_TYPE = 'temcoWorkbench.settings.publishing';
+
+// The General page's bundle, and the one state it draws.
+//
+// The page is Fluent UI in a webview, so the extension host's job is narrow: build the bundle when a source tree has none,
+// hand the webview the two files, and answer every message with a state read from the configuration. Nothing here draws a
+// control; `webview/settings/` does that.
+
+/** The bundle's name, under `out/webview/settings/`. `scripts/build-webview.mts` writes these two files. */
+const BUNDLE_FOLDER = ['out', 'webview', 'settings'];
+const BUNDLE = 'settings';
+
+/** The one page the bundle draws. A second bundled page would be a second entry point, not a flag. */
+const BUNDLED = 'general';
+
+/** Every row on the page, and which of them write an editor setting. The two counts in the strip come from here. */
+const ROWS = ['theme', 'start', 'breadcrumbs', 'workingFolder', 'telemetry', 'updateChannel'] as const;
+const EDITOR_SETTINGS = new Set(['theme', 'start', 'breadcrumbs', 'telemetry']);
+
+/** What the bundled page draws. Its own shape, because the webview is a separate compilation with its own tsconfig. */
+interface GeneralView {
+	theme: string;
+	start: string;
+	breadcrumbs: boolean;
+	telemetry: boolean;
+	workingFolder: string;
+	channel: string;
+	lastChanged: string;
+	realSettings: number;
+	totalSettings: number;
+}
+
+/** The state the page draws, read from the same places the control rows write. */
+function generalView(): GeneralView {
+	const settings = values();
+	return {
+		theme: themeChoice(),
+		start: startChoice(),
+		breadcrumbs: breadcrumbsOn(),
+		telemetry: telemetryOn(),
+		workingFolder: settings.workingFolder,
+		channel: settings.updateChannel,
+		lastChanged: settings.lastChanged,
+		realSettings: ROWS.filter((row) => EDITOR_SETTINGS.has(row)).length,
+		totalSettings: ROWS.length
+	};
+}
+
+/**
+ * The folder the bundle lives in, built first if a source tree has not built it.
+ *
+ * `out/` is wiped by every `compile-extension`, so a bundle that only the build writes would be a page that opens blank
+ * after a compile. `build-webviews` and `vscode:prepublish` both build it; this is the third belt, for a window that was
+ * started from a tree compiled with neither.
+ */
+async function bundleFolder(context: vscode.ExtensionContext, output: vscode.OutputChannel): Promise<vscode.Uri> {
+	const folder = vscode.Uri.joinPath(context.extensionUri, ...BUNDLE_FOLDER);
+	const script = vscode.Uri.joinPath(folder, `${BUNDLE}.js`);
+	if (await exists(script)) {
+		return folder;
+	}
+	output.appendLine('[settings] the General page was not built; building it now');
+	const module = context.extensionUri.fsPath;
+	await new Promise<void>((resolve) => {
+		execFile(
+			process.execPath,
+			['--experimental-strip-types', path.join('scripts', 'build-webview.mts')],
+			{ cwd: module, windowsHide: true },
+			(error, stdout, stderr) => {
+				if (stdout.trim() !== '') {
+					output.appendLine(stdout.trim());
+				}
+				if (stderr.trim() !== '') {
+					output.appendLine(stderr.trim());
+				}
+				if (error) {
+					output.appendLine(`[settings] ${error.message}`);
+				}
+				resolve();
+			}
+		);
+	});
+	return folder;
+}
+
+async function exists(uri: vscode.Uri): Promise<boolean> {
+	try {
+		await vscode.workspace.fs.stat(uri);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/** The webview's own document: one empty root, the bundle, and a content-security policy that allows nothing else. */
+function bundleDocument(webview: vscode.Webview, folder: vscode.Uri): string {
+	const script = webview.asWebviewUri(vscode.Uri.joinPath(folder, `${BUNDLE}.js`));
+	const style = webview.asWebviewUri(vscode.Uri.joinPath(folder, `${BUNDLE}.css`));
+	const nonce = Array.from({ length: 16 }, () => Math.floor(Math.random() * 36).toString(36)).join('');
+	return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${webview.cspSource};">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="${style.toString()}">
+<title>General</title>
+</head>
+<body>
+<div id="root"></div>
+<script nonce="${nonce}" src="${script.toString()}"></script>
+</body>
+</html>`;
+}
 
 /* ------------------------------------------------------------------ page vocabulary */
 
@@ -103,11 +218,15 @@ function telemetryOn(): boolean {
 /** The five settings surfaces, one panel each. */
 export class SettingsPages {
 	private readonly panels = new Map<string, vscode.WebviewPanel>();
+	/** What building the page said, when a source tree had no bundle: a silent failure here is a blank page. */
+	readonly output = vscode.window.createOutputChannel('Temco Settings');
 
-	constructor(private readonly context: vscode.ExtensionContext) { }
+	constructor(private readonly context: vscode.ExtensionContext) {
+		context.subscriptions.push(this.output);
+	}
 
 	general(): void {
-		this.open('general', SETTINGS_GENERAL_VIEW_TYPE, 'General', generalBody);
+		void this.openBundled(BUNDLED, SETTINGS_GENERAL_VIEW_TYPE, 'General');
 	}
 
 	modules(): void {
@@ -129,6 +248,10 @@ export class SettingsPages {
 	/** Re-draws every page that is open — one page's write is another page's fact. */
 	refresh(): void {
 		for (const [id, panel] of this.panels) {
+			if (id === BUNDLED) {
+				void this.postState(panel);
+				continue;
+			}
 			const body = BODIES[id];
 			const definition = PAGES.find((entry) => entry.id === id);
 			if (body && definition) {
@@ -142,6 +265,38 @@ export class SettingsPages {
 			panel.dispose();
 		}
 		this.panels.clear();
+		this.output.dispose();
+	}
+
+	/** The state the bundled page draws, by message: a refresh here never rewrites the document. */
+	async postState(panel: vscode.WebviewPanel): Promise<void> {
+		await panel.webview.postMessage({ type: 'state', state: generalView() });
+	}
+
+	/**
+	 * A page drawn by the module's React bundle rather than by the shared page kit.
+	 *
+	 * The page asks for its state when it mounts and gets a new one after every write, so refreshing it is a message and
+	 * never a new document: rewriting the HTML would throw away the reader's scroll and focus for a colour that moved.
+	 */
+	private async openBundled(id: string, viewType: string, title: string): Promise<void> {
+		const existing = this.panels.get(id);
+		if (existing !== undefined) {
+			existing.reveal(pageColumn());
+			await this.postState(existing);
+			return;
+		}
+		const folder = await bundleFolder(this.context, this.output);
+		const panel = vscode.window.createWebviewPanel(viewType, title, pageColumn(), {
+			enableScripts: true,
+			retainContextWhenHidden: true,
+			localResourceRoots: [folder]
+		});
+		panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'settings.svg');
+		panel.webview.html = bundleDocument(panel.webview, folder);
+		panel.webview.onDidReceiveMessage((message: SettingsMessage) => void receiveBundled(this, panel, message));
+		this.panels.set(id, panel);
+		panel.onDidDispose(() => this.panels.delete(id));
 	}
 
 	private open(id: string, viewType: string, title: string, body: () => string): void {
@@ -166,7 +321,6 @@ export class SettingsPages {
 
 /** The pages, in the order the side bar lists them. */
 const PAGES: { id: string; title: string; body: () => string }[] = [
-	{ id: 'general', title: 'General', body: generalBody },
 	{ id: 'modules', title: 'Modules', body: modulesBody },
 	{ id: 'branding', title: 'Branding', body: brandingBody },
 	{ id: 'ai', title: 'AI Models', body: aiBody },
@@ -174,7 +328,6 @@ const PAGES: { id: string; title: string; body: () => string }[] = [
 ];
 
 const BODIES: { [id: string]: () => string } = {
-	general: generalBody,
 	modules: modulesBody,
 	branding: brandingBody,
 	ai: aiBody,
@@ -211,43 +364,6 @@ const SETTINGS_SCRIPT = `
 	});
 })();
 `;
-
-/* ------------------------------------------------------------------ General */
-
-/** *General* — the mock's `settings/general`. */
-function generalBody(): string {
-	const settings = values();
-
-	return `${pageHead({
-		title: 'General',
-		mark: 'gear',
-		desc: 'Settings this profile owns. Only the rows marked <span class="tag">Workspace</span> — nothing else here follows a workspace.',
-		actions: button('Open JSON', 'workbench.action.openSettingsJson', { mark: 'code' })
-	})}
-${rule('Window', '3 settings', 'What the window looks like, and what it opens with.')}
-<div class="settings-rows">
-${formRow('Theme', 'Colour roles only — a theme never changes the layout.', segmented('theme', ['System', 'Dark', 'Light'], themeChoice(), 'Theme'))}
-${formRow('Startup view', 'The tab that opens when the window starts.', select('start', START_OPTIONS, startChoice(), 'Startup view'))}
-${formRow('Breadcrumbs', 'The path above the editor. Off by default: this window has no file system, so the bar can only repeat the side bar and the tab.', check('breadcrumbs', breadcrumbsOn(), 'Show breadcrumbs'))}
-</div>
-${rule('Files', '1 setting', 'One folder holds every repository, capture and build the platform writes.')}
-<div class="settings-rows">
-${formRow('Working folder', 'Where repositories are cloned and captures are written.', text('workingFolder', settings.workingFolder, 'Working folder'), 'Workspace')}
-</div>
-${rule('Diagnostics and Updates', '2 settings')}
-<div class="settings-rows">
-${formRow('Telemetry', 'Documentation checks and build failures only. Never page content, never a prompt.', check('telemetry', telemetryOn(), 'Send diagnostics'))}
-${formRow('Update channel', 'Preview adds release candidates one version earlier than Stable.', segmented('updateChannel', ['Stable', 'Preview'], settings.updateChannel, 'Update channel'), 'Restart')}
-</div>
-${rule('Where These Live', undefined, undefined, button('Restore Defaults', 'temcoWorkbench.settings.reset', { small: true, kind: 'ghost' }))}
-${settingsStrip([
-		['File', 'settings.json · this profile', true],
-		['Profile', 'Default'],
-		['Can be overridden', '3 of these 5 settings'],
-		['Last changed', settings.lastChanged]
-	])}
-<div class="mt-16">${callout('Theme, Startup view, Breadcrumbs and Telemetry are the editor’s own settings: writing one here changes the whole window at once. The Working folder and the Update channel have no setting behind them yet, so they are kept in this profile’s register — the strip above says which is which.')}</div>`;
-}
 
 /* ------------------------------------------------------------------ Modules */
 
@@ -421,6 +537,38 @@ interface SettingsMessage {
 	name?: string;
 	command?: string;
 	args?: unknown;
+}
+
+/** One message from the bundled page: it asks for its state, writes a setting, or runs a command. */
+async function receiveBundled(pages: SettingsPages, panel: vscode.WebviewPanel, message: SettingsMessage): Promise<void> {
+	if (message.type === 'ready') {
+		await pages.postState(panel);
+		return;
+	}
+	if (message.type === 'command' && typeof message.command === 'string') {
+		const args = Array.isArray(message.args) ? message.args : message.args === undefined ? [] : [message.args];
+		await vscode.commands.executeCommand(message.command, ...args);
+		return;
+	}
+	if (message.type === 'pick-folder') {
+		const chosen = await vscode.window.showOpenDialog({
+			canSelectFiles: false,
+			canSelectFolders: true,
+			canSelectMany: false,
+			openLabel: 'Use This Folder',
+			title: 'Where repositories are cloned and captures are written'
+		});
+		const folder = chosen?.[0]?.fsPath;
+		if (folder !== undefined) {
+			await applySetting('workingFolder', folder);
+			pages.refresh();
+		}
+		return;
+	}
+	if (message.type === 'setting' && typeof message.key === 'string') {
+		await applySetting(message.key, message.value, message.name);
+		pages.refresh();
+	}
 }
 
 /** Applies one control's message, then re-draws the pages so every one of them agrees. */

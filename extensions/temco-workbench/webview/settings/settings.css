@@ -1,0 +1,182 @@
+/* The General page's own additions, on top of the kit's page vocabulary.
+ *
+ * `main.tsx` imports `temco-ui`'s `media/page.css` beside this file: the wash, the section heading, the entry row and the
+ * buttons — and the page's margins — are the same rules Temco Learn's Overview page is drawn by. What is here is only the
+ * part that page supplies itself (the brand rule before a section title, the facts band, the foot of a block) and the one
+ * thing a settings row adds: a slot for its control, at the size a row can carry. */
+
+html,
+body,
+#root {
+	min-height: 100%;
+}
+
+/* The page's margins are the Welcome page's, because that page is the one every other page of ours is measured against:
+ * the kit's own shell — `padding: 0 4px 32px` at the sides and foot, with the band bled to the tab's edges and its own
+ * 20px above the eyebrow. The one thing added here is 16px of page above the band: the Welcome page starts its band at the
+ * top of the tab, and a settings page that does the same reads as text pressed against the frame.
+ *
+ * Nothing else of the shell is restated: `page.css` carries it, so a change there reaches this page too. */
+.view__inner {
+	padding: var(--sp-4) var(--sp-1) var(--sp-8);
+}
+
+/* The section title's brand rule: a 2px Azure bar, the mark the Overview page puts before each of its sections. */
+.az-section__title {
+	position: relative;
+	padding-left: 10px;
+}
+
+.az-section__title::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 2px;
+	height: 12px;
+	border-radius: 1px;
+	background: var(--az-blue, #0078d4);
+}
+
+/* The entry row's third cell: the control. The kit puts "Open ›" there; a setting puts its control there instead, at a
+ * size that fits a row — a 32px control would set the row's height instead of the row setting the control's. */
+.setting-control {
+	display: flex;
+	grid-column: 3;
+	align-items: center;
+	justify-content: flex-end;
+	gap: var(--sp-2);
+	min-width: 232px;
+	font-size: 12px;
+	line-height: 16px;
+}
+
+/* Fluent's own controls, one step down: the sizes are the component's own padding, so a control shrinks without its text
+ * jumping to another line. */
+.setting-control .fui-Input,
+.setting-control .fui-Dropdown,
+.setting-control .fui-Button {
+	min-width: 0;
+	font-size: 12px;
+}
+
+/* A field and a dropdown take the room a path and a label need, not Fluent's 250px default. */
+.setting-control .fui-Input {
+	flex: 0 1 220px;
+	max-width: 220px;
+}
+
+.setting-control .fui-Dropdown {
+	min-width: 150px;
+}
+
+.setting-control .fui-Input + .az-btn--sm {
+	flex: none;
+}
+
+.setting-control .fui-Input__input,
+.setting-control .fui-Dropdown__button {
+	font-size: 12px;
+	line-height: 16px;
+	min-height: 24px;
+	padding-top: 2px;
+	padding-bottom: 2px;
+}
+
+.setting-control .fui-Radio {
+	font-size: 12px;
+	line-height: 16px;
+}
+
+.setting-control .fui-Radio__label {
+	font-size: 12px;
+	line-height: 16px;
+	padding-left: 4px;
+}
+
+.setting-control .fui-Radio__indicator {
+	width: 14px;
+	height: 14px;
+}
+
+.setting-control .fui-Checkbox {
+	font-size: 12px;
+}
+
+/* An entry's second line is prose here, not the path `az-entry__meta` is set in monospace for. */
+.az-entry__desc {
+	display: block;
+	margin-top: 1px;
+	color: var(--ink-3);
+	font-size: 12px;
+	line-height: 16px;
+}
+
+/* The facts band: the floor the Overview page puts an address on. */
+.az-facts {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+	gap: var(--sp-4);
+	padding: var(--sp-3) var(--sp-4);
+	border: 1px solid var(--hairline);
+	border-radius: var(--r-2);
+	background: var(--surface-card);
+}
+
+.az-fact {
+	min-width: 0;
+}
+
+.az-fact__title {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-1);
+	color: var(--ink-2);
+	font-size: 12px;
+	line-height: 16px;
+}
+
+.az-fact__value {
+	display: block;
+	margin-top: 2px;
+	color: var(--ink-1);
+	font-size: 12.5px;
+	line-height: 17px;
+	overflow-wrap: break-word;
+}
+
+.az-fact__value--mono {
+	font-family: var(--font-mono);
+}
+
+/* A sentence under a band: quieter than a row, one step in from the edge it belongs to. */
+.az-block__note,
+.az-note--foot {
+	margin: var(--sp-2) 0 0;
+	color: var(--ink-3);
+	font-size: 11.5px;
+	line-height: 16px;
+}
+
+.az-block__foot {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--sp-5);
+	margin: var(--sp-3) 0 0;
+	padding-top: var(--sp-2);
+	border-top: 1px solid var(--border);
+}
+
+@media (max-width: 640px) {
+	.az-entry {
+		grid-template-columns: 26px minmax(0, 1fr);
+	}
+
+	.az-entry .setting-control {
+		grid-column: 1 / -1;
+		justify-content: flex-start;
+		min-width: 0;
+		margin-left: 38px;
+	}
+}

@@ -215,6 +215,19 @@ publishing, and every failure say what happened there, with at most one thing to
 version box, and the build picker when a row did not name its build, and the folder dialog for a clone that has not been
 chosen yet.
 
+﻿**Settings → General is a bundled Fluent page** (`webview/settings/`, React 19 + Fluent UI v9), not markup generated in the
+extension host: the tokens are Fluent's, the brand is Azure's blue, and every control is a real Fluent control. It is drawn
+in the house page language rather than a settings template — the brand wash with an eyebrow, a title and a note; one tinted
+callout; a section heading with the 2px Azure rule before it; an entry row per setting with its control at the right-hand
+end; a facts band; and links at the foot of the last block. `main.tsx` imports `temco-ui`'s `media/page.css`, so the wash, the
+rule, the row and the buttons are the same rules Temco Learn's Overview page is drawn by and the two pages cannot drift.
+
+The host's half is narrow: `src/settingsPages.ts` builds the bundle when a source tree has none (a compile wipes `out/`),
+hands the webview `settings.js` and `settings.css` under a content-security policy that allows nothing else, and answers three
+messages — `ready` with one state, `setting` with a key to write, `command` to run. A refresh is a new state and never a new
+document, so a write does not throw away the reader's scroll. `npm run build-webview` builds it; `build-webviews` and
+`vscode:prepublish` run that too.
+
 ## Design system
 
 - **Fluent v9** (`@fluentui/react-components`, `@fluentui/react-icons`) with the brand ramp seeded from Azure blue
