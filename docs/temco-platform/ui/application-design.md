@@ -183,6 +183,25 @@ page title usually ends with (`Test1 docs` reads as `Test1`); the title itself i
 it. There is deliberately no group of `dist` builds: the build as written is a file on disk, which is the page's *Build
 outputs* and the Download view's business, not something to read here.
 
+**The site itself** is read by people who never see this application, so it follows Microsoft Learn rather than the editor: every
+page runs the reader's full width (`--gutter` is the only side margin), the title band bleeds past it, cards and rows are
+surfaces with no frame around them, and a section title is a small upper-case label (`RECENTLY UPDATED`), not a headline. A
+section lists its projects as a category of cards with no "Projects" heading above them: the cards are the category.
+
+**The project page is a real application** (`webview/preview/`, React + Fluent UI), not a page drawn by string concatenation.
+`scripts/build-webview.mts` bundles it with esbuild into `out/webview/preview/preview.js|css` (built output, never committed),
+and `installSite` copies those two files into `<site>/assets/` beside `site.js`. `out/` is build output that `compile-extension` cleans,
+so the root `npm run build-webviews` builds this bundle with the others, packaging builds it through `vscode:prepublish`, and
+`installSite` builds it once itself when it is missing — a source tree compiled after the last bundle still opens the page. The theme is Fluent's neutral theme seeded with
+Azure's blue and a Segoe face, and the page keeps the bundle's own accessibility: a real `h1`, a breadcrumb nav, buttons that
+are anchors, and a page that says so when the project is not on the site. The reader (`reader.html`) stays a classic script,
+because it only moves an iframe and reads headings out of it.
+
+**Publishing has a page** (`src/publishPage.ts`, `temcoLearn.publishing`), opened by the `Publish` row: the branch and the
+address, the four steps of a publish with the act that performs each, how much is waiting, and the lines the last attempt
+printed — `src/publishLog.ts` keeps them for the window, and `publishSite` writes to a sink that feeds both the output channel
+and that log. **Downloads has a page** (`src/downloadPage.ts`, `temcoLearn.downloads`), opened by the Download view's empty row
+and by its title bar: what a build writes, where each kind lands, and the files that are on this machine.
 **Next steps** is where the acts live, and publishing is one of them: `Publish` pushes the site folder to `gh-pages` the first
 time and again after a change, and the words beside it are how many changes are waiting (`up to date` when none are). It is an
 act, so it belongs with the other acts, not with the site it publishes.

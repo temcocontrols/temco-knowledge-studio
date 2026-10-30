@@ -267,7 +267,12 @@ export class DownloadTree implements vscode.TreeDataProvider<Row> {
 			rows.push(entry);
 		}
 		return rows.length === 0
-			? [row('No file to take', 'info', { tooltip: 'A build writes these; build a project in Temco Docs.' })]
+			? [
+					row('No file to take', 'info', {
+						tooltip: 'Open the Downloads page: what a build writes, and where it lands',
+						command: { command: 'temcoLearn.downloads', title: 'Downloads' }
+					})
+				]
 			: rows;
 	}
 
@@ -332,7 +337,7 @@ export class TodoTree implements vscode.TreeDataProvider<Row> {
 		const entry = row('Publish', 'cloud-upload', {
 			description: published.pending === 0 ? 'up to date' : plural(published.pending, 'change'),
 			tooltip: `${published.base ?? 'no address yet'} · ${last} · publishes the site, or publishes it again after a change`,
-			command: { command: 'temcoLearn.publish', title: 'Publish the Website' }
+			command: { command: 'temcoLearn.publishing', title: 'Publishing' }
 		});
 		entry.id = 'temcoLearn.todo.publish';
 		entry.contextValue = 'temcoLearn.publish';

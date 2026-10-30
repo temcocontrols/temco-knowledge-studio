@@ -143,10 +143,27 @@
         "title": "Show This Build Output in the Folder",
         "icon": "$(folder-opened)",
         "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.publishing",
+        "title": "Publishing",
+        "icon": "$(cloud-upload)",
+        "category": "Temco Learn"
+      },
+      {
+        "command": "temcoLearn.downloads",
+        "title": "Downloads",
+        "icon": "$(cloud-download)",
+        "category": "Temco Learn"
       }
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "temcoLearn.downloads",
+          "when": "view == temcoLearn.download",
+          "group": "navigation@1"
+        },
         {
           "command": "temcoLearn.refresh",
           "when": "view == temcoLearn.overviewView",
@@ -214,16 +231,27 @@
   },
   "scripts": {
     "compile": "tsc -p .",
+    "vscode:prepublish": "npm run build-webview",
+    "build-webview": "node --experimental-strip-types scripts/build-webview.mts",
     "check-commands": "node --experimental-strip-types scripts/check-commands.mts",
     "check-site": "node --experimental-strip-types scripts/check-site.mts",
     "check-app": "node --experimental-strip-types scripts/check-app.mts",
     "check-state": "node --experimental-strip-types scripts/check-state.mts",
     "check-publish": "node --experimental-strip-types scripts/check-publish.mts",
     "check-overview": "node --experimental-strip-types scripts/check-overview.mts",
+    "check-details": "node --experimental-strip-types scripts/check-details.mts",
     "check-artifacts": "node --experimental-strip-types scripts/check-artifacts.mts",
     "check-panel": "node --experimental-strip-types scripts/check-panel.mts"
   },
   "extensionDependencies": [
     "temcocontrols.temco-ui"
-  ]
+  ],
+  "devDependencies": {
+    "@fluentui/react-components": "^9.74.11",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "esbuild": "0.28.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
 }

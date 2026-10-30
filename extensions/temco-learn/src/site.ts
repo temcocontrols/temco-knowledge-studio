@@ -17,10 +17,12 @@
 // `~/Temco` is the working area `temco-repositories` owns (`temcoRepositories.workspaceFolder`, or the user's home
 // folder). One working area, one owner: this module reads the same setting rather than inventing a second place.
 
+import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { promisify } from 'util';
 
 /** The folder under the working area that holds the site. Lowercase, like every folder under it. */
 const SITE_FOLDER = 'site';
@@ -125,6 +127,25 @@ export function appFolder(context: vscode.ExtensionContext): string {
  * The script is TypeScript (`src/siteApp.ts`) and JavaScript only once compiled, because the repository keeps no
  * JavaScript of its own. It compiles to the module's `out/`, so the site folder gets `assets/site.js` from there.
  */
+/**
+ * Build the project view when it is missing.
+ *
+ * A source tree has the bundler (`scripts/build-webview.mts` and the module's `node_modules`); a packaged extension does
+ * not, and does not need it, because packaging built the bundle already. So this is best-effort: a tree that cannot build
+ * it says so through the caller's message rather than pretending the page will work.
+ */
+async function buildProjectView(module: string): Promise<void> {
+	const script = path.join(module, 'scripts', 'build-webview.mts');
+	if (!fs.existsSync(script)) {
+		return;
+	}
+	try {
+		await promisify(execFile)(process.execPath, ['--experimental-strip-types', script], { cwd: module, timeout: 180_000 });
+	} catch {
+		// The caller reports the missing bundle, which is the fact that matters.
+	}
+}
+
 export function appScript(app: string): string {
 	return path.join(path.dirname(app), 'out', 'siteApp.js');
 }
@@ -148,6 +169,26 @@ export async function installSite(folder: string, app: string): Promise<string> 
 	const code = await fs.promises.readFile(script, 'utf8');
 	// The built file ends with a source map reference that the site has no map for: a published site carries no map.
 	await fs.promises.writeFile(path.join(folder, 'assets', 'site.js'), code.replace(/\r?\n\/\/# sourceMappingURL=.*$/, '\n'), 'utf8');
+
+	// The project view is a bundled React app (React and Fluent UI cannot be a hand-written script), built by
+	// `scripts/build-webview.mts` into `out/webview/preview/`. A missing bundle is a build that never ran this step, and
+	// the page would open blank — so it is said here, once, rather than discovered in a browser.
+	// `out/` is build output, and `compile-extension` cleans it: a source tree compiled after the bundle was built has no
+	// bundle. It is built once here; a tree without the bundler gets a message instead of a page.
+	const module = path.dirname(app);
+	const view = path.join(module, 'out', 'webview', 'preview');
+	if (!fs.existsSync(path.join(view, 'preview.js'))) {
+		await buildProjectView(module);
+	}
+	for (const asset of ['preview.js', 'preview.css']) {
+		const built = path.join(view, asset);
+		if (!fs.existsSync(built)) {
+			throw new Error(
+				`The project view has not been built: ${built} is missing. Run \`npm run build-webview\` in extensions/temco-learn, then try again.`
+			);
+		}
+		await fs.promises.writeFile(path.join(folder, 'assets', asset), await fs.promises.readFile(built));
+	}
 
 	if (!fs.existsSync(path.join(folder, PROJECTS_FILE))) {
 		await writeSite(folder, { projects: [] });

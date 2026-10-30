@@ -46,6 +46,9 @@
 	--r4: 4px;
 
 	--mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+
+	/* The page's side margin: one value, so the title band can bleed past it and the text still line up. */
+	--gutter: clamp(16px, 3vw, 40px);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -103,9 +106,8 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid 
 	align-items: center;
 	gap: var(--s6);
 	height: 52px;
-	max-width: 1180px;
-	margin: 0 auto;
-	padding: 0 var(--s6);
+	width: 100%;
+	padding: 0 var(--gutter);
 }
 
 .bar__brand {
@@ -149,18 +151,18 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid 
 
 /* ---- the page --------------------------------------------------------------------------------------- */
 
-.wrap { max-width: 1180px; margin: 0 auto; padding: 0 var(--s6) var(--s10); }
+.wrap { width: 100%; padding: 0 var(--gutter) var(--s10); }
 
 .hero {
-	margin: 0 calc(-1 * var(--s6));
-	padding: var(--s8) var(--s6) var(--s6);
+	/* The band bleeds to the edges of the window while its words keep the page's gutter. */
+	margin: 0 calc(-1 * var(--gutter));
+	padding: var(--s10) var(--gutter) var(--s6);
 	background: linear-gradient(180deg, var(--wash) 0%, transparent 100%);
-	border-bottom: 1px solid var(--line);
 }
 
 .hero__eyebrow { margin: 0 0 var(--s1); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
-.hero__title { margin: 0 0 var(--s2); font-size: 28px; line-height: 1.25; font-weight: 600; }
-.hero__desc { margin: 0; max-width: 76ch; color: var(--ink-2); font-size: 15px; }
+.hero__title { margin: 0 0 var(--s3); font-size: 32px; line-height: 1.2; font-weight: 600; letter-spacing: -.01em; }
+.hero__desc { margin: 0; color: var(--ink-2); font-size: 16px; line-height: 1.65; }
 
 .hero .search { margin-top: var(--s4); max-width: 520px; }
 
@@ -169,11 +171,10 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid 
 	align-items: center;
 	gap: var(--s2);
 	width: 100%;
-	height: 34px;
+	height: 38px;
 	padding: 0 var(--s3);
-	background: var(--bg);
-	border: 1px solid var(--line-2);
-	border-radius: var(--r2);
+	background: var(--bg-3);
+	border-radius: 6px;
 }
 
 .search input {
@@ -200,65 +201,64 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid 
 	margin: var(--s8) 0 var(--s3);
 }
 
-.section-head h2 { margin: 0; font-size: 18px; font-weight: 600; }
+.section-head h2 { margin: 0; font-size: 13.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
 .section-head .more { font-size: 13px; }
 
 /* ---- cards ------------------------------------------------------------------------------------------ */
 
-.grid { display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fill, minmax(258px, 1fr)); }
+.grid { display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
 
 .card {
 	display: grid;
 	grid-template-columns: auto minmax(0, 1fr);
 	grid-template-rows: auto auto;
 	column-gap: var(--s3);
-	row-gap: 2px;
-	padding: var(--s4);
-	background: var(--bg);
-	border: 1px solid var(--line);
-	border-radius: var(--r4);
+	row-gap: var(--s1);
+	padding: var(--s5);
+	background: var(--bg-2);
+	border-radius: 6px;
 	color: inherit;
+	transition: background 120ms ease;
 }
 
-.card:hover { border-color: var(--line-2); background: var(--bg-2); text-decoration: none; }
+.card:hover { background: var(--brand-soft); text-decoration: none; }
+.card:hover .card__title { color: var(--brand-pressed); }
 
 .card__chip {
 	grid-row: 1 / span 2;
 	display: grid;
 	place-items: center;
-	width: 34px;
-	height: 34px;
-	border-radius: var(--r2);
-	background: var(--brand-soft);
-	border: 1px solid var(--brand-line);
+	width: 36px;
+	height: 36px;
+	border-radius: 6px;
+	background: var(--bg);
 	color: var(--brand);
-	font-size: 15px;
+	font-size: 16px;
 	font-weight: 700;
 }
 
-.card__title { font-size: 15px; font-weight: 600; color: var(--ink); }
-.card__desc { grid-column: 2; color: var(--ink-2); font-size: 13px; }
+.card__title { font-size: 16px; font-weight: 600; line-height: 1.35; color: var(--ink); }
+.card__desc { grid-column: 2; color: var(--ink-2); font-size: 13.5px; line-height: 1.55; }
 .card__meta { grid-column: 2; margin-top: var(--s1); color: var(--ink-3); font-size: 12px; }
 
 /* ---- rows ------------------------------------------------------------------------------------------- */
 
-.rows { border: 1px solid var(--line); border-radius: var(--r4); overflow: hidden; }
+.rows { display: flex; flex-direction: column; gap: 1px; }
 
 .row {
 	display: flex;
 	align-items: baseline;
 	gap: var(--s3);
 	padding: var(--s3) var(--s4);
-	border-bottom: 1px solid var(--line);
+	border-radius: 4px;
 	color: inherit;
 }
 
-.row:last-child { border-bottom: 0; }
 .row:hover { background: var(--bg-2); text-decoration: none; }
 .row__title { font-weight: 600; color: var(--ink); }
 .row__version { font-family: var(--mono); font-size: 13px; color: var(--ink); }
 .row__meta { color: var(--ink-3); font-size: 12.5px; }
-.row__tag { font-size: 11.5px; color: var(--brand); background: var(--brand-soft); border: 1px solid var(--brand-line); border-radius: 10px; padding: 0 8px; }
+.row__tag { font-size: 11.5px; color: var(--brand); background: var(--brand-soft); border-radius: 10px; padding: 1px 8px; }
 .row__go { margin-left: auto; color: var(--brand); font-size: 13px; white-space: nowrap; }
 
 /* ---- the honest empty block ------------------------------------------------------------------------- */
@@ -266,20 +266,17 @@ a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid 
 .empty {
 	margin: var(--s4) 0 0;
 	padding: var(--s4) var(--s5);
-	max-width: 76ch;
 	color: var(--ink-2);
 	background: var(--bg-2);
-	border-left: 3px solid var(--brand-line);
-	border-radius: 0 var(--r2) var(--r2) 0;
+	border-radius: 6px;
 }
 
 /* ---- the foot --------------------------------------------------------------------------------------- */
 
 .foot {
-	max-width: 1180px;
-	margin: var(--s10) auto 0;
-	padding: var(--s4) var(--s6) var(--s8);
-	border-top: 1px solid var(--line);
+	width: 100%;
+	margin: var(--s10) 0 0;
+	padding: var(--s5) var(--gutter) var(--s8);
 	color: var(--ink-3);
 	font-size: 12.5px;
 	display: flex;

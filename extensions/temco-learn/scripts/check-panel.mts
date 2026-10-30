@@ -167,15 +167,15 @@ test('Download is the project name as the category, and its rows carry the size'
 	assert.ok(artifacts.every((row) => row.command?.command === 'temcoLearn.downloadArtifact'));
 	assert.deepEqual(artifacts.map((row) => row.contextValue), ['temcoLearn.artifact.look', 'temcoLearn.artifact']);
 	const none = await new views.DownloadTree(newReads({ ...snapshot, artifacts: [] })).getChildren();
-	assert.deepEqual(none.map((row) => row.label), ['No file to take']);
+	assert.deepEqual(none.map((row) => [row.label, row.command?.command]), [['No file to take', 'temcoLearn.downloads']], 'the empty Download row does not open its page');
 });
 
-test('Next steps holds the acts, publishing among them', async () => {
+test('Next steps holds the acts, and Publish opens the page that explains it', async () => {
 	const provider = new views.TodoTree(newReads(snapshot));
 	const rows = await provider.getChildren();
 	assert.deepEqual(rows.map((row) => [row.label, count(row), row.command?.command ?? '']), [
 		['Waiting to be added', '1 build', ''],
-		['Publish', '3 changes', 'temcoLearn.publish'],
+		['Publish', '3 changes', 'temcoLearn.publishing'],
 		['Build a project', '', 'temcoDocs.builds']
 	]);
 	const builds = await provider.getChildren(rows[0]);

@@ -1,0 +1,42 @@
+/* The project view's own bytes: what Fluent does not draw.
+ *
+ * Fluent supplies every component's look through Griffel at runtime; what is left is the page itself — the box model,
+ * the reading rhythm, and the two things Fluent has no opinion about (a quiet scrollbar and the print sheet).
+ */
+
+* {
+	box-sizing: border-box;
+}
+
+html {
+	-webkit-text-size-adjust: 100%;
+}
+
+body {
+	margin: 0;
+	background: #ffffff;
+	color: #1b1b1f;
+	font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+	body {
+		background: #1b1a19;
+		color: #f3f2f1;
+	}
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus-visible,
+button:focus-visible {
+	outline: 2px solid #0078d4;
+	outline-offset: 2px;
+}

@@ -15,10 +15,13 @@ import * as vscode from 'vscode';
 import { findArtifacts } from './artifacts';
 import { Build, findBuilds } from './builds';
 import { OverviewPage } from './overview';
+import { DownloadPage } from './downloadPage';
 import { Preview } from './preview';
-import { publishSite } from './publish';
+import { PublishLog } from './publishLog';
+import { PublishFacts, PublishPage } from './publishPage';
+import { publishSite, PublishSink } from './publish';
 import { Server } from './server';
-import { addVersion, appFolder, installSite, readSite, siteFolder } from './site';
+import { addVersion, appFolder, installSite, readSite, siteFolder, workRoot } from './site';
 import { Snapshot } from './snapshot';
 import { readPublishedState } from './state';
 import { BrowseTree, DownloadTree, OverviewTree, Reads, TodoTree, VIEWS } from './tree';
@@ -32,6 +35,14 @@ export function activate(context: vscode.ExtensionContext): void {
 	const server = new Server();
 	const preview = new Preview();
 	const output = vscode.window.createOutputChannel('Temco Learn');
+	// Publishing says what it does once, and two places listen: the output channel, and the page that explains a push.
+	const publishLog = new PublishLog();
+	const publishSink: PublishSink = {
+		appendLine: (line: string) => {
+			output.appendLine(line);
+			publishLog.append(line);
+		}
+	};
 	const readSnapshot = async (): Promise<Snapshot> => {
 		const root = siteFolder();
 		return {
@@ -41,8 +52,24 @@ export function activate(context: vscode.ExtensionContext): void {
 			published: await readPublishedState(root)
 		};
 	};
+	/** What the Publishing page says: git's own account of the site folder, and what the last attempt printed. */
+	const readPublishFacts = async (): Promise<PublishFacts> => {
+		const published = await readPublishedState(siteFolder());
+		const log = publishLog.read();
+		return {
+			where: published.where,
+			base: published.base,
+			commit: published.commit,
+			at: published.at,
+			pending: published.pending,
+			log: log.lines,
+			logAt: log.at
+		};
+	};
 	const reads = new Reads(readSnapshot);
 	const overview = new OverviewPage(readSnapshot);
+	const publishing = new PublishPage(readPublishFacts, publishLog);
+	const downloads = new DownloadPage(async () => ({ projects: await findArtifacts(), root: workRoot() }));
 	const overviewTree = new OverviewTree();
 	const browseTree = new BrowseTree(reads);
 	const downloadTree = new DownloadTree(reads);
@@ -65,6 +92,8 @@ export function activate(context: vscode.ExtensionContext): void {
 		downloadTree.refresh();
 		todoTree.refresh();
 		overview.refresh();
+		publishing.refresh();
+		downloads.refresh();
 	};
 
 	/** The site folder with the app in it, ready to serve. Made on first use — it is a folder, not a question. */
@@ -212,8 +241,9 @@ export function activate(context: vscode.ExtensionContext): void {
 		preview.note('progress', 'Publishing the site…');
 		try {
 			const root = await prepare();
-			const published = await publishSite(root, output);
+			const published = await publishSite(root, publishSink);
 			refresh();
+			publishing.refresh();
 			const openSite = { label: 'Open the Site', run: () => vscode.env.openExternal(vscode.Uri.parse(published.base)) };
 			preview.note(
 				'info',
@@ -232,12 +262,22 @@ export function activate(context: vscode.ExtensionContext): void {
 		server,
 		preview,
 		overview,
+		publishing,
+		downloads,
 		...views,
 		output,
 
 		// The module's own page: what it is for, the three steps, and where the website goes. Never the website itself.
 		vscode.commands.registerCommand('temcoLearn.overview', () => {
 			overview.open();
+		}),
+
+		vscode.commands.registerCommand('temcoLearn.publishing', () => {
+			publishing.open();
+		}),
+
+		vscode.commands.registerCommand('temcoLearn.downloads', () => {
+			downloads.open();
 		}),
 
 		vscode.commands.registerCommand('temcoLearn.preview', async (args?: { page?: string }) => {

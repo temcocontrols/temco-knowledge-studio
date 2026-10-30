@@ -261,8 +261,7 @@ function drawSection(projects: SiteProject[]): void {
 ${
 	held.length === 0
 		? `	<p class="empty">${asked.empty}</p>`
-		: `	<div class="section-head"><h2>Projects</h2><span class="more">${plural(held.length, 'project')}</span></div>
-	<div class="grid">
+		: `	<div class="grid">
 		${held.map(card).join('\n\t\t')}
 	</div>
 ${
@@ -275,48 +274,6 @@ ${
 `
 }`
 }`;
-
-	attachFilter(wrap);
-}
-
-/* ---- one project --------------------------------------------------------------------------------------------- */
-
-function drawProject(projects: SiteProject[]): void {
-	const project = projects.find((entry) => entry.id === param('id'));
-	const wrap = need<HTMLElement>('wrap');
-
-	if (project === undefined) {
-		drawTabs('documentation');
-		document.title = 'Not on the site · Temco Learn';
-		wrap.innerHTML = `<p class="empty">This project is not on the site. <a href="index.html">Back to Documentation</a>.</p>`;
-		return;
-	}
-
-	const section = sectionOf(project);
-	drawTabs(section.id);
-	document.title = `${project.title} · Temco Learn`;
-
-	const versions = (project.versions ?? [])
-		.map((entry) => {
-			const latest = entry.version === latestOf(project);
-			return `<a class="row" href="${readerLink(project, entry.version)}" data-name="${escapeHtml(entry.version)}">
-			<span class="row__version">${escapeHtml(entry.version)}</span>
-			${latest ? '<span class="row__tag">latest</span>' : ''}
-			${latest && entry.builtAt !== undefined ? `<span class="row__meta">built ${escapeHtml(since(entry.builtAt))}</span>` : ''}
-			<span class="row__go">Read →</span>
-		</a>`;
-		})
-		.join('\n\t\t');
-
-	wrap.innerHTML = `	<header class="hero">
-		<p class="crumbs"><a href="${sectionLink(section)}">${escapeHtml(section.title)}</a> › ${escapeHtml(project.title)}</p>
-		<h1 class="hero__title">${escapeHtml(project.title)}</h1>
-		${project.summary === undefined || project.summary === '' ? '' : `<p class="hero__desc">${escapeHtml(project.summary)}</p>`}
-	</header>
-	<div class="section-head"><h2>${plural((project.versions ?? []).length, 'version')}</h2></div>
-	<div class="rows">
-		${versions}
-	</div>`;
 
 	attachFilter(wrap);
 }
@@ -503,10 +460,8 @@ function drawReader(projects: SiteProject[]): void {
 
 (async () => {
 	const projects = await readProjects();
+	// `project.html` is not drawn here: it mounts the bundled React app (`assets/preview.js`).
 	switch (document.body?.dataset.page) {
-		case 'project':
-			drawProject(projects);
-			break;
 		case 'reader':
 			drawReader(projects);
 			break;

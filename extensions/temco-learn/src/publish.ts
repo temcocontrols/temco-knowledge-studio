@@ -11,8 +11,15 @@
 // Never a forced push. If the branch carries work this clone does not know about, that is a fact to report — the
 // commit is in the repository either way, and the next publish will be a fast-forward.
 
-import * as vscode from 'vscode';
 import { git } from './git';
+
+/**
+ * Where a publish says what it is doing: the output channel, and — because a page shows it — whatever else is listening.
+ * The narrow shape is deliberate: publishing knows about lines, not about the editor.
+ */
+export interface PublishSink {
+	appendLine(line: string): void;
+}
 
 /** The branch GitHub Pages serves for a project repository. */
 const BRANCH = 'gh-pages';
@@ -72,7 +79,7 @@ export interface Published {
  * folder that is not gets one, because the alternative is a publish that fails with "there is nowhere to publish to"
  * on the one machine that has never published before.
  */
-export async function ensureRepo(root: string, output: vscode.OutputChannel): Promise<void> {
+export async function ensureRepo(root: string, output: PublishSink): Promise<void> {
 	try {
 		await git(root, ['rev-parse', '--git-dir']);
 	} catch {
@@ -93,7 +100,7 @@ export async function ensureRepo(root: string, output: vscode.OutputChannel): Pr
  * The commit message names the date rather than a version: the folder holds several projects, each with its own
  * versions, and a message that claims one of them would be wrong about the others.
  */
-export async function publishSite(root: string, output: vscode.OutputChannel): Promise<Published> {
+export async function publishSite(root: string, output: PublishSink): Promise<Published> {
 	await ensureRepo(root, output);
 	const target = await publishingTarget(root);
 	if (target === undefined) {

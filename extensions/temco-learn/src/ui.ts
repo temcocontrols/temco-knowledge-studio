@@ -28,6 +28,8 @@ interface UiApi {
 	callout(options: CalloutOptions): string;
 	section(options: SectionOptions): string;
 	entryRow(options: EntryRowOptions): string;
+	cards(items: readonly FeatureCard[], options?: { dense?: boolean }): string;
+	code(options: CodeOptions): string;
 	commandScript: string;
 	runCommand(message: PageMessage): void;
 }
@@ -68,6 +70,21 @@ interface CalloutOptions {
 	mark?: string;
 	/** Pre-rendered buttons. */
 	actions?: string;
+}
+
+interface FeatureCard {
+	title: string;
+	desc: string;
+	mark?: string;
+	command?: string;
+	args?: unknown;
+	go?: string;
+	note?: string;
+}
+
+interface CodeOptions {
+	language: string;
+	lines: readonly { text: string }[];
 }
 
 interface SectionOptions {
@@ -123,6 +140,12 @@ export const section = ui.section;
 
 /** One thing a page already knows about, lying on its side with the way in at its right-hand end. */
 export const entryRow = ui.entryRow;
+
+/** A row of cards that are ways in: a step of a flow, or a kind of thing a page offers. */
+export const cards = ui.cards;
+
+/** A card of numbered lines: what was run, and what it said. */
+export const code = ui.code;
 
 /** The script a page runs so its `data-command` buttons reach this module. */
 export const commandScript = ui.commandScript;
